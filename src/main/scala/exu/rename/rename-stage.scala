@@ -126,7 +126,6 @@ class RenameStage(
   // Pipeline State & Wires
 
   // Stage 1
-  val ren1_br_tags    = Wire(Vec(plWidth, Valid(UInt(brTagSz.W))))
   val ren1_fire       = Wire(Vec(plWidth, Bool()))
   val ren1_uops       = Wire(Vec(plWidth, new MicroOp))
   val ren1_alloc_reqs = Wire(Vec(plWidth, Bool()))
@@ -137,6 +136,7 @@ class RenameStage(
   val ren2_fire       = io.dis_fire
   val ren2_ready      = io.dis_ready
   val ren2_alloc_reqs = Wire(Vec(plWidth, Bool()))
+  val ren2_br_tags    = Wire(Vec(plWidth, Valid(UInt(brTagSz.W))))
 
   // Commit/Rollback
   val com_valids      = Wire(Vec(plWidth, Bool()))
@@ -146,8 +146,6 @@ class RenameStage(
   for (w <- 0 until plWidth) {
     ren1_fire(w)          := io.dec_fire(w)
     ren1_uops(w)          := io.dec_uops(w)
-    ren1_br_tags(w).valid := ren1_fire(w) && io.dec_uops(w).allocate_brtag
-    ren1_br_tags(w).bits  := io.dec_uops(w).br_tag
 
     ren1_alloc_reqs(w)    := ren1_uops(w).ldst_val && ren1_uops(w).dst_rtype === rtype && ren1_fire(w)
     ren2_alloc_reqs(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === rtype && ren2_fire(w)
@@ -155,6 +153,9 @@ class RenameStage(
     com_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.com_valids(w)
     rbk_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.rbk_valids(w)
     ren2_rbk_valids(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === rtype && io.flush && ren2_valids(w)
+
+    ren2_br_tags(w).valid := ren2_fire(w) && ren2_uops(w).allocate_brtag
+    ren2_br_tags(w).bits  := ren2_uops(w).br_tag
   }
 
   //-------------------------------------------------------------
@@ -180,7 +181,7 @@ class RenameStage(
   // Hook up inputs.
   maptable.io.map_reqs    := map_reqs
   maptable.io.remap_reqs  := remap_reqs
-  maptable.io.ren_br_tags := ren1_br_tags
+  maptable.io.ren_br_tags := ren2_br_tags
   maptable.io.brinfo      := io.brinfo
   maptable.io.rollback    := io.rollback
 
@@ -226,7 +227,7 @@ class RenameStage(
     {case ((d,c),r) => d.valid := c || r}
   freelist.io.dealloc_pregs zip io.com_uops map
     {case (d,c) => d.bits := Mux(io.rollback, c.pdst, c.stale_pdst)}
-  freelist.io.ren_br_tags := ren1_br_tags
+  freelist.io.ren_br_tags := ren2_br_tags
   freelist.io.brinfo := io.brinfo
   freelist.io.debug.pipeline_empty := io.debug_rob_empty
 
