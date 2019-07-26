@@ -183,7 +183,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val intToFpLatency = boomParams.intToFpLatency
 
   val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
-  require (Seq(3, 4).contains(fetchLatency)) // 3 and 4 cycle fetch supported
+  require (fetchLatency == 4) // Only 4-cycle fetch is supported
   val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
 
   val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
