@@ -165,24 +165,24 @@ class RenameStage(
   val remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
 
   // Generate maptable requests.
-  for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops.reverse zip io.com_uops.reverse zipWithIndex) {
+  for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops zip io.com_uops.reverse zipWithIndex) {
     map_reqs(w).lrs1 := ren1.lrs1
     map_reqs(w).lrs2 := ren1.lrs2
     map_reqs(w).lrs3 := ren1.lrs3
     map_reqs(w).ldst := ren1.ldst
 
-    remap_reqs(w).ldst := Mux(io.rollback, com.ldst,       Mux(io.flush, ren2.ldst,       ren2.ldst))
-    remap_reqs(w).pdst := Mux(io.rollback, com.stale_pdst, Mux(io.flush, ren2.stale_pdst, ren2.pdst))
+    remap_reqs(w).ldst := Mux(io.rollback, com.ldst      , ren2.ldst)
+    remap_reqs(w).pdst := Mux(io.rollback, com.stale_pdst, ren2.pdst)
   }
-  ren2_alloc_reqs zip rbk_valids.reverse zip ren2_rbk_valids.reverse zip remap_reqs map {
-    case (((a,r1),r2),rr) => rr.valid := a || r1 || r2}
+  ren2_alloc_reqs zip rbk_valids.reverse zip remap_reqs map {
+    case ((a,r),rr) => rr.valid := a || r}
 
   // Hook up inputs.
   maptable.io.map_reqs    := map_reqs
   maptable.io.remap_reqs  := remap_reqs
   maptable.io.ren_br_tags := ren1_br_tags
   maptable.io.brinfo      := io.brinfo
-  maptable.io.rollback    := io.flush || io.rollback
+  maptable.io.rollback    := io.rollback
 
   // Maptable outputs.
   for ((uop, w) <- ren1_uops.zipWithIndex) {
@@ -222,15 +222,15 @@ class RenameStage(
 
   // Freelist inputs.
   freelist.io.reqs := ren2_alloc_reqs
-  freelist.io.dealloc_pregs zip com_valids zip rbk_valids zip ren2_rbk_valids map
-    {case (((d,c),r1),r2) => d.valid := c || r1 || r2}
-  freelist.io.dealloc_pregs zip io.com_uops zip ren2_uops map
-    {case ((d,c),r) => d.bits := Mux(io.rollback, c.pdst, Mux(io.flush, r.pdst, c.stale_pdst))}
+  freelist.io.dealloc_pregs zip com_valids zip rbk_valids map
+    {case ((d,c),r) => d.valid := c || r}
+  freelist.io.dealloc_pregs zip io.com_uops map
+    {case (d,c) => d.bits := Mux(io.rollback, c.pdst, c.stale_pdst)}
   freelist.io.ren_br_tags := ren1_br_tags
   freelist.io.brinfo := io.brinfo
-  freelist.io.debug.pipeline_empty := io.debug_rob_empty && !ren2_valids.reduce(_||_)
+  freelist.io.debug.pipeline_empty := io.debug_rob_empty
 
-  assert (ren1_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
+  assert (ren2_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
            "[rename-stage] A uop is trying to allocate the zero physical register.")
 
   // Freelist outputs.
