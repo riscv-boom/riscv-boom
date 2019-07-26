@@ -221,7 +221,7 @@ class RenameStage(
   // Free List
 
   // Freelist inputs.
-  freelist.io.reqs := ren1_alloc_reqs
+  freelist.io.reqs := ren2_alloc_reqs
   freelist.io.dealloc_pregs zip com_valids zip rbk_valids zip ren2_rbk_valids map
     {case (((d,c),r1),r2) => d.valid := c || r1 || r2}
   freelist.io.dealloc_pregs zip io.com_uops zip ren2_uops map
@@ -234,7 +234,7 @@ class RenameStage(
            "[rename-stage] A uop is trying to allocate the zero physical register.")
 
   // Freelist outputs.
-  for ((uop, w) <- ren1_uops.zipWithIndex) {
+  for ((uop, w) <- ren2_uops.zipWithIndex) {
     val preg = freelist.io.alloc_pregs(w).bits
     uop.pdst := Mux(uop.ldst =/= 0.U || float.B, preg, 0.U)
   }
