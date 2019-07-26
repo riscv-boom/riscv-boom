@@ -266,7 +266,7 @@ class RenameStage(
     val can_allocate = freelist.io.alloc_pregs(w).valid
 
     // Push back against Decode stage if Rename1 can't proceed.
-    io.ren_stalls(w) := (ren1_uops(w).dst_rtype === rtype) && !can_allocate
+    io.ren_stalls(w) := (ren2_uops(w).dst_rtype === rtype) && !can_allocate
   }
 
   //-------------------------------------------------------------
