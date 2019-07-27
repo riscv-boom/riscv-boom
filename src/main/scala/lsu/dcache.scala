@@ -224,7 +224,9 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     // val drain_load = (isRead(rpq.io.deq.bits.uop.mem_cmd) &&
     //                   (rpq.io.deq.bits.is_hella ||
     //                     IsOlder(rpq.io.deq.bits.uop.rob_idx, io.rob_pnr_idx, io.rob_head_idx)))
-    val drain_load = isRead(rpq.io.deq.bits.uop.mem_cmd) && !isWrite(rpq.io.deq.bits.uop.mem_cmd)
+    val drain_load = (isRead(rpq.io.deq.bits.uop.mem_cmd) &&
+                     !isWrite(rpq.io.deq.bits.uop.mem_cmd) &&
+                     (rpq.io.deq.bits.uop.mem_cmd =/= M_XLR)) // LR should go through replay
     // drain all loads for now
     val rp_addr = Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
     val word_idx  = if (rowWords == 1) 0.U else rp_addr(log2Up(rowWords*coreDataBytes)-1, log2Up(wordBytes))
