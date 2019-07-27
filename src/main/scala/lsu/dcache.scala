@@ -1071,12 +1071,13 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val lrsc_count = RegInit(0.U(log2Ceil(lrscCycles).W))
   val lrsc_valid = lrsc_count > lrscBackoff.U
   val lrsc_addr  = Reg(UInt())
-  val s2_lr = s2_req.uop.mem_cmd === M_XLR && !RegNext(s1_nack)
-  val s2_sc = s2_req.uop.mem_cmd === M_XSC && !RegNext(s1_nack)
+  val s2_lr = s2_req.uop.mem_cmd === M_XLR && (!RegNext(s1_nack) || s2_is_replay)
+  val s2_sc = s2_req.uop.mem_cmd === M_XSC && (!RegNext(s1_nack) || s2_is_replay)
   val s2_lrsc_addr_match = lrsc_valid && lrsc_addr === (s2_req.addr >> blockOffBits)
   val s2_sc_fail = s2_sc && !s2_lrsc_addr_match
   when (lrsc_count > 0.U) { lrsc_count := lrsc_count - 1.U }
-  when ((s2_valid && s2_hit && !s2_nack) || (s2_is_replay && s2_req.uop.mem_cmd =/= M_FLUSH_ALL)) {
+  when (s2_valid && ((s2_is_lsu && s2_hit && !s2_nack) ||
+                     (s2_is_replay && s2_req.uop.mem_cmd =/= M_FLUSH_ALL))) {
     when (s2_lr) {
       lrsc_count := (lrscCycles - 1).U
       lrsc_addr := s2_req.addr >> blockOffBits
@@ -1085,7 +1086,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
       lrsc_count := 0.U
     }
   }
-  when (s2_valid && !s2_hit && s2_lrsc_addr_match && !s2_nack) {
+  when (s2_valid && s2_is_lsu && !s2_hit && s2_lrsc_addr_match && !s2_nack) {
     lrsc_count := 0.U
   }
 
