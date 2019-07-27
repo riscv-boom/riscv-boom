@@ -136,7 +136,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val r_f4_valid = RegInit(false.B)
 
   // Can the F3 stage proceed?
-  val f4_ready = ((!r_f4_valid && (fetchLatency == 4).B) || fb.io.enq.ready) && ftq.io.enq.ready
+  val f4_ready = (!r_f4_valid || fb.io.enq.ready) && ftq.io.enq.ready
 
   // F4 Redirection path.
   val r_f4_req = Reg(Valid(new PCReq()))
@@ -536,7 +536,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   } .otherwise {
     r_f4_req.valid := false.B
   }
-  r_f4_valid := r_f4_valid && !fb.io.enq.ready && !io.clear_fetchbuffer && (fetchLatency == 4).B || f3_fire
+  r_f4_valid := r_f4_valid && !fb.io.enq.ready && !io.clear_fetchbuffer || f3_fire
 
   assert (!(r_f4_req.valid && !r_f4_valid),
     "[fetch] f4-request is high but f4_valid is not.")
@@ -548,11 +548,8 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   // Fetch Buffer
-  if (fetchLatency == 3) fb.io.enq.valid := f3_fire && (f3_fetch_bundle.mask =/= 0.U)
-  else                   fb.io.enq.valid := r_f4_valid && (r_f4_fetch_bundle.mask =/= 0.U)
-
-  if (fetchLatency == 3) fb.io.enq.bits := f3_fetch_bundle
-  else                   fb.io.enq.bits := r_f4_fetch_bundle
+  fb.io.enq.valid := r_f4_valid && (r_f4_fetch_bundle.mask =/= 0.U)
+  fb.io.enq.bits := r_f4_fetch_bundle
   fb.io.clear := io.clear_fetchbuffer
 
   for (i <- 0 until fetchWidth) {
