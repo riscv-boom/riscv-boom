@@ -160,6 +160,7 @@ class RenameStage(
     plWidth,
     numPhysRegs,
     numWbPorts,
+    false,
     float))
 
   //-------------------------------------------------------------
