@@ -95,6 +95,6 @@ class RenameFreeList(
   assert (!(free_list & dealloc_mask).orR, "[freelist] Returning a free physical register.")
 
   val numLregs = if(float) 32 else 31
-  assert (!io.debug.pipeline_empty || PopCount(free_list) >= (numPregs - numLregs - 1).U,
+  assert (!io.debug.pipeline_empty || PopCount(free_list) >= (numPregs - numLregs - 1 - plWidth).U,
     "[freelist] Leaking physical registers.")
 }
