@@ -119,14 +119,26 @@ class RenameStage(
     val bypass_sel_rs3 = PriorityEncoderOH(bypass_hits_rs3.reverse).reverse
     val bypass_sel_dst = PriorityEncoderOH(bypass_hits_dst.reverse).reverse
 
+    val do_bypass_rs1 = bypass_hits_rs1.reduce(_||_)
+    val do_bypass_rs2 = bypass_hits_rs2.reduce(_||_)
+    val do_bypass_rs3 = bypass_hits_rs3.reduce(_||_)
+    val do_bypass_dst = bypass_hits_dst.reduce(_||_)
+
     val bypass_pdsts = older_uops.map(_.pdst)
 
-    when (bypass_hits_rs1.reduce(_||_)) { bypassed_uop.prs1       := Mux1H(bypass_sel_rs1, bypass_pdsts) }
-    when (bypass_hits_rs2.reduce(_||_)) { bypassed_uop.prs2       := Mux1H(bypass_sel_rs2, bypass_pdsts) }
-    when (bypass_hits_rs3.reduce(_||_)) { bypassed_uop.prs3       := Mux1H(bypass_sel_rs3, bypass_pdsts) }
-    when (bypass_hits_dst.reduce(_||_)) { bypassed_uop.stale_pdst := Mux1H(bypass_sel_dst, bypass_pdsts) }
+    when (do_bypass_rs1) { bypassed_uop.prs1       := Mux1H(bypass_sel_rs1, bypass_pdsts) }
+    when (do_bypass_rs2) { bypassed_uop.prs2       := Mux1H(bypass_sel_rs2, bypass_pdsts) }
+    when (do_bypass_rs3) { bypassed_uop.prs3       := Mux1H(bypass_sel_rs3, bypass_pdsts) }
+    when (do_bypass_dst) { bypassed_uop.stale_pdst := Mux1H(bypass_sel_dst, bypass_pdsts) }
 
-    if (!float) bypassed_uop.prs3 := DontCare
+    bypassed_uop.prs1_busy := uop.prs1_busy || do_bypass_rs1
+    bypassed_uop.prs2_busy := uop.prs2_busy || do_bypass_rs2
+    bypassed_uop.prs3_busy := uop.prs3_busy || do_bypass_rs3
+
+    if (!float) {
+      bypassed_uop.prs3      := DontCare
+      bypassed_uop.prs3_busy := false.B
+    }
 
     bypassed_uop
   }
