@@ -90,11 +90,11 @@ class RenameFreeList(
     io.alloc_pregs(w).valid := r_valid
   }
 
-  io.debug.freelist := free_list
+  io.debug.freelist := free_list | io.alloc_pregs.map(p => UIntToOH(p.bits) & Fill(n,p.valid)).reduce(_|_)
   io.debug.isprlist := 0.U  // TODO track commit free list.
 
   val numLregs = if(float) 32 else 31
-  assert (!(free_list & dealloc_mask).orR, "[freelist] Returning a free physical register.")
-  assert (!io.debug.pipeline_empty || PopCount(free_list) >= (numPregs - numLregs - 1 - plWidth).U,
+  assert (!(io.debug.freelist & dealloc_mask).orR, "[freelist] Returning a free physical register.")
+  assert (!io.debug.pipeline_empty || PopCount(io.debug.freelist) >= (numPregs - numLregs - 1).U,
     "[freelist] Leaking physical registers.")
 }
