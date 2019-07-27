@@ -116,8 +116,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
   val bchecker = Module (new BranchChecker)
   val ftq = Module(new FetchTargetQueue(num_entries = ftqSz))
-  val fb = if (useNewFetchBuffer) Module(new    FetchBuffer(numEntries=numFetchBufferEntries))
-           else                   Module(new OldFetchBuffer(numEntries=1<<log2Ceil(numFetchBufferEntries)))
+  val fb  = Module(new FetchBuffer(numEntries=numFetchBufferEntries))
   val monitor: Option[FetchMonitor] = (useFetchMonitor).option(Module(new FetchMonitor))
 
   val br_unit = io.br_unit
