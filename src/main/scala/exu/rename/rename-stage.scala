@@ -255,8 +255,7 @@ class RenameStage(
     r_uop := GetNewUopAndBrMask(BypassAllocations(next_uop, ren2_uops, ren2_alloc_reqs), io.brinfo)
 
     ren2_valids(w) := r_valid
-    if (w > 0) ren2_uops(w) := BypassAllocations(r_uop, ren2_uops.slice(0,w), ren2_alloc_reqs.slice(0,w))
-    else       ren2_uops(w) := r_uop
+    ren2_uops(w)   := r_uop
   }
 
   //-------------------------------------------------------------
@@ -308,13 +307,18 @@ class RenameStage(
   // Outputs
 
   io.ren2_mask := ren2_valids
-  io.ren2_uops := ren2_uops map {u => GetNewUopAndBrMask(u, io.brinfo)}
 
   for (w <- 0 until plWidth) {
     val can_allocate = freelist.io.alloc_pregs(w).valid
 
     // Push back against Decode stage if Rename1 can't proceed.
     io.ren_stalls(w) := (ren2_uops(w).dst_rtype === rtype) && !can_allocate
+
+    val bypassed_uop = Wire(new MicroOp)
+    if (w > 0) bypassed_uop := BypassAllocations(ren2_uops(w), ren2_uops.slice(0,w), ren2_alloc_reqs.slice(0,w))
+    else       bypassed_uop := ren2_uops(w)
+
+    io.ren2_uops(w) := GetNewUopAndBrMask(bypassed_uop, io.brinfo)
   }
 
   //-------------------------------------------------------------
