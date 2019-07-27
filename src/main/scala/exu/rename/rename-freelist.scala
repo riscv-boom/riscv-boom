@@ -62,8 +62,8 @@ class RenameFreeList(
 
   // Masks that modify the freelist array.
   val sel_mask = (sels zip sel_fire) map { case (s,f) => s & Fill(n,f) } reduce(_|_)
-  val dealloc_mask = io.dealloc_pregs.map(d => UIntToOH(d.bits)(numPregs-1,0) & Fill(n,d.valid)).reduce(_|_) |
-                     br_alloc_lists(io.brinfo.tag) & Fill(n, io.brinfo.mispredict)
+  val br_deallocs = br_alloc_lists(io.brinfo.tag) & Fill(n, io.brinfo.mispredict)
+  val dealloc_mask = io.dealloc_pregs.map(d => UIntToOH(d.bits)(numPregs-1,0) & Fill(n,d.valid)).reduce(_|_) | br_deallocs
 
   val br_slots = VecInit(io.ren_br_tags.map(tag => tag.valid)).asUInt
   // Create branch allocation lists.
@@ -71,7 +71,7 @@ class RenameFreeList(
     val list_req = VecInit(io.ren_br_tags.map(tag => UIntToOH(tag.bits)(i))).asUInt & br_slots
     val new_list = list_req.orR
     br_alloc_lists(i) := Mux(new_list, Mux1H(list_req, alloc_masks.slice(1, plWidth+1)),
-                                       br_alloc_lists(i) | alloc_masks(0))
+                                       br_alloc_lists(i) & ~br_deallocs | alloc_masks(0))
   }
 
   // Update the free list.
