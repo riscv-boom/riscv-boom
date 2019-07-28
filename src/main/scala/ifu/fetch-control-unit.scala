@@ -247,8 +247,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val prev_half    = Reg(UInt(coreInstBits.W))
   // Tracks if last fetchpacket contained a half-inst
   val prev_is_half = RegInit(false.B)
-  // Tracks nextpc after the previous fetch bundle
-  val prev_nextpc = Reg(UInt(vaddrBitsExtended.W))
 
   assert(fetchWidth >= 4 || !usingCompressed) // Logic gets kind of annoying with fetchWidth = 2
   for (i <- 0 until fetchWidth) {
@@ -312,22 +310,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     jal_targs_ma(i) := jal_targs(i)(1) && is_jal(i) && !usingCompressed.B
   }
 
-  val f3_br_seen = f3_valid &&
-                   !f3_imemresp.xcpt.pf.inst &&
-                   is_br.reduce(_|_) &&
-                   (!is_jal.reduce(_|_) || (PriorityEncoder(is_br.asUInt) < PriorityEncoder(is_jal.asUInt))) &&
-                   (!is_jr.reduce(_|_) || (PriorityEncoder(is_br.asUInt) < PriorityEncoder(is_jr.asUInt)))
-  val f3_jr_seen = f3_valid &&
-                   !f3_imemresp.xcpt.pf.inst &&
-                   is_jr.reduce(_|_) &&
-                   (!is_jal.reduce(_|_) || (PriorityEncoder(is_jr.asUInt) < PriorityEncoder(is_jal.asUInt)))
-
-  // What does the BIM predict?
-//  val f3_bim_predictions = is_br.asUInt & f3_btb_resp.bits.bim_resp.bits.getTakens()
-//  val f3_bim_br_taken = f3_bim_predictions.orR
-//  val f3_bim_br_idx = PriorityEncoder(f3_bim_predictions)
-//  val f3_bim_target = br_targs(f3_bim_br_idx)
-
   // Does the BPD have a prediction to make (in the case of a BTB miss?)
   // Calculate in F3 but don't redirect until F4.
   io.f3_is_br := is_br
@@ -373,9 +355,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     && f3_btb_mask(last_idx)
     && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
     prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
-    prev_nextpc  := alignToFetchBoundary(f3_fetch_bundle.pc) + Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
-                                                                 bankBytes.U,
-                                                                 fetchBytes.U)
   } .elsewhen (io.clear_fetchbuffer) {
     prev_is_half := false.B
   }
@@ -390,7 +369,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
     val btb_idx = f3_btb_resp.bits.cfi_idx
 
-    when (BpredType.isAlwaysTaken(f3_btb_resp.bits.bpd_type)) {// TODO XXX BUG look at actual inst, not BTB
+    when (BpredType.isAlwaysTaken(f3_btb_resp.bits.bpd_type)) {
       f3_bpd_may_redirect_taken := io.f3_bpd_resp.valid && f3_bpd_br_taken && f3_bpd_br_idx < btb_idx
 
       assert (f3_btb_resp.bits.taken)
@@ -399,7 +378,6 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
       val bpd_agrees_with_btb = f3_bpd_predictions(btb_idx)
       f3_bpd_may_redirect_taken := io.f3_bpd_resp.valid && f3_bpd_br_taken &&
         (f3_bpd_br_idx < btb_idx || !bpd_agrees_with_btb)
-        // XXX in this scenario, ignore the btb mask and go with the bpd mask
       f3_bpd_may_redirect_next := io.f3_bpd_resp.valid && !f3_bpd_br_taken
 
       assert (BpredType.isBranch(f3_btb_resp.bits.bpd_type))
@@ -433,20 +411,16 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   bchecker.io.btb_resp := f3_btb_resp
   bchecker.io.bpd_resp := io.f3_bpd_resp
 
-  // who wins? bchecker or bpd? or jal?
+  // who wins? bchecker or bpd?
   val jal_overrides_bpd = f3_has_jal && f3_jal_idx < f3_bpd_redirect_cfiidx && f3_bpd_may_redirect_taken
-  val f3_bpd_overrides_bcheck =
-    f3_bpd_may_redirect &&
-    !jal_overrides_bpd &&
-    (!bchecker.io.req.valid || (f3_bpd_redirect_cfiidx < bchecker.io.req_cfi_idx))
-  f3_req.valid := f3_valid && (bchecker.io.req.valid ||
-                  (f3_bpd_may_redirect && !jal_overrides_bpd)) // && !(f0_redirect_val)
+  val f3_bpd_overrides_bcheck = f3_bpd_may_redirect && !jal_overrides_bpd &&
+                                (!bchecker.io.req.valid || f3_bpd_redirect_cfiidx < bchecker.io.req_cfi_idx)
+  f3_req.valid := f3_valid && (f3_bpd_may_redirect && !jal_overrides_bpd || bchecker.io.req.valid)
   f3_req.bits.addr := Mux(f3_bpd_overrides_bcheck, f3_bpd_redirect_target, bchecker.io.req.bits.addr)
 
   // This has a bad effect on QoR.
   io.f3_will_redirect := false.B //f3_req.valid
 
-  // TODO this logic is broken and vestigial. Do update correctly (remove RegNext)
   val f3_btb_update_bits = Wire(new BoomBTBUpdate)
   val f3_btb_update_valid = Mux(f3_bpd_overrides_bcheck,
                               f3_bpd_btb_update_valid      && (!f3_jr_valid || f3_bpd_br_idx < f3_jr_idx),
@@ -481,10 +455,9 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   when (f3_req.valid) {
     // f3_bpd only requests taken redirections on btb misses.
     // f3_req via bchecker only ever requests nextline_pc or jump targets (which we don't track in ghistory).
-    f3_taken := Mux(f3_bpd_overrides_bcheck, (f3_bpd_may_redirect_taken && !jal_overrides_bpd), false.B)
+    f3_taken := f3_bpd_overrides_bcheck && f3_bpd_may_redirect_taken
   } .elsewhen (f3_btb_resp.valid) {
     f3_taken := f3_btb_resp.bits.taken
-    // TODO XXX f3_taken logic is wrong. it looks to be missing bpd? Or is that f3_req.valid?
   }
 
   f3_fetch_bundle.pc := f3_imemresp.pc
@@ -511,12 +484,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
     when (w.U === f3_bpd_br_idx && f3_bpd_overrides_bcheck) {
       f3_fetch_bundle.bpu_info(w).bpd_blame := true.B
-    }
-    // TODO deal with blame with bpd
-//    .elsewhen (w.U === f3_btb_resp.bits.cfi_idx && io.f3_bpu_request.valid && !f3_req.valid) {
-//      f3_fetch_bundle.bpu_info(w).bpd_blame := true.B
-//    }
-    .elsewhen (w.U === f3_btb_resp.bits.cfi_idx && f3_btb_resp.valid && !f3_req.valid) {
+    } .elsewhen (w.U === f3_btb_resp.bits.cfi_idx && f3_btb_resp.valid && !f3_req.valid) {
        f3_fetch_bundle.bpu_info(w).btb_blame := true.B
     }
 
