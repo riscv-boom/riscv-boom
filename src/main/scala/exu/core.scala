@@ -104,7 +104,11 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
 
   val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
   val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
-  val rename_stage     = Module(new RenameStage(coreWidth, numIntRenameWakeupPorts, numFpWakeupPorts))
+  val rename_stage     = Module(new RenameStage(coreWidth, numIntPhysRegs, numIntRenameWakeupPorts, false))
+  val fp_rename_stage  = if (usingFPU) Module(new RenameStage(coreWidth, numFpPhysRegs, numFpWakeupPorts, true))
+                         else null
+  val rename_stages    = if (usingFPU) Seq(rename_stage, fp_rename_stage) else Seq(rename_stage)
+
   val issue_units      = new boom.exu.IssueUnits(numIntIssueWakeupPorts)
   val dispatcher       = Module(new BasicDispatcher)
 
@@ -156,6 +160,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                                                     // (can still be stopped in ren or dis)
   val dec_ready  = Wire(Bool())
   val dec_xcpts  = Wire(Vec(coreWidth, Bool()))
+  val ren_stalls = Wire(Vec(coreWidth, Bool()))
 
   // Rename2/Dispatch stage
   val dis_valids = Wire(Vec(coreWidth, Bool()))
@@ -434,7 +439,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                       || rob.io.commit.rollback
                       || dec_xcpt_stall
                       || branch_mask_full(w)
-                      || !rename_stage.io.inst_can_proceed(w)
+                      || ren_stalls(w)
                       || flush_ifu))
 
   val dec_stalls = dec_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
@@ -471,25 +476,54 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  rename_stage.io.kill := flush_ifu
-  rename_stage.io.brinfo := br_unit.brinfo
+  // Inputs
+  for (rename <- rename_stages) {
+    rename.io.kill := flush_ifu
+    rename.io.brinfo := br_unit.brinfo
 
-  rename_stage.io.flush := rob.io.flush.valid || io.ifu.sfence_take_pc
-  rename_stage.io.debug_rob_empty := rob.io.empty
+    rename.io.flush := rob.io.flush.valid || io.ifu.sfence_take_pc
+    rename.io.debug_rob_empty := rob.io.empty
 
-  rename_stage.io.dec_fire := dec_fire
-  rename_stage.io.dec_uops := dec_uops
+    rename.io.dec_fire := dec_fire
+    rename.io.dec_uops := dec_uops
 
-  rename_stage.io.dis_fire := dis_fire
-  rename_stage.io.dis_ready := dis_ready
+    rename.io.dis_fire := dis_fire
+    rename.io.dis_ready := dis_ready
 
-  rename_stage.io.com_valids := rob.io.commit.valids
-  rename_stage.io.com_uops := rob.io.commit.uops
-  rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
-  rename_stage.io.rollback := rob.io.commit.rollback
+    rename.io.com_valids := rob.io.commit.valids
+    rename.io.com_uops := rob.io.commit.uops
+    rename.io.rbk_valids := rob.io.commit.rbk_valids
+    rename.io.rollback := rob.io.commit.rollback
+  }
 
+  // Outputs
   dis_uops := rename_stage.io.ren2_uops
   dis_valids := rename_stage.io.ren2_mask
+  ren_stalls := rename_stage.io.ren_stalls
+
+  /**
+   * TODO This is a bit nasty, but it's currently necessary to
+   * split the INT/FP rename pipelines into separate instantiations.
+   * Won't have to do this anymore with a properly decoupled FP pipeline.
+   */
+  if (usingFPU) {
+    for (w <- 0 until coreWidth) {
+      val i_uop = rename_stage.io.ren2_uops(w)
+      val f_uop = fp_rename_stage.io.ren2_uops(w)
+
+      dis_uops(w).prs1 := Mux(dis_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1, i_uop.prs1)
+      dis_uops(w).prs2 := Mux(dis_uops(w).lrs2_rtype === RT_FLT, f_uop.prs2, i_uop.prs2)
+      dis_uops(w).prs3 := f_uop.prs3
+      dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype  === RT_FLT, f_uop.pdst, i_uop.pdst)
+      dis_uops(w).stale_pdst := Mux(dis_uops(w).dst_rtype === RT_FLT, f_uop.stale_pdst, i_uop.stale_pdst)
+
+      dis_uops(w).prs1_busy := Mux(dis_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1_busy, i_uop.prs1_busy)
+      dis_uops(w).prs2_busy := Mux(dis_uops(w).lrs2_rtype === RT_FLT, f_uop.prs2_busy, i_uop.prs2_busy)
+      dis_uops(w).prs3_busy := f_uop.prs3_busy
+
+      ren_stalls(w) := rename_stage.io.ren_stalls(w) || fp_rename_stage.io.ren_stalls(w)
+    }
+  }
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -662,7 +696,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     iu.io.mem_ldSpecWakeup <> lsu.io.mem_ldSpecWakeup
   }
 
-  for ((renport, intport) <- rename_stage.io.int_wakeups zip int_ren_wakeups) {
+  for ((renport, intport) <- rename_stage.io.wakeups zip int_ren_wakeups) {
     // Stop wakeup for bypassable children of spec-loads trying to issue during a ldMiss.
     renport.valid :=
        intport.valid &&
@@ -670,7 +704,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     renport.bits := intport.bits
   }
   if (usingFPU) {
-    for ((renport, fpport) <- rename_stage.io.fp_wakeups zip fp_pipeline.io.wakeups) {
+    for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
        renport <> fpport
     }
   }
@@ -1173,15 +1207,17 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       BoolToChar(rob.io.com_xcpt.valid, 'E'),
       rob.io.com_xcpt.bits.cause,
       rob.io.commit.valids.asUInt,
-      rename_stage.io.debug.ifreelist,
-      PopCount(rename_stage.io.debug.ifreelist),
-      rename_stage.io.debug.iisprlist,
-      PopCount(rename_stage.io.debug.iisprlist))
-    printf("    FFreeList:0x%x TotFree:%d FPrefLst:0x%x TotPreg:%d\n",
-      rename_stage.io.debug.ffreelist,
-      PopCount(rename_stage.io.debug.ffreelist),
-      rename_stage.io.debug.fisprlist,
-      PopCount(rename_stage.io.debug.fisprlist))
+      rename_stage.io.debug.freelist,
+      PopCount(rename_stage.io.debug.freelist),
+      rename_stage.io.debug.isprlist,
+      PopCount(rename_stage.io.debug.isprlist))
+    if (usingFPU) {
+      printf("    FFreeList:0x%x TotFree:%d FPrefLst:0x%x TotPreg:%d\n",
+        fp_rename_stage.io.debug.freelist,
+        PopCount(fp_rename_stage.io.debug.freelist),
+        fp_rename_stage.io.debug.isprlist,
+        PopCount(fp_rename_stage.io.debug.isprlist))
+    }
 
     // branch unit
     printf("Branch Unit:\n")
