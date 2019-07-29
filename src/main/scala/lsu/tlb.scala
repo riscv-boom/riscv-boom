@@ -278,7 +278,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   // a miss on duplicate entries.
   val multipleHits = PopCountAtLeast(real_hits, 2)
 
-  io.req.ready := state === s_ready
+  io.req.ready := true.B
   io.resp.pf.ld := (bad_va && cmd_read) || (pf_ld_array & hits).orR
   io.resp.pf.st := (bad_va && cmd_write_perms) || (pf_st_array & hits).orR
   io.resp.pf.inst := bad_va || (pf_inst_array & hits).orR
@@ -300,7 +300,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
 
   if (usingVM) {
     val sfence = io.sfence.valid
-    when (io.req.fire() && tlb_miss) {
+    when (io.req.fire() && tlb_miss && state === s_ready) {
       state := s_request
       r_refill_tag := vpn
 
