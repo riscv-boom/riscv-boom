@@ -1086,7 +1086,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
       lrsc_count := 0.U
     }
   }
-  when (s2_valid && s2_is_lsu && !s2_hit && s2_lrsc_addr_match && !s2_nack) {
+  when (s2_valid && s2_is_lsu && !s2_hit && !(s2_has_permission && s2_tag_match) && s2_lrsc_addr_match && !s2_nack) {
     lrsc_count := 0.U
   }
 
