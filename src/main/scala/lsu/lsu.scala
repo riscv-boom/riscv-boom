@@ -225,7 +225,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val hella_xcpt            = Reg(new rocket.HellaCacheExceptions)
 
 
-  val dtlb = Module(new rocket.TLB(
+  val dtlb = Module(new NBDTLB(
     instruction = false, lgMaxSize = log2Ceil(coreDataBytes), rocket.TLBConfig(dcacheParams.nTLBEntries)))
 
   io.ptw <> dtlb.io.ptw
