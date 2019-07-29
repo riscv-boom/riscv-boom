@@ -19,6 +19,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   require(!instruction)
   val io = IO(new Bundle {
     val req = Flipped(Decoupled(new TLBReq(lgMaxSize)))
+    val miss_rdy = Output(Bool())
     val resp = Output(new TLBResp)
     val sfence = Input(Valid(new SFenceReq))
     val ptw = new TLBPTWIO
@@ -279,6 +280,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   val multipleHits = PopCountAtLeast(real_hits, 2)
 
   io.req.ready := true.B
+  io.miss_rdy := state === s_ready
   io.resp.pf.ld := (bad_va && cmd_read) || (pf_ld_array & hits).orR
   io.resp.pf.st := (bad_va && cmd_write_perms) || (pf_st_array & hits).orR
   io.resp.pf.inst := bad_va || (pf_inst_array & hits).orR

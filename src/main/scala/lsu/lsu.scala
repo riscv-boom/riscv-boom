@@ -376,7 +376,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                                  ldq_retry_e.bits.addr_is_virtual             &&
                                 !p1_block_load_mask(ldq_retry_idx)            &&
                                 !p2_block_load_mask(ldq_retry_idx)            &&
-                                RegNext(dtlb.io.req.ready)                    &&
+                                RegNext(dtlb.io.miss_rdy)                     &&
                                 !store_needs_order                            &&
                                 !ldq_retry_e.bits.order_fail)
 
@@ -385,7 +385,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val stq_retry_e   = stq(stq_retry_idx)
   val can_fire_sta_retry     = ( stq_retry_e.valid                            &&
                                  stq_retry_e.bits.addr.valid                  &&
-                                 stq_retry_e.bits.addr_is_virtual)
+                                 stq_retry_e.bits.addr_is_virtual             &&
+                                 RegNext(dtlb.io.miss_rdy))
 
   // Can we commit a store
   val stq_commit_e  = stq(stq_execute_head)
