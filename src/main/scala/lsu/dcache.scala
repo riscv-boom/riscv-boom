@@ -644,6 +644,7 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
   val data_req_cnt = RegInit(0.U(log2Up(refillCycles+1).W))
   val (_, last_beat, all_beats_done, beat_count) = edge.count(io.release)
   val wb_buffer = Reg(Vec(refillCycles, UInt(encRowBits.W)))
+  val acked = RegInit(false.B)
 
   io.idx.valid       := state =/= s_invalid
   io.idx.bits        := req.idx
@@ -654,7 +655,7 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
   io.meta_read.bits  := DontCare
   io.data_req.valid  := false.B
   io.data_req.bits   := DontCare
-  io.resp       := false.B
+  io.resp            := false.B
 
   when (state === s_invalid) {
     io.req.ready := true.B
@@ -662,6 +663,7 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
       state := s_fill_buffer
       data_req_cnt := 0.U
       req := io.req.bits
+      acked := false.B
     }
   } .elsewhen (state === s_fill_buffer) {
     io.meta_read.valid := data_req_cnt < refillCycles.U
@@ -712,14 +714,20 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
 
     io.release.bits := Mux(req.voluntary, voluntaryRelease, probeResponse)
 
+    when (io.mem_grant) {
+      acked := true.B
+    }
     when (io.release.fire()) {
       data_req_cnt := data_req_cnt + 1.U
     }
     when ((data_req_cnt === (refillCycles-1).U) && io.release.fire()) {
-      state := Mux(io.mem_grant || !req.voluntary, s_invalid, s_grant)
+      state := Mux(req.voluntary, s_grant, s_invalid)
     }
   } .elsewhen (state === s_grant) {
     when (io.mem_grant) {
+      acked := true.B
+    }
+    when (acked) {
       state := s_invalid
     }
   }
