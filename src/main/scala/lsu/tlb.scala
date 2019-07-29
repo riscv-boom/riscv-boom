@@ -18,7 +18,7 @@ import boom.util.{BoolToChar, AgePriorityEncoder, IsKilledByBranch, GetNewBrMask
 class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p) {
   require(!instruction)
   val io = IO(new Bundle {
-    val req = Decoupled(new TLBReq(lgMaxSize)).flip
+    val req = Flipped(Decoupled(new TLBReq(lgMaxSize)))
     val resp = Output(new TLBResp)
     val sfence = Input(Valid(new SFenceReq))
     val ptw = new TLBPTWIO
@@ -50,7 +50,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
 
     val level = UInt(log2Ceil(pgLevels).W)
     val tag = UInt(vpnBits.W)
-    val data = Vec(nSectors, UInt(new EntryData().getWidth))
+    val data = Vec(nSectors, UInt(new EntryData().getWidth.W))
     val valid = Vec(nSectors, Bool())
     def entry_data = data.map(_.asTypeOf(new EntryData))
 
@@ -148,10 +148,10 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   pmp.io.addr := mpu_physaddr
   pmp.io.size := io.req.bits.size
   pmp.io.pmp := (io.ptw.pmp: Seq[PMP])
-  pmp.io.prv := Mux(Bool(usingVM) && (do_refill || io.req.bits.passthrough /* PTW */), PRV.S.U, priv)
+  pmp.io.prv := Mux(usingVM.B && (do_refill || io.req.bits.passthrough /* PTW */), PRV.S.U, priv)
   val legal_address = edge.manager.findSafe(mpu_physaddr).reduce(_||_)
   def fastCheck(member: TLManagerParameters => Boolean) =
-    legal_address && edge.manager.fastProperty(mpu_physaddr, member, (b:Boolean) => Bool(b))
+    legal_address && edge.manager.fastProperty(mpu_physaddr, member, (b:Boolean) => b.B)
   val cacheable = fastCheck(_.supportsAcquireT) && (instruction || !usingDataScratchpad).B
   val homogeneous = TLBPageLookup(edge.manager.managers, xLen, p(CacheBlockBytes), BigInt(1) << pgIdxBits)(mpu_physaddr).homogeneous
   val prot_r = fastCheck(_.supportsGet) && pmp.io.r
@@ -209,7 +209,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   val ptw_ae_array = Cat(false.B, entries.map(_.ae).asUInt)
   val priv_rw_ok = Mux(!priv_s || io.ptw.status.sum, entries.map(_.u).asUInt, 0.U) | Mux(priv_s, ~entries.map(_.u).asUInt, 0.U)
   val priv_x_ok = Mux(priv_s, ~entries.map(_.u).asUInt, entries.map(_.u).asUInt)
-  val r_array = Cat(true.B, priv_rw_ok & (entries.map(_.sr).asUInt | Mux(io.ptw.status.mxr, entries.map(_.sx).asUInt, UInt(0))))
+  val r_array = Cat(true.B, priv_rw_ok & (entries.map(_.sr).asUInt | Mux(io.ptw.status.mxr, entries.map(_.sx).asUInt, 0.U)))
   val w_array = Cat(true.B, priv_rw_ok & entries.map(_.sw).asUInt)
   val x_array = Cat(true.B, priv_x_ok & entries.map(_.sx).asUInt)
   val pr_array = Cat(Fill(nPhysicalEntries, prot_r), normal_entries.map(_.pr).asUInt) & ~ptw_ae_array
@@ -234,15 +234,15 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     }).orR
   }
 
-  val cmd_lrsc = Bool(usingAtomics) && io.req.bits.cmd.isOneOf(M_XLR, M_XSC)
-  val cmd_amo_logical = Bool(usingAtomics) && isAMOLogical(io.req.bits.cmd)
-  val cmd_amo_arithmetic = Bool(usingAtomics) && isAMOArithmetic(io.req.bits.cmd)
+  val cmd_lrsc = usingAtomics.B && io.req.bits.cmd.isOneOf(M_XLR, M_XSC)
+  val cmd_amo_logical = usingAtomics.B && isAMOLogical(io.req.bits.cmd)
+  val cmd_amo_arithmetic = usingAtomics.B && isAMOArithmetic(io.req.bits.cmd)
   val cmd_read = isRead(io.req.bits.cmd)
   val cmd_write = isWrite(io.req.bits.cmd)
   val cmd_write_perms = cmd_write ||
-    Bool(coreParams.haveCFlush) && io.req.bits.cmd === M_FLUSH_ALL // not a write, but needs write permissions
+    coreParams.haveCFlush.B && io.req.bits.cmd === M_FLUSH_ALL // not a write, but needs write permissions
 
-  val lrscAllowed = Mux(Bool(usingDataScratchpad || usingAtomicsOnlyForIO), 0.U, c_array)
+  val lrscAllowed = Mux((usingDataScratchpad || usingAtomicsOnlyForIO).B, 0.U, c_array)
   val ae_array =
     Mux(misaligned, eff_array, 0.U) |
     Mux(cmd_lrsc, ~lrscAllowed, 0.U)
