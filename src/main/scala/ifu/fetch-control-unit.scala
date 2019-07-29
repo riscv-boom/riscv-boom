@@ -28,7 +28,7 @@ import chisel3.util._
 import chisel3.core.{withReset, DontCare}
 import chisel3.experimental.{dontTouch}
 
-import freechips.rocketchip.rocket.{MStatus, BP, BreakpointUnit}
+import freechips.rocketchip.rocket.{MStatus, BP}
 import freechips.rocketchip.config.{Parameters}
 import freechips.rocketchip.util._
 

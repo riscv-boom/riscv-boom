@@ -77,7 +77,7 @@ case class BoomCoreParams(
   mtvecWritable: Boolean = true,
   haveCFlush: Boolean = false,
   mulDiv: Option[freechips.rocketchip.rocket.MulDivParams] = Some(MulDivParams(divEarlyOut=true)),
-  nBreakpoints: Int = 1,
+  nBreakpoints: Int = 0, // TODO Fix with better frontend breakpoint unit
   nL2TLBEntries: Int = 512,
   nLocalInterrupts: Int = 0,
   useAtomics: Boolean = true,
