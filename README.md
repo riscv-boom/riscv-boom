@@ -28,6 +28,7 @@ Please check out the BOOM website @ https://boom-core.org for the most up-to-dat
 It contains links to the mailing lists, documentation, design spec., publications and more!
 
 **Website:** (www.boom-core.org)
+
 **Mailing List** (https://groups.google.com/forum/#!forum/riscv-boom)
 
 ## Important!
