@@ -86,6 +86,6 @@ Now that the flow of ecosystem has been briefly explained here is a quick recap.
 
 .. [1] Unfortunately, one of the big components of the BOOM system, Rocket-Chip, lacks alot of meaningful documentation. This is a known issue that the Rocket-Chip maintainers hope to fix one day.
 
-.. [2] This section describes the current build process that is used in `boom-template <https://github.com/riscv-boom/boom-template>`__.
+.. [2] This section describes the current build process that is used in `Chipyard <https://github.com/ucb-bar/chipyard>`__.
 
 .. [3] This is not exactly true since to be able to run BOOM in simulations we wrap the ExampleBoomSystem in a TestHarness found in ``src/main/scala/system/TestHarness.scala``.
