@@ -14,18 +14,8 @@ The core code structure is shown below:
 
 * ``boom/src/main/scala/``
   * ``bpu/`` - branch predictor unit
-    * ``bpd/``
-        * ``gshare/``
-        * ``simple-predictors/``
-        * ``tage/``
-    * ``btb/``
-    * ``misc/``
   * ``common/`` - configs, bundles, and tile definitions
   * ``exu/`` - execute/core unit
-    * ``execution-units/``
-    * ``issue-units/``
-    * ``register-read/``
-    * ``rename/``
   * ``ifu/`` - instruction fetch unit
   * ``lsu/`` - load/store/memory unit
   * ``system/`` - non-core system-level infrastructure
