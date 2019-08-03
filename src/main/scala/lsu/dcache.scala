@@ -21,17 +21,6 @@ import boom.common._
 import boom.exu.BrResolutionInfo
 import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder, UpdateBrMask, AgePriorityEncoder, WrapInc}
 
-class BoomDCacheReqInternal(implicit p: Parameters) extends BoomDCacheReq()(p)
-  with HasL1HellaCacheParameters
-{
-  // miss info
-  val tag_match = Bool()
-  val old_meta  = new L1Metadata
-  val way_en    = UInt(nWays.W)
-
-  // Used in the MSHRs
-  val sdq_id    = UInt(log2Ceil(cfg.nSDQ).W)
-}
 
 class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) {
   val io = new Bundle {
@@ -254,6 +243,7 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
 }
 
 
+
 /**
  * Top level class wrapping a non-blocking dcache.
  *
@@ -304,6 +294,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
     require (m.fifoId == fifoManagers.head.fifoId,
       s"IOMSHRs must be FIFO for all regions with effects, but HellaCache sees ${m.nodePath.map(_.name)}")
   }
+
+  val t_replay :: t_probe :: t_wb :: t_mshr_meta_read :: t_lsu :: t_prefetch :: Nil = Enum(6)
 
   val wb = Module(new BoomWritebackUnit)
   val prober = Module(new BoomProbeUnit)
@@ -427,6 +419,14 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                  Mux(prefetch_fire            , prefetch_req,
                  Mux(mshrs.io.meta_read.fire(), mshr_read_req
                                               , replay_req)))))
+  val s0_type  = Mux(io.lsu.req.fire()        , t_lsu,
+                 Mux(wb_fire                  , t_wb,
+                 Mux(prober_fire              , t_probe,
+                 Mux(prefetch_fire            , t_prefetch,
+                 Mux(mshrs.io.meta_read.fire(), t_mshr_meta_read
+                                              , t_replay)))))
+
+
   val s0_send_resp_or_nack = io.lsu.req.fire() || (mshrs.io.replay.fire() && isRead(mshrs.io.replay.bits.uop.mem_cmd)) // Does this request need to send a response or nack
 
   val s1_req          = RegNext(s0_req)
@@ -442,11 +442,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s1_addr         = s1_req.addr
   val s1_nack         = s1_req.addr(idxMSB,idxLSB) === prober.io.meta_write.bits.idx && !prober.io.req.ready
   val s1_send_resp_or_nack = RegNext(s0_send_resp_or_nack)
-  val s1_is_lsu        = RegNext(io.lsu.req.fire()) // TODO make this a bundle
-  val s1_is_probe      = RegNext(prober_fire)
-  val s1_is_replay     = RegNext(mshrs.io.replay.fire())
-  val s1_is_wb         = RegNext(wb_fire)
-  val s1_is_mshr_read  = RegNext(mshrs.io.meta_read.fire())
+  val s1_type         = RegNext(s0_type)
+
   val s1_mshr_meta_read_way_en = RegNext(mshrs.io.meta_read.bits.way_en)
   val s1_replay_way_en = RegNext(mshrs.io.replay.bits.way_en) // For replays, the metadata isn't written yet
   val s1_wb_way_en     = RegNext(wb.io.data_req.bits.way_en)
@@ -454,34 +451,35 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   // tag check
   def wayMap[T <: Data](f: Int => T) = VecInit((0 until nWays).map(f))
   val s1_tag_eq_way = wayMap((w: Int) => meta.io.resp(w).tag === (s1_addr >> untagBits)).asUInt
-  val s1_tag_match_way = Mux(s1_is_replay, s1_replay_way_en,
-                         Mux(s1_is_wb,     s1_wb_way_en,
-                         Mux(s1_is_mshr_read, s1_mshr_meta_read_way_en,
+  val s1_tag_match_way = Mux(s1_type === t_replay, s1_replay_way_en,
+                         Mux(s1_type === t_wb,     s1_wb_way_en,
+                         Mux(s1_type === t_mshr_meta_read, s1_mshr_meta_read_way_en,
                            wayMap((w: Int) => s1_tag_eq_way(w) && meta.io.resp(w).coh.isValid()).asUInt)))
 
 
+  // LineBuffer tags should be read in s1
+  mshrs.io.s1_req.valid := s1_valid
+  mshrs.io.s1_req.bits  := s1_req
+
+
   val s2_req   = RegNext(s1_req)
+  val s2_type  = RegNext(s1_type)
   val s2_valid = RegNext(s1_valid &&
                          !io.lsu.s1_kill &&
                          !IsKilledByBranch(io.lsu.brinfo, s1_req.uop) &&
                          !(io.lsu.exception && s1_req.uop.uses_ldq) &&
-                         !(s2_store_failed && s1_is_lsu && s1_req.uop.uses_stq))
+                         !(s2_store_failed && (s1_type === t_lsu) && s1_req.uop.uses_stq))
   s2_req.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s1_req.uop)
-  val s2_is_lsu    = RegNext(s1_is_lsu)
-  val s2_is_probe  = RegNext(s1_is_probe)
-  val s2_is_replay = RegNext(s1_is_replay)
-  val s2_is_wb     = RegNext(s1_is_wb)
-
 
   val s2_tag_match_way = RegNext(s1_tag_match_way)
   val s2_tag_match = s2_tag_match_way.orR
   val s2_hit_state = Mux1H(s2_tag_match_way, wayMap((w: Int) => RegNext(meta.io.resp(w).coh)))
   val (s2_has_permission, _, s2_new_hit_state) = s2_hit_state.onAccess(s2_req.uop.mem_cmd)
 
-  val s2_hit = (s2_tag_match && (s2_has_permission && s2_hit_state === s2_new_hit_state) && !mshrs.io.block_hit) || s2_is_replay || s2_is_wb
+  val s2_hit = (s2_tag_match && (s2_has_permission && s2_hit_state === s2_new_hit_state) && !mshrs.io.block_hit) || s2_type.isOneOf(t_replay, t_wb)
   val s2_nack = Wire(Bool())
-  assert(!(s2_is_replay && !s2_hit), "Replays should always hit")
-  assert(!(s2_is_wb && !s2_hit), "Writeback should always see data hit")
+  assert(!(s2_type === t_replay && !s2_hit), "Replays should always hit")
+  assert(!(s2_type === t_wb && !s2_hit), "Writeback should always see data hit")
 
   // lr/sc
   val debug_sc_fail_addr = RegInit(0.U)
@@ -490,13 +488,13 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val lrsc_count = RegInit(0.U(log2Ceil(lrscCycles).W))
   val lrsc_valid = lrsc_count > lrscBackoff.U
   val lrsc_addr  = Reg(UInt())
-  val s2_lr = s2_req.uop.mem_cmd === M_XLR && (!RegNext(s1_nack) || s2_is_replay)
-  val s2_sc = s2_req.uop.mem_cmd === M_XSC && (!RegNext(s1_nack) || s2_is_replay)
+  val s2_lr = s2_req.uop.mem_cmd === M_XLR && (!RegNext(s1_nack) || s2_type === t_replay)
+  val s2_sc = s2_req.uop.mem_cmd === M_XSC && (!RegNext(s1_nack) || s2_type === t_replay)
   val s2_lrsc_addr_match = lrsc_valid && lrsc_addr === (s2_req.addr >> blockOffBits)
   val s2_sc_fail = s2_sc && !s2_lrsc_addr_match
   when (lrsc_count > 0.U) { lrsc_count := lrsc_count - 1.U }
-  when (s2_valid && ((s2_is_lsu && s2_hit && !s2_nack) ||
-                     (s2_is_replay && s2_req.uop.mem_cmd =/= M_FLUSH_ALL))) {
+  when (s2_valid && ((s2_type === t_lsu && s2_hit && !s2_nack) ||
+                     (s2_type === t_replay && s2_req.uop.mem_cmd =/= M_FLUSH_ALL))) {
     when (s2_lr) {
       lrsc_count := (lrscCycles - 1).U
       lrsc_addr := s2_req.addr >> blockOffBits
@@ -505,7 +503,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
       lrsc_count := 0.U
     }
   }
-  when (s2_valid && s2_is_lsu && !s2_hit && !(s2_has_permission && s2_tag_match) && s2_lrsc_addr_match && !s2_nack) {
+  when (s2_valid && s2_type === t_lsu && !s2_hit && !(s2_has_permission && s2_tag_match) && s2_lrsc_addr_match && !s2_nack) {
     lrsc_count := 0.U
   }
 
@@ -545,7 +543,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_nack_hit    = RegNext(s1_nack) // nack because of incoming probe
   val s2_nack_victim = s2_valid &&  s2_hit && mshrs.io.secondary_miss // Nack when we hit something currently being evicted
   val s2_nack_miss   = s2_valid && !s2_hit && !mshrs.io.req.ready // MSHRs not ready for request
-  s2_nack           := (s2_nack_miss || s2_nack_hit || s2_nack_victim) && !s2_is_replay
+  s2_nack           := (s2_nack_miss || s2_nack_hit || s2_nack_victim) && s2_type =/= t_replay
   val s2_send_resp = (RegNext(s1_send_resp_or_nack) && !s2_nack &&
                       (s2_hit || (mshrs.io.req.fire() && isWrite(s2_req.uop.mem_cmd) && !isRead(s2_req.uop.mem_cmd))))
   val s2_send_nack = (RegNext(s1_send_resp_or_nack) && s2_nack)
@@ -560,22 +558,24 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   mshrs.io.req.valid := s2_valid          &&
                         !RegNext(s1_nack) &&
                         !s2_hit           &&
-                        s2_is_lsu         &&
+                        s2_type.isOneOf(t_lsu, t_prefetch) &&
                         !IsKilledByBranch(io.lsu.brinfo, s2_req.uop) &&
                         !(io.lsu.exception && s2_req.uop.uses_ldq) &&
                         (isPrefetch(s2_req.uop.mem_cmd) ||
                          isRead(s2_req.uop.mem_cmd) ||
                          isWrite(s2_req.uop.mem_cmd))
-  assert(!(mshrs.io.req.valid && s2_is_replay), "Replays should not need to go back into MSHRs")
+  assert(!(mshrs.io.req.valid && s2_type === t_replay), "Replays should not need to go back into MSHRs")
+  mshrs.io.req.bits             := DontCare
   mshrs.io.req.bits.uop         := s2_req.uop
   mshrs.io.req.bits.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s2_req.uop)
   mshrs.io.req.bits.addr        := s2_req.addr
   mshrs.io.req.bits.tag_match   := s2_tag_match
   mshrs.io.req.bits.old_meta    := Mux(s2_tag_match, L1Metadata(s2_repl_meta.tag, s2_hit_state), s2_repl_meta)
   mshrs.io.req.bits.way_en      := Mux(s2_tag_match, s2_tag_match_way, s2_replaced_way_en)
-  mshrs.io.req.bits.sdq_id      := DontCare // this is set inside MSHR
+
   mshrs.io.req.bits.data        := s2_req.data
   mshrs.io.req.bits.is_hella    := s2_req.is_hella
+  mshrs.io.req_is_probe         := s2_type === t_probe && s2_valid
   mshrs.io.meta_resp.valid      := !s2_nack_hit || prober.io.mshr_wb_rdy
   mshrs.io.meta_resp.bits       := Mux1H(s2_tag_match_way, RegNext(meta.io.resp))
   when (mshrs.io.req.fire()) { replacer.miss }
@@ -592,9 +592,15 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   prober.io.wb_rdy      := (prober.io.meta_write.bits.idx =/= wb.io.idx.bits) || !wb.io.idx.valid
 
   // refills
-  mshrs.io.mem_grant.valid := tl_out.d.fire() && tl_out.d.bits.source =/= cfg.nMSHRs.U
-  mshrs.io.mem_grant.bits  := tl_out.d.bits
-  tl_out.d.ready           := true.B // MSHRs should always be ready for refills
+  when (tl_out.d.bits.source === cfg.nMSHRs.U) {
+    // This should be ReleaseAck
+    tl_out.d.ready := true.B
+    mshrs.io.mem_grant.valid := false.B
+    mshrs.io.mem_grant.bits  := DontCare
+  } .otherwise {
+    // This should be GrantData
+    mshrs.io.mem_grant <> tl_out.d
+  }
 
   dataWriteArb.io.in(1) <> mshrs.io.refill
   metaWriteArb.io.in(0) <> mshrs.io.meta_write
@@ -640,7 +646,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                        !(io.lsu.exception && s2_req.uop.uses_ldq) &&
                        !IsKilledByBranch(io.lsu.brinfo, s2_req.uop)
   io.lsu.nack.bits  := UpdateBrMask(io.lsu.brinfo, s2_req)
-  assert(!(io.lsu.nack.valid && !s2_is_lsu))
+  assert(!(io.lsu.nack.valid && s2_type =/= t_lsu))
 
   // Store/amo hits
   val s3_req   = RegNext(s2_req)

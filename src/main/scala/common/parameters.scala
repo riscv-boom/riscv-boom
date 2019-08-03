@@ -214,6 +214,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableFastLoadUse = boomParams.enableFastLoadUse
   val enablePrefetching = boomParams.enablePrefetching
 
+  val nLBEntries = dcacheParams.nMSHRs + (if (enablePrefetching) 2 else 0)
+
   //************************************
   // Branch Prediction
 
