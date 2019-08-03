@@ -40,10 +40,10 @@ Generating a BOOM System
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 The word "generator" used in many *Chisel* projects refers to a program that takes in a *Chisel Module* and a *Configuration* and returns a circuit based on those parameters.
-The generator for BOOM can be found in ``src/main/scala/system/Generator.scala``.
+The generator for BOOM and Rocket SoC's can be found in Chipyard under the ``Generator.scala`` file.
 The *Chisel Module* used in the generator is normally the top-level *Chisel Module* class that you (the developer) want to make a circuit of.
 The *Configuration* is just a set of *Scala* variables used to configure the parameters of the passed in *Chisel Module*.
-In BOOM's case, the top-level *Module* would be something like the ExampleBoomSystem found in ``src/main/scala/system/ExampleBoomSystem.scala`` and a *Configuration* like MediumBoomConfig found in ``src/main/scala/system/Configs.scala``. [3]_
+In BOOM's case, the top-level *Module* would be something like the BoomRocketSystem found in ``src/main/scala/system/BoomRocketSystem.scala`` and a *Configuration* like MediumBoomConfig found in ``src/main/scala/common/configs.scala``. [3]_
 In this case, the parameters specified in MediumBoomConfig would set the necessary *Scala* variables needed throughout the ExampleBoomSystem *Module*.
 Once the *Module* and *Configuration* is passed into the generator, they will be combined to form a piece of RTL representing the circuit given by the *Module* parameterized by the *Configuration*.
 
@@ -88,4 +88,4 @@ Now that the flow of ecosystem has been briefly explained here is a quick recap.
 
 .. [2] This section describes the current build process that is used in `Chipyard <https://github.com/ucb-bar/chipyard>`__.
 
-.. [3] This is not exactly true since to be able to run BOOM in simulations we wrap the ExampleBoomSystem in a TestHarness found in ``src/main/scala/system/TestHarness.scala``.
+.. [3] This is not exactly true since to be able to run BOOM in simulations we wrap the BoomRocketSystem in a TestHarness found in Chipyard.
