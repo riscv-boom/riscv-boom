@@ -11,6 +11,10 @@ out–of–order processors. Like the R10k and the
 
 The source code to BOOM can be found at https://github.com/riscv-boom/riscv-boom.
 
+The BOOM website can be found at https://boom-core.org.
+
+The mailing list can be found at https://groups.google.com/forum/#!forum/riscv-boom.
+
 .. toctree::
     :maxdepth: 2
     :caption: Introduction and Overview:
