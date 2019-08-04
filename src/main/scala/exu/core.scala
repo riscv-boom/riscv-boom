@@ -568,7 +568,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   if (usingRoCC) {
     for (w <- 0 until coreWidth) {
       // We guarantee only decoding 1 RoCC instruction per cycle
-      dis_uops(w).rxq_idx := exe_units.rocc_unit.io.rocc.rxq_idx
+      dis_uops(w).rxq_idx := exe_units.rocc_unit.io.rocc.rxq_idx(w)
     }
   }
 
