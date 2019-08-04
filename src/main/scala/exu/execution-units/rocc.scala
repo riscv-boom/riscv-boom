@@ -35,7 +35,7 @@ class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle
   val dis_uops         = Input(Vec(coreWidth, new MicroOp))
   val rxq_full         = Output(Bool())
   val rxq_empty        = Output(Bool())
-  val rxq_idx          = Output(UInt(log2Ceil(numRxqEntries).W))
+  val rxq_idx          = Output(Vec(coreWidth, UInt(log2Ceil(numRxqEntries).W)))
   val rob_pnr_idx      = Input(UInt(robAddrSz.W))
   val rob_head_idx     = Input(UInt(robAddrSz.W))
 
@@ -68,8 +68,6 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new RoCCShimIO)
 
-  val enq_val      = WireInit(false.B)
-
   // RoCC execute queue. Wait for PNR, holds operands and inst bits
   val rxq_val       = Reg(Vec(numRxqEntries, Bool()))
   val rxq_op_val    = Reg(Vec(numRxqEntries, Bool()))
@@ -88,18 +86,22 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   val rxq_com_head = RegInit(0.U(log2Ceil(numRxqEntries).W))
   val rxq_tail     = RegInit(0.U(log2Ceil(numRxqEntries).W))
 
-  io.core.rxq_idx := rxq_tail
 
   // Decode
   val rocc_idx = WireInit(0.U)
   val br_mask = WireInit(0.U(maxBrCount.W))
+  var enq_val = false.B
 
+  assert(PopCount(io.core.dis_rocc_vals) <= 1.U)
   for (w <- 0 until coreWidth) {
-    when (io.core.dis_rocc_vals(w)
-       && io.core.dis_uops(w).uopc === uopROCC) {
-      enq_val      := true.B
-      rocc_idx     := w.U
+    val enq_this = !enq_val && io.core.dis_rocc_vals(w) && io.core.dis_uops(w).uopc === uopROCC
+    when (enq_this) {
+      rocc_idx := w.U
     }
+
+    io.core.rxq_idx(w) := Mux(enq_val, WrapInc(rxq_tail, numRxqEntries), rxq_tail)
+
+    enq_val = enq_val || enq_this
   }
 
   when (enq_val) {
