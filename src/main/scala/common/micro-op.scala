@@ -131,11 +131,13 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
                                             // If it's non-ld/st it will write back exception bits to the fcsr.
   val fp_single        = Bool()             // single-precision floating point instruction (F-extension)
 
-  // exception information
+  // frontend exception information
   val xcpt_pf_if       = Bool()             // I-TLB page fault.
   val xcpt_ae_if       = Bool()             // I$ access exception.
   val replay_if        = Bool()             // I$ wants us to replay our ifetch request
   val xcpt_ma_if       = Bool()             // Misaligned fetch (jal/brjumping to misaligned addr).
+  val bp_debug_if      = Bool()             // Breakpoint
+  val bp_xcpt_if       = Bool()             // Breakpoint
 
   // purely debug information
   val debug_wdata      = UInt(xLen.W)

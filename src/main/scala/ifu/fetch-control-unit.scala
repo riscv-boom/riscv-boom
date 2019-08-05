@@ -28,6 +28,7 @@ import chisel3.util._
 import chisel3.core.{withReset, DontCare}
 import chisel3.experimental.{dontTouch}
 
+import freechips.rocketchip.rocket.{MStatus, BP}
 import freechips.rocketchip.config.{Parameters}
 import freechips.rocketchip.util._
 
@@ -93,6 +94,10 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
     val br_unit           = Input(new BranchUnitResp())
     val get_pc            = new GetPCFromFtqIO()
+
+    // Breakpoint info
+    val status            = Input(new MStatus)
+    val bp                = Input(Vec(nBreakpoints, new BP))
 
     val tsc_reg           = Input(UInt(xLen.W))
 
@@ -519,6 +524,9 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   fb.io.enq.valid := r_f4_valid && (r_f4_fetch_bundle.mask =/= 0.U)
   fb.io.enq.bits := r_f4_fetch_bundle
   fb.io.clear := io.clear_fetchbuffer
+
+  fb.io.status := io.status
+  fb.io.bp     := io.bp
 
   for (i <- 0 until fetchWidth) {
     if (i == 0) {
