@@ -198,6 +198,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
       req_needs_wb := old_coh.onCacheControl(M_FLUSH)._1 // does the line we are evicting need to be written back
 
       when (io.req.from_lb) {
+        assert(enablePrefetching.B)
         val (is_hit, _, coh_on_hit) = io.req.lb_coh.onAccess(io.req.uop.mem_cmd)
         lb_id          := io.req.lb_id
         lb_needs_clear := true.B
@@ -230,6 +231,9 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     when (io.lb_alloc.fire()) {
       lb_id          := io.lb_id
       state          := s_refill_req
+      if (!enablePrefetching) {
+        lb_needs_clear := true.B
+      }
     }
 
   } .elsewhen (state === s_refill_req) {
@@ -295,13 +299,10 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
       .elsewhen (rpq.io.empty && !commit_line)
     {
       when (!rpq.io.enq.fire()) {
-        io.lb_meta_write.valid       := true.B
+        io.lb_meta_write.valid       := enablePrefetching.B
         io.lb_meta_write.bits.id     := lb_id
         io.lb_meta_write.bits.coh    := new_coh
         io.lb_meta_write.bits.addr   := req.addr // TODO: Truncate the block offset bits
-        if (!enablePrefetching) {
-          lb_needs_clear := true.B
-        }
         state := s_mem_finish
       }
     } .elsewhen (rpq.io.empty || (rpq.io.deq.valid && !drain_load)) {
@@ -632,6 +633,9 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   for (i <- 0 until nLBEntries) {
     when (io.req_is_probe && s2_lb_addr_matches(i) && lb_meta(i).coh.isValid()) {
       lb_state(i) := lb_invalid
+    }
+    if (!enablePrefetching) {
+      assert(lb_state(i) =/= lb_prefetched)
     }
   }
 
