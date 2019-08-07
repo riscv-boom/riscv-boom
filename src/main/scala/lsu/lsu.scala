@@ -544,21 +544,21 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                        will_fire_sta_retry       , false.B,
                    Mux(will_fire_hella_incoming  , io.hellacache.s1_kill,
                                                    false.B))
-  dtlb.io.req.valid            := !tlb_avail
-  dtlb.io.req.bits.vaddr       := exe_vaddr
-  dtlb.io.req.bits.size        := exe_size
-  dtlb.io.req.bits.cmd         := exe_cmd
-  dtlb.io.req.bits.passthrough := exe_passthr
-  dtlb.io.kill                 := exe_kill
-  dtlb.io.sfence               := exe_sfence
+  dtlb.io.req(0).valid            := !tlb_avail
+  dtlb.io.req(0).bits.vaddr       := exe_vaddr
+  dtlb.io.req(0).bits.size        := exe_size
+  dtlb.io.req(0).bits.cmd         := exe_cmd
+  dtlb.io.req(0).bits.passthrough := exe_passthr
+  dtlb.io.kill                    := exe_kill
+  dtlb.io.sfence                  := exe_sfence
 
   // exceptions
   val ma_ld = will_fire_load_incoming && exe_req.bits.mxcpt.valid // We get ma_ld in memaddrcalc
   val ma_st = (will_fire_sta_incoming || will_fire_stad_incoming) && exe_req.bits.mxcpt.valid // We get ma_ld in memaddrcalc
-  val pf_ld = dtlb.io.req.valid && dtlb.io.resp.pf.ld && (exe_tlb_uop.uses_ldq || exe_tlb_uop.is_amo) // TODO: uses_ldq is not right here
-  val pf_st = dtlb.io.req.valid && dtlb.io.resp.pf.st && exe_tlb_uop.uses_stq
-  val ae_ld = dtlb.io.req.valid && dtlb.io.resp.ae.ld && (exe_tlb_uop.uses_ldq|| exe_tlb_uop.is_amo)
-  val ae_st = dtlb.io.req.valid && dtlb.io.resp.ae.st && exe_tlb_uop.uses_stq
+  val pf_ld = dtlb.io.req(0).valid && dtlb.io.resp(0).pf.ld && (exe_tlb_uop.uses_ldq || exe_tlb_uop.is_amo) // TODO: uses_ldq is not right here
+  val pf_st = dtlb.io.req(0).valid && dtlb.io.resp(0).pf.st && exe_tlb_uop.uses_stq
+  val ae_ld = dtlb.io.req(0).valid && dtlb.io.resp(0).ae.ld && (exe_tlb_uop.uses_ldq|| exe_tlb_uop.is_amo)
+  val ae_st = dtlb.io.req(0).valid && dtlb.io.resp(0).ae.st && exe_tlb_uop.uses_stq
 
   // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
   mem_xcpt_valid := (pf_ld || pf_st || ae_ld || ae_st || ma_ld || ma_st) &&
@@ -592,21 +592,21 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                rocket.Causes.store_access.U))))))
 
 
-  assert (!(dtlb.io.req.valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
+  assert (!(dtlb.io.req(0).valid && exe_tlb_uop.is_fence), "Fence is pretending to talk to the TLB")
   assert (!((will_fire_load_incoming || will_fire_sta_incoming || will_fire_stad_incoming) &&
-            exe_req.bits.mxcpt.valid && dtlb.io.req.valid &&
+            exe_req.bits.mxcpt.valid && dtlb.io.req(0).valid &&
             !(exe_tlb_uop.ctrl.is_load || exe_tlb_uop.ctrl.is_sta)),
           "A uop that's not a load or store-address is throwing a memory exception.")
 
-  val tlb_miss = dtlb.io.req.valid && (dtlb.io.resp.miss || !dtlb.io.req.ready)
+  val tlb_miss = dtlb.io.req(0).valid && (dtlb.io.resp(0).miss || !dtlb.io.req(0).ready)
 
   // output
-  val exe_tlb_paddr = Cat(dtlb.io.resp.paddr(paddrBits-1,corePgIdxBits), exe_vaddr(corePgIdxBits-1,0))
-  assert (exe_tlb_paddr === dtlb.io.resp.paddr || exe_req.bits.sfence.valid, "[lsu] paddrs should match.")
+  val exe_tlb_paddr = Cat(dtlb.io.resp(0).paddr(paddrBits-1,corePgIdxBits), exe_vaddr(corePgIdxBits-1,0))
+  assert (exe_tlb_paddr === dtlb.io.resp(0).paddr || exe_req.bits.sfence.valid, "[lsu] paddrs should match.")
 
   // check if a load is uncacheable - must stop it from executing speculatively,
   // as it might have side-effects!
-  val tlb_addr_uncacheable = !(dtlb.io.resp.cacheable)
+  val tlb_addr_uncacheable = !(dtlb.io.resp(0).cacheable)
 
   assert (stq(stq_execute_head).valid ||
           stq_head === stq_execute_head || stq_tail === stq_execute_head,
@@ -789,8 +789,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val mem_stdf_uop         = RegNext(UpdateBrMask(io.core.brinfo, io.core.fp_stdata.bits.uop))
 
 
-  val mem_tlb_miss             = RegNext(dtlb.io.req.valid && tlb_miss)
-  val mem_tlb_addr_uncacheable = RegNext(dtlb.io.req.valid && tlb_addr_uncacheable)
+  val mem_tlb_miss             = RegNext(dtlb.io.req(0).valid && tlb_miss)
+  val mem_tlb_addr_uncacheable = RegNext(dtlb.io.req(0).valid && tlb_addr_uncacheable)
   val mem_paddr                = RegNext(io.dmem.req.bits.addr)
 
   // Task 1: Clr ROB busy bit
@@ -1356,7 +1356,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     can_fire_hella_incoming := true.B
 
     hella_data := io.hellacache.s1_data
-    hella_xcpt := dtlb.io.resp
+    hella_xcpt := dtlb.io.resp(0)
 
     when (io.hellacache.s1_kill) {
       when (will_fire_hella_incoming && io.dmem.req.fire()) {
