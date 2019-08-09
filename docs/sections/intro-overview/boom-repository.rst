@@ -13,10 +13,17 @@ The BOOM core source code can be found in ``boom/src/main/scala``.
 The core code structure is shown below:
 
 * ``boom/src/main/scala/``
+
   * ``bpu/`` - branch predictor unit
+
   * ``common/`` - configs, bundles, and tile definitions
+
   * ``exu/`` - execute/core unit
+
   * ``ifu/`` - instruction fetch unit
+
   * ``lsu/`` - load/store/memory unit
+
   * ``system/`` - non-core system-level infrastructure
+
   * ``util/`` - utilities
