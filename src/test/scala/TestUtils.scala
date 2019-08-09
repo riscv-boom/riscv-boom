@@ -2,8 +2,6 @@
 // Copyright (c) 2018 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Abraham Gonzalez
-//------------------------------------------------------------------------------
 
 package boom.tests
 
