@@ -137,17 +137,17 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   val priv = if (instruction) io.ptw.status.prv else io.ptw.status.dprv
   val priv_s = priv(0)
   val priv_uses_vm = priv <= PRV.S.U
-  val vm_enabled = widthMap((w: Int) => usingVM.B && io.ptw.ptbr.mode(io.ptw.ptbr.mode.getWidth-1) && priv_uses_vm && !io.req(w).bits.passthrough)
+  val vm_enabled = widthMap(w => usingVM.B && io.ptw.ptbr.mode(io.ptw.ptbr.mode.getWidth-1) && priv_uses_vm && !io.req(w).bits.passthrough)
 
   // share a single physical memory attribute checker (unshare if critical path)
-  val vpn = widthMap((w: Int) => io.req(w).bits.vaddr(vaddrBits-1, pgIdxBits))
+  val vpn = widthMap(w => io.req(w).bits.vaddr(vaddrBits-1, pgIdxBits))
   val refill_ppn = io.ptw.resp.bits.pte.ppn(ppnBits-1, 0)
   val do_refill = usingVM.B && io.ptw.resp.valid
   val invalidate_refill = state.isOneOf(s_request /* don't care */, s_wait_invalidate)
-  val mpu_ppn = widthMap((w: Int) =>
+  val mpu_ppn = widthMap(w =>
                 Mux(do_refill, refill_ppn,
                 Mux(vm_enabled(w) && special_entry.nonEmpty.B, special_entry.map(_.ppn(vpn(w))).getOrElse(0.U), io.req(w).bits.vaddr >> pgIdxBits)))
-  val mpu_physaddr = widthMap((w: Int) => Cat(mpu_ppn(w), io.req(w).bits.vaddr(pgIdxBits-1, 0)))
+  val mpu_physaddr = widthMap(w => Cat(mpu_ppn(w), io.req(w).bits.vaddr(pgIdxBits-1, 0)))
   val pmp = Seq.fill(memWidth) { Module(new PMPChecker(lgMaxSize)) }
   for (w <- 0 until memWidth) {
     pmp(w).io.addr := mpu_physaddr(w)
@@ -155,24 +155,24 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     pmp(w).io.pmp := (io.ptw.pmp: Seq[PMP])
     pmp(w).io.prv := Mux(usingVM.B && (do_refill || io.req(w).bits.passthrough /* PTW */), PRV.S.U, priv) // TODO should add separate bit to track PTW
   }
-  val legal_address = widthMap((w: Int) => edge.manager.findSafe(mpu_physaddr(w)).reduce(_||_))
+  val legal_address = widthMap(w => edge.manager.findSafe(mpu_physaddr(w)).reduce(_||_))
   def fastCheck(member: TLManagerParameters => Boolean, w: Int) =
     legal_address(w) && edge.manager.fastProperty(mpu_physaddr(w), member, (b:Boolean) => b.B)
-  val cacheable = widthMap((w: Int) => fastCheck(_.supportsAcquireT, w) && (instruction || !usingDataScratchpad).B)
-  val homogeneous = widthMap((w: Int) => TLBPageLookup(edge.manager.managers, xLen, p(CacheBlockBytes), BigInt(1) << pgIdxBits)(mpu_physaddr(w)).homogeneous)
-  val prot_r   = widthMap((w: Int) => fastCheck(_.supportsGet, w) && pmp(w).io.r)
-  val prot_w   = widthMap((w: Int) => fastCheck(_.supportsPutFull, w) && pmp(w).io.w)
-  val prot_al  = widthMap((w: Int) => fastCheck(_.supportsLogical, w))
-  val prot_aa  = widthMap((w: Int) => fastCheck(_.supportsArithmetic, w))
-  val prot_x   = widthMap((w: Int) => fastCheck(_.executable, w) && pmp(w).io.x)
-  val prot_eff = widthMap((w: Int) => fastCheck(Seq(RegionType.PUT_EFFECTS, RegionType.GET_EFFECTS) contains _.regionType, w))
+  val cacheable = widthMap(w => fastCheck(_.supportsAcquireT, w) && (instruction || !usingDataScratchpad).B)
+  val homogeneous = widthMap(w => TLBPageLookup(edge.manager.managers, xLen, p(CacheBlockBytes), BigInt(1) << pgIdxBits)(mpu_physaddr(w)).homogeneous)
+  val prot_r   = widthMap(w => fastCheck(_.supportsGet, w) && pmp(w).io.r)
+  val prot_w   = widthMap(w => fastCheck(_.supportsPutFull, w) && pmp(w).io.w)
+  val prot_al  = widthMap(w => fastCheck(_.supportsLogical, w))
+  val prot_aa  = widthMap(w => fastCheck(_.supportsArithmetic, w))
+  val prot_x   = widthMap(w => fastCheck(_.executable, w) && pmp(w).io.x)
+  val prot_eff = widthMap(w => fastCheck(Seq(RegionType.PUT_EFFECTS, RegionType.GET_EFFECTS) contains _.regionType, w))
 
-  val sector_hits = widthMap((w: Int) => VecInit(sectored_entries.map(_.sectorHit(vpn(w)))))
-  val superpage_hits = widthMap((w: Int) => VecInit(superpage_entries.map(_.hit(vpn(w)))))
-  val hitsVec = widthMap((w: Int) => VecInit(all_entries.map(vm_enabled(w) && _.hit(vpn(w)))))
-  val real_hits = widthMap((w: Int) => hitsVec(w).asUInt)
-  val hits = widthMap((w: Int) => Cat(!vm_enabled(w), real_hits(w)))
-  val ppn = widthMap((w: Int) => Mux1H(hitsVec(w) :+ !vm_enabled(w), all_entries.map(_.ppn(vpn(w))) :+ vpn(w)(ppnBits-1, 0)))
+  val sector_hits = widthMap(w => VecInit(sectored_entries.map(_.sectorHit(vpn(w)))))
+  val superpage_hits = widthMap(w => VecInit(superpage_entries.map(_.hit(vpn(w)))))
+  val hitsVec = widthMap(w => VecInit(all_entries.map(vm_enabled(w) && _.hit(vpn(w)))))
+  val real_hits = widthMap(w => hitsVec(w).asUInt)
+  val hits = widthMap(w => Cat(!vm_enabled(w), real_hits(w)))
+  val ppn = widthMap(w => Mux1H(hitsVec(w) :+ !vm_enabled(w), all_entries.map(_.ppn(vpn(w))) :+ vpn(w)(ppnBits-1, 0)))
 
     // permission bit arrays
   when (do_refill && !invalidate_refill) {
@@ -209,28 +209,28 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     }
   }
 
-  val entries = widthMap((w: Int) => VecInit(all_entries.map(_.getData(vpn(w)))))
-  val normal_entries = widthMap((w: Int) => VecInit(ordinary_entries.map(_.getData(vpn(w)))))
+  val entries = widthMap(w => VecInit(all_entries.map(_.getData(vpn(w)))))
+  val normal_entries = widthMap(w => VecInit(ordinary_entries.map(_.getData(vpn(w)))))
   val nPhysicalEntries = 1 + special_entry.size
-  val ptw_ae_array = widthMap((w: Int) => Cat(false.B, entries(w).map(_.ae).asUInt))
-  val priv_rw_ok   = widthMap((w: Int) => Mux(!priv_s || io.ptw.status.sum, entries(w).map(_.u).asUInt, 0.U) | Mux(priv_s, ~entries(w).map(_.u).asUInt, 0.U))
-  val priv_x_ok    = widthMap((w: Int) => Mux(priv_s, ~entries(w).map(_.u).asUInt, entries(w).map(_.u).asUInt))
-  val r_array      = widthMap((w: Int) => Cat(true.B, priv_rw_ok(w) & (entries(w).map(_.sr).asUInt | Mux(io.ptw.status.mxr, entries(w).map(_.sx).asUInt, 0.U))))
-  val w_array      = widthMap((w: Int) => Cat(true.B, priv_rw_ok(w) & entries(w).map(_.sw).asUInt))
-  val x_array      = widthMap((w: Int) => Cat(true.B, priv_x_ok(w)  & entries(w).map(_.sx).asUInt))
-  val pr_array     = widthMap((w: Int) => Cat(Fill(nPhysicalEntries, prot_r(w))   , normal_entries(w).map(_.pr).asUInt) & ~ptw_ae_array(w))
-  val pw_array     = widthMap((w: Int) => Cat(Fill(nPhysicalEntries, prot_w(w))   , normal_entries(w).map(_.pw).asUInt) & ~ptw_ae_array(w))
-  val px_array     = widthMap((w: Int) => Cat(Fill(nPhysicalEntries, prot_x(w))   , normal_entries(w).map(_.px).asUInt) & ~ptw_ae_array(w))
-  val eff_array    = widthMap((w: Int) => Cat(Fill(nPhysicalEntries, prot_eff(w)) , normal_entries(w).map(_.eff).asUInt))
-  val c_array      = widthMap((w: Int) => Cat(Fill(nPhysicalEntries, cacheable(w)), normal_entries(w).map(_.c).asUInt))
-  val paa_array    = widthMap((w: Int) => Cat(Fill(nPhysicalEntries, prot_aa(w))  , normal_entries(w).map(_.paa).asUInt))
-  val pal_array    = widthMap((w: Int) => Cat(Fill(nPhysicalEntries, prot_al(w))  , normal_entries(w).map(_.pal).asUInt))
-  val paa_array_if_cached = widthMap((w: Int) => paa_array(w) | Mux(usingAtomicsInCache.B, c_array(w), 0.U))
-  val pal_array_if_cached = widthMap((w: Int) => pal_array(w) | Mux(usingAtomicsInCache.B, c_array(w), 0.U))
-  val prefetchable_array  = widthMap((w: Int) => Cat((cacheable(w) && homogeneous(w)) << (nPhysicalEntries-1), normal_entries(w).map(_.c).asUInt))
+  val ptw_ae_array = widthMap(w => Cat(false.B, entries(w).map(_.ae).asUInt))
+  val priv_rw_ok   = widthMap(w => Mux(!priv_s || io.ptw.status.sum, entries(w).map(_.u).asUInt, 0.U) | Mux(priv_s, ~entries(w).map(_.u).asUInt, 0.U))
+  val priv_x_ok    = widthMap(w => Mux(priv_s, ~entries(w).map(_.u).asUInt, entries(w).map(_.u).asUInt))
+  val r_array      = widthMap(w => Cat(true.B, priv_rw_ok(w) & (entries(w).map(_.sr).asUInt | Mux(io.ptw.status.mxr, entries(w).map(_.sx).asUInt, 0.U))))
+  val w_array      = widthMap(w => Cat(true.B, priv_rw_ok(w) & entries(w).map(_.sw).asUInt))
+  val x_array      = widthMap(w => Cat(true.B, priv_x_ok(w)  & entries(w).map(_.sx).asUInt))
+  val pr_array     = widthMap(w => Cat(Fill(nPhysicalEntries, prot_r(w))   , normal_entries(w).map(_.pr).asUInt) & ~ptw_ae_array(w))
+  val pw_array     = widthMap(w => Cat(Fill(nPhysicalEntries, prot_w(w))   , normal_entries(w).map(_.pw).asUInt) & ~ptw_ae_array(w))
+  val px_array     = widthMap(w => Cat(Fill(nPhysicalEntries, prot_x(w))   , normal_entries(w).map(_.px).asUInt) & ~ptw_ae_array(w))
+  val eff_array    = widthMap(w => Cat(Fill(nPhysicalEntries, prot_eff(w)) , normal_entries(w).map(_.eff).asUInt))
+  val c_array      = widthMap(w => Cat(Fill(nPhysicalEntries, cacheable(w)), normal_entries(w).map(_.c).asUInt))
+  val paa_array    = widthMap(w => Cat(Fill(nPhysicalEntries, prot_aa(w))  , normal_entries(w).map(_.paa).asUInt))
+  val pal_array    = widthMap(w => Cat(Fill(nPhysicalEntries, prot_al(w))  , normal_entries(w).map(_.pal).asUInt))
+  val paa_array_if_cached = widthMap(w => paa_array(w) | Mux(usingAtomicsInCache.B, c_array(w), 0.U))
+  val pal_array_if_cached = widthMap(w => pal_array(w) | Mux(usingAtomicsInCache.B, c_array(w), 0.U))
+  val prefetchable_array  = widthMap(w => Cat((cacheable(w) && homogeneous(w)) << (nPhysicalEntries-1), normal_entries(w).map(_.c).asUInt))
 
-  val misaligned = widthMap((w: Int) => (io.req(w).bits.vaddr & (UIntToOH(io.req(w).bits.size) - 1.U)).orR)
-  val bad_va = widthMap((w: Int) => if (!usingVM || (minPgLevels == pgLevels && vaddrBits == vaddrBitsExtended)) false.B else vm_enabled(w) && {
+  val misaligned = widthMap(w => (io.req(w).bits.vaddr & (UIntToOH(io.req(w).bits.size) - 1.U)).orR)
+  val bad_va = widthMap(w => if (!usingVM || (minPgLevels == pgLevels && vaddrBits == vaddrBitsExtended)) false.B else vm_enabled(w) && {
     val nPgLevelChoices = pgLevels - minPgLevels + 1
     val minVAddrBits = pgIdxBits + minPgLevels * pgLevelBits
     (for (i <- 0 until nPgLevelChoices) yield {
@@ -240,35 +240,35 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     }).orR
   })
 
-  val cmd_lrsc           = widthMap((w: Int) => usingAtomics.B && io.req(w).bits.cmd.isOneOf(M_XLR, M_XSC))
-  val cmd_amo_logical    = widthMap((w: Int) => usingAtomics.B && isAMOLogical(io.req(w).bits.cmd))
-  val cmd_amo_arithmetic = widthMap((w: Int) => usingAtomics.B && isAMOArithmetic(io.req(w).bits.cmd))
-  val cmd_read           = widthMap((w: Int) => isRead(io.req(w).bits.cmd))
-  val cmd_write          = widthMap((w: Int) => isWrite(io.req(w).bits.cmd))
-  val cmd_write_perms    = widthMap((w: Int) => cmd_write(w) ||
+  val cmd_lrsc           = widthMap(w => usingAtomics.B && io.req(w).bits.cmd.isOneOf(M_XLR, M_XSC))
+  val cmd_amo_logical    = widthMap(w => usingAtomics.B && isAMOLogical(io.req(w).bits.cmd))
+  val cmd_amo_arithmetic = widthMap(w => usingAtomics.B && isAMOArithmetic(io.req(w).bits.cmd))
+  val cmd_read           = widthMap(w => isRead(io.req(w).bits.cmd))
+  val cmd_write          = widthMap(w => isWrite(io.req(w).bits.cmd))
+  val cmd_write_perms    = widthMap(w => cmd_write(w) ||
     coreParams.haveCFlush.B && io.req(w).bits.cmd === M_FLUSH_ALL) // not a write, but needs write permissions
 
-  val lrscAllowed = widthMap((w: Int) => Mux((usingDataScratchpad || usingAtomicsOnlyForIO).B, 0.U, c_array(w)))
-  val ae_array = widthMap((w: Int) =>
+  val lrscAllowed = widthMap(w => Mux((usingDataScratchpad || usingAtomicsOnlyForIO).B, 0.U, c_array(w)))
+  val ae_array = widthMap(w =>
     Mux(misaligned(w), eff_array(w), 0.U) |
     Mux(cmd_lrsc(w)  , ~lrscAllowed(w), 0.U))
-  val ae_ld_array = widthMap((w: Int) => Mux(cmd_read(w), ae_array(w) | ~pr_array(w), 0.U))
-  val ae_st_array = widthMap((w: Int) =>
+  val ae_ld_array = widthMap(w => Mux(cmd_read(w), ae_array(w) | ~pr_array(w), 0.U))
+  val ae_st_array = widthMap(w =>
     Mux(cmd_write_perms(w)   , ae_array(w) | ~pw_array(w), 0.U) |
     Mux(cmd_amo_logical(w)   , ~pal_array_if_cached(w), 0.U) |
     Mux(cmd_amo_arithmetic(w), ~paa_array_if_cached(w), 0.U))
-  val must_alloc_array = widthMap((w: Int) =>
+  val must_alloc_array = widthMap(w =>
     Mux(cmd_amo_logical(w)   , ~paa_array(w), 0.U) |
     Mux(cmd_amo_arithmetic(w), ~pal_array(w), 0.U) |
     Mux(cmd_lrsc(w)          , ~0.U(pal_array(w).getWidth.W), 0.U))
-  val ma_ld_array = widthMap((w: Int) => Mux(misaligned(w) && cmd_read(w) , ~eff_array(w), 0.U))
-  val ma_st_array = widthMap((w: Int) => Mux(misaligned(w) && cmd_write(w), ~eff_array(w), 0.U))
-  val pf_ld_array = widthMap((w: Int) => Mux(cmd_read(w)       , ~(r_array(w) | ptw_ae_array(w)), 0.U))
-  val pf_st_array = widthMap((w: Int) => Mux(cmd_write_perms(w), ~(w_array(w) | ptw_ae_array(w)), 0.U))
-  val pf_inst_array = widthMap((w: Int) => ~(x_array(w) | ptw_ae_array(w)))
+  val ma_ld_array = widthMap(w => Mux(misaligned(w) && cmd_read(w) , ~eff_array(w), 0.U))
+  val ma_st_array = widthMap(w => Mux(misaligned(w) && cmd_write(w), ~eff_array(w), 0.U))
+  val pf_ld_array = widthMap(w => Mux(cmd_read(w)       , ~(r_array(w) | ptw_ae_array(w)), 0.U))
+  val pf_st_array = widthMap(w => Mux(cmd_write_perms(w), ~(w_array(w) | ptw_ae_array(w)), 0.U))
+  val pf_inst_array = widthMap(w => ~(x_array(w) | ptw_ae_array(w)))
 
-  val tlb_hit = widthMap((w: Int) => real_hits(w).orR)
-  val tlb_miss = widthMap((w: Int) => vm_enabled(w) && !bad_va(w) && !tlb_hit(w))
+  val tlb_hit = widthMap(w => real_hits(w).orR)
+  val tlb_miss = widthMap(w => vm_enabled(w) && !bad_va(w) && !tlb_hit(w))
 
   val sectored_plru = new PseudoLRU(sectored_entries.size)
   val superpage_plru = new PseudoLRU(superpage_entries.size)
@@ -284,7 +284,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   // we must return either the old translation or the new translation.  This
   // isn't compatible with the Mux1H approach.  So, flush the TLB and report
   // a miss on duplicate entries.
-  val multipleHits = widthMap((w: Int) => PopCountAtLeast(real_hits(w), 2))
+  val multipleHits = widthMap(w => PopCountAtLeast(real_hits(w), 2))
 
   io.miss_rdy := state === s_ready
   for (w <- 0 until memWidth) {
