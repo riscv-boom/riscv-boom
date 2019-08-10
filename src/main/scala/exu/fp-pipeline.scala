@@ -184,7 +184,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   var w_cnt = 1
   for (i <- 1 until memWidth) {
-    fregfile.io.write_ports(w_cnt).valid := RegNext(WritePort(io.ll_wports(i), fpregSz, fLen+1, RT_FLT))
+    fregfile.io.write_ports(w_cnt) := RegNext(WritePort(io.ll_wports(i), fpregSz, fLen+1, RT_FLT))
     fregfile.io.write_ports(w_cnt).bits.data := RegNext(recode(io.ll_wports(i).bits.data,
                                                                io.ll_wports(i).bits.uop.mem_size =/= 2.U))
     w_cnt += 1
