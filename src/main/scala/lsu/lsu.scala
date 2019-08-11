@@ -982,8 +982,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val lcam_uop   = widthMap(w => Mux(do_st_search(w), mem_stq_e(w).bits.uop,
                                  Mux(do_ld_search(w), mem_ldq_e(w).bits.uop, NullMicroOp)))
 
-  val lcam_valid = widthMap(w => Mux(do_st_search(w), mem_stq_e(w).valid,
-                                 Mux(do_ld_search(w), mem_ldq_e(w).valid, false.B)))
   val lcam_mask  = widthMap(w => GenByteMask(lcam_addr(w), lcam_uop(w).mem_size))
   val lcam_st_dep_mask = widthMap(w => mem_ldq_e(w).bits.st_dep_mask)
   val lcam_is_fence = widthMap(w => lcam_uop(w).is_fence)
@@ -1008,9 +1006,16 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   // Mask of stores which we can forward from
   val ldst_forward_matches = WireInit(widthMap(w => VecInit((0 until NUM_STQ_ENTRIES).map(x=>false.B))))
 
-  val failed_loads     = WireInit(VecInit((0 until NUM_LDQ_ENTRIES).map(x=>false.B)))
-  val succeeding_loads = WireInit(VecInit((0 until NUM_LDQ_ENTRIES).map(x=>false.B)))
-  val nacking_loads    = WireInit(VecInit((0 until NUM_LDQ_ENTRIES).map(x=>false.B)))
+  val executing_loads  = WireInit(VecInit((0 until NUM_LDQ_ENTRIES).map(x=>false.B))) // Loads which are firing (searching the LDQ/STQ) in this stage
+  val failed_loads     = WireInit(VecInit((0 until NUM_LDQ_ENTRIES).map(x=>false.B))) // Loads which we will report as failures (throws a mini-exception)
+  val succeeding_loads = WireInit(VecInit((0 until NUM_LDQ_ENTRIES).map(x=>false.B))) // Loads which are responding to core in the next stage
+  val nacking_loads    = WireInit(VecInit((0 until NUM_LDQ_ENTRIES).map(x=>false.B))) // Loads which are being nacked by dcache in the next stage
+
+  for (w <- 0 until memWidth) {
+    when (do_ld_search(w)) {
+      executing_loads(lcam_ldq_idx(w)) := true.B
+    }
+  }
 
   for (i <- 0 until NUM_LDQ_ENTRIES) {
     val l_valid = ldq(i).valid
@@ -1025,7 +1030,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     // Searcher is a store
     for (w <- 0 until memWidth) {
       when (do_st_search(w)                                                                         &&
-            lcam_valid(w)                                                                           &&
             l_valid                                                                                 &&
             l_bits.addr.valid                                                                       &&
             ((l_bits.executed && !l_bits.execute_ignore) || l_bits.succeeded || l_is_succeeding)    &&
@@ -1044,7 +1048,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
           }
         }
       } .elsewhen (do_ld_search(w)            &&
-                   lcam_valid(w)              &&
                    l_valid                    &&
                    l_bits.addr.valid          &&
                    !l_bits.addr_is_virtual    &&
@@ -1052,7 +1055,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                    ((lcam_mask(w) & l_mask) =/= 0.U)) {
         val searcher_is_older = IsOlder(lcam_ldq_idx(w), i.U, ldq_head)
         when (searcher_is_older) {
-          when ((l_bits.executed && !l_bits.execute_ignore)) {
+          when ((l_bits.executed && !l_bits.execute_ignore && !executing_loads(i))) { // If the load is proceeding in parallel we don't need to kill it
             when (l_bits.succeeded || l_is_succeeding) { // If the younger load is executing and succeeded, we are screwed. Throw order fail
               ldq(i).bits.order_fail := true.B
               failed_loads(i)        := true.B
@@ -1082,7 +1085,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                               (s_addr(corePAddrBits-1,3) === lcam_addr(w)(corePAddrBits-1,3))))
     val write_mask = GenByteMask(s_addr, s_uop.mem_size)
     for (w <- 0 until memWidth) {
-      when (do_ld_search(w) && stq(i).valid && lcam_valid(w) && lcam_st_dep_mask(w)(i)) {
+      when (do_ld_search(w) && stq(i).valid && lcam_st_dep_mask(w)(i)) {
         when (((lcam_mask(w) & write_mask) === lcam_mask(w)) && !s_uop.is_fence && dword_addr_matches(w) && can_forward(w))
         {
           ldst_addr_matches(w)(i)            := true.B
