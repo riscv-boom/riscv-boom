@@ -843,19 +843,19 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   //-------------------------------------------------------------
   // Note the DCache may not have accepted our request
 
-  val exe_req_killed = IsKilledByBranch(io.core.brinfo, exe_req.bits.uop)
+  val exe_req_killed = widthMap(w => IsKilledByBranch(io.core.brinfo, exe_req(w).bits.uop))
   val stdf_killed = IsKilledByBranch(io.core.brinfo, io.core.fp_stdata.bits.uop)
 
-  val fired_load_incoming  = RegNext(will_fire_load_incoming && !exe_req_killed)
-  val fired_stad_incoming  = RegNext(will_fire_stad_incoming && !exe_req_killed)
-  val fired_sta_incoming   = RegNext(will_fire_sta_incoming  && !exe_req_killed)
-  val fired_std_incoming   = RegNext(will_fire_std_incoming  && !exe_req_killed)
+  val fired_load_incoming  = widthMap(w => RegNext(will_fire_load_incoming(w) && !exe_req_killed(w)))
+  val fired_stad_incoming  = widthMap(w => RegNext(will_fire_stad_incoming(w) && !exe_req_killed(w)))
+  val fired_sta_incoming   = widthMap(w => RegNext(will_fire_sta_incoming (w) && !exe_req_killed(w)))
+  val fired_std_incoming   = widthMap(w => RegNext(will_fire_std_incoming (w) && !exe_req_killed(w)))
   val fired_stdf_incoming  = RegNext(will_fire_stdf_incoming && !stdf_killed)
   val fired_sfence         = RegNext(will_fire_sfence)
-  val fired_load_retry     = RegNext(will_fire_load_retry   && !IsKilledByBranch(io.core.brinfo, ldq_retry_e.bits.uop))
-  val fired_sta_retry      = RegNext(will_fire_sta_retry    && !IsKilledByBranch(io.core.brinfo, stq_retry_e.bits.uop))
+  val fired_load_retry     = widthMap(w => RegNext(will_fire_load_retry   (w) && !IsKilledByBranch(io.core.brinfo, ldq_retry_e.bits.uop)))
+  val fired_sta_retry      = widthMap(w => RegNext(will_fire_sta_retry    (w) && !IsKilledByBranch(io.core.brinfo, stq_retry_e.bits.uop)))
   val fired_store_commit   = RegNext(will_fire_store_commit)
-  val fired_load_wakeup    = RegNext(will_fire_load_wakeup  && !IsKilledByBranch(io.core.brinfo, ldq_wakeup_e.bits.uop))
+  val fired_load_wakeup    = widthMap(w => RegNext(will_fire_load_wakeup  (w) && !IsKilledByBranch(io.core.brinfo, ldq_wakeup_e.bits.uop)))
   val fired_hella_incoming = RegNext(will_fire_hella_incoming)
   val fired_hella_wakeup   = RegNext(will_fire_hella_wakeup)
 
@@ -1029,12 +1029,12 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
     // Searcher is a store
     for (w <- 0 until memWidth) {
-      when (do_st_search(w)                                                                         &&
-            l_valid                                                                                 &&
-            l_bits.addr.valid                                                                       &&
-            ((l_bits.executed && !l_bits.execute_ignore) || l_bits.succeeded || l_is_succeeding)    &&
-            !l_bits.addr_is_virtual                                                                 &&
-            l_bits.st_dep_mask(lcam_stq_idx(w))                                                     &&
+      when (do_st_search(w)                                                                                             &&
+            l_valid                                                                                                     &&
+            l_bits.addr.valid                                                                                           &&
+            ((l_bits.executed && !l_bits.execute_ignore && !executing_loads(i)) || l_bits.succeeded || l_is_succeeding) &&
+            !l_bits.addr_is_virtual                                                                                     &&
+            l_bits.st_dep_mask(lcam_stq_idx(w))                                                                         &&
             dword_addr_matches(w)) {
         val forwarded_is_older = IsOlder(l_bits.forward_stq_idx, lcam_stq_idx(w), l_bits.youngest_stq_idx)
         // We are older than this load, which overlapped us.
