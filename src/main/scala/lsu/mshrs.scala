@@ -266,6 +266,9 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
       grantack.bits := edge.GrantAck(io.mem_grant.bits)
       state := Mux(grant_had_data, s_drain_rpq_loads, s_drain_rpq)
       assert(!(!grant_had_data && req_needs_wb))
+      when (!grant_had_data) { // Happens when a permissions upgrade doesn't come back with data
+        lb_needs_clear := true.B
+      }
       commit_line := false.B
       new_coh := coh_on_grant
 
@@ -391,7 +394,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   } .elsewhen (state === s_mem_finish) {
     io.mem_finish.valid := grantack.valid
     io.mem_finish.bits  := grantack.bits
-    io.lb_free.valid    := lb_needs_clear
+    io.lb_free.valid    := lb_needs_clear && enablePrefetching.B
     io.lb_free.bits     := lb_id
     lb_needs_clear      := false.B
     when (io.mem_finish.fire() || !grantack.valid) {
@@ -399,8 +402,6 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
       state := s_invalid
     }
   }
-
-
 }
 
 class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
@@ -580,7 +581,6 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   val lb_state   = RegInit(VecInit(Seq.fill(nLBEntries) { lb_invalid }))
   val lb_head    = RegInit(0.U(log2Ceil(nLBEntries).W))
   val lb_alloc_idx = RegNext(AgePriorityEncoder(lb_state.map(s => s === lb_invalid), lb_head))
-  val lb_do_free = WireInit(false.B)
   val lb_free_idx = if (enablePrefetching) {
     RegNext(AgePriorityEncoder(lb_state.map(s => s === lb_prefetched), random.LFSR(log2Ceil(nLBEntries))))
   } else { 0.U }
@@ -592,13 +592,14 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   val lb_write_arb = Module(new Arbiter(new LineBufferWriteReq, cfg.nMSHRs))
 
   lb_alloc_arb.io.out.ready := lb_state(lb_alloc_idx) === lb_invalid
-  when (lb_alloc_arb.io.out.fire()) {
-    lb_head := WrapInc(lb_head, nLBEntries)
-    lb_state(lb_alloc_idx) := lb_in_use
-  } .elsewhen (lb_alloc_arb.io.out.valid) {
-    lb_do_free := true.B
-    when (lb_state(lb_free_idx) === lb_prefetched) {
-      lb_state(lb_free_idx) := lb_invalid
+  if (enablePrefetching) { // When not prefetching the MSHRs have 1-to-1 allocation of linebuffer
+    when (lb_alloc_arb.io.out.fire()) {
+      lb_head := WrapInc(lb_head, nLBEntries)
+      lb_state(lb_alloc_idx) := lb_in_use
+    } .elsewhen (lb_alloc_arb.io.out.valid) {
+      when (lb_state(lb_free_idx) === lb_prefetched) {
+        lb_state(lb_free_idx) := lb_invalid
+      }
     }
   }
 
@@ -607,7 +608,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
 
   val lb_read_data = WireInit(0.U(encRowBits.W))
   when (lb_write_arb.io.out.fire()) {
-    assert(lb_state(lb_write_arb.io.out.bits.id) === lb_in_use)
+    assert(lb_state(lb_write_arb.io.out.bits.id) === lb_in_use || !enablePrefetching.B)
     lb.write(lb_write_arb.io.out.bits.lb_addr, lb_write_arb.io.out.bits.data)
   } .otherwise {
     lb_read_arb.io.out.ready := true.B
@@ -631,11 +632,8 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
 
   // Probes clear prefetched lines out of LineBuffer
   for (i <- 0 until nLBEntries) {
-    when (io.req_is_probe && s2_lb_addr_matches(i) && lb_meta(i).coh.isValid()) {
+    when (io.req_is_probe && s2_lb_addr_matches(i) && lb_meta(i).coh.isValid() && enablePrefetching.B) {
       lb_state(i) := lb_invalid
-    }
-    if (!enablePrefetching) {
-      assert(lb_state(i) =/= lb_prefetched)
     }
   }
 
@@ -685,9 +683,9 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     mshr.io.req_sec_val  := io.req.valid && sdq_rdy && tag_match && cacheable
     mshr.io.req          := io.req.bits
     mshr.io.req.sdq_id   := sdq_alloc_id
-    mshr.io.req.from_lb  := s2_lb_hit
-    mshr.io.req.lb_id    := s2_lb_hit_idx
-    mshr.io.req.lb_coh   := s2_lb_hit_state
+    mshr.io.req.from_lb  := (if (enablePrefetching) s2_lb_hit       else false.B)
+    mshr.io.req.lb_id    := (if (enablePrefetching) s2_lb_hit_idx   else DontCare)
+    mshr.io.req.lb_coh   := (if (enablePrefetching) s2_lb_hit_state else DontCare)
 
     mshr.io.brinfo       := io.brinfo
     mshr.io.exception    := io.exception
@@ -704,13 +702,14 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     refill_arb.io.in(i)     <> mshr.io.refill
 
     lb_alloc_arb.io.in(i)      <> mshr.io.lb_alloc
-    mshr.io.lb_id              := lb_alloc_idx
+    if (!enablePrefetching) mshr.io.lb_alloc.ready := true.B
+    mshr.io.lb_id              := (if (enablePrefetching) lb_alloc_idx else i.U)
     lb_read_arb.io.in(i)       <> mshr.io.lb_read
     mshr.io.lb_resp            := lb_read_data
     lb_write_arb.io.in(i)      <> mshr.io.lb_write
 
     when (mshr.io.lb_meta_write.valid) {
-      assert(lb_state(mshr.io.lb_meta_write.bits.id) === lb_in_use)
+      assert(lb_state(mshr.io.lb_meta_write.bits.id) === lb_in_use && enablePrefetching.B)
       lb_meta(mshr.io.lb_meta_write.bits.id).coh  := mshr.io.lb_meta_write.bits.coh
       lb_meta(mshr.io.lb_meta_write.bits.id).addr := mshr.io.lb_meta_write.bits.addr
 
