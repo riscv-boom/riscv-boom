@@ -428,7 +428,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
 
   // Can we retry a load that missed in the TLB
-
   val can_fire_load_retry    = widthMap(w =>
                                ( ldq_retry_e.valid                            &&
                                  ldq_retry_e.bits.addr.valid                  &&
@@ -441,13 +440,17 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                                 !ldq_retry_e.bits.order_fail))
 
   // Can we retry a store addrgen that missed in the TLB
+  // - Weird edge case when sta_retry and std_incoming for same entry in same cycle. Delay this
   val can_fire_sta_retry     = widthMap(w =>
                                ( stq_retry_e.valid                            &&
                                  stq_retry_e.bits.addr.valid                  &&
                                  stq_retry_e.bits.addr_is_virtual             &&
                                  (w == memWidth-1).B                          &&
-                                 RegNext(dtlb.io.miss_rdy)))
-
+                                 RegNext(dtlb.io.miss_rdy)                    &&
+                                 !(widthMap(i => (i != w).B               &&
+                                                 can_fire_std_incoming(i) &&
+                                                 stq_incoming_idx(i) === stq_retry_idx).reduce(_||_))
+                               ))
   // Can we commit a store
   val can_fire_store_commit  = widthMap(w =>
                                ( stq_commit_e.valid                           &&
