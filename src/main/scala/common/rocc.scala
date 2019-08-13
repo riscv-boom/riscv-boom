@@ -55,6 +55,8 @@ trait HasBoomLazyRoCCModule extends CanHaveBoomPTWModule
       hellaCachePorts += dcIF.io.cache
       respArb.io.in(i) <> Queue(rocc.module.io.resp)
     }
+    // Connect the snooping lines
+    outer.roccs.foreach(_.module.io.dcacheSnoop := outer.dcache.module.io.snoop)
     // Create this FPU just for RoCC
     val nFPUPorts = outer.roccs.filter(_.usesFPU).size
     if (nFPUPorts > 0) {

@@ -290,6 +290,7 @@ class BoomDCacheBundle(implicit p: Parameters) extends BoomBundle()(p) {
   val hartid = Input(UInt(hartIdLen.W))
   val errors = new DCacheErrors
   val lsu   = Flipped(new LSUDMemIO)
+  val snoop = Valid(new HellaCacheSnoopBundle)
 }
 
 class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModuleImp(outer)
@@ -680,4 +681,9 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
 
   io.lsu.ordered := mshrs.io.fence_rdy && !s1_valid && !s2_valid
+
+  // Only send snoops if the request is coming from a normal MSHR
+  io.snoop.valid := tl_out.a.fire() && tl_out.a.bits.source < cfg.nMSHRs.U
+  io.snoop.bits.addr := tl_out.a.bits.address
+  io.snoop.bits.rw   := tl_out.a.bits.param =/= TLPermissions.NtoB
 }
