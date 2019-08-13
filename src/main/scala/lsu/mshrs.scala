@@ -706,7 +706,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     mshr.io.req          := req.bits
     mshr.io.req.sdq_id   := sdq_alloc_id
 
-    mshr.io.req.from_lb  := (if (enablePrefetching) s2_lb_hit      (req_idx) else false.B)
+    mshr.io.req.from_lb  := (if (enablePrefetching) s2_lb_hit                else false.B)
     mshr.io.req.lb_id    := (if (enablePrefetching) s2_lb_hit_idx  (req_idx) else DontCare)
     mshr.io.req.lb_coh   := (if (enablePrefetching) s2_lb_hit_state(req_idx) else DontCare)
 
