@@ -441,7 +441,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
                       || rob.io.commit.rollback
                       || dec_xcpt_stall
                       || branch_mask_full(w)
-                      || ren_stalls(w)
                       || flush_ifu))
 
   val dec_stalls = dec_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
@@ -483,7 +482,6 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     rename.io.kill := flush_ifu
     rename.io.brinfo := br_unit.brinfo
 
-    rename.io.flush := rob.io.flush.valid || io.ifu.sfence_take_pc
     rename.io.debug_rob_empty := rob.io.empty
 
     rename.io.dec_fire := dec_fire
@@ -551,6 +549,7 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
   val dis_hazards = (0 until coreWidth).map(w =>
                       dis_valids(w) &&
                       (  !rob.io.ready
+                      || ren_stalls(w)
                       || lsu.io.laq_full(w) && dis_uops(w).is_load
                       || lsu.io.stq_full(w) && dis_uops(w).is_store
                       || !dispatcher.io.ren_uops(w).ready
