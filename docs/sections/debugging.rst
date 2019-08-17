@@ -72,7 +72,7 @@ To enable pipeline visualization, first set :code:`O3PIPEVIEW_PRINTF` in
     val O3PIPEVIEW_PRINTF = true // dump trace for O3PipeView from gem5
 
 Rebuild and rerun BOOM. You should find the traces (:code:`*.out`) in
-the :code:`verisim/output/` or :code:`vsim/output/` directories if you are using :code:`boom-template` to
+the :code:`verilator/output/` or :code:`vcs/output/` directories if you are using :code:`chipyard` to
 run the core. To generate the visualization, first download and install gem5, and then run:
 
 .. code-block:: bash
