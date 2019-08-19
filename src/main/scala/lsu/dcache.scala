@@ -268,47 +268,18 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
   val waddr = io.write.bits.addr >> rowOffBits
   val raddr = io.read.bits.addr >> rowOffBits
 
-  if (doNarrowRead) {
-    for (w <- 0 until nWays by rowWords) {
-      val wway_en = io.write.bits.way_en(w+rowWords-1,w)
-      val rway_en = io.read.bits.way_en(w+rowWords-1,w)
-      val resp = Wire(Vec(rowWords, Bits(width = encRowBits)))
-      val r_raddr = RegEnable(io.read.bits.addr, io.read.valid)
-      for (i <- 0 until resp.size) {
-        val (array, omSRAM) = DescribedSRAM(
-          name = s"array_${w}_${i}",
-          desc = "Non-blocking DCache Data Array",
-          size = nSets * refillCycles,
-          data = Vec(rowWords, Bits(width=encDataBits))
-        )
-        when (wway_en.orR && io.write.valid && io.write.bits.wmask(i)) {
-          val data = Vec.fill(rowWords)(io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i))
-          array.write(waddr, data, wway_en.asBools)
-        }
-        resp(i) := array.read(raddr, rway_en.orR && io.read.valid).asUInt
-      }
-      for (dw <- 0 until rowWords) {
-        val r = Vec(resp.map(_(encDataBits*(dw+1)-1,encDataBits*dw)))
-        val resp_mux =
-          if (r.size == 1) r
-          else Vec(r(r_raddr(rowOffBits-1,wordOffBits)), r.tail:_*)
-        io.resp(w+dw) := resp_mux.asUInt
-      }
+  for (w <- 0 until nWays) {
+    val (array, omSRAM) = DescribedSRAM(
+      name = s"array_${w}",
+      desc = "Non-blocking DCache Data Array",
+      size = nSets * refillCycles,
+      data = Vec(rowWords, Bits(width=encDataBits))
+    )
+    when (io.write.bits.way_en(w) && io.write.valid) {
+      val data = Vec.tabulate(rowWords)(i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i))
+      array.write(waddr, data, io.write.bits.wmask.asBools)
     }
-  } else {
-    for (w <- 0 until nWays) {
-      val (array, omSRAM) = DescribedSRAM(
-        name = s"array_${w}",
-        desc = "Non-blocking DCache Data Array",
-        size = nSets * refillCycles,
-        data = Vec(rowWords, Bits(width=encDataBits))
-      )
-      when (io.write.bits.way_en(w) && io.write.valid) {
-        val data = Vec.tabulate(rowWords)(i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i))
-        array.write(waddr, data, io.write.bits.wmask.asBools)
-      }
-      io.resp(w) := array.read(raddr, io.read.bits.way_en(w) && io.read.valid).asUInt
-    }
+    io.resp(w) := array.read(raddr, io.read.bits.way_en(w) && io.read.valid).asUInt
   }
 
   io.read.ready := Bool(true)
