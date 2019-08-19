@@ -260,9 +260,9 @@ class BoomL1MetaReadReq(implicit p: Parameters) extends BoomBundle()(p) {
 
 class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCacheParameters {
   val io = new Bundle {
-    val read = Flipped(Decoupled(new L1DataReadReq))
+    val read = Vec(memWidth, Flipped(Decoupled(new L1DataReadReq)))
     val write = Flipped(Decoupled(new L1DataWriteReq))
-    val resp = Output(Vec(nWays, Bits(encRowBits.W)))
+    val resp = Output(Vec(memWidth, Vec(nWays, Bits(encRowBits.W))))
   }
 
   val waddr = io.write.bits.addr >> rowOffBits
