@@ -260,9 +260,9 @@ class BoomL1MetaReadReq(implicit p: Parameters) extends BoomBundle()(p) {
 
 class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCacheParameters {
   val io = new Bundle {
-    val read = Decoupled(new L1DataReadReq).flip
-    val write = Decoupled(new L1DataWriteReq).flip
-    val resp = Vec(nWays, Bits(OUTPUT, encRowBits))
+    val read = Flipped(Decoupled(new L1DataReadReq))
+    val write = Flipped(Decoupled(new L1DataWriteReq))
+    val resp = Output(Vec(nWays, Bits(encRowBits.W)))
   }
 
   val waddr = io.write.bits.addr >> rowOffBits
@@ -273,7 +273,7 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
       name = s"array_${w}",
       desc = "Non-blocking DCache Data Array",
       size = nSets * refillCycles,
-      data = Vec(rowWords, Bits(width=encDataBits))
+      data = Vec(rowWords, Bits(encDataBits.W))
     )
     when (io.write.bits.way_en(w) && io.write.valid) {
       val data = Vec.tabulate(rowWords)(i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i))
@@ -282,8 +282,8 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
     io.resp(w) := array.read(raddr, io.read.bits.way_en(w) && io.read.valid).asUInt
   }
 
-  io.read.ready := Bool(true)
-  io.write.ready := Bool(true)
+  io.read.ready := true.B
+  io.write.ready := true.B
 }
 
 /**
