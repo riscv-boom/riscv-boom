@@ -264,20 +264,23 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
     val write = Flipped(Decoupled(new L1DataWriteReq))
     val resp = Output(Vec(memWidth, Vec(nWays, Bits(encRowBits.W))))
   }
+  val nBanks = boomParams.numDCacheBanks
 
   val waddr = io.write.bits.addr >> rowOffBits
   val raddr = io.read.bits.addr >> rowOffBits
 
   for (w <- 0 until nWays) {
-    val (array, omSRAM) = DescribedSRAM(
-      name = s"array_${w}",
-      desc = "Non-blocking DCache Data Array",
-      size = nSets * refillCycles,
-      data = Vec(rowWords, Bits(encDataBits.W))
-    )
-    when (io.write.bits.way_en(w) && io.write.valid) {
-      val data = Vec.tabulate(rowWords)(i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i))
-      array.write(waddr, data, io.write.bits.wmask.asBools)
+    for (b <- 0 until nBanks) {
+      val (array, omSRAM) = DescribedSRAM(
+        name = s"array_${w}_${b}",
+        desc = "Non-blocking DCache Data Array",
+        size = nSets * refillCycles,
+        data = Vec(rowWords, Bits(encDataBits.W))
+      )
+      when (io.write.bits.way_en(w) && io.write.valid) {
+        val data = Vec.tabulate(rowWords)(i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i))
+        array.write(waddr, data, io.write.bits.wmask.asBools)
+      }
     }
     io.resp(w) := array.read(raddr, io.read.bits.way_en(w) && io.read.valid).asUInt
   }
