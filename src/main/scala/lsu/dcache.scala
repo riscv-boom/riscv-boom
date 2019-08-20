@@ -288,6 +288,8 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
   val bank_write_gnt = (UIntToOH(wbank) & Fill(nBanks, io.write.valid)).asBools
 
   for (w <- 0 until nWays) {
+    val bank_reads = Wire(Vec(nBanks, Bits(encDataBits.W)))
+
     for (b <- 0 until nBanks) {
       val (array, omSRAM) = DescribedSRAM(
         name = s"array_${w}_${b}",
@@ -295,12 +297,18 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
         size = bankSize,
         data = Vec(rowWords, Bits(encDataBits.W))
       )
-      when (io.write.bits.way_en(w) && io.write.valid) {
+
+      val ridx = Mux1H(bank_read_gnts(b), ridxs)
+      val way_en = Mux1H(bank_read_gnts(b), io.read.map(_.bits.way_en))
+      bank_reads(b) := array.read(ridx, way_en && bank_read_gnts(b))
+
+      when (io.write.bits.way_en(w) && bank_write_gnt(b)) {
         val data = Vec.tabulate(rowWords)(i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i))
         array.write(waddr, data, io.write.bits.wmask.asBools)
       }
     }
-    io.resp(w) := array.read(raddr, io.read.bits.way_en(w) && io.read.valid).asUInt
+
+    io.resp(w) := Mux1H(RegNext(bank_read_gnts), bank_reads)
   }
 
   io.read.ready := true.B
