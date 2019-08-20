@@ -268,6 +268,8 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
     val nacks = Output(Vec(memWidth, Bool()))
   }
 
+  def pipeMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
+
   val nBanks   = boomParams.numDCacheBanks
   val bankSize = nSets * refillCycles / nBanks
   require (nBanks >= memWidth)
@@ -280,14 +282,13 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
 
   //----------------------------------------------------------------------------------------------------
 
-  val s0_rbanks = if (nBanks > 1) io.read.map((_.bits.addr >> bankOffBits)(bankBits-1,0)) else Seq(0.U)
+  val s0_rbanks = if (nBanks > 1) VecInit(io.read.map((_.bits.addr >> bankOffBits)(bankBits-1,0))) else Vec(1, 0.U)
   val s0_wbank  = if (nBanks > 1) (io.write.bits.addr >> bankOffBits)(bankBits-1,0) else 0.U
-  val s0_ridxs  = io.read.map((_.bits.addr >> idxOffBits)(idxBits-1,0))
+  val s0_ridxs  = VecInit(io.read.map((_.bits.addr >> idxOffBits)(idxBits-1,0)))
   val s0_widx   = (io.write.bits.addr >> idxOffBits)(idxBits-1,0)
 
   val s0_read_valids    = VecInit(io.read.map(_.valid))
-  val s0_bank_conflicts = (0 until memWidth).map(w => (0 until w).foldLeft(false.B)(i =>
-                            io.read(i).valid && rbank(i) === rbank(w)))
+  val s0_bank_conflicts = pipeMap(w => (0 until w).foldLeft(false.B)(i => io.read(i).valid && rbank(i) === rbank(w)))
   val s0_do_bank_read   = s0_read_valids zip s0_bank_conflicts map {case (v,c) => v && !c}
   val s0_bank_read_gnts = Transpose(s0_rbanks zip s0_do_bank_read map {case (b,d) => (UIntToOH(b) & Fill(nBanks,d)).asBools})
   val s0_bank_write_gnt = (UIntToOH(s0_wbank) & Fill(nBanks, io.write.valid)).asBools
@@ -298,11 +299,10 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
   val s1_ridxs          = RegNext(s0_ridxs)
   val s1_read_valids    = RegNext(s0_read_valids)
   val s1_bank_conflicts = RegNext(s0_bank_conflicts)
-  val s1_bank_selection = (0 until memWidth).map(w => PriorityEncoderOH((0 to w).map(i =>
+  val s1_bank_selection = pipeMap(w => PriorityEncoderOH((0 to w).map(i =>
                             if (i == w) true.B else s1_read_valids(i) && s1_rbanks(i) === s1_rbanks(w))))
-  val s1_ridx_match     = (0 until memWidth).map(w => (0 to w).map(i =>
-                            if (i == w) true.B else s1_ridxs(i) === s1_ridxs(w)))
-  val s1_nacks          = (s1_bank_selection zip s1_ridx_match) map {case (s,m) => (s.asUInt & ~m.asUInt).orR}
+  val s1_ridx_match     = pipeMap(w => (0 to w).map(i => if (i == w) true.B else s1_ridxs(i) === s1_ridxs(w)))
+  val s1_nacks          = VecInit((s1_bank_selection zip s1_ridx_match) map {case (s,m) => (s.asUInt & ~m.asUInt).orR})
 
   //----------------------------------------------------------------------------------------------------
 
