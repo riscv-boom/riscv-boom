@@ -423,20 +423,21 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   metaWriteArb.io.out.ready := meta.map(_.io.write.ready).reduce(_||_)
 
   // data
-  val data = Seq.fill(memWidth) { Module(new DataArray) } // TODO: This is not the right way
+  val data = Module(new BoomDataArray)
   val dataWriteArb = Module(new Arbiter(new L1DataWriteReq, 2))
   // 0 goes to pipeline, 1 goes to MSHR refills
   val dataReadArb = Module(new Arbiter(new BoomL1DataReadReq, 3))
   // 0 goes to MSHR replays, 1 goes to wb, 2 goes to pipeline
+   dataReadArb.io.in := DontCare
 
-  dataReadArb.io.in := DontCare
   for (w <- 0 until memWidth) {
-    data(w).io.write.valid := dataWriteArb.io.out.fire()
-    data(w).io.write.bits  := dataWriteArb.io.out.bits
-    data(w).io.read.valid  := dataReadArb.io.out.valid
-    data(w).io.read.bits   := dataReadArb.io.out.bits.req(w)
+    data.io.read(w).valid := dataReadArb.io.out.valid
+    data.io.read(w).bits  := dataReadArb.io.out.bits.req(w)
   }
-  dataReadArb.io.out.ready  := data.map(_.io.read.ready).reduce(_||_)
+  dataReadArb.io.out.ready := data.map(_.io.read.ready).reduce(_||_)
+
+  data(w).io.write.valid := dataWriteArb.io.out.fire()
+  data(w).io.write.bits  := dataWriteArb.io.out.bits
   dataWriteArb.io.out.ready := data.map(_.io.write.ready).reduce(_||_)
 
   // ------------
@@ -669,15 +670,12 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   assert(debug_sc_fail_cnt < 100.U, "L1DCache failed too many SCs in a row")
 
   val s2_data = Wire(Vec(memWidth, Vec(nWays, UInt(encRowBits.W))))
-  for (w <- 0 until nWays) {
-    for (ii <- 0 until memWidth) {
-      val regs = Reg(Vec(rowWords, UInt(encDataBits.W)))
-      for (i <- 0 until rowWords) {
-        regs(i) := data(ii).io.resp(w) >> encDataBits*i
-      }
-      s2_data(ii)(w) := regs.asUInt
+  for (i <- 0 until memWidth) {
+    for (w <- 0 until nWays) {
+      s2_data(i)(w) := data.io.resp(i)(w)
     }
   }
+
   val s2_data_muxed = widthMap(w => Mux1H(s2_tag_match_way(w), s2_data(w)))
   val s2_word_idx   = widthMap(w => if (doNarrowRead) 0.U else s2_req(w).addr(log2Up(rowWords*coreDataBytes)-1, log2Up(wordBytes)))
 
@@ -693,7 +691,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_nack_victim = widthMap(w => s2_valid(w) &&  s2_hit(w) && mshrs.io.secondary_miss(w))
   // MSHRs not ready for request
   val s2_nack_miss   = widthMap(w => s2_valid(w) && !s2_hit(w) && !mshrs.io.req(w).ready)
-  s2_nack           := widthMap(w => (s2_nack_miss(w) || s2_nack_hit(w) || s2_nack_victim(w)) && s2_type =/= t_replay)
+  s2_nack           := widthMap(w => (s2_nack_miss(w) || s2_nack_hit(w) || s2_nack_victim(w)) && s2_type =/= t_replay || data.io.nacks(w))
   val s2_send_resp = widthMap(w => (RegNext(s1_send_resp_or_nack(w)) && !s2_nack(w) &&
                       (s2_hit(w) || (mshrs.io.req(w).fire() && isWrite(s2_req(w).uop.mem_cmd) && !isRead(s2_req(w).uop.mem_cmd)))))
   val s2_send_nack = widthMap(w => (RegNext(s1_send_resp_or_nack(w)) && s2_nack(w)))
