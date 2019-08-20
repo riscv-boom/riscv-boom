@@ -303,8 +303,13 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
                             if (i == w) true.B else s1_ridxs(i) === s1_ridxs(w)))
   val s1_nacks          = (s1_bank_selection zip s1_ridx_match) map {case (s,m) => (s.asUInt & ~m.asUInt).orR}
 
+  //----------------------------------------------------------------------------------------------------
+
+  val s2_bank_selection = RegNext(s1_bank_selection)
+  val s2_nacks          = RegNext(s1_nacks)
+
   for (w <- 0 until nWays) {
-    val s1_bank_reads = Wire(Vec(nBanks, Bits(encDataBits.W)))
+    val s2_bank_reads = Reg(Vec(nBanks, Bits(encDataBits.W)))
 
     for (b <- 0 until nBanks) {
       val (array, omSRAM) = DescribedSRAM(
@@ -324,10 +329,10 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
       }
     }
 
-    io.resp(w) := Mux1H(s1_bank_selection, s1_bank_reads)
+    io.resp(w) := Mux1H(s2_bank_selection, s2_bank_reads)
   }
 
-  io.nacks := s1_nacks
+  io.nacks := s2_nacks
 
   io.read.ready  := true.B
   io.write.ready := true.B
