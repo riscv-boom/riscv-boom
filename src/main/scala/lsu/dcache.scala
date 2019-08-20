@@ -19,7 +19,7 @@ import freechips.rocketchip.rocket._
 
 import boom.common._
 import boom.exu.BrResolutionInfo
-import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder, UpdateBrMask, AgePriorityEncoder, WrapInc}
+import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder, UpdateBrMask, AgePriorityEncoder, WrapInc, Transpose}
 
 
 class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) {
@@ -280,6 +280,12 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
   val idxOffBits = bankOffBits + bankBits
   val ridxs = io.read.map((_.bits.addr >> idxOffBits)(idxBits-1,0))
   val widx = (io.write.bits.addr >> idxOffBits)(idxBits-1,0)
+
+  val bank_read_cols = (0 until memWidth).map(w => (0 until w).foldLeft(false.B)(i =>
+                         io.read(i).valid && rbank(i) === rbank(w)))
+  val do_bank_read = io.read zip bank_read_cols map {case (r,c) => r.valid && !c}
+  val bank_read_gnts = Transpose(rbanks zip do_bank_read map {case (b,d) => (UIntToOH(b) & Fill(nBanks,d)).asBools})
+  val bank_write_gnt = (UIntToOH(wbank) & Fill(nBanks, io.write.valid)).asBools
 
   for (w <- 0 until nWays) {
     for (b <- 0 until nBanks) {
