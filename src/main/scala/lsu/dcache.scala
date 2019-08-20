@@ -273,24 +273,31 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
   val bankSize = nSets * refillCycles / nBanks
   require (bankSize > 0)
 
-  val bankBits = log2Ceil(nBanks)
+  val bankBits    = log2Ceil(nBanks)
   val bankOffBits = log2Ceil(rowWords)
-  val rbanks = if (nBanks > 1) io.read.map((_.bits.addr >> bankOffBits)(bankBits-1,0)) else Seq(0.U)
-  val wbank = if (nBanks > 1) (io.write.bits.addr >> bankOffBits)(bankBits-1,0) else 0.U
+  val s0_rbanks   = if (nBanks > 1) io.read.map((_.bits.addr >> bankOffBits)(bankBits-1,0)) else Seq(0.U)
+  val s0_wbank    =  if (nBanks > 1) (io.write.bits.addr >> bankOffBits)(bankBits-1,0) else 0.U
 
-  val idxBits = log2Ceil(bankSize)
-  val idxOffBits = bankOffBits + bankBits
-  val ridxs = io.read.map((_.bits.addr >> idxOffBits)(idxBits-1,0))
-  val widx = (io.write.bits.addr >> idxOffBits)(idxBits-1,0)
+  val idxBits     = log2Ceil(bankSize)
+  val idxOffBits  = bankOffBits + bankBits
+  val s0_ridxs    = io.read.map((_.bits.addr >> idxOffBits)(idxBits-1,0))
+  val s0_widx     = (io.write.bits.addr >> idxOffBits)(idxBits-1,0)
 
-  val bank_read_cols = (0 until memWidth).map(w => (0 until w).foldLeft(false.B)(i =>
-                         io.read(i).valid && rbank(i) === rbank(w)))
-  val do_bank_read = io.read zip bank_read_cols map {case (r,c) => r.valid && !c}
-  val bank_read_gnts = Transpose(rbanks zip do_bank_read map {case (b,d) => (UIntToOH(b) & Fill(nBanks,d)).asBools})
-  val bank_write_gnt = (UIntToOH(wbank) & Fill(nBanks, io.write.valid)).asBools
+  val s0_read_valids    = VecInit(io.read.map(_.valid))
+
+  val s0_bank_conflicts = (0 until memWidth).map(w => (0 until w).foldLeft(false.B)(i =>
+                            io.read(i).valid && rbank(i) === rbank(w)))
+  val s0_do_bank_read   = s0_read_valids zip s0_bank_conflicts map {case (v,c) => v && !c}
+  val s0_bank_read_gnts = Transpose(rbanks zip s0_do_bank_read map {case (b,d) => (UIntToOH(b) & Fill(nBanks,d)).asBools})
+  val s0_bank_write_gnt = (UIntToOH(s0_wbank) & Fill(nBanks, io.write.valid)).asBools
+
+  val s1_read_valids    = RegNext(s0_read_valids)
+  val s1_bank_read_cols = RegNext(s0_bank_read_cols)
+  val s1_bank_read_gnts = RegNext(s0_bank_read_gnts)
+  val s1_bank_conflicts = RegNext(s0_bank_conflicts)
 
   for (w <- 0 until nWays) {
-    val bank_reads = Wire(Vec(nBanks, Bits(encDataBits.W)))
+    val s1_bank_reads = Wire(Vec(nBanks, Bits(encDataBits.W)))
 
     for (b <- 0 until nBanks) {
       val (array, omSRAM) = DescribedSRAM(
@@ -300,20 +307,20 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
         data = Vec(rowWords, Bits(encDataBits.W))
       )
 
-      val ridx = Mux1H(bank_read_gnts(b), ridxs)
-      val way_en = Mux1H(bank_read_gnts(b), io.read.map(_.bits.way_en))
-      bank_reads(b) := array.read(ridx, way_en && bank_read_gnts(b))
+      val ridx = Mux1H(s0_bank_read_gnts(b), s0_ridxs)
+      val way_en = Mux1H(s0_bank_read_gnts(b), io.read.map(_.bits.way_en))
+      s1_bank_reads(b) := array.read(ridx, way_en && s0_bank_read_gnts(b))
 
-      when (io.write.bits.way_en(w) && bank_write_gnt(b)) {
+      when (io.write.bits.way_en(w) && s0_bank_write_gnt(b)) {
         val data = Vec.tabulate(rowWords)(i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i))
-        array.write(waddr, data, io.write.bits.wmask.asBools)
+        array.write(s0_widx, data, io.write.bits.wmask.asBools)
       }
     }
 
-    io.resp(w) := Mux1H(RegNext(bank_read_gnts), bank_reads)
+    io.resp(w) := Mux1H(s1_bank_read_gnts, s1_bank_reads)
   }
 
-  io.nacks := RegNext(VecInit(bank_read_cols))
+  io.nacks := s1_read_valids zip s1_bank_conflicts map {case (v,c) => v && c}
 
   io.read.ready := true.B
   io.write.ready := true.B
