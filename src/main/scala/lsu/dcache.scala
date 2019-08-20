@@ -264,7 +264,12 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
     val write = Flipped(Decoupled(new L1DataWriteReq))
     val resp = Output(Vec(memWidth, Vec(nWays, Bits(encRowBits.W))))
   }
+
   val nBanks = boomParams.numDCacheBanks
+  require (nBanks >= memWidth)
+
+  val bankSize = nSets * refillCycles / nBanks
+  require (bankSize > 0)
 
   val waddr = io.write.bits.addr >> rowOffBits
   val raddr = io.read.bits.addr >> rowOffBits
@@ -274,7 +279,7 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
       val (array, omSRAM) = DescribedSRAM(
         name = s"array_${w}_${b}",
         desc = "Non-blocking DCache Data Array",
-        size = nSets * refillCycles,
+        size = bankSize,
         data = Vec(rowWords, Bits(encDataBits.W))
       )
       when (io.write.bits.way_en(w) && io.write.valid) {
