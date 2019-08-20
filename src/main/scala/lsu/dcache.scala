@@ -199,6 +199,7 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
   io.wb_req.bits.way_en := way_en
   io.wb_req.bits.voluntary := false.B
 
+
   io.mshr_wb_rdy := !state.isOneOf(s_release, s_writeback_req, s_writeback_resp, s_meta_write, s_meta_write_resp)
 
   io.lsu_release.valid := state === s_lsu_release
@@ -263,6 +264,7 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
     val read = Vec(memWidth, Flipped(Decoupled(new L1DataReadReq)))
     val write = Flipped(Decoupled(new L1DataWriteReq))
     val resp = Output(Vec(memWidth, Vec(nWays, Bits(encRowBits.W))))
+    val nacks = Output(Vec(memWidth, Bool()))
   }
 
   val nBanks = boomParams.numDCacheBanks
@@ -310,6 +312,8 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
 
     io.resp(w) := Mux1H(RegNext(bank_read_gnts), bank_reads)
   }
+
+  io.nacks := RegNext(VecInit(bank_read_cols))
 
   io.read.ready := true.B
   io.write.ready := true.B
