@@ -288,13 +288,18 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
   val s0_bank_conflicts = (0 until memWidth).map(w => (0 until w).foldLeft(false.B)(i =>
                             io.read(i).valid && rbank(i) === rbank(w)))
   val s0_do_bank_read   = s0_read_valids zip s0_bank_conflicts map {case (v,c) => v && !c}
-  val s0_bank_read_gnts = Transpose(rbanks zip s0_do_bank_read map {case (b,d) => (UIntToOH(b) & Fill(nBanks,d)).asBools})
+  val s0_bank_read_gnts = Transpose(s0_rbanks zip s0_do_bank_read map {case (b,d) => (UIntToOH(b) & Fill(nBanks,d)).asBools})
   val s0_bank_write_gnt = (UIntToOH(s0_wbank) & Fill(nBanks, io.write.valid)).asBools
 
+  val s1_rbanks         = RegNext(s0_rbanks)
+  val s1_ridxs          = RegNext(s0_ridxs)
   val s1_read_valids    = RegNext(s0_read_valids)
-  val s1_bank_read_cols = RegNext(s0_bank_read_cols)
-  val s1_bank_read_gnts = RegNext(s0_bank_read_gnts)
   val s1_bank_conflicts = RegNext(s0_bank_conflicts)
+  val s1_bank_selection = (0 until memWidth).map(w => PriorityEncoderOH((0 to w).map(i =>
+                            if (i == w) true.B else s1_read_valids(i) && s1_rbanks(i) === s1_rbanks(w))))
+  val s1_ridx_match     = (0 until memWidth).map(w => (0 to w).map(i =>
+                            if (i == w) true.B else s1_ridxs(i) === s1_ridxs(w)))
+  val s1_nacks          = (s1_bank_selection zip s1_ridx_match) map {case (s,m) => (s.asUInt & ~m.asUInt).orR}
 
   for (w <- 0 until nWays) {
     val s1_bank_reads = Wire(Vec(nBanks, Bits(encDataBits.W)))
@@ -317,10 +322,10 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
       }
     }
 
-    io.resp(w) := Mux1H(s1_bank_read_gnts, s1_bank_reads)
+    io.resp(w) := Mux1H(s1_bank_selection, s1_bank_reads)
   }
 
-  io.nacks := s1_read_valids zip s1_bank_conflicts map {case (v,c) => v && c}
+  io.nacks := s1_nacks
 
   io.read.ready := true.B
   io.write.ready := true.B
