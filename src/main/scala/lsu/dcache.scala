@@ -271,8 +271,15 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
   val bankSize = nSets * refillCycles / nBanks
   require (bankSize > 0)
 
-  val waddr = io.write.bits.addr >> rowOffBits
-  val raddr = io.read.bits.addr >> rowOffBits
+  val bankBits = log2Ceil(nBanks)
+  val bankOffBits = log2Ceil(rowWords)
+  val rbanks = if (nBanks > 1) io.read.map((_.bits.addr >> bankOffBits)(bankBits-1,0)) else Seq(0.U)
+  val wbank = if (nBanks > 1) (io.write.bits.addr >> bankOffBits)(bankBits-1,0) else 0.U
+
+  val idxBits = log2Ceil(bankSize)
+  val idxOffBits = bankOffBits + bankBits
+  val ridxs = io.read.map((_.bits.addr >> idxOffBits)(idxBits-1,0))
+  val widx = (io.write.bits.addr >> idxOffBits)(idxBits-1,0)
 
   for (w <- 0 until nWays) {
     for (b <- 0 until nBanks) {
