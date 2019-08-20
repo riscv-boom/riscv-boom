@@ -758,16 +758,19 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   //-------------------------------------------------------------
   // Note the DCache may not have accepted our request
 
-  val fired_load_incoming  = RegNext(will_fire_load_incoming)
-  val fired_stad_incoming  = RegNext(will_fire_stad_incoming)
-  val fired_sta_incoming   = RegNext(will_fire_sta_incoming)
-  val fired_std_incoming   = RegNext(will_fire_std_incoming)
-  val fired_stdf_incoming  = RegNext(will_fire_stdf_incoming)
+  val exe_req_killed = IsKilledByBranch(io.core.brinfo, exe_req.bits.uop)
+  val stdf_killed = IsKilledByBranch(io.core.brinfo, io.core.fp_stdata.bits.uop)
+
+  val fired_load_incoming  = RegNext(will_fire_load_incoming && !exe_req_killed)
+  val fired_stad_incoming  = RegNext(will_fire_stad_incoming && !exe_req_killed)
+  val fired_sta_incoming   = RegNext(will_fire_sta_incoming  && !exe_req_killed)
+  val fired_std_incoming   = RegNext(will_fire_std_incoming  && !exe_req_killed)
+  val fired_stdf_incoming  = RegNext(will_fire_stdf_incoming && !stdf_killed)
   val fired_sfence         = RegNext(will_fire_sfence)
-  val fired_load_retry     = RegNext(will_fire_load_retry)
-  val fired_sta_retry      = RegNext(will_fire_sta_retry)
+  val fired_load_retry     = RegNext(will_fire_load_retry   && !IsKilledByBranch(io.core.brinfo, ldq_retry_e.bits.uop))
+  val fired_sta_retry      = RegNext(will_fire_sta_retry    && !IsKilledByBranch(io.core.brinfo, stq_retry_e.bits.uop))
   val fired_store_commit   = RegNext(will_fire_store_commit)
-  val fired_load_wakeup    = RegNext(will_fire_load_wakeup)
+  val fired_load_wakeup    = RegNext(will_fire_load_wakeup  && !IsKilledByBranch(io.core.brinfo, ldq_wakeup_e.bits.uop))
   val fired_hella_incoming = RegNext(will_fire_hella_incoming)
   val fired_hella_wakeup   = RegNext(will_fire_hella_wakeup)
 
