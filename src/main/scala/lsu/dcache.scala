@@ -261,35 +261,37 @@ class BoomL1MetaReadReq(implicit p: Parameters) extends BoomBundle()(p) {
 
 class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCacheParameters {
   val io = new Bundle {
-    val read = Vec(memWidth, Flipped(Decoupled(new L1DataReadReq)))
+    val read  = Vec(memWidth, Flipped(Decoupled(new L1DataReadReq)))
     val write = Flipped(Decoupled(new L1DataWriteReq))
-    val resp = Output(Vec(memWidth, Vec(nWays, Bits(encRowBits.W))))
+    val resp  = Output(Vec(memWidth, Vec(nWays, Bits(encRowBits.W))))
     val nacks = Output(Vec(memWidth, Bool()))
   }
 
-  val nBanks = boomParams.numDCacheBanks
-  require (nBanks >= memWidth)
-
+  val nBanks   = boomParams.numDCacheBanks
   val bankSize = nSets * refillCycles / nBanks
+  require (nBanks >= memWidth)
   require (bankSize > 0)
 
   val bankBits    = log2Ceil(nBanks)
   val bankOffBits = log2Ceil(rowWords)
-  val s0_rbanks   = if (nBanks > 1) io.read.map((_.bits.addr >> bankOffBits)(bankBits-1,0)) else Seq(0.U)
-  val s0_wbank    =  if (nBanks > 1) (io.write.bits.addr >> bankOffBits)(bankBits-1,0) else 0.U
-
   val idxBits     = log2Ceil(bankSize)
   val idxOffBits  = bankOffBits + bankBits
-  val s0_ridxs    = io.read.map((_.bits.addr >> idxOffBits)(idxBits-1,0))
-  val s0_widx     = (io.write.bits.addr >> idxOffBits)(idxBits-1,0)
+
+  //----------------------------------------------------------------------------------------------------
+
+  val s0_rbanks = if (nBanks > 1) io.read.map((_.bits.addr >> bankOffBits)(bankBits-1,0)) else Seq(0.U)
+  val s0_wbank  = if (nBanks > 1) (io.write.bits.addr >> bankOffBits)(bankBits-1,0) else 0.U
+  val s0_ridxs  = io.read.map((_.bits.addr >> idxOffBits)(idxBits-1,0))
+  val s0_widx   = (io.write.bits.addr >> idxOffBits)(idxBits-1,0)
 
   val s0_read_valids    = VecInit(io.read.map(_.valid))
-
   val s0_bank_conflicts = (0 until memWidth).map(w => (0 until w).foldLeft(false.B)(i =>
                             io.read(i).valid && rbank(i) === rbank(w)))
   val s0_do_bank_read   = s0_read_valids zip s0_bank_conflicts map {case (v,c) => v && !c}
   val s0_bank_read_gnts = Transpose(s0_rbanks zip s0_do_bank_read map {case (b,d) => (UIntToOH(b) & Fill(nBanks,d)).asBools})
   val s0_bank_write_gnt = (UIntToOH(s0_wbank) & Fill(nBanks, io.write.valid)).asBools
+
+  //----------------------------------------------------------------------------------------------------
 
   val s1_rbanks         = RegNext(s0_rbanks)
   val s1_ridxs          = RegNext(s0_ridxs)
@@ -327,7 +329,7 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
 
   io.nacks := s1_nacks
 
-  io.read.ready := true.B
+  io.read.ready  := true.B
   io.write.ready := true.B
 }
 
