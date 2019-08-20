@@ -257,6 +257,7 @@ class BoomL1MetaReadReq(implicit p: Parameters) extends BoomBundle()(p) {
 
  class BoomL1DataReadReq(implicit p: Parameters) extends BoomBundle()(p) {
   val req = Vec(memWidth, new L1DataReadReq)
+  val valid = Vec(memWidth, Bool())
 }
 
 class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCacheParameters {
@@ -431,7 +432,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
    dataReadArb.io.in := DontCare
 
   for (w <- 0 until memWidth) {
-    data.io.read(w).valid := dataReadArb.io.out.valid
+    data.io.read(w).valid := dataReadArb.io.out.bits.valid(w)
     data.io.read(w).bits  := dataReadArb.io.out.bits.req(w)
   }
   dataReadArb.io.out.ready := data.map(_.io.read.ready).reduce(_||_)
@@ -452,6 +453,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
     metaReadArb.io.in(4).bits.req(w).way_en := DontCare
     metaReadArb.io.in(4).bits.req(w).tag    := DontCare
     // Data read for new requests
+    dataReadArb.io.in(2).valid              := io.lsu.req.bits(w).valid
     dataReadArb.io.in(2).bits.req(w).addr   := io.lsu.req.bits(w).bits.addr
     dataReadArb.io.in(2).bits.req(w).way_en := ~0.U(nWays.W)
   }
@@ -475,7 +477,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   dataReadArb.io.in(0).valid              := mshrs.io.replay.valid
   dataReadArb.io.in(0).bits.req(0).addr   := mshrs.io.replay.bits.addr
   dataReadArb.io.in(0).bits.req(0).way_en := mshrs.io.replay.bits.way_en
-
+  dataReadArb.io.in(0).bits.valid         := widthMap(w => (w ==  0).B)
   // -----------
   // MSHR Meta read
   val mshr_read_req = Wire(Vec(memWidth, new BoomDCacheReq))
@@ -507,6 +509,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   // Data read for write-back
   dataReadArb.io.in(1).valid        := wb.io.data_req.valid
   dataReadArb.io.in(1).bits.req(0)  := wb.io.data_req.bits
+  dataReadArb.io.in(1).bits.valid   := widthMap(w => (w == 0).B)
   wb.io.data_req.ready  := metaReadArb.io.in(2).ready && dataReadArb.io.in(1).ready
   assert(!(wb.io.meta_read.fire() ^ wb.io.data_req.fire()))
 
