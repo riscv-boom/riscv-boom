@@ -510,14 +510,6 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                          Mux(s1_type === t_mshr_meta_read, s1_mshr_meta_read_way_en,
                            wayMap((w: Int) => s1_tag_eq_way(i)(w) && meta(i).io.resp(w).coh.isValid()).asUInt))))
 
-
-  // LineBuffer tags should be read in s1
-  for (w <- 0 until memWidth) {
-    mshrs.io.s1_req(w).valid := s1_valid(w)
-    mshrs.io.s1_req(w).bits  := s1_req(w)
-  }
-
-
   val s2_req   = RegNext(s1_req)
   val s2_type  = RegNext(s1_type)
   val s2_valid = widthMap(w =>

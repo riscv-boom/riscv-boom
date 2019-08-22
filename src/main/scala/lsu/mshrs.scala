@@ -31,9 +31,6 @@ class BoomDCacheReqInternal(implicit p: Parameters) extends BoomDCacheReq()(p)
 
   // Used in the MSHRs
   val sdq_id    = UInt(log2Ceil(cfg.nSDQ).W)
-  val lb_id     = UInt(log2Ceil(nLBEntries).W)
-  val lb_coh    = new ClientMetadata
-  val from_lb   = Bool()
 }
 
 
@@ -46,12 +43,14 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     val req_sec_val = Input(Bool())
     val req_sec_rdy = Output(Bool())
 
+    val clear_prefetch = Input(Bool())
     val brinfo       = Input(new BrResolutionInfo)
     val exception    = Input(Bool())
     val rob_pnr_idx  = Input(UInt(robAddrSz.W))
     val rob_head_idx = Input(UInt(robAddrSz.W))
 
-    val req         = Input(new BoomDCacheReqInternal)
+    val req          = Input(new BoomDCacheReqInternal)
+    val req_is_probe = Input(Bool())
 
     val idx = Output(Valid(UInt()))
     val way = Output(Valid(UInt()))
@@ -76,13 +75,9 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     val commit_coh  = Output(new ClientMetadata)
 
     // Reading from the line buffer
-    val lb_alloc      = Decoupled(Bool())
-    val lb_id         = Input(UInt(log2Ceil(nLBEntries).W))
     val lb_read       = Decoupled(new LineBufferReadReq)
     val lb_resp       = Input(UInt(encRowBits.W))
     val lb_write      = Decoupled(new LineBufferWriteReq)
-    val lb_meta_write = Valid(new LineBufferMetaWriteReq)
-    val lb_free       = Output(Valid(UInt(log2Ceil(nLBEntries).W))) // Throw away the linebuffer entry
 
     // Replays go through the cache pipeline again
     val replay      = Decoupled(new BoomDCacheReqInternal)
@@ -105,7 +100,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   // s_meta_write_req  : Write the metadata for new cache lne
   // s_meta_write_resp :
 
-  val s_invalid :: s_alloc_lb :: s_refill_req :: s_refill_resp :: s_drain_rpq_loads :: s_meta_read :: s_meta_resp_1 :: s_meta_resp_2 :: s_meta_clear :: s_wb_meta_read :: s_wb_req :: s_wb_resp :: s_commit_line :: s_drain_rpq :: s_meta_write_req :: s_mem_finish :: Nil = Enum(16)
+  val s_invalid :: s_refill_req :: s_refill_resp :: s_drain_rpq_loads :: s_meta_read :: s_meta_resp_1 :: s_meta_resp_2 :: s_meta_clear :: s_wb_meta_read :: s_wb_req :: s_wb_resp :: s_commit_line :: s_drain_rpq :: s_meta_write_req :: s_mem_finish :: s_mem_finish_to_prefetch :: s_prefetched :: s_prefetch :: Nil = Enum(18)
   val state = RegInit(s_invalid)
 
   val req     = Reg(new BoomDCacheReqInternal)
@@ -113,9 +108,6 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   val req_tag = req.addr >> untagBits
   val req_block_addr = (req.addr >> blockOffBits) << blockOffBits
   val req_needs_wb = RegInit(false.B)
-  // val idx_match = req_idx === io.req.addr(untagBits-1, blockOffBits)
-  // val way_match = req.way_en === io.req.way_en
-  // val tag_match = req_tag === io.req.addr >> untagBits
 
   val new_coh = RegInit(ClientMetadata.onReset)
   val (_, shrink_param, coh_on_clear) = req.old_meta.coh.onCacheControl(M_FLUSH)
@@ -127,7 +119,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     new_coh.onSecondaryAccess(req.uop.mem_cmd, io.req.uop.mem_cmd)
 
   val (_, _, refill_done, refill_address_inc) = edge.addr_inc(io.mem_grant)
-  val sec_rdy = (!cmd_requires_second_acquire &&
+  val sec_rdy = (!cmd_requires_second_acquire && !io.req_is_probe &&
                  !state.isOneOf(s_invalid, s_meta_write_req, s_mem_finish))// Always accept secondary misses
 
   val rpq = Module(new BranchKillableQueue(new BoomDCacheReqInternal, cfg.nRPQ, u => u.uses_ldq, false))
@@ -141,20 +133,19 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
 
 
   val grantack = Reg(Valid(new TLBundleE(edge.bundle)))
-  val lb_id          = Reg(UInt(log2Ceil(nLBEntries).W))
-  val lb_needs_clear = RegInit(false.B)
   val refill_ctr  = Reg(UInt(log2Ceil(cacheDataBeats).W))
   val commit_line = Reg(Bool())
   val grant_had_data = Reg(Bool())
+  val finish_to_prefetch = Reg(Bool())
 
   // Block probes if a tag write we started is still in the pipeline
   val meta_hazard = RegInit(0.U(2.W))
   when (meta_hazard =/= 0.U) { meta_hazard := meta_hazard + 1.U }
   when (io.meta_write.fire()) { meta_hazard := 1.U }
-  io.probe_rdy   := (meta_hazard === 0.U && state.isOneOf(s_invalid, s_alloc_lb, s_refill_req, s_refill_resp))
+  io.probe_rdy   := (meta_hazard === 0.U && state.isOneOf(s_invalid, s_refill_req, s_refill_resp))
   io.idx.valid := state =/= s_invalid
   io.tag.valid := state =/= s_invalid
-  io.way.valid := state =/= s_invalid
+  io.way.valid := !state.isOneOf(s_invalid, s_prefetch)
   io.idx.bits := req_idx
   io.tag.bits := req_tag
   io.way.bits := req.way_en
@@ -172,12 +163,8 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
   io.commit_coh          := coh_on_grant
   io.meta_read.valid     := false.B
   io.mem_finish.valid    := false.B
-  io.lb_alloc.valid      := false.B
-  io.lb_alloc.bits       := DontCare
   io.lb_write.valid      := false.B
-  io.lb_free.valid       := false.B
   io.lb_read.valid       := false.B
-  io.lb_meta_write.valid := false.B
 
   when (io.req_sec_val && io.req_sec_rdy) {
     req.uop.mem_cmd := dirtier_cmd
@@ -198,22 +185,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
       req := io.req
       val old_coh   = io.req.old_meta.coh
       req_needs_wb := old_coh.onCacheControl(M_FLUSH)._1 // does the line we are evicting need to be written back
-
-      when (io.req.from_lb) {
-        assert(enablePrefetching.B)
-        val (is_hit, _, coh_on_hit) = io.req.lb_coh.onAccess(io.req.uop.mem_cmd)
-        lb_id          := io.req.lb_id
-        lb_needs_clear := true.B
-        new_coh        := coh_on_hit
-        state          := s_drain_rpq_loads
-        when (is_hit) { // Proceed with refill
-          new_coh := coh_on_hit
-          state   := s_meta_read
-        } .otherwise { // Reacquire this line
-          new_coh := ClientMetadata.onReset
-          state   := s_refill_req
-        }
-      } .elsewhen (io.req.tag_match) {
+      when (io.req.tag_match) {
         val (is_hit, _, coh_on_hit) = old_coh.onAccess(io.req.uop.mem_cmd)
         when (is_hit) { // set dirty bit
           assert(isWrite(io.req.uop.mem_cmd))
@@ -221,23 +193,13 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
           state   := s_drain_rpq
         } .otherwise { // upgrade permissions
           new_coh := old_coh
-          state   := s_alloc_lb
+          state   := s_refill_req
         }
       } .otherwise { // refill and writeback if necessary
         new_coh := ClientMetadata.onReset
-        state   := s_alloc_lb
+        state   := s_refill_req
       }
     }
-  } .elsewhen (state === s_alloc_lb) {
-    io.lb_alloc.valid := true.B
-    when (io.lb_alloc.fire()) {
-      lb_id          := io.lb_id
-      state          := s_refill_req
-      if (!enablePrefetching) {
-        lb_needs_clear := true.B
-      }
-    }
-
   } .elsewhen (state === s_refill_req) {
     io.mem_acquire.valid := true.B
     // TODO: Use AcquirePerm if just doing permissions acquire
@@ -253,7 +215,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     when (edge.hasData(io.mem_grant.bits)) {
       io.mem_grant.ready      := io.lb_write.ready
       io.lb_write.valid       := io.mem_grant.valid
-      io.lb_write.bits.id     := lb_id
+      io.lb_write.bits.id     := id.U
       io.lb_write.bits.offset := refill_address_inc >> rowOffBits
       io.lb_write.bits.data   := io.mem_grant.bits.data
     } .otherwise {
@@ -268,9 +230,6 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
       grantack.bits := edge.GrantAck(io.mem_grant.bits)
       state := Mux(grant_had_data, s_drain_rpq_loads, s_drain_rpq)
       assert(!(!grant_had_data && req_needs_wb))
-      when (!grant_had_data) { // Happens when a permissions upgrade doesn't come back with data
-        lb_needs_clear := true.B
-      }
       commit_line := false.B
       new_coh := coh_on_grant
 
@@ -291,7 +250,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
 
     rpq.io.deq.ready       := io.resp.ready && io.lb_read.ready && drain_load
     io.lb_read.valid       := rpq.io.deq.valid && drain_load
-    io.lb_read.bits.id     := lb_id
+    io.lb_read.bits.id     := id.U
     io.lb_read.bits.offset := rpq.io.deq.bits.addr >> rowOffBits
 
     io.resp.valid     := rpq.io.deq.valid && io.lb_read.fire() && drain_load
@@ -304,14 +263,10 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
       .elsewhen (rpq.io.empty && !commit_line)
     {
       when (!rpq.io.enq.fire()) {
-        io.lb_meta_write.valid       := enablePrefetching.B
-        io.lb_meta_write.bits.id     := lb_id
-        io.lb_meta_write.bits.coh    := new_coh
-        io.lb_meta_write.bits.addr   := req.addr // TODO: Truncate the block offset bits
         state := s_mem_finish
+        finish_to_prefetch := enablePrefetching.B
       }
     } .elsewhen (rpq.io.empty || (rpq.io.deq.valid && !drain_load)) {
-      lb_needs_clear := true.B
       // io.commit_val is for the prefetcher. it tells the prefetcher that this line was correctly acquired
       // The prefetcher should consider fetching the next line
       io.commit_val := true.B
@@ -359,7 +314,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     }
   } .elsewhen (state === s_commit_line) {
     io.lb_read.valid       := true.B
-    io.lb_read.bits.id     := lb_id
+    io.lb_read.bits.id     := id.U
     io.lb_read.bits.offset := refill_ctr
 
     io.refill.valid       := io.lb_read.fire()
@@ -394,16 +349,27 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     io.meta_write.bits.way_en   := req.way_en
     when (io.meta_write.fire()) {
       state := s_mem_finish
+      finish_to_prefetch := false.B
     }
   } .elsewhen (state === s_mem_finish) {
     io.mem_finish.valid := grantack.valid
     io.mem_finish.bits  := grantack.bits
-    io.lb_free.valid    := lb_needs_clear && enablePrefetching.B
-    io.lb_free.bits     := lb_id
-    lb_needs_clear      := false.B
     when (io.mem_finish.fire() || !grantack.valid) {
       grantack.valid := false.B
+      state := Mux(finish_to_prefetch, s_prefetch, s_invalid)
+    }
+  } .elsewhen (state === s_prefetch) {
+    when ((io.req_sec_val && !io.req_sec_rdy) || io.clear_prefetch) {
       state := s_invalid
+    } .elsewhen (io.req_sec_val && io.req_sec_rdy) {
+      val (is_hit, _, coh_on_hit) = new_coh.onAccess(io.req.uop.mem_cmd)
+      when (is_hit) { // Proceed with refill
+        new_coh := coh_on_hit
+        state := s_meta_read
+      } .otherwise { // Reacquire this line
+        new_coh := ClientMetadata.onReset
+        state := s_refill_req
+      }
     }
   }
 }
@@ -522,7 +488,6 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   with HasL1HellaCacheParameters
 {
   val io = IO(new Bundle {
-    val s1_req = Input(Vec(memWidth, Valid(new BoomDCacheReq))) // Req from s1 of DCache pipe
     val req  = Flipped(Vec(memWidth, Decoupled(new BoomDCacheReqInternal))) // Req from s2 of DCache pipe
     val req_is_probe = Input(Vec(memWidth, Bool()))
     val resp = Decoupled(new BoomDCacheResp)
@@ -556,11 +521,10 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
 
   val req_idx = OHToUInt(io.req.map(_.valid))
   val req     = io.req(req_idx)
-  for (w <- 0 until memWidth)
-    io.req(w).ready := false.B
+  val req_is_probe = io.req_is_probe(0)
 
   for (w <- 0 until memWidth)
-    assert(!(io.req(w).valid && !RegNext(io.s1_req(w).valid)))
+    io.req(w).ready := false.B
 
   val prefetcher: DataPrefetcher = if (enablePrefetching) Module(new NLPrefetcher)
                                                      else Module(new NullPrefetcher)
@@ -585,40 +549,15 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   // --------------------
   // The LineBuffer Data
   // Holds refilling lines, prefetched lines
-
-  val lb_invalid :: lb_in_use :: lb_prefetched :: Nil = Enum(3)
   val lb = Mem(nLBEntries * cacheDataBeats, UInt(encRowBits.W))
-  val lb_state   = RegInit(VecInit(Seq.fill(nLBEntries) { lb_invalid }))
-  val lb_head    = RegInit(0.U(log2Ceil(nLBEntries).W))
-  val lb_alloc_idx = RegNext(AgePriorityEncoder(lb_state.map(s => s === lb_invalid), lb_head))
-  val lb_free_idx = if (enablePrefetching) {
-    RegNext(AgePriorityEncoder(lb_state.map(s => s === lb_prefetched), random.LFSR(log2Ceil(nLBEntries))))
-  } else { 0.U }
-
-  val lb_meta = Reg(Vec(nLBEntries, new LineBufferMeta))
-
-  val lb_alloc_arb = Module(new Arbiter(Bool(), cfg.nMSHRs))
   val lb_read_arb  = Module(new Arbiter(new LineBufferReadReq, cfg.nMSHRs))
   val lb_write_arb = Module(new Arbiter(new LineBufferWriteReq, cfg.nMSHRs))
-
-  lb_alloc_arb.io.out.ready := lb_state(lb_alloc_idx) === lb_invalid
-  if (enablePrefetching) { // When not prefetching the MSHRs have 1-to-1 allocation of linebuffer
-    when (lb_alloc_arb.io.out.fire()) {
-      lb_head := WrapInc(lb_head, nLBEntries)
-      lb_state(lb_alloc_idx) := lb_in_use
-    } .elsewhen (lb_alloc_arb.io.out.valid) {
-      when (lb_state(lb_free_idx) === lb_prefetched) {
-        lb_state(lb_free_idx) := lb_invalid
-      }
-    }
-  }
 
   lb_read_arb.io.out.ready  := false.B
   lb_write_arb.io.out.ready := true.B
 
   val lb_read_data = WireInit(0.U(encRowBits.W))
   when (lb_write_arb.io.out.fire()) {
-    assert(lb_state(lb_write_arb.io.out.bits.id) === lb_in_use || !enablePrefetching.B)
     lb.write(lb_write_arb.io.out.bits.lb_addr, lb_write_arb.io.out.bits.data)
   } .otherwise {
     lb_read_arb.io.out.ready := true.B
@@ -627,30 +566,6 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     }
   }
   def widthMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
-
-  val s1_lb_addr_matches = widthMap(w => VecInit((lb_meta zip lb_state) .map { case (m, s) =>
-    (io.s1_req(w).bits.addr >> blockOffBits === m.addr >> blockOffBits) && s === lb_prefetched && enablePrefetching.B
-  }))
-  val s2_lb_addr_matches = RegNext(s1_lb_addr_matches)
-  val s2_lb_addr_match   = widthMap(w => s2_lb_addr_matches(w).orR)
-  val s2_lb_hit_idx      = widthMap(w => OHToUInt(s2_lb_addr_matches(w)))
-  val s2_lb_hit_state    = widthMap(w => Mux1H(s2_lb_addr_matches(w), lb_meta.map(_.coh)))
-  val s2_lb_hit          = req.valid && s2_lb_addr_match(req_idx)
-  when (s2_lb_hit && req.fire()) {
-    lb_state(s2_lb_hit_idx(req_idx)) := lb_in_use
-  }
-
-
-  // Probes clear prefetched lines out of LineBuffer
-  if (enablePrefetching) {
-    for (i <- 0 until nLBEntries) {
-      for (w <- 0 until memWidth) {
-        when (io.req_is_probe(w) && s2_lb_addr_matches(w)(i) && lb_meta(i).coh.isValid()) {
-          lb_state(i) := lb_invalid
-        }
-      }
-    }
-  }
 
 
 
@@ -704,12 +619,11 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
 
     mshr.io.req_sec_val  := req.valid && sdq_rdy && tag_match(req_idx) && idx_matches(req_idx)(i) && cacheable
     mshr.io.req          := req.bits
+    mshr.io.req_is_probe := req_is_probe
     mshr.io.req.sdq_id   := sdq_alloc_id
 
-    mshr.io.req.from_lb  := (if (enablePrefetching) s2_lb_hit                else false.B)
-    mshr.io.req.lb_id    := (if (enablePrefetching) s2_lb_hit_idx  (req_idx) else DontCare)
-    mshr.io.req.lb_coh   := (if (enablePrefetching) s2_lb_hit_state(req_idx) else DontCare)
-
+    mshr.io.clear_prefetch := io.clear_all ||
+    ((req.valid || req_is_probe) && idx_matches(req_idx)(i) && cacheable && !tag_match(req_idx))
     mshr.io.brinfo       := io.brinfo
     mshr.io.exception    := io.exception
     mshr.io.rob_pnr_idx  := io.rob_pnr_idx
@@ -724,24 +638,9 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     replay_arb.io.in(i)     <> mshr.io.replay
     refill_arb.io.in(i)     <> mshr.io.refill
 
-    lb_alloc_arb.io.in(i)      <> mshr.io.lb_alloc
-    if (!enablePrefetching) mshr.io.lb_alloc.ready := true.B
-    mshr.io.lb_id              := (if (enablePrefetching) lb_alloc_idx else i.U)
     lb_read_arb.io.in(i)       <> mshr.io.lb_read
     mshr.io.lb_resp            := lb_read_data
     lb_write_arb.io.in(i)      <> mshr.io.lb_write
-
-    when (mshr.io.lb_meta_write.valid) {
-      assert(lb_state(mshr.io.lb_meta_write.bits.id) === lb_in_use && enablePrefetching.B)
-      lb_meta(mshr.io.lb_meta_write.bits.id).coh  := mshr.io.lb_meta_write.bits.coh
-      lb_meta(mshr.io.lb_meta_write.bits.id).addr := mshr.io.lb_meta_write.bits.addr
-
-      lb_state(mshr.io.lb_meta_write.bits.id)     := lb_prefetched
-    }
-    when (mshr.io.lb_free.valid) {
-      lb_state(mshr.io.lb_free.bits)    := lb_invalid
-      lb_meta(mshr.io.lb_free.bits).coh := ClientMetadata.onReset
-    }
 
     commit_vals(i)  := mshr.io.commit_val
     commit_addrs(i) := mshr.io.commit_addr
