@@ -114,7 +114,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   }
 
   // Wait for operands
-  when (io.req.valid) {
+  when (io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop)) {
     val rxq_idx = io.req.bits.uop.rxq_idx
     assert(io.req.bits.uop.rob_idx === rxq_uop(rxq_idx).rob_idx,
       "Mismatch between RoCCUnit request and RoCC execute head")
