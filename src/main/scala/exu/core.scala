@@ -517,8 +517,10 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
       dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype  === RT_FLT, f_uop.pdst, i_uop.pdst)
       dis_uops(w).stale_pdst := Mux(dis_uops(w).dst_rtype === RT_FLT, f_uop.stale_pdst, i_uop.stale_pdst)
 
-      dis_uops(w).prs1_busy := Mux(dis_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1_busy, i_uop.prs1_busy)
-      dis_uops(w).prs2_busy := Mux(dis_uops(w).lrs2_rtype === RT_FLT, f_uop.prs2_busy, i_uop.prs2_busy)
+      dis_uops(w).prs1_busy := i_uop.prs1_busy && (dis_uops(w).lrs1_rtype === RT_FIX) ||
+                               f_uop.prs1_busy && (dis_uops(w).lrs1_rtype === RT_FLT)
+      dis_uops(w).prs2_busy := i_uop.prs2_busy && (dis_uops(w).lrs2_rtype === RT_FIX) ||
+                               f_uop.prs2_busy && (dis_uops(w).lrs2_rtype === RT_FLT)
       dis_uops(w).prs3_busy := f_uop.prs3_busy
 
       ren_stalls(w) := rename_stage.io.ren_stalls(w) || fp_rename_stage.io.ren_stalls(w)
