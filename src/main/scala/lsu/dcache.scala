@@ -262,8 +262,8 @@ class BoomL1MetaReadReq(implicit p: Parameters) extends BoomBundle()(p) {
 
 class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCacheParameters {
   val io = IO(new BoomBundle {
-    val read  = Vec(memWidth, Flipped(Decoupled(new L1DataReadReq)))
-    val write = Flipped(Decoupled(new L1DataWriteReq))
+    val read  = Input(Vec(memWidth, Valid(new L1DataReadReq)))
+    val write = Input(Valid(new L1DataWriteReq))
     val resp  = Output(Vec(memWidth, Vec(nWays, Bits(encRowBits.W))))
     val nacks = Output(Vec(memWidth, Bool()))
   })
@@ -321,7 +321,6 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
         size = bankSize,
         data = Vec(rowWords, Bits(encDataBits.W))
       )
-
       val ridx = Mux1H(s0_bank_read_gnts(b), s0_ridxs)
       val way_en = Mux1H(s0_bank_read_gnts(b), io.read.map(_.bits.way_en))
       s2_bank_reads(b) := array.read(ridx, way_en(w) && s0_bank_read_gnts(b).reduce(_||_)).asUInt
@@ -338,9 +337,6 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
   }
 
   io.nacks := s2_nacks
-
-  (0 until memWidth) foreach (w => io.read(w).ready := true.B)
-  io.write.ready := true.B
 }
 
 /**
