@@ -117,10 +117,10 @@ class RenameStage(
     val bypass_sel_rs3 = PriorityEncoderOH(bypass_hits_rs3.reverse).reverse
     val bypass_sel_dst = PriorityEncoderOH(bypass_hits_dst.reverse).reverse
 
-    val do_bypass_rs1 = bypass_hits_rs1.reduce(_||_)
-    val do_bypass_rs2 = bypass_hits_rs2.reduce(_||_)
-    val do_bypass_rs3 = bypass_hits_rs3.reduce(_||_)
-    val do_bypass_dst = bypass_hits_dst.reduce(_||_)
+    val do_bypass_rs1 = bypass_hits_rs1.reduce(_||_) && uop.lrs1_rtype === rtype
+    val do_bypass_rs2 = bypass_hits_rs2.reduce(_||_) && uop.lrs2_rtype === rtype
+    val do_bypass_rs3 = bypass_hits_rs3.reduce(_||_) && uop.frs3_en && float.B
+    val do_bypass_dst = bypass_hits_dst.reduce(_||_) && uop.dst_rtype === rtype
 
     val bypass_pdsts = older_uops.map(_.pdst)
 
