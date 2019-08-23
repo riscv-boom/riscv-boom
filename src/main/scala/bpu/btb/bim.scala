@@ -219,7 +219,7 @@ class BimodalTable(val bankBytes: Int)(implicit p: Parameters) extends BoomModul
 
   for (w <- 0 until nBanks) {
     val ram = SyncReadMem(nSets/nBanks, Vec(rowSz, Bool()))
-    ram.suggestName("bim_data_array")
+    ram.suggestName(s"bim_data_array_$w")
 
     val ren = Wire(Bool())
     val s2_rmw_valid = Wire(Bool())
