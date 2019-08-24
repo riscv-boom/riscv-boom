@@ -86,7 +86,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // ********************************************************
   // Clear fp_pipeline before use
   if (usingFPU) {
-    fp_pipeline.io.ll_wport  := DontCare
+    fp_pipeline.io.ll_wports := DontCare
     fp_pipeline.io.wb_valids := DontCare
     fp_pipeline.io.wb_pdsts  := DontCare
   }
@@ -98,7 +98,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val numFastWakeupPorts      = exe_units.count(_.bypassable)
   val numAlwaysBypassable     = exe_units.count(_.alwaysBypassable)
 
-  val numIntIssueWakeupPorts  = numIrfWritePorts + 1 + numFastWakeupPorts - numAlwaysBypassable // + 1 for ll_wb
+  val numIntIssueWakeupPorts  = numIrfWritePorts + memWidth + numFastWakeupPorts - numAlwaysBypassable // + memWidth for ll_wb
   val numIntRenameWakeupPorts = if (enableFastWakeupsToRename) numIntIssueWakeupPorts else numIrfWritePorts + 1
   val numFpWakeupPorts        = if (usingFPU) fp_pipeline.io.wakeups.length else 0
 
@@ -112,17 +112,20 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                            Module(new RegisterFileSeqCustomArray(
                              numIntPhysRegs,
                              numIrfReadPorts,
-                             numIrfWritePorts + 1, // + 1 for ll writebacks
+                             numIrfWritePorts + memWidth, // + memWidth for ll writebacks
                              xLen,
-                             Seq(true) ++ exe_units.bypassable_write_port_mask)) // 0th is bypassable ll_wb
+                             Seq.fill(memWidth) {true} ++ exe_units.bypassable_write_port_mask)) // bypassable ll_wb
                          } else {
                            Module(new RegisterFileSynthesizable(
                              numIntPhysRegs,
                              numIrfReadPorts,
-                             numIrfWritePorts + 1, // + 1 for ll writebacks
+                             numIrfWritePorts + memWidth, // + memWidth for ll writebacks
                              xLen,
-                             Seq(true) ++ exe_units.bypassable_write_port_mask)) // 0th is bypassable ll_wb
+                             Seq.fill(memWidth) {true} ++ exe_units.bypassable_write_port_mask)) // bypassable ll_wb
                          }
+
+  // wb arbiter for the 0th ll writeback
+  // TODO: should this be a multi-arb?
   val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 1 +
                                                                    (if (usingFPU) 1 else 0) +
                                                                    (if (usingRoCC) 1 else 0)))
@@ -134,7 +137,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                            exe_units.numTotalBypassPorts,
                            xLen))
   val rob              = Module(new Rob(
-                           numIrfWritePorts + 1 + numFpWakeupPorts, // +1 for ll writebacks
+                           numIrfWritePorts + memWidth + numFpWakeupPorts, // +memWidth for ll writebacks
                            numFpWakeupPorts))
   // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
   val int_iss_wakeups  = Wire(Vec(numIntIssueWakeupPorts, Valid(new ExeUnitResp(xLen))))
@@ -185,7 +188,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
 
   // Load/Store Unit & ExeUnits
-  exe_units.memory_unit.io.lsu_io <> io.lsu.exe
+  val mem_units = exe_units.memory_units
+  val mem_resps = mem_units.map(_.io.ll_iresp)
+  for (i <- 0 until memWidth) {
+    mem_units(i).io.lsu_io <> io.lsu.exe(i)
+  }
 
   //-------------------------------------------------------------
   // Uarch Hardware Performance Events (HPEs)
@@ -300,11 +307,17 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // SFence needs access to the PC to inject an address into the TLB's CAM port. The ROB
   // will have to later redirect the PC back to the regularly scheduled program.
-  io.ifu.sfence_take_pc    := io.lsu.exe.req.bits.sfence.valid
-  io.ifu.sfence_addr       := io.lsu.exe.req.bits.sfence.bits.addr
+  io.ifu.sfence_take_pc := false.B
+  io.ifu.sfence_addr    := DontCare
+  for (i <- 0 until memWidth) {
+    when (io.lsu.exe(i).req.bits.sfence.valid) {
+      io.ifu.sfence_take_pc    := true.B
+      io.ifu.sfence_addr       := io.lsu.exe(i).req.bits.sfence.bits.addr
+    }
+  }
 
   // We must redirect the PC the cycle after playing the SFENCE game.
-  io.ifu.flush_take_pc     := rob.io.flush.valid || RegNext(io.lsu.exe.req.bits.sfence.valid)
+  io.ifu.flush_take_pc     := rob.io.flush.valid || RegNext(io.ifu.sfence_take_pc)
 
   // TODO FIX THIS HACK
   // The below code works because of two quirks with the flush mechanism
@@ -335,7 +348,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     (br_unit.brinfo.mispredict && br_unit.brinfo.is_jr &&  csr.io.status.debug)
 
   // Delay sfence to match pushing the sfence.addr into the TLB's CAM port.
-  io.ifu.sfence := RegNext(io.lsu.exe.req.bits.sfence)
+  io.ifu.sfence.valid := false.B
+  io.ifu.sfence.bits  := DontCare
+  for (i <- 0 until memWidth) {
+    when (RegNext(io.lsu.exe(i).req.bits.sfence.valid)) {
+      io.ifu.sfence.valid := true.B
+      io.ifu.sfence.bits  := RegNext(io.lsu.exe(i).req.bits.sfence.bits)
+    }
+  }
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -564,6 +584,16 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   int_ren_wakeups(0).valid := ll_wbarb.io.out.fire() && ll_wbarb.io.out.bits.uop.dst_rtype === RT_FIX
   int_ren_wakeups(0).bits  := ll_wbarb.io.out.bits
 
+  for (i <- 1 until memWidth) {
+    int_iss_wakeups(i).valid := mem_resps(i).valid && mem_resps(i).bits.uop.dst_rtype === RT_FIX
+    int_iss_wakeups(i).bits  := mem_resps(i).bits
+
+    int_ren_wakeups(i).valid := mem_resps(i).valid && mem_resps(i).bits.uop.dst_rtype === RT_FIX
+    int_ren_wakeups(i).bits  := mem_resps(i).bits
+    iss_wu_idx += 1
+    ren_wu_idx += 1
+  }
+
   // loop through each issue-port (exe_units are statically connected to an issue-port)
   for (i <- 0 until exe_units.length) {
     if (exe_units(i).writesIrf) {
@@ -631,7 +661,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
 
   var iss_idx = 0
-  var iss_cnt = 0
+  var int_iss_cnt = 0
+  var mem_iss_cnt = 0
   for (w <- 0 until exe_units.length) {
     var fu_types = exe_units(w).io.fu_types
     val exe_unit = exe_units(w)
@@ -644,14 +675,15 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       }
 
       if (exe_unit.hasMem) {
-        iss_valids(iss_idx) := issue_units.mem_iq.io.iss_valids(0)
-        iss_uops(iss_idx)   := issue_units.mem_iq.io.iss_uops(0)
-        issue_units.mem_iq.io.fu_types(0) := fu_types
+        iss_valids(iss_idx) := issue_units.mem_iq.io.iss_valids(mem_iss_cnt)
+        iss_uops(iss_idx)   := issue_units.mem_iq.io.iss_uops(mem_iss_cnt)
+        issue_units.mem_iq.io.fu_types(mem_iss_cnt) := fu_types
+        mem_iss_cnt += 1
       } else {
-        iss_valids(iss_idx) := issue_units.int_iq.io.iss_valids(iss_cnt)
-        iss_uops(iss_idx)   := issue_units.int_iq.io.iss_uops(iss_cnt)
-        issue_units.int_iq.io.fu_types(iss_cnt) := fu_types
-        iss_cnt += 1
+        iss_valids(iss_idx) := issue_units.int_iq.io.iss_valids(int_iss_cnt)
+        iss_uops(iss_idx)   := issue_units.int_iq.io.iss_uops(int_iss_cnt)
+        issue_units.int_iq.io.fu_types(int_iss_cnt) := fu_types
+        int_iss_cnt += 1
       }
       iss_idx += 1
     }
@@ -666,13 +698,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   require (issue_units.count(_.iqType == IQT_MEM.litValue) == 1 || usingUnifiedMemIntIQs)
   val mem_iq = issue_units.mem_iq
 
-  require (mem_iq.issueWidth == 1)
+  require (mem_iq.issueWidth <= 2)
   issue_units.map(_.io.ld_miss := io.lsu.ld_miss)
 
-  // Share the memory port with other long latency operations.
-  val mem_unit = exe_units.memory_unit
-  val mem_resp = mem_unit.io.ll_iresp
-  mem_unit.io.com_exception := rob.io.flush.valid
+  mem_units.map(u => u.io.com_exception := rob.io.flush.valid)
 
   // Wakeup (Issue & Writeback)
   for {
@@ -847,8 +876,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   var w_cnt = 1
-  // 0th goes to ll_wbarb
   iregfile.io.write_ports(0) := WritePort(ll_wbarb.io.out, ipregSz, xLen, RT_FIX)
+  ll_wbarb.io.in(0) <> mem_resps(0)
+  assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
+  for (i <- 1 until memWidth) {
+    iregfile.io.write_ports(w_cnt) := WritePort(mem_resps(i), ipregSz, xLen, RT_FIX)
+    w_cnt += 1
+  }
+
   for (i <- 0 until exe_units.length) {
     if (exe_units(i).writesIrf) {
       val wbresp = exe_units(i).io.iresp
@@ -883,16 +918,15 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
   }
   require(w_cnt == iregfile.io.write_ports.length)
-  ll_wbarb.io.in(0) <> mem_resp
-  assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
+
 
   if (usingFPU) {
     // Connect IFPU
-    fp_pipeline.io.from_int <> exe_units.ifpu_unit.io.ll_fresp
+    fp_pipeline.io.from_int  <> exe_units.ifpu_unit.io.ll_fresp
     // Connect FPIU
-    ll_wbarb.io.in(1)       <> fp_pipeline.io.to_int
+    ll_wbarb.io.in(1)        <> fp_pipeline.io.to_int
     // Connect FLDs
-    fp_pipeline.io.ll_wport <> exe_units.memory_unit.io.ll_fresp
+    fp_pipeline.io.ll_wports <> exe_units.memory_units.map(_.io.ll_fresp)
   }
   if (usingRoCC) {
     require(usingFPU)
@@ -914,6 +948,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   rob.io.debug_wb_valids(0) := ll_wbarb.io.out.valid && ll_uop.dst_rtype =/= RT_X
   rob.io.debug_wb_wdata(0)  := ll_wbarb.io.out.bits.data
   var cnt = 1
+  for (i <- 1 until memWidth) {
+    val mem_uop = mem_resps(i).bits.uop
+    rob.io.wb_resps(cnt).valid := mem_resps(i).valid && !(mem_uop.uses_stq && !mem_uop.is_amo)
+    rob.io.wb_resps(cnt).bits  := mem_resps(i).bits
+    rob.io.debug_wb_valids(cnt) := mem_resps(i).valid && mem_uop.dst_rtype =/= RT_X
+    rob.io.debug_wb_wdata(cnt)  := mem_resps(i).bits.data
+    cnt += 1
+  }
   var f_cnt = 0 // rob fflags port index
   for (eu <- exe_units) {
     if (eu.writesIrf)
@@ -940,7 +982,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
   }
 
-  require(cnt == numIrfWritePorts + 1)
+  require(cnt == numIrfWritePorts + memWidth)
   if (usingFPU) {
     for ((wdata, wakeup) <- fp_pipeline.io.debug_wb_wdata zip fp_pipeline.io.wakeups) {
       rob.io.wb_resps(cnt) <> wakeup
