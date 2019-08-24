@@ -173,32 +173,37 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     }
   }
 
+  def handle_pri_req(old_state: UInt): UInt = {
+    val new_state = WireInit(old_state)
+    grantack.valid := false.B
+    refill_ctr := 0.U
+    assert(rpq.io.enq.ready)
+    req := io.req
+    val old_coh   = io.req.old_meta.coh
+    req_needs_wb := old_coh.onCacheControl(M_FLUSH)._1 // does the line we are evicting need to be written back
+    when (io.req.tag_match) {
+      val (is_hit, _, coh_on_hit) = old_coh.onAccess(io.req.uop.mem_cmd)
+      when (is_hit) { // set dirty bit
+        assert(isWrite(io.req.uop.mem_cmd))
+        new_coh     := coh_on_hit
+        new_state   := s_drain_rpq
+      } .otherwise { // upgrade permissions
+        new_coh     := old_coh
+        new_state   := s_refill_req
+      }
+    } .otherwise { // refill and writeback if necessary
+      new_coh     := ClientMetadata.onReset
+      new_state   := s_refill_req
+    }
+    new_state
+  }
 
   when (state === s_invalid) {
     io.req_pri_rdy := true.B
     grant_had_data := false.B
 
     when (io.req_pri_val && io.req_pri_rdy) {
-      grantack.valid := false.B
-      refill_ctr := 0.U
-      assert(rpq.io.enq.ready)
-      req := io.req
-      val old_coh   = io.req.old_meta.coh
-      req_needs_wb := old_coh.onCacheControl(M_FLUSH)._1 // does the line we are evicting need to be written back
-      when (io.req.tag_match) {
-        val (is_hit, _, coh_on_hit) = old_coh.onAccess(io.req.uop.mem_cmd)
-        when (is_hit) { // set dirty bit
-          assert(isWrite(io.req.uop.mem_cmd))
-          new_coh := coh_on_hit
-          state   := s_drain_rpq
-        } .otherwise { // upgrade permissions
-          new_coh := old_coh
-          state   := s_refill_req
-        }
-      } .otherwise { // refill and writeback if necessary
-        new_coh := ClientMetadata.onReset
-        state   := s_refill_req
-      }
+      state := handle_pri_req(state)
     }
   } .elsewhen (state === s_refill_req) {
     io.mem_acquire.valid := true.B
@@ -359,6 +364,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
       state := Mux(finish_to_prefetch, s_prefetch, s_invalid)
     }
   } .elsewhen (state === s_prefetch) {
+    io.req_pri_rdy := true.B
     when ((io.req_sec_val && !io.req_sec_rdy) || io.clear_prefetch) {
       state := s_invalid
     } .elsewhen (io.req_sec_val && io.req_sec_rdy) {
@@ -370,6 +376,9 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
         new_coh := ClientMetadata.onReset
         state := s_refill_req
       }
+    } .elsewhen (io.req_pri_val && io.req_pri_rdy) {
+      grant_had_data := false.B
+      state := handle_pri_req(state)
     }
   }
 }
@@ -622,8 +631,11 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     mshr.io.req_is_probe := req_is_probe
     mshr.io.req.sdq_id   := sdq_alloc_id
 
-    mshr.io.clear_prefetch := io.clear_all ||
-    ((req.valid || req_is_probe) && idx_matches(req_idx)(i) && cacheable && !tag_match(req_idx))
+    // Clear because of a FENCE, a request to the same idx as a prefetched line,
+    // a probe to that prefetched line, all mshrs are in use
+    mshr.io.clear_prefetch := ((io.clear_all && !req.valid)||
+      (req.valid && idx_matches(req_idx)(i) && cacheable && !tag_match(req_idx)) ||
+      (req_is_probe && idx_matches(req_idx)(i)))
     mshr.io.brinfo       := io.brinfo
     mshr.io.exception    := io.exception
     mshr.io.rob_pnr_idx  := io.rob_pnr_idx
