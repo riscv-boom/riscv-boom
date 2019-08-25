@@ -223,8 +223,7 @@ class RenameStage(
   for ((uop, w) <- ren1_uops.zipWithIndex) {
     val mappings = maptable.io.map_resps(w)
 
-    // lrs1 can "pass through" to prs1. Used solely to index the csr file.
-    uop.prs1       := Mux(!float.B && uop.lrs1_rtype === RT_PAS, uop.lrs1, mappings.prs1)
+    uop.prs1       := mappings.prs1
     uop.prs2       := mappings.prs2
     uop.prs3       := mappings.prs3 // only FP has 3rd operand
     uop.stale_pdst := mappings.stale_pdst
