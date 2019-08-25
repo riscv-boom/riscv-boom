@@ -326,7 +326,7 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
       s2_bank_reads(b) := array.read(ridx, way_en(w) && s0_bank_read_gnts(b).reduce(_||_)).asUInt
 
       when (io.write.bits.way_en(w) && s0_bank_write_gnt(b)) {
-        val data = VecInit.tabulate(rowWords)(i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i))
+        val data = VecInit((0 until rowWords) map (i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i)))
         array.write(s0_widx, data, io.write.bits.wmask.asBools)
       }
     }
