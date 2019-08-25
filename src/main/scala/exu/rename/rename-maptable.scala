@@ -2,8 +2,6 @@
 // Copyright (c) 2015 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -46,6 +44,7 @@ class RenameMapTable(
   val plWidth: Int,
   val numLregs: Int,
   val numPregs: Int,
+  val bypass: Boolean,
   val float: Boolean)
   (implicit p: Parameters) extends BoomModule
 {
@@ -111,11 +110,16 @@ class RenameMapTable(
 
   // Read out mappings.
   for (i <- 0 until plWidth) {
-    val remapped_col = remap_table(i)
-    io.map_resps(i).prs1 := remapped_col(io.map_reqs(i).lrs1)
-    io.map_resps(i).prs2 := remapped_col(io.map_reqs(i).lrs2)
-    if (float) io.map_resps(i).prs3 := remapped_col(io.map_reqs(i).lrs3) else io.map_resps(i).prs3 := 0.U(pregSz.W)
-    io.map_resps(i).stale_pdst := remapped_col(io.map_reqs(i).ldst)
+    io.map_resps(i).prs1       := (0 until i).foldLeft(map_table(io.map_reqs(i).lrs1)) ((p,k) =>
+      Mux(bypass.B && io.remap_reqs(k).valid && io.remap_reqs(k).ldst === io.map_reqs(i).lrs1, io.remap_reqs(k).pdst, p))
+    io.map_resps(i).prs2       := (0 until i).foldLeft(map_table(io.map_reqs(i).lrs2)) ((p,k) =>
+      Mux(bypass.B && io.remap_reqs(k).valid && io.remap_reqs(k).ldst === io.map_reqs(i).lrs2, io.remap_reqs(k).pdst, p))
+    io.map_resps(i).prs3       := (0 until i).foldLeft(map_table(io.map_reqs(i).lrs3)) ((p,k) =>
+      Mux(bypass.B && io.remap_reqs(k).valid && io.remap_reqs(k).ldst === io.map_reqs(i).lrs3, io.remap_reqs(k).pdst, p))
+    io.map_resps(i).stale_pdst := (0 until i).foldLeft(map_table(io.map_reqs(i).ldst)) ((p,k) =>
+      Mux(bypass.B && io.remap_reqs(k).valid && io.remap_reqs(k).ldst === io.map_reqs(i).ldst, io.remap_reqs(k).pdst, p))
+
+    if (!float) io.map_resps(i).prs3 := DontCare
   }
 
   // Don't flag the creation of duplicate 'p0' mappings during rollback.
