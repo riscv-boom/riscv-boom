@@ -510,9 +510,9 @@ class BoomCore(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdg
     for (w <- 0 until coreWidth) {
       val i_uop = rename_stage.io.ren2_uops(w)
       val f_uop = fp_rename_stage.io.ren2_uops(w)
-  
+
       // lrs1 can "pass through" to prs1. Used solely to index the csr file.
-      dis_uops(w).prs1 := Mux(dis_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1, 
+      dis_uops(w).prs1 := Mux(dis_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1,
                           Mux(dis_uops(w).lrs1_rtype === RT_FIX, i_uop.prs1, dis_uops(w).lrs1))
       dis_uops(w).prs2 := Mux(dis_uops(w).lrs2_rtype === RT_FLT, f_uop.prs2, i_uop.prs2)
       dis_uops(w).prs3 := f_uop.prs3
