@@ -93,6 +93,7 @@ class TracedSmallBoomConfig extends Config(
 
 //RV32IMAC TODO: Support FP
 class SmallRV32UnifiedBoomConfig extends Config(
+  new WithBoomRV32 ++
   new WithoutBoomFPU ++
   new WithUnifiedMemIntIQs ++
   new SmallBoomConfig)
