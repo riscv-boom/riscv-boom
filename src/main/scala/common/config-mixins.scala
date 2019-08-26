@@ -28,23 +28,6 @@ case object BoomCrossingKey extends Field[Seq[RocketCrossingParams]](List(Rocket
 // ---------------------
 
 /**
- * Baseline BOOM configuration.
- */
-class BaseBoomConfig extends Config((site, here, up) => {
-  // Top-Level
-  case XLen => 64
-
-  // Specify things which are typically common between core configs.
-  case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
-    core = b.core.copy(
-      fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true)))
-  )}
-
-  // Make sure there are enough hart bits to support multiple cores
-  case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
-})
-
-/**
  * Enables RV32 version of the core
  */
 class WithBoomRV32 extends Config((site, here, up) => {
@@ -67,13 +50,6 @@ class WithUnifiedMemIntIQs extends Config((site, here, up) => {
                                    iq.copy(issueWidth=b.core.decodeWidth) else iq)
     ))
   }
-})
-
-/**
-  * Adds a boot ROM.
-  */
-class WithBootROM extends Config((site, here, up) => {
-  case BootROMParams => BootROMParams(contentFileName = s"./bootrom/bootrom.rv${site(XLen)}.img")
 })
 
 /**
@@ -115,16 +91,6 @@ class WithTrace extends Config((site, here, up) => {
 })
 
 /**
- * Enable RVC
- */
-class WithRVC extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
-    core = b.core.copy(
-      fetchWidth = b.core.fetchWidth * 2,
-      useCompressed = true))}
-})
-
-/**
  * Create multiple copies of a BOOM tile (and thus a core).
  * Override with the default mixins to control all params of the tiles.
  * Default adds small BOOMs.
@@ -133,35 +99,12 @@ class WithRVC extends Config((site, here, up) => {
  */
 class WithNBoomCores(n: Int) extends Config(
   new WithSmallBooms ++
-  new BaseBoomConfig ++
   new Config((site, here, up) => {
     case BoomTilesKey => {
       List.tabulate(n)(i => BoomTileParams(hartId = i))
     }
   })
 )
-
-/**
- * This sets the ECC for the L1 instruction cache.
- *
- * @param tecc ...
- * @param decc ...
- */
-class WithL1IECC(tecc: String, decc: String) extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
-    r.copy(icache = r.icache.map(_.copy(tagECC = Some(tecc), dataECC = Some(decc)))) }
-})
-
-/**
- * This sets the ECC for the L1 data cache.
- *
- * @param tecc ...
- * @param decc ...
- */
-class WithL1DECC(tecc: String, decc: String) extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { r =>
-    r.copy(dcache = r.dcache.map(_.copy(tagECC = Some(tecc), dataECC = Some(decc)))) }
-})
 
 /**
  * Class to renumber BOOM + Rocket harts so that there are no overlapped harts
@@ -212,7 +155,8 @@ class WithRationalBoomTiles extends Config((site, here, up) => {
 class WithSmallBooms extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
-      fetchWidth = 2,
+      fetchWidth = 4,
+      useCompressed = true,
       decodeWidth = 1,
       numRobEntries = 32,
       issueParams = Seq(
@@ -232,12 +176,15 @@ class WithSmallBooms extends Config((site, here, up) => {
       gshare = Some(GShareParameters(historyLength=11, numSets=2048)),
       tage = None,
       bpdRandom = None,
-      nPerfCounters = 2),
+      nPerfCounters = 2,
+      fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits,
                                nSets=64, nWays=4, nMSHRs=2, nTLBEntries=8)),
     icache = Some(ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=2*4))
-    )}
+  )}
   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
+  case XLen => 64
+  case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
 })
 
 /**
@@ -246,7 +193,8 @@ class WithSmallBooms extends Config((site, here, up) => {
 class WithMediumBooms extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
-      fetchWidth = 2,
+      fetchWidth = 4,
+      useCompressed = true,
       decodeWidth = 2,
       numRobEntries = 64,
       issueParams = Seq(
@@ -273,6 +221,9 @@ class WithMediumBooms extends Config((site, here, up) => {
     icache = Some(ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=2*4))
     )}
   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
+  case XLen => 64
+  case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
+
 })
 
 /**
@@ -281,7 +232,8 @@ class WithMediumBooms extends Config((site, here, up) => {
 class WithLargeBooms extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
-      fetchWidth = 4,
+      fetchWidth = 8,
+      useCompressed = true,
       decodeWidth = 3,
       numRobEntries = 96,
       issueParams = Seq(
@@ -299,12 +251,15 @@ class WithLargeBooms extends Config((site, here, up) => {
       bpdBaseOnly = None,
       gshare = Some(GShareParameters(historyLength=23, numSets=4096)),
       tage = None,
-      bpdRandom = None),
+      bpdRandom = None,
+      fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                nSets=64, nWays=8, nMSHRs=4, nTLBEntries=16)),
     icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
-    )}
+  )}
   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+  case XLen => 64
+  case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
 })
 
 /**
@@ -313,7 +268,8 @@ class WithLargeBooms extends Config((site, here, up) => {
 class WithMegaBooms extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
-      fetchWidth = 4,
+      fetchWidth = 8,
+      useCompressed = true,
       decodeWidth = 4,
       numRobEntries = 128,
       issueParams = Seq(
@@ -331,10 +287,13 @@ class WithMegaBooms extends Config((site, here, up) => {
       bpdBaseOnly = None,
       gshare = Some(GShareParameters(historyLength=23, numSets=4096)),
       tage = None,
-      bpdRandom = None),
+      bpdRandom = None,
+      fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                nSets=64, nWays=8, nMSHRs=8, nTLBEntries=32)),
     icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
-    )}
+  )}
   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+  case XLen => 64
+  case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
 })
