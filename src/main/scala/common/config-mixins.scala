@@ -8,8 +8,8 @@ package boom.common
 import chisel3._
 import chisel3.util.{log2Up}
 
-import freechips.rocketchip.config.{Parameters, Config}
-import freechips.rocketchip.subsystem.{SystemBusKey, RocketTilesKey}
+import freechips.rocketchip.config.{Parameters, Config, Field}
+import freechips.rocketchip.subsystem.{SystemBusKey, RocketTilesKey, RocketCrossingParams}
 import freechips.rocketchip.devices.tilelink.{BootROMParams}
 import freechips.rocketchip.diplomacy.{SynchronousCrossing, AsynchronousCrossing, RationalCrossing}
 import freechips.rocketchip.rocket._
@@ -19,7 +19,9 @@ import boom.ifu._
 import boom.bpu._
 import boom.exu._
 import boom.lsu._
-import boom.system.{BoomTilesKey, BoomCrossingKey}
+
+case object BoomTilesKey extends Field[Seq[BoomTileParams]](Nil)
+case object BoomCrossingKey extends Field[Seq[RocketCrossingParams]](List(RocketCrossingParams()))
 
 // ---------------------
 // BOOM Configs
