@@ -31,8 +31,8 @@ abstract trait DecodeConstants
   def decode_default: List[BitPat] =
             //                                                                  frs3_en                        wakeup_delay
             //     is val inst?                                                 |  imm sel                     |    bypassable (aka, known/fixed latency)
-            //     |  is fp inst?                                               |  |     is_load               |    |  br/jmp
-            //     |  |  is single-prec?                        rs1 regtype     |  |     |  is_store           |    |  |  is jal
+            //     |  is fp inst?                                               |  |     uses_ldq              |    |  br/jmp
+            //     |  |  is single-prec?                        rs1 regtype     |  |     |  uses_stq           |    |  |  is jal
             //     |  |  |  micro-code                          |       rs2 type|  |     |  |  is_amo          |    |  |  |  allocate_brtag
             //     |  |  |  |         iq-type  func unit        |       |       |  |     |  |  |  is_fence     |    |  |  |  |
             //     |  |  |  |         |        |                |       |       |  |     |  |  |  |  is_fencei |    |  |  |  |  is breakpoint or ecall?
@@ -62,8 +62,8 @@ class CtrlSigs extends Bundle
   val rs2_type        = UInt(2.W)
   val frs3_en         = Bool()
   val imm_sel         = UInt(IS_X.getWidth.W)
-  val is_load         = Bool()
-  val is_store        = Bool()
+  val uses_ldq        = Bool()
+  val uses_stq        = Bool()
   val is_amo          = Bool()
   val is_fence        = Bool()
   val is_fencei       = Bool()
@@ -83,7 +83,7 @@ class CtrlSigs extends Bundle
     val decoder = freechips.rocketchip.rocket.DecodeLogic(inst, XDecode.decode_default, table)
     val sigs =
       Seq(legal, fp_val, fp_single, uopc, iq_type, fu_code, dst_type, rs1_type,
-          rs2_type, frs3_en, imm_sel, is_load, is_store, is_amo,
+          rs2_type, frs3_en, imm_sel, uses_ldq, uses_stq, is_amo,
           is_fence, is_fencei, mem_cmd, wakeup_delay, bypassable,
           br_or_jmp, is_jal, allocate_brtag, is_sys_pc2epc, inst_unique, flush_on_commit, csr_cmd)
       sigs zip decoder map {case(s,d) => s := d}
@@ -100,8 +100,8 @@ object X32Decode extends DecodeConstants
 {
             //                                                                  frs3_en                        wakeup_delay
             //     is val inst?                                                 |  imm sel                     |    bypassable (aka, known/fixed latency)
-            //     |  is fp inst?                                               |  |     is_load               |    |  br/jmp
-            //     |  |  is single-prec?                        rs1 regtype     |  |     |  is_store           |    |  |  is jal
+            //     |  is fp inst?                                               |  |     uses_ldq              |    |  br/jmp
+            //     |  |  is single-prec?                        rs1 regtype     |  |     |  uses_stq           |    |  |  is jal
             //     |  |  |  micro-code                          |       rs2 type|  |     |  |  is_amo          |    |  |  |  allocate_brtag
             //     |  |  |  |         iq-type  func unit        |       |       |  |     |  |  |  is_fence     |    |  |  |  |
             //     |  |  |  |         |        |                |       |       |  |     |  |  |  |  is_fencei |    |  |  |  |  is breakpoint or ecall?
@@ -122,8 +122,8 @@ object X64Decode extends DecodeConstants
 {
            //                                                                  frs3_en                        wakeup_delay
            //     is val inst?                                                 |  imm sel                     |    bypassable (aka, known/fixed latency)
-           //     |  is fp inst?                                               |  |     is_load               |    |  br/jmp
-           //     |  |  is single-prec?                        rs1 regtype     |  |     |  is_store           |    |  |  is jal
+           //     |  is fp inst?                                               |  |     uses_ldq              |    |  br/jmp
+           //     |  |  is single-prec?                        rs1 regtype     |  |     |  uses_stq           |    |  |  is jal
            //     |  |  |  micro-code                          |       rs2 type|  |     |  |  is_amo          |    |  |  |  allocate_brtag
            //     |  |  |  |         iq-type  func unit        |       |       |  |     |  |  |  is_fence     |    |  |  |  |
            //     |  |  |  |         |        |                |       |       |  |     |  |  |  |  is_fencei |    |  |  |  |  is breakpoint or ecall?
@@ -159,8 +159,8 @@ object XDecode extends DecodeConstants
 {
            //                                                                  frs3_en                        wakeup_delay
            //     is val inst?                                                 |  imm sel                     |    bypassable (aka, known/fixed latency)
-           //     |  is fp inst?                                               |  |     is_load               |    |  br/jmp
-           //     |  |  is single-prec?                        rs1 regtype     |  |     |  is_store           |    |  |  is jal
+           //     |  is fp inst?                                               |  |     uses_ldq              |    |  br/jmp
+           //     |  |  is single-prec?                        rs1 regtype     |  |     |  uses_stq           |    |  |  is jal
            //     |  |  |  micro-code                          |       rs2 type|  |     |  |  is_amo          |    |  |  |  allocate_brtag
            //     |  |  |  |         iq-type  func unit        |       |       |  |     |  |  |  is_fence     |    |  |  |  |
            //     |  |  |  |         |        |                |       |       |  |     |  |  |  |  is_fencei |    |  |  |  |  is breakpoint or ecall?
@@ -280,8 +280,8 @@ object FDecode extends DecodeConstants
   val table: Array[(BitPat, List[BitPat])] = Array(
             //                                                                  frs3_en                        wakeup_delay
             //                                                                  |  imm sel                     |    bypassable (aka, known/fixed latency)
-            //                                                                  |  |     is_load               |    |  br/jmp
-            //    is val inst?                                  rs1 regtype     |  |     |  is_store           |    |  |  is jal
+            //                                                                  |  |     uses_ldq              |    |  br/jmp
+            //    is val inst?                                  rs1 regtype     |  |     |  uses_stq           |    |  |  is jal
             //    |  is fp inst?                                |       rs2 type|  |     |  |  is_amo          |    |  |  |  allocate_brtag
             //    |  |  is dst single-prec?                     |       |       |  |     |  |  |  is_fence     |    |  |  |  |
             //    |  |  |  micro-opcode                         |       |       |  |     |  |  |  |  is_fencei |    |  |  |  |  is breakpoint or ecall
@@ -374,8 +374,8 @@ object FDivSqrtDecode extends DecodeConstants
   val table: Array[(BitPat, List[BitPat])] = Array(
             //                                                                  frs3_en                        wakeup_delay
             //                                                                  |  imm sel                     |    bypassable (aka, known/fixed latency)
-            //                                                                  |  |     is_load               |    |  br/jmp
-            //     is val inst?                                 rs1 regtype     |  |     |  is_store           |    |  |  is jal
+            //                                                                  |  |     uses_ldq              |    |  br/jmp
+            //     is val inst?                                 rs1 regtype     |  |     |  uses_stq           |    |  |  is jal
             //     |  is fp inst?                               |       rs2 type|  |     |  |  is_amo          |    |  |  |  allocate_brtag
             //     |  |  is dst single-prec?                    |       |       |  |     |  |  |  is_fence     |    |  |  |  |
             //     |  |  |  micro-opcode                        |       |       |  |     |  |  |  |  is_fencei |    |  |  |  |  is breakpoint or ecall
@@ -398,8 +398,8 @@ object RoCCDecode extends DecodeConstants
   // Note: We use FU_CSR since CSR instructions cannot co-execute with RoCC instructions
                        //                                                                   frs3_en                        wakeup_delay
                        //     is val inst?                                                  |  imm sel                     |    bypassable (aka, known/fixed latency)
-                       //     |  is fp inst?                                                |  |     is_load               |    |  br/jmp
-                       //     |  |  is single-prec                          rs1 regtype     |  |     |  is_store           |    |  |  is jal
+                       //     |  is fp inst?                                                |  |     uses_ldq              |    |  br/jmp
+                       //     |  |  is single-prec                          rs1 regtype     |  |     |  uses_stq           |    |  |  is jal
                        //     |  |  |                                       |       rs2 type|  |     |  |  is_amo          |    |  |  |  allocate_brtag
                        //     |  |  |  micro-code           func unit       |       |       |  |     |  |  |  is_fence     |    |  |  |  |
                        //     |  |  |  |           iq-type  |               |       |       |  |     |  |  |  |  is_fencei |    |  |  |  |  is breakpoint or ecall?
@@ -540,8 +540,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   uop.mem_cmd    := cs.mem_cmd
   uop.mem_size   := Mux(cs.mem_cmd.isOneOf(M_SFENCE, M_FLUSH_ALL), Cat(uop.lrs2 =/= 0.U, uop.lrs1 =/= 0.U), inst(13,12))
   uop.mem_signed := !inst(14)
-  uop.is_load    := cs.is_load
-  uop.is_store   := cs.is_store
+  uop.uses_ldq   := cs.uses_ldq
+  uop.uses_stq   := cs.uses_stq
   uop.is_amo     := cs.is_amo
   uop.is_fence   := cs.is_fence
   uop.is_fencei  := cs.is_fencei

@@ -26,6 +26,7 @@ trait BOOMDebugConstants
 {
   val DEBUG_PRINTF        = false // use the Chisel printf functionality
   val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
+  val MEMTRACE_PRINTF     = false // dump trace of memory accesses to L1D for debugging
   val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
   val O3_CYCLE_TIME       = (1000)// "cycle" time expected by o3pipeview.py
 
@@ -290,8 +291,8 @@ trait ScalarOpConstants
     uop.uopc       := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
     uop.bypassable := false.B
     uop.fp_val     := false.B
-    uop.is_store   := false.B
-    uop.is_load    := false.B
+    uop.uses_stq   := false.B
+    uop.uses_ldq   := false.B
     uop.pdst       := 0.U
     uop.dst_rtype  := RT_X
     // TODO these unnecessary? used in regread stage?
@@ -339,7 +340,7 @@ trait RISCVConstants
   // memory consistency model
   // The C/C++ atomics MCM requires that two loads to the same address maintain program order.
   // The Cortex A9 does NOT enforce load/load ordering (which leads to buggy behavior).
-  val MCM_ORDER_DEPENDENT_LOADS = false
+  val MCM_ORDER_DEPENDENT_LOADS = true
 
   val jal_opc = (0x6f).U
   val jalr_opc = (0x67).U

@@ -10,6 +10,9 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
+rm -rf $LOCAL_CHIPYARD_DIR/generators/boom/*
+mv -f $LOCAL_CHECKOUT_DIR/* $LOCAL_CHIPYARD_DIR/generators/boom/
+
 # call clean on exit
 trap clean EXIT
 

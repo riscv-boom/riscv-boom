@@ -39,6 +39,7 @@ case class BoomCoreParams(
   numFetchBufferEntries: Int = 16,
   enableAgePriorityIssue: Boolean = true,
   enablePrefetching: Boolean = false,
+  enableFastLoadUse: Boolean = true,
   enableBrResolutionRegister: Boolean = true,
   enableCommitMapTable: Boolean = false,
   enableFastPNR: Boolean = false,
@@ -95,7 +96,7 @@ case class BoomCoreParams(
   val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
   val retireWidth = decodeWidth
   val jumpInFrontend: Boolean = false // unused in boom
-  val nPMPs: Int = 0 // TODO Fix this!!!!!
+  val nPMPs: Int = 8
 
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
 }
@@ -205,6 +206,9 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val icBlockBytes = icacheParams.blockBytes
 
   require(icacheParams.nSets <= 64, "Handling aliases in the ICache is buggy.")
+
+  val enableFastLoadUse = boomParams.enableFastLoadUse
+  val enablePrefetching = boomParams.enablePrefetching
 
   //************************************
   // Branch Prediction

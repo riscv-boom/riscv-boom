@@ -74,8 +74,8 @@ class BoomTile(
   with SourcesExternalNotifications
   with HasBoomLazyRoCC  // implies CanHaveSharedFPU with CanHavePTW with HasHellaCache
   with CanHaveBoomPTW
-  with HasBoomHellaCache
   with HasBoomICacheFrontend
+  with HasBoomLSU
 {
 
   // Private constructor ensures altered LazyModule.p is used implicitly
@@ -113,7 +113,6 @@ class BoomTile(
   masterNode :=* tlOtherMastersNode
   DisableMonitors { implicit p => tlSlaveXbar.node :*= slaveNode }
 
-  nDCachePorts += 1 /*core */ + (dtim_adapter.isDefined).toInt
 
   val dtimProperty = dtim_adapter.map(d => Map(
     "sifive,dtim" -> d.device.asProperty)).getOrElse(Nil)
@@ -190,12 +189,12 @@ class BoomTile(
 class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   with HasBoomLazyRoCCModule
   with CanHaveBoomPTWModule
-  with HasBoomHellaCacheModule
   with HasBoomICacheFrontendModule
+  with HasBoomLSUModule
 {
   Annotated.params(this, outer.boomParams)
 
-  val core = Module(new BoomCore()(outer.p, outer.dcache.module.edge))
+  val core = Module(new BoomCore()(outer.p))
 
   // Observe the Tilelink Channel C traffic leaving the L1D (writeback/releases).
   val tl_c = outer.dCacheTap.out(0)._1.c
@@ -203,7 +202,8 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   core.io.release.bits.address := tl_c.bits.address
 
   // Report unrecoverable error conditions; for now the only cause is cache ECC errors
-  outer.reportHalt(List(outer.frontend.module.io.errors, outer.dcache.module.io.errors))
+  // outer.reportHalt(List(outer.frontend.module.io.errors, outer.dcache.module.io.errors))
+  // ECC is not supported
 
   // Report when the tile has ceased to retire instructions; for now the only cause is clock gating
   //outer.reportCease(outer.boomParams.core.clockGate.option(
@@ -232,7 +232,8 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
 
   // Connect the core pipeline to other intra-tile modules
   outer.frontend.module.io.cpu <> core.io.ifu
-  dcachePorts += core.io.dmem // TODO outer.dcachePorts += () => module.core.io.dmem ??
+  core.io.lsu <> lsu.io.core
+
   //fpuOpt foreach { fpu => core.io.fpu <> fpu.io } RocketFpu - not needed in boom
   core.io.ptw <> ptw.io.dpath
   fcsr_rm := core.io.fcsr_rm
@@ -249,16 +250,12 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer)
   }
 
 
-  outer.dtim_adapter.foreach { lm => dcachePorts += lm.module.io.dmem }
-
   // TODO eliminate this redundancy
-  val h = dcachePorts.size
-  val c = core.dcacheArbPorts
-  val o = outer.nDCachePorts
-  require(h == c, s"port list size was $h, core expected $c")
+  val h = hellaCachePorts.size
+  val o = outer.nHellaCachePorts
   require(h == o, s"port list size was $h, outer counted $o")
   // TODO figure out how to move the below into their respective mix-ins
-  dcacheArb.io.requestor <> dcachePorts
+  hellaCacheArb.io.requestor <> hellaCachePorts
   ptwPorts += core.io.ptw_tlb
   ptw.io.requestor <> ptwPorts
 

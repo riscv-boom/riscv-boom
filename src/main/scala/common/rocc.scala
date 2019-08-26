@@ -32,7 +32,7 @@ trait HasBoomLazyRoCC extends CanHaveBoomPTW { this: BaseTile =>
   roccs.map(_.tlNode).foreach { tl => tlOtherMastersNode :=* tl }
 
   nPTWPorts += roccs.map(_.nPTWPorts).foldLeft(0)(_+_)
-  nDCachePorts += roccs.size
+  nHellaCachePorts += roccs.size
 }
 
 /**
@@ -50,7 +50,7 @@ trait HasBoomLazyRoCCModule extends CanHaveBoomPTWModule
       rocc.module.io.cmd <> cmdRouter.io.out(i)
       val dcIF = Module(new SimpleHellaCacheIF()(outer.p))
       dcIF.io.requestor <> rocc.module.io.mem
-      dcachePorts += dcIF.io.cache
+      hellaCachePorts += dcIF.io.cache
       respArb.io.in(i) <> Queue(rocc.module.io.resp)
     }
     // Create this FPU just for RoCC

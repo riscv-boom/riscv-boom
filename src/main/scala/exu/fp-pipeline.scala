@@ -43,7 +43,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     // +1 for recoding.
     val ll_wport         = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from memory unit
     val from_int         = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from integer RF
-    val to_sdq           = Valid(new MicroOpWithData(fLen))           // to Load/Store Unit
+    val to_sdq           = Decoupled(new MicroOpWithData(fLen))           // to Load/Store Unit
     val to_int           = Decoupled(new ExeUnitResp(xLen))           // to integer RF
 
     val wakeups          = Vec(numWakeupPorts, Valid(new ExeUnitResp(fLen+1)))
@@ -90,9 +90,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   issue_unit.io.brinfo := io.brinfo
   issue_unit.io.flush_pipeline := io.flush_pipeline
   // Don't support ld-hit speculation to FP window.
-  issue_unit.io.mem_ldSpecWakeup.valid := false.B
-  issue_unit.io.mem_ldSpecWakeup.bits := 0.U
-  issue_unit.io.sxt_ldMiss := false.B
+  issue_unit.io.spec_ld_wakeup.valid := false.B
+  issue_unit.io.spec_ld_wakeup.bits := 0.U
+  issue_unit.io.ld_miss := false.B
 
   require (exe_units.numTotalBypassPorts == 0)
 
@@ -198,10 +198,12 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   require (w_cnt == fregfile.io.write_ports.length)
 
   val fpiu_unit = exe_units.fpiu_unit
-  io.to_int <> fpiu_unit.io.ll_iresp
-  io.to_sdq.valid := fpiu_unit.io.iresp.valid
-  io.to_sdq.bits  := fpiu_unit.io.iresp.bits
-  fpiu_unit.io.iresp.ready := true.B
+  val fpiu_is_sdq = fpiu_unit.io.ll_iresp.bits.uop.uopc === uopSTA
+  io.to_int.valid := fpiu_unit.io.ll_iresp.fire() && !fpiu_is_sdq
+  io.to_sdq.valid := fpiu_unit.io.ll_iresp.fire() &&  fpiu_is_sdq
+  io.to_int.bits  := fpiu_unit.io.ll_iresp.bits
+  io.to_sdq.bits  := fpiu_unit.io.ll_iresp.bits
+  fpiu_unit.io.ll_iresp.ready := io.to_sdq.ready && io.to_int.ready
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -224,8 +226,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
       w_cnt += 1
 
-      assert(!(exe_resp.valid && wb_uop.is_store))
-      assert(!(exe_resp.valid && wb_uop.is_load))
+      assert(!(exe_resp.valid && wb_uop.uses_ldq))
+      assert(!(exe_resp.valid && wb_uop.uses_stq))
       assert(!(exe_resp.valid && wb_uop.is_amo))
     }
   }
