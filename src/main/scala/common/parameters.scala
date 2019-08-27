@@ -67,6 +67,7 @@ case class BoomCoreParams(
   nPerfCounters: Int = 0,
   numRXQEntries: Int = 4,
   numRCQEntries: Int = 8,
+  numDCacheBanks: Int = 1,
   /* more stuff */
 
   useFetchMonitor: Boolean = true,
