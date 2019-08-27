@@ -734,9 +734,9 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   io.refill         <> refill_arb.io.out
 
   val free_sdq = io.replay.fire() && isWrite(io.replay.bits.uop.mem_cmd)
-  io.replay.bits.data := sdq(RegEnable(replay_arb.io.out.bits.sdq_id, free_sdq))
 
   io.replay <> replay_arb.io.out
+  io.replay.bits.data := sdq(replay_arb.io.out.bits.sdq_id)
 
   when (io.replay.valid || sdq_enq) {
     sdq_val := sdq_val & ~(UIntToOH(replay_arb.io.out.bits.sdq_id) & Fill(cfg.nSDQ, free_sdq)) |
