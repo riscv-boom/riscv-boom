@@ -53,6 +53,17 @@ class WithUnifiedMemIntIQs extends Config((site, here, up) => {
 })
 
 /**
+ * Disable support for C-extension (RVC)
+ */
+class WithoutBoomRVC extends Config((site, here, up) => {
+  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
+    b.copy(core = b.core.copy(
+      fetchWidth = b.core.fetchWidth / 2,
+      useCompressed = false))
+   }
+})
+
+/**
  * Remove FPU
  */
 class WithoutBoomFPU extends Config((site, here, up) => {
