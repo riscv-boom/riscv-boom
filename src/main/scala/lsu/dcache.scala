@@ -681,7 +681,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   }
 
   val s2_data_muxed = widthMap(w => Mux1H(s2_tag_match_way(w), s2_data(w)))
-  val s2_word_idx   = widthMap(w => if (doNarrowRead) 0.U else s2_req(w).addr(log2Up(rowWords*coreDataBytes)-1, log2Up(wordBytes)))
+  val s2_word_idx   = widthMap(w => if (rowWords == 1) 0.U else s2_req(w).addr(log2Up(rowWords*wordBytes)-1, log2Up(wordBytes)))
 
   // replacement policy
   val replacer = cacheParams.replacement
