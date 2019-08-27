@@ -170,7 +170,7 @@ jobs:
             - run:
                 name: Building MegaBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh megaboom
-                no_output_timeout: 240m
+                no_output_timeout: 480m
             - save_cache:
                 key: megaboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
