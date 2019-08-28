@@ -9,7 +9,7 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
-SIM_BASE=simulator-boom.system-
+SIM_BASE=simulator-example-
 CONFIG=$(echo ${mapping[$1]} | sed -n -e 's/^.*CONFIG=\([a-zA-Z0-9]*\).*/\1/p')
 SIM=${SIM_BASE}${CONFIG}
 AMT_RUNS=$2

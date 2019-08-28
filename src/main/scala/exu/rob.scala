@@ -2,8 +2,6 @@
 // Copyright (c) 2013 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -55,6 +53,8 @@ class RobIo(
   val enq_partial_stall= Input(Bool()) // we're dispatching only a partial packet,
                                        // and stalling on the rest of it (don't
                                        // advance the tail ptr)
+
+  val xcpt_fetch_pc = Input(UInt(vaddrBitsExtended.W))
 
   val rob_tail_idx = Output(UInt(robAddrSz.W))
   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
@@ -645,7 +645,7 @@ class Rob(
       // if no exception yet, dispatch exception wins
       r_xcpt_val      := true.B
       next_xcpt_uop   := io.enq_uops(idx)
-      r_xcpt_badvaddr := io.enq_uops(idx).pc + Mux(io.enq_uops(idx).edge_inst, 2.U, 0.U)
+      r_xcpt_badvaddr := AlignPCToBoundary(io.xcpt_fetch_pc, icBlockBytes) | io.enq_uops(idx).pc_lob
 
       assert(!(usingCompressed.B && (io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR),
         "when using RVC, JAL exceptions should not be seen")
@@ -909,7 +909,7 @@ class Rob(
           BoolToChar( debug_entry(r_idx+0).valid, 'V'),
           BoolToChar(  debug_entry(r_idx+0).busy, 'B'),
           BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
-          debug_entry(r_idx+0).uop.pc(31,0),
+          debug_entry(r_idx+0).uop.debug_pc(31,0),
           debug_entry(r_idx+0).uop.debug_inst,
           BoolToChar(debug_entry(r_idx+0).exception, 'E'))
       } else if (coreWidth == 2) {
@@ -921,8 +921,8 @@ class Rob(
           BoolToChar(  debug_entry(r_idx+1).busy, 'B'),
           BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
           BoolToChar(debug_entry(r_idx+1).unsafe, 'U'),
-          debug_entry(r_idx+0).uop.pc(31,0),
-          debug_entry(r_idx+1).uop.pc(15,0),
+          debug_entry(r_idx+0).uop.debug_pc(31,0),
+          debug_entry(r_idx+1).uop.debug_pc(15,0),
           debug_entry(r_idx+0).uop.debug_inst,
           debug_entry(r_idx+1).uop.debug_inst,
           BoolToChar(debug_entry(r_idx+0).exception, 'E'),
@@ -944,10 +944,10 @@ class Rob(
           BoolToChar(debug_entry(r_idx+1).unsafe, 'U'),
           BoolToChar(debug_entry(r_idx+2).unsafe, 'U'),
           BoolToChar(debug_entry(r_idx+3).unsafe, 'U'),
-          debug_entry(r_idx+0).uop.pc(23,0),
-          debug_entry(r_idx+1).uop.pc(15,0),
-          debug_entry(r_idx+2).uop.pc(15,0),
-          debug_entry(r_idx+3).uop.pc(15,0),
+          debug_entry(r_idx+0).uop.debug_pc(23,0),
+          debug_entry(r_idx+1).uop.debug_pc(15,0),
+          debug_entry(r_idx+2).uop.debug_pc(15,0),
+          debug_entry(r_idx+3).uop.debug_pc(15,0),
           debug_entry(r_idx+0).uop.debug_inst,
           debug_entry(r_idx+1).uop.debug_inst,
           debug_entry(r_idx+2).uop.debug_inst,
