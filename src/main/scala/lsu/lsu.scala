@@ -51,6 +51,7 @@ import chisel3.experimental.dontTouch
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket
+import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util.Str
 
 import boom.common._
@@ -81,7 +82,7 @@ class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
   val is_hella = Bool()
 }
 
-class LSUDMemIO(implicit p: Parameters) extends BoomBundle()(p)
+class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
 {
   // In LSU's dmem stage, send the request
   val req         = new DecoupledIO(Vec(memWidth, Valid(new BoomDCacheReq)))
@@ -92,15 +93,18 @@ class LSUDMemIO(implicit p: Parameters) extends BoomBundle()(p)
   // In our response stage, if we get a nack, we need to reexecute
   val nack        = Flipped(Vec(memWidth, new ValidIO(new BoomDCacheReq)))
 
-
   val brinfo       = Output(new BrResolutionInfo)
   val exception    = Output(Bool())
   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
   val rob_head_idx = Output(UInt(robAddrSz.W))
 
+  val release = Flipped(new DecoupledIO(new TLBundleC(edge.bundle)))
+
   // Clears prefetching MSHRs
   val force_order  = Output(Bool())
   val ordered     = Input(Bool())
+
+  override def cloneType = new LSUDMemIO().asInstanceOf[this.type]
 }
 
 class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
@@ -146,7 +150,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val tsc_reg     = Input(UInt())
 }
 
-class LSUIO(implicit p: Parameters) extends BoomBundle()(p)
+class LSUIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
 {
   val ptw   = new rocket.TLBPTWIO
   val core  = new LSUCoreIO
@@ -166,6 +170,7 @@ class LDQEntry(implicit p: Parameters) extends BoomBundle()(p)
   val execute_ignore      = Bool() // Ignore the next response we get from memory, we need to replay it
   val succeeded           = Bool() // Load send data back to core
   val order_fail          = Bool()
+  val observed            = Bool()
 
   val st_dep_mask         = UInt(NUM_STQ_ENTRIES.W) // list of stores older than us
   val youngest_stq_idx    = UInt(stqAddrSz.W) // index of the oldest store younger than us
@@ -189,7 +194,8 @@ class STQEntry(implicit p: Parameters) extends BoomBundle()(p)
   val debug_wb_data       = UInt(xLen.W)
 }
 
-class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut) extends BoomModule()(p)
+class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
+  with rocket.HasL1HellaCacheParameters
 {
   val io = IO(new LSUIO)
 
@@ -289,6 +295,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
       ldq(ld_enq_idx).bits.execute_ignore  := false.B
       ldq(ld_enq_idx).bits.succeeded       := false.B
       ldq(ld_enq_idx).bits.order_fail      := false.B
+      ldq(ld_enq_idx).bits.observed        := false.B
       ldq(ld_enq_idx).bits.forward_std_val := false.B
 
       assert (ld_enq_idx === io.core.dis_uops(w).bits.ldq_idx, "[lsu] mismatch enq load tag.")
@@ -354,6 +361,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val will_fire_sfence         = Wire(Vec(memWidth, Bool()))
   val will_fire_hella_incoming = Wire(Vec(memWidth, Bool()))
   val will_fire_hella_wakeup   = Wire(Vec(memWidth, Bool()))
+  val will_fire_release        = Wire(Vec(memWidth, Bool()))
   val will_fire_load_retry     = Wire(Vec(memWidth, Bool()))
   val will_fire_sta_retry      = Wire(Vec(memWidth, Bool()))
   val will_fire_store_commit   = Wire(Vec(memWidth, Bool()))
@@ -426,6 +434,10 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   // Can we fire an incoming sfence
   val can_fire_sfence        = widthMap(w => exe_req(w).valid && exe_req(w).bits.sfence.valid)
 
+  // Can we fire a request from dcache to release a line
+  // This needs to go through LDQ search to mark loads as dangerous
+  val can_fire_release       = widthMap(w => (w == memWidth-1).B && io.dmem.release.valid)
+  io.dmem.release.ready     := will_fire_release.reduce(_||_)
 
   // Can we retry a load that missed in the TLB
   val can_fire_load_retry    = widthMap(w =>
@@ -517,6 +529,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     will_fire_sta_incoming  (w) := lsu_sched(can_fire_sta_incoming  (w) , true , false, true , true)  // TLB ,    , LCAM , ROB
     will_fire_std_incoming  (w) := lsu_sched(can_fire_std_incoming  (w) , false, false, false, true)  //                 , ROB
     will_fire_sfence        (w) := lsu_sched(can_fire_sfence        (w) , true , false, false, true)  // TLB ,    ,      , ROB
+    will_fire_release       (w) := lsu_sched(can_fire_release       (w) , false, false, true , false) //            LCAM
     will_fire_hella_incoming(w) := lsu_sched(can_fire_hella_incoming(w) , true , true , false, false) // TLB , DC
     will_fire_hella_wakeup  (w) := lsu_sched(can_fire_hella_wakeup  (w) , false, true , false, false) //     , DC
     will_fire_load_retry    (w) := lsu_sched(can_fire_load_retry    (w) , true , true , true , false) // TLB , DC , LCAM
@@ -855,6 +868,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   val fired_std_incoming   = widthMap(w => RegNext(will_fire_std_incoming (w) && !exe_req_killed(w)))
   val fired_stdf_incoming  = RegNext(will_fire_stdf_incoming && !stdf_killed)
   val fired_sfence         = RegNext(will_fire_sfence)
+  val fired_release        = RegNext(will_fire_release)
   val fired_load_retry     = widthMap(w => RegNext(will_fire_load_retry   (w) && !IsKilledByBranch(io.core.brinfo, ldq_retry_e.bits.uop)))
   val fired_sta_retry      = widthMap(w => RegNext(will_fire_sta_retry    (w) && !IsKilledByBranch(io.core.brinfo, stq_retry_e.bits.uop)))
   val fired_store_commit   = RegNext(will_fire_store_commit)
@@ -972,9 +986,8 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
   // We translated a load last cycle
   val do_ld_search = widthMap(w => ((fired_load_incoming(w) || fired_load_retry(w)) && !mem_tlb_miss(w)) ||
                      fired_load_wakeup(w))
-
-  for (w <- 0 until memWidth)
-    assert(!(do_st_search(w) && do_ld_search(w)))
+  // We are making a local line visible to other harts
+  val do_release_search = widthMap(w => fired_release(w))
 
   // Store addrs don't go to memory yet, get it from the TLB response
   // Load wakeups don't go through TLB, get it through memory
@@ -987,7 +1000,7 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
 
   val lcam_mask  = widthMap(w => GenByteMask(lcam_addr(w), lcam_uop(w).mem_size))
   val lcam_st_dep_mask = widthMap(w => mem_ldq_e(w).bits.st_dep_mask)
-  val lcam_is_fence = widthMap(w => lcam_uop(w).is_fence)
+  val lcam_is_release = widthMap(w => fired_release(w))
   val lcam_ldq_idx  = widthMap(w =>
                       Mux(fired_load_incoming(w), mem_incoming_uop(w).ldq_idx,
                       Mux(fired_load_wakeup  (w), RegNext(ldq_wakeup_idx),
@@ -996,9 +1009,6 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                       Mux(fired_stad_incoming(w) ||
                           fired_sta_incoming (w), mem_incoming_uop(w).stq_idx,
                       Mux(fired_sta_retry    (w), RegNext(stq_retry_idx), 0.U)))
-
-
-
 
   val can_forward = WireInit(widthMap(w =>
     Mux(fired_load_incoming(w) || fired_load_retry(w), !mem_tlb_uncacheable(w),
@@ -1026,19 +1036,28 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
     val l_addr  = ldq(i).bits.addr.bits
     val l_mask  = GenByteMask(l_addr, l_bits.uop.mem_size)
 
-    val dword_addr_matches = widthMap(w => lcam_addr(w)(corePAddrBits-1,3) === l_addr(corePAddrBits-1,3))
+
+    val block_addr_matches = widthMap(w => lcam_addr(w) >> blockOffBits === l_addr >> blockOffBits)
+    val dword_addr_matches = widthMap(w => block_addr_matches(w) && lcam_addr(w)(blockOffBits-1,3) === l_addr(blockOffBits-1,3))
     val mask_match = widthMap(w => (l_mask & lcam_mask(w)) === l_mask)
     val l_is_succeeding = succeeding_loads(i)
 
     // Searcher is a store
     for (w <- 0 until memWidth) {
-      when (do_st_search(w)                                                                                             &&
-            l_valid                                                                                                     &&
-            l_bits.addr.valid                                                                                           &&
-            ((l_bits.executed && !l_bits.execute_ignore && !executing_loads(i)) || l_bits.succeeded || l_is_succeeding) &&
-            !l_bits.addr_is_virtual                                                                                     &&
-            l_bits.st_dep_mask(lcam_stq_idx(w))                                                                         &&
-            dword_addr_matches(w)) {
+      when (do_release_search(w) &&
+            l_valid              &&
+            l_bits.addr.valid    &&
+            block_addr_matches(w)) {
+        // This load has been observed, so if a younger load to the same address has not
+        // executed yet, this load must be squashed
+        ldq(i).bits.observed := true.B
+      } .elsewhen (do_st_search(w)                                                                                             &&
+                   l_valid                                                                                                     &&
+                   l_bits.addr.valid                                                                                           &&
+                   ((l_bits.executed && !l_bits.execute_ignore && !executing_loads(i)) || l_bits.succeeded || l_is_succeeding) &&
+                   !l_bits.addr_is_virtual                                                                                     &&
+                   l_bits.st_dep_mask(lcam_stq_idx(w))                                                                         &&
+                   dword_addr_matches(w)) {
         val forwarded_is_older = IsOlder(l_bits.forward_stq_idx, lcam_stq_idx(w), l_bits.youngest_stq_idx)
         // We are older than this load, which overlapped us.
         when (!l_bits.forward_std_val || // If the load wasn't forwarded, it definitely failed
@@ -1058,7 +1077,10 @@ class LSU(implicit p: Parameters, edge: freechips.rocketchip.tilelink.TLEdgeOut)
                    ((lcam_mask(w) & l_mask) =/= 0.U)) {
         val searcher_is_older = IsOlder(lcam_ldq_idx(w), i.U, ldq_head)
         when (searcher_is_older) {
-          when ((l_bits.executed && !l_bits.execute_ignore && !executing_loads(i))) { // If the load is proceeding in parallel we don't need to kill it
+          when (l_bits.executed        &&
+                !l_bits.execute_ignore &&
+                !executing_loads(i)    && // If the load is proceeding in parallel we don't need to kill it
+                l_bits.observed) {        // Its only a ordering failure if the cache line was observed between the younger load and us
             when (l_bits.succeeded || l_is_succeeding) { // If the younger load is executing and succeeded, we are screwed. Throw order fail
               ldq(i).bits.order_fail := true.B
               failed_loads(i)        := true.B

@@ -67,6 +67,7 @@ case class BoomCoreParams(
   nPerfCounters: Int = 0,
   numRXQEntries: Int = 4,
   numRCQEntries: Int = 8,
+  numDCacheBanks: Int = 1,
   /* more stuff */
 
   useFetchMonitor: Boolean = true,
@@ -216,8 +217,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   val enableFastLoadUse = boomParams.enableFastLoadUse
   val enablePrefetching = boomParams.enablePrefetching
-
-  val nLBEntries = dcacheParams.nMSHRs + (if (enablePrefetching) 2 else 0)
+  val nLBEntries = dcacheParams.nMSHRs
 
   //************************************
   // Branch Prediction
