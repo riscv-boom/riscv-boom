@@ -703,6 +703,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   for (w <- 0 until memWidth) {
     mshrs.io.req(w).valid := s2_valid(w)          &&
                             !RegNext(s1_nack(w))  &&
+                            !data.io.nacks(w)     &&
                             !s2_hit(w)            &&
                              s2_type.isOneOf(t_lsu, t_prefetch)             &&
                             !IsKilledByBranch(io.lsu.brinfo, s2_req(w).uop) &&
