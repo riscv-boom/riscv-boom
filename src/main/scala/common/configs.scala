@@ -230,13 +230,15 @@ class WithMegaBooms extends Config((site, here, up) => {
       decodeWidth = 4,
       numRobEntries = 128,
       issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4),
+        IssueParams(issueWidth=2, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4),
         IssueParams(issueWidth=3, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=4),
         IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
       numIntPhysRegisters = 128,
       numFpPhysRegisters = 128,
       numLdqEntries = 32,
       numStqEntries = 32,
+      enablePrefetching = true,
+      numDCacheBanks = 2,
       maxBrCount = 16,
       numFetchBufferEntries = 32,
       ftq = FtqParameters(nEntries=32),
@@ -247,7 +249,7 @@ class WithMegaBooms extends Config((site, here, up) => {
       bpdRandom = None),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                nSets=64, nWays=8, nMSHRs=8, nTLBEntries=32)),
-    icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
+    icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8, prefetch=true))
     )}
   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
 })
