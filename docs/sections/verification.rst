@@ -12,7 +12,7 @@ RISC-V Tests
 
 A basic set of functional tests and micro-benchmarks can be found at
 (https://github.com/riscv/riscv-tests). These are invoked by the :code:`make
-run` targets in the :code:`verisim` and :code:`vsim` directories located in the
+run` targets in the :code:`verilator` and :code:`vcs` directories located in the
 BOOM template repository.
 
 RISC-V Torture Tester

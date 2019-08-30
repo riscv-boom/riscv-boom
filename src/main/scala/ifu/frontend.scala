@@ -2,8 +2,6 @@
 // Copyright (c) 2017 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -116,6 +114,10 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
 
   val status_prv        = Output(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
   val status_debug      = Output(Bool())
+
+  // Breakpoint info
+  val status            = Output(new MStatus)
+  val bp                = Output(Vec(nBreakpoints, new BP))
 
   val perf              = Input(new FrontendPerfEvents())
   val tsc_reg           = Output(UInt(xLen.W))
@@ -254,6 +256,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   fetch_controller.io.br_unit           := io.cpu.br_unit
   fetch_controller.io.tsc_reg           := io.cpu.tsc_reg
+
+  fetch_controller.io.status            := io.cpu.status
+  fetch_controller.io.bp                := io.cpu.bp
 
   fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp
   fetch_controller.io.f3_bpd_resp       := bpdpipeline.io.f3_bpd_resp

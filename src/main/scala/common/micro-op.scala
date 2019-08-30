@@ -2,8 +2,6 @@
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -40,7 +38,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val inst             = UInt(32.W)
   val debug_inst       = UInt(32.W)
   val is_rvc           = Bool()
-  val pc               = UInt(coreMaxAddrBits.W) // TODO remove -- use FTQ to get PC. Change to debug_pc.
+  val debug_pc         = UInt(coreMaxAddrBits.W)
   val iq_type          = UInt(IQT_SZ.W)        // which issue unit do we use?
   val fu_code          = UInt(FUConstants.FUC_SZ.W) // which functional unit do we use?
   val ctrl             = new CtrlSignals
@@ -131,11 +129,13 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
                                             // If it's non-ld/st it will write back exception bits to the fcsr.
   val fp_single        = Bool()             // single-precision floating point instruction (F-extension)
 
-  // exception information
+  // frontend exception information
   val xcpt_pf_if       = Bool()             // I-TLB page fault.
   val xcpt_ae_if       = Bool()             // I$ access exception.
   val replay_if        = Bool()             // I$ wants us to replay our ifetch request
   val xcpt_ma_if       = Bool()             // Misaligned fetch (jal/brjumping to misaligned addr).
+  val bp_debug_if      = Bool()             // Breakpoint
+  val bp_xcpt_if       = Bool()             // Breakpoint
 
   // purely debug information
   val debug_wdata      = UInt(xLen.W)

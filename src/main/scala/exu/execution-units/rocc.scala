@@ -2,8 +2,6 @@
 // Copyright (c) 2013 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Jerry Zhao
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -109,12 +107,13 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
     rxq_op_val   (rxq_tail) := false.B
     rxq_committed(rxq_tail) := false.B
     rxq_uop      (rxq_tail) := io.core.dis_uops(rocc_idx)
-    rxq_inst     (rxq_tail) := io.core.dis_uops(rocc_idx).debug_inst
+    rxq_inst     (rxq_tail) := io.core.dis_uops(rocc_idx).inst
     rxq_tail                := WrapInc(rxq_tail, numRxqEntries)
   }
 
   // Wait for operands
-  when (io.req.valid) {
+  when (io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop)
+     && !io.exception && !RegNext(io.exception)) {
     val rxq_idx = io.req.bits.uop.rxq_idx
     assert(io.req.bits.uop.rob_idx === rxq_uop(rxq_idx).rob_idx,
       "Mismatch between RoCCUnit request and RoCC execute head")
