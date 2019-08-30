@@ -39,7 +39,7 @@ import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle}
 
 import boom.common._
 import boom.exu.FUConstants._
-import boom.system.BoomTilesKey
+import boom.common.BoomTilesKey
 import boom.util.{RobTypeToChars, BoolToChar, GetNewUopAndBrMask, Sext, WrapInc, BoomCoreStringPrefix}
 
 /**
