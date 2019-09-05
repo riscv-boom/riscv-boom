@@ -268,7 +268,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   var ld_enq_idx = ldq_tail
   var st_enq_idx = stq_tail
 
-  val stq_nonempty = VecInit(stq.map(_.valid)).asUInt =/= 0.U
+  val stq_nonempty = (0 until NUM_STQ_ENTRIES).map{ i => stq(i).valid }.reduce(_||_) =/= 0.U
 
   var ldq_full = Bool()
   var stq_full = Bool()
@@ -398,8 +398,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   }), ldq_head))
   val ldq_retry_e            = ldq(ldq_retry_idx)
 
-  val stq_retry_idx = RegNext(AgePriorityEncoder(stq.map(e=>e.bits.addr.valid && e.bits.addr_is_virtual),
-                                                 stq_commit_head))
+  val stq_retry_idx = RegNext(AgePriorityEncoder((0 until NUM_STQ_ENTRIES).map(i => {
+    val e = stq(i).bits
+    e.addr.valid && e.addr_is_virtual
+  }), stq_commit_head))
   val stq_retry_e   = stq(stq_retry_idx)
 
   val stq_commit_e  = stq(stq_execute_head)
