@@ -49,15 +49,6 @@ trait BOOMDebugConstants
 }
 
 /**
- * Mixin for branch prediction constants
- */
-trait BrPredConstants
-{
-  val NOT_TAKEN = false.B
-  val TAKEN = true.B
-}
-
-/**
  * Mixin for issue queue types
  */
 trait IQType

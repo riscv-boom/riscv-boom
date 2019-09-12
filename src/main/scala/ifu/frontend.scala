@@ -13,6 +13,7 @@ package boom.ifu
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.dontTouch
 import chisel3.core.{withReset}
 import chisel3.internal.sourceinfo.{SourceInfo}
 
@@ -25,10 +26,17 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
 import freechips.rocketchip.util.property._
 
-import boom.bpu._
 import boom.common._
-import boom.exu.{BranchUnitResp, CommitExceptionSignals}
+import boom.exu.{BranchUnitResp, CommitExceptionSignals, BranchDecode}
 import boom.util.{BoomCoreStringPrefix}
+
+
+class FrontendResp(implicit p: Parameters) extends BoomBundle()(p) {
+  val pc = UInt(vaddrBitsExtended.W)  // ID stage PC
+  val data = UInt((fetchWidth * coreInstBits).W)
+  val mask = UInt(fetchWidth.W)
+  val xcpt = new FrontendExceptions
+}
 
 /**
  * Parameters to manage a L1 Banked ICache
@@ -79,6 +87,28 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
 }
 
 /**
+ * Bundle passed into the FetchBuffer and used to combine multiple
+ * relevant signals together.
+ */
+class FetchBundle(implicit p: Parameters) extends BoomBundle
+{
+  val pc            = UInt(vaddrBitsExtended.W)
+  val edge_inst     = Bool() // True if 1st instruction in this bundle is pc - 2
+  val insts         = Vec(fetchWidth, Bits(32.W))
+  val exp_insts     = Vec(fetchWidth, Bits(32.W))
+  val ftq_idx       = UInt(log2Ceil(ftqSz).W)
+  val mask          = Vec(fetchWidth, Bool()) // mark which words are valid instructions
+  val xcpt_pf_if    = Bool() // I-TLB miss (instruction fetch fault).
+  val xcpt_ae_if    = Bool() // Access exception.
+  val xcpt_ma_if_oh = Vec(fetchWidth, Bool())
+                           // A cfi branched to a misaligned address --
+                           // one-hot encoding (1:1 with insts).
+  val bp_debug_if_oh= Vec(fetchWidth, Bool())
+  val bp_xcpt_if_oh = Vec(fetchWidth, Bool())
+}
+
+
+/**
  * IO for the BOOM Frontend to/from the CPU
  */
 class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
@@ -89,36 +119,20 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   val br_unit           = Output(new BranchUnitResp())
   val get_pc            = Flipped(new GetPCFromFtqIO())
 
-  val sfence            = Valid(new SFenceReq)
-
-  // sfence needs to steal the TLB CAM part.
-  // TODO redudcant with above sfenceReq
-  val sfence_take_pc    = Output(Bool())
-  val sfence_addr       = Output(UInt((vaddrBits+1).W))
-
-  val commit            = Valid(UInt(ftqSz.W))
-  val flush_info        = Valid(new CommitExceptionSignals())
-  val flush_take_pc     = Output(Bool())
-  val flush_pc          = Output(UInt((vaddrBits+1).W)) // TODO rename; no longer catch-all flush_pc
-  val flush_icache      = Output(Bool())
-
-  val com_ftq_idx       = Output(UInt(log2Ceil(ftqSz).W)) // ROB tells us the commit pointer so we can read out the PC.
-  val com_fetch_pc      = Input(UInt(vaddrBitsExtended.W)) // tell CSRFile the fetch-pc at the FTQ head.
-
-  // bpd pipeline
-  // should I take in the entire rob.io.flush?
-  val flush             = Output(Bool()) // pipeline flush from ROB TODO CODEREVIEW (redudant with fe_clear?)
-  val clear_fetchbuffer = Output(Bool()) // pipeline redirect (rob-flush, sfence request, branch mispredict)
-
-  val status_prv        = Output(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
-  val status_debug      = Output(Bool())
-
   // Breakpoint info
   val status            = Output(new MStatus)
   val bp                = Output(Vec(nBreakpoints, new BP))
 
-  val perf              = Input(new FrontendPerfEvents())
-  val tsc_reg           = Output(UInt(xLen.W))
+  val sfence = Valid(new SFenceReq)
+
+  // Redirects change the PC
+  val redirect_val     = Output(Bool())
+  val redirect_pc      = Output(UInt())
+  val redirect_ftq_idx = Output(UInt())
+
+  val commit = Valid(UInt(ftqSz.W))
+
+  val flush_icache = Output(Bool())
 }
 
 /**
@@ -132,7 +146,6 @@ class BoomFrontend(val icacheParams: ICacheParams, hartid: Int)(implicit p: Para
   lazy val module = new BoomFrontendModule(this)
   val icache = LazyModule(new boom.ifu.ICache(icacheParams, hartid))
   val masterNode = icache.masterNode
-  val slaveNode = icache.slaveNode
 }
 
 /**
@@ -155,180 +168,277 @@ class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
  * @param outer top level Frontend class
  */
 class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
-  with HasCoreParameters
+  with HasBoomCoreParameters
   with HasL1ICacheParameters
   with HasL1ICacheBankedParameters
 {
   val io = IO(new BoomFrontendBundle(outer))
+  dontTouch(io)
   implicit val edge = outer.masterNode.edges.out(0)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
   val icache = outer.icache.module
+  dontTouch(icache.io)
+  icache.io.hartid     := io.hartid
+  icache.io.invalidate := io.cpu.flush_icache
   val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBEntries)))
-  val fetch_controller = Module(new FetchControlUnit)
-  val bpdpipeline = Module(new BranchPredictionStage(bankBytes))
+  io.ptw <> tlb.io.ptw
 
-  val s0_pc = Wire(UInt(vaddrBitsExtended.W))
-  val s0_valid = fetch_controller.io.imem_req.valid || fetch_controller.io.imem_resp.ready
-  val s1_valid = RegNext(s0_valid)
-  val s1_pc = Reg(UInt(vaddrBitsExtended.W))
-  val s1_speculative = Reg(Bool())
-  val s2_valid = RegInit(false.B)
-  val s2_pc = RegInit(t = UInt(vaddrBitsExtended.W), alignPC(io.reset_vector))
-  val s2_btb_resp_valid = if (usingBTB) Reg(Bool()) else false.B
-  val s2_btb_resp_bits = Reg(new BTBResp)
-  val s2_btb_taken = s2_btb_resp_valid && s2_btb_resp_bits.taken
-  val s2_tlb_resp = Reg(new TLBResp())
-  val s2_xcpt = s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst
-  val s2_speculative = RegInit(false.B)
-  val s2_partial_insn_valid = RegInit(false.B)
-  val s2_partial_insn = Reg(UInt(coreInstBits.W))
-  val wrong_path = Reg(Bool())
+  // --------------------------------------------------------
+  // **** NextPC Select (F0) ****
+  //      Send request to ICache
+  // --------------------------------------------------------
 
-  val s1_base_pc = alignToFetchBoundary(s1_pc)
-  val ntpc = nextFetchStart(s1_base_pc)
-  val predicted_npc = WireInit(ntpc)
-  val predicted_taken = WireInit(false.B)
+  val s0_vpc       = WireInit(0.U(vaddrBitsExtended.W))
+  val s0_valid     = WireInit(false.B)
+  val s0_is_replay = WireInit(false.B)
+  val s0_is_sfence = WireInit(false.B)
+  val s0_replay_resp = Wire(new TLBResp)
+  val s0_replay_ppc  = Wire(UInt())
 
-  val s2_replay = Wire(Bool())
-  s2_replay := (s2_valid && !fetch_controller.io.imem_resp.fire()) || RegNext(s2_replay && !s0_valid, true.B)
-  val npc = Mux(s2_replay, s2_pc, predicted_npc)
-
-  s1_pc := s0_pc
-  // consider RVC fetches across blocks to be non-speculative if the first
-  // part was non-speculative
-  val s0_speculative =
-    if (usingCompressed) s1_speculative || s2_valid && !s2_speculative || predicted_taken
-    else true.B
-  s1_speculative := Mux(fetch_controller.io.imem_req.valid,
-                      fetch_controller.io.imem_req.bits.speculative,
-                      Mux(s2_replay, s2_speculative, s0_speculative))
-
-  val s2_redirect = WireInit(fetch_controller.io.imem_req.valid)
-  s2_valid := false.B
-  when (!s2_replay) {
-    s2_valid := !s2_redirect
-    s2_pc := s1_pc
-    s2_speculative := s1_speculative
-    s2_tlb_resp := tlb.io.resp
+  when (RegNext(reset.asBool) && !reset.asBool) {
+    s0_valid := true.B
+    s0_vpc   := io.reset_vector
   }
 
-  io.ptw <> tlb.io.ptw
-  tlb.io.req.valid := !s2_replay
-  tlb.io.req.bits.cmd := DontCare
-  tlb.io.req.bits.vaddr := s1_pc
+  icache.io.req.valid     := s0_valid
+  icache.io.req.bits.addr := s0_vpc
+
+  // --------------------------------------------------------
+  // **** ICache Access (F1) ****
+  //      Translate VPC
+  // --------------------------------------------------------
+  val s1_vpc       = RegNext(s0_vpc)
+  val s1_valid     = RegNext(s0_valid, false.B)
+  val s1_is_replay = RegNext(s0_is_replay)
+  val s1_is_sfence = RegNext(s0_is_sfence)
+  val f1_clear     = WireInit(false.B)
+
+  tlb.io.req.valid      := (s1_valid && !s1_is_replay && !f1_clear) || s1_is_sfence
+  tlb.io.req.bits.cmd   := DontCare
+  tlb.io.req.bits.vaddr := s1_vpc
   tlb.io.req.bits.passthrough := false.B
-  tlb.io.req.bits.size := log2Ceil(coreInstBytes*fetchWidth).U
-  tlb.io.sfence := io.cpu.sfence
-  tlb.io.kill := DontCare
+  tlb.io.req.bits.size  := log2Ceil(coreInstBytes * fetchWidth).U
+  tlb.io.sfence         := RegNext(io.cpu.sfence)
+  tlb.io.kill           := false.B
 
-  icache.io.hartid := io.hartid
-  icache.io.req.valid := s0_valid
-  icache.io.req.bits.addr := s0_pc
-  icache.io.invalidate := io.cpu.flush_icache
-  icache.io.s1_vaddr := s1_pc
-  icache.io.s1_paddr := tlb.io.resp.paddr
-  icache.io.s2_vaddr := s2_pc
-  icache.io.s1_kill := s2_redirect || tlb.io.resp.miss || s2_replay
-  icache.io.s2_kill := s2_speculative && !s2_tlb_resp.cacheable || s2_xcpt
-  icache.io.s2_prefetch := s2_tlb_resp.prefetchable
+  val s1_tlb_miss = !s1_is_replay && tlb.io.resp.miss
+  val s1_tlb_resp = Mux(s1_is_replay, RegNext(s0_replay_resp), tlb.io.resp)
+  val s1_ppc  = Mux(s1_is_replay, RegNext(s0_replay_ppc), tlb.io.resp.paddr)
 
-  s0_pc := alignPC(Mux(fetch_controller.io.imem_req.valid, fetch_controller.io.imem_req.bits.pc, npc))
-  fetch_controller.io.imem_resp.valid := RegNext(s1_valid) && s2_valid &&
-                                         (icache.io.resp.valid || !s2_tlb_resp.miss && icache.io.s2_kill)
-  fetch_controller.io.imem_resp.bits.pc := s2_pc
+  icache.io.s1_paddr := s1_ppc
+  icache.io.s1_kill  := tlb.io.resp.miss || f1_clear
 
-  fetch_controller.io.imem_resp.bits.data := icache.io.resp.bits.data
-  fetch_controller.io.imem_resp.bits.mask := fetchMask(s2_pc)
+  when (s1_valid && !s1_tlb_miss) {
+    s0_valid := true.B
+    s0_vpc   := nextFetchStart(alignToFetchBoundary(s1_vpc))
+  }
 
-  fetch_controller.io.imem_resp.bits.replay := icache.io.resp.bits.replay || icache.io.s2_kill &&
-                                               !icache.io.resp.valid && !s2_xcpt
-  fetch_controller.io.imem_resp.bits.btb := s2_btb_resp_bits
-  fetch_controller.io.imem_resp.bits.btb.taken := s2_btb_taken
-  fetch_controller.io.imem_resp.bits.xcpt := s2_tlb_resp
-  when (icache.io.resp.valid && icache.io.resp.bits.ae) { fetch_controller.io.imem_resp.bits.xcpt.ae.inst := true.B }
+  // --------------------------------------------------------
+  // **** ICache Response (F2) ****
+  // --------------------------------------------------------
 
-  //-------------------------------------------------------------
-  // **** Fetch Controller ****
-  //-------------------------------------------------------------
+  val s2_valid = RegNext(s1_valid && !f1_clear, false.B)
+  val s2_vpc = RegNext(s1_vpc)
+  val s2_ppc = RegNext(s1_ppc)
+  val f2_clear = WireInit(false.B)
+  val s2_tlb_resp = RegNext(s1_tlb_resp)
+  val s2_is_replay = RegNext(s1_is_replay) && s2_valid
+  val s2_xcpt = s2_valid && (s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay
+  val f3_ready = Wire(Bool())
 
-  fetch_controller.io.br_unit           := io.cpu.br_unit
-  fetch_controller.io.tsc_reg           := io.cpu.tsc_reg
+  icache.io.s2_kill := s2_xcpt
 
-  fetch_controller.io.status            := io.cpu.status
-  fetch_controller.io.bp                := io.cpu.bp
+  when ((s2_valid && !icache.io.resp.valid) ||
+        (s2_valid && icache.io.resp.valid && !f3_ready)) {
+    s0_valid := true.B
+    s0_vpc   := s2_vpc
+    s0_is_replay := s2_valid && icache.io.resp.valid
 
-  fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp
-  fetch_controller.io.f3_bpd_resp       := bpdpipeline.io.f3_bpd_resp
-  fetch_controller.io.f2_bpd_resp       := DontCare
+    f1_clear := true.B
+  }
+  s0_replay_resp := s2_tlb_resp
+  s0_replay_ppc  := s2_ppc
 
-  fetch_controller.io.clear_fetchbuffer := io.cpu.clear_fetchbuffer
+  // --------------------------------------------------------
+  // **** F3 ****
+  // --------------------------------------------------------
+  val f3_clear = WireInit(false.B)
+  val f3 = withReset(reset.toBool || f3_clear) {
+    Module(new Queue(new FrontendResp, 1, pipe=true, flow=false)) }
+  val f4_ready = Wire(Bool())
+  dontTouch(f3.io)
+  f3_ready := f3.io.enq.ready
+  f3.io.enq.valid   := s2_valid && icache.io.resp.valid && !f2_clear
+  f3.io.enq.bits.pc := s2_vpc
+  f3.io.enq.bits.data := Mux(s2_xcpt, 0.U, icache.io.resp.bits.data)
+  f3.io.enq.bits.mask := fetchMask(s2_vpc)
+  f3.io.enq.bits.xcpt := s2_tlb_resp
 
-  fetch_controller.io.sfence_take_pc    := io.cpu.sfence_take_pc
-  fetch_controller.io.sfence_addr       := io.cpu.sfence_addr
+  f3.io.deq.ready := f4_ready
+  val f3_imemresp     = f3.io.deq.bits
+  val f3_data         = f3_imemresp.data
+  val f3_aligned_pc   = alignToFetchBoundary(f3_imemresp.pc)
+  val f3_targs        = Wire(Vec(fetchWidth, UInt()))
 
-  fetch_controller.io.flush_take_pc     := io.cpu.flush_take_pc
-  fetch_controller.io.flush_pc          := io.cpu.flush_pc
-  fetch_controller.io.com_ftq_idx       := io.cpu.com_ftq_idx
+  val f3_fetch_bundle = Wire(new FetchBundle)
+  f3_fetch_bundle.pc := f3_imemresp.pc
+  f3_fetch_bundle.ftq_idx := 0.U // This gets assigned later
+  f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf.inst
+  f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae.inst
 
-  fetch_controller.io.flush_info        := io.cpu.flush_info
-  fetch_controller.io.commit            := io.cpu.commit
+  // Tracks trailing 16b of previous fetch packet
+  val f3_prev_half    = Reg(UInt(coreInstBits.W))
+  // Tracks if last fetchpacket contained a half-inst
+  val f3_prev_is_half = RegInit(false.B)
 
-  io.cpu.get_pc <> fetch_controller.io.get_pc
+  assert(fetchWidth >= 4 || !usingCompressed) // Logic gets kind of annoying with fetchWidth = 2
+  for (i <- 0 until fetchWidth) {
+    val bpd_decoder = Module(new BranchDecode)
+    val is_valid = Wire(Bool())
+    val inst = Wire(UInt((2*coreInstBits).W))
+    if (!usingCompressed) {
+      is_valid := true.B
+      inst     := f3_data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
+      f3_fetch_bundle.edge_inst := false.B
+    } else if (i == 0) {
+      when (f3_prev_is_half) {
+        inst := Cat(f3_data(15,0), f3_prev_half)
+        f3_fetch_bundle.edge_inst := true.B
+      } .otherwise {
+        inst := f3_data(31,0)
+        f3_fetch_bundle.edge_inst := false.B
+      }
+      is_valid := true.B
+    } else if (i == 1) {
+      // Need special case since 0th instruction may carry over the wrap around
+      inst     := f3_data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
+      is_valid := f3_prev_is_half || !(f3_fetch_bundle.mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
+    } else if (icIsBanked && i == (fetchWidth / 2) - 1) {
+      // If we are using a banked I$ we could get cut-off halfway through the fetch bundle
+      inst     := f3_data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
+      is_valid := !(f3_fetch_bundle.mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) &&
+                  !(inst(1,0) === 3.U && !f3_imemresp.mask(i+1))
+    } else if (i == fetchWidth - 1) {
+      inst     := Cat(0.U(16.W), f3_data(fetchWidth*coreInstBits-1,i*coreInstBits))
+      is_valid := !((f3_fetch_bundle.mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) ||
+                    inst(1,0) === 3.U)
+    } else {
+      inst     := f3_data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
+      is_valid := !(f3_fetch_bundle.mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
+    }
+    f3_fetch_bundle.insts(i) := inst
 
-  io.cpu.com_fetch_pc := fetch_controller.io.com_fetch_pc
+    // TODO do not compute a vector of targets
+    val pc = (f3_aligned_pc
+            + (i << log2Ceil(coreInstBytes)).U
+            - Mux(f3_prev_is_half && (i == 0).B, 2.U, 0.U))
 
-  io.cpu.fetchpacket <> fetch_controller.io.fetchpacket
+    val bpu = Module(new BreakpointUnit(nBreakpoints))
+    bpu.io.status := io.cpu.status
+    bpu.io.bp     := io.cpu.bp
+    bpu.io.pc     := pc
+    bpu.io.ea     := DontCare
 
-  //-------------------------------------------------------------
-  // **** Branch Prediction ****
-  //-------------------------------------------------------------
+    val exp_inst = ExpandRVC(inst)
 
-  bpdpipeline.io.s0_req.valid := s0_valid
-  bpdpipeline.io.s0_req.bits.addr := s0_pc
+    bpd_decoder.io.inst := exp_inst
+    bpd_decoder.io.pc   := pc
 
-  bpdpipeline.io.f2_replay := s2_replay
-  bpdpipeline.io.f2_stall := !fetch_controller.io.imem_resp.ready
-  bpdpipeline.io.f3_stall := fetch_controller.io.f3_stall
-  bpdpipeline.io.f3_is_br := fetch_controller.io.f3_is_br
-  bpdpipeline.io.debug_imemresp_pc := fetch_controller.io.imem_resp.bits.pc
+    f3_fetch_bundle.exp_insts(i) := exp_inst
 
-  bpdpipeline.io.br_unit_resp := io.cpu.br_unit
-  bpdpipeline.io.ftq_restore := fetch_controller.io.ftq_restore_history
-  bpdpipeline.io.redirect := fetch_controller.io.imem_req.valid
+    f3_fetch_bundle.mask(i) := f3.io.deq.valid && f3_imemresp.mask(i) && is_valid
+    f3_targs(i)        := bpd_decoder.io.target
+    f3_fetch_bundle.xcpt_ma_if_oh(i) := (f3_targs(i)(1) && bpd_decoder.io.is_jal
+                        && f3_imemresp.mask(i) && !usingCompressed.B)
 
-  bpdpipeline.io.flush := io.cpu.flush
+    f3_fetch_bundle.bp_debug_if_oh(i) := bpu.io.debug_if
+    f3_fetch_bundle.bp_xcpt_if_oh (i) := bpu.io.xcpt_if
+  }
 
-  bpdpipeline.io.f2_valid := fetch_controller.io.imem_resp.valid
-  bpdpipeline.io.f2_redirect := fetch_controller.io.f2_redirect
-  bpdpipeline.io.f3_will_redirect := fetch_controller.io.f3_will_redirect
-  bpdpipeline.io.f4_redirect := fetch_controller.io.f4_redirect
-  bpdpipeline.io.f4_taken := fetch_controller.io.f4_taken
-  bpdpipeline.io.fe_clear := fetch_controller.io.clear_fetchbuffer
+  when (f3.io.deq.fire()) {
+    val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
+                      (fetchWidth/2-1).U, (fetchWidth-1).U)
+    f3_prev_is_half := (usingCompressed.B
+                     && !(f3_fetch_bundle.mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
+                     && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
+    f3_prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
+  }
 
-  bpdpipeline.io.f2_aligned_pc := alignToFetchBoundary(s2_pc)
-  bpdpipeline.io.f3_ras_update := fetch_controller.io.f3_ras_update
-  bpdpipeline.io.f3_btb_update := fetch_controller.io.f3_btb_update
-  bpdpipeline.io.bim_update    := fetch_controller.io.bim_update
-  bpdpipeline.io.bpd_update    := fetch_controller.io.bpd_update
+  when (f3_clear) {
+    f3_prev_is_half := false.B
+  }
 
-  bpdpipeline.io.status_prv    := io.cpu.status_prv
-  bpdpipeline.io.status_debug  := io.cpu.status_debug
 
-  //-------------------------------------------------------------
-  // performance events
-  io.cpu.perf.acquire := icache.io.perf.acquire
-  io.cpu.perf.tlbMiss := io.ptw.req.fire()
-  io.errors := icache.io.errors
+  // -------------------------------------------------------
+  // **** F4 ****
+  // -------------------------------------------------------
+  val f4_clear = WireInit(false.B)
+  val f4 = withReset(reset.toBool || f4_clear) {
+    Module(new Queue(new FetchBundle, 1, pipe=true, flow=false))}
+  dontTouch(f4.io)
+  val fb  = Module(new FetchBuffer(numEntries=numFetchBufferEntries))
+  val ftq = Module(new FetchTargetQueue(num_entries=ftqSz))
+  dontTouch(fb.io)
+  dontTouch(ftq.io)
 
-  def alignPC(pc: UInt) = ~(~pc | (coreInstBytes.U - 1.U))
+  f4_ready := f4.io.enq.ready
+  f4.io.enq.valid := f3.io.deq.valid && !f3_clear
+  f4.io.enq.bits  := f3_fetch_bundle
+  f4.io.deq.ready := fb.io.enq.ready && ftq.io.enq.ready
 
-  def ccover(cond: Bool, label: String, desc: String)(implicit sourceInfo: SourceInfo) =
-    cover(cond, s"FRONTEND_$label", "Rocket;;" + desc)
+  fb.io.enq.valid := f4.io.deq.valid && ftq.io.enq.ready
+  fb.io.enq.bits  := f4.io.deq.bits
+  fb.io.enq.bits.ftq_idx := ftq.io.enq_idx
+
+  ftq.io.enq.valid         := f4.io.deq.valid && fb.io.enq.ready
+  ftq.io.enq.bits.fetch_pc := f4.io.deq.bits.pc
+
+  // -------------------------------------------------------
+  // **** To Core (F5) ****
+  // -------------------------------------------------------
+
+  io.cpu.fetchpacket <> fb.io.deq
+  io.cpu.get_pc <> ftq.io.get_ftq_pc
+  ftq.io.deq := io.cpu.commit
+
+
+  ftq.io.redirect.valid := io.cpu.redirect_val
+  ftq.io.redirect.bits  := io.cpu.redirect_ftq_idx
+  fb.io.clear := false.B
+
+  when (io.cpu.sfence.valid) {
+    fb.io.clear := true.B
+    f4_clear    := true.B
+    f3_clear    := true.B
+    f2_clear    := true.B
+    f1_clear    := true.B
+
+    s0_valid     := false.B
+    s0_vpc       := io.cpu.sfence.bits.addr
+    s0_is_replay := false.B
+    s0_is_sfence := true.B
+
+  }.elsewhen (io.cpu.redirect_val) {
+    fb.io.clear := true.B
+    f4_clear    := true.B
+    f3_clear    := true.B
+    f2_clear    := true.B
+    f1_clear    := true.B
+
+    s0_valid     := true.B
+    s0_vpc       := io.cpu.redirect_pc
+    s0_is_replay := false.B
+
+    ftq.io.redirect.valid := true.B
+    ftq.io.redirect.bits  := io.cpu.redirect_ftq_idx
+  }
+
+  fb.io.clear := io.cpu.redirect_val
+
 
   override def toString: String =
     (BoomCoreStringPrefix("====Overall Frontend Params====") + "\n"
-    + bpdpipeline.toString + "\n"
     + icache.toString)
 }
 

@@ -42,7 +42,7 @@ import freechips.rocketchip.devices.tilelink.{PLICConsts, CLINTConsts}
 import boom.common._
 import boom.exu.FUConstants._
 import boom.common.BoomTilesKey
-import boom.util.{RobTypeToChars, BoolToChar, GetNewUopAndBrMask, Sext, WrapInc, BoomCoreStringPrefix, DromajoCosimBlackBox}
+import boom.util._
 
 /**
  * IO bundle for the BOOM Core. Connects the external components such as
@@ -174,9 +174,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val brunit_idx = exe_units.br_unit_idx
   br_unit <> exe_units.br_unit_io
 
-  val flush_ifu = br_unit.brinfo.mispredict || // In practice, means flushing everything prior to dispatch.
-                         rob.io.flush.valid || // i.e. 'flush in-order part of the pipeline'
-                         io.ifu.sfence_take_pc
+  // val flush_ifu = br_unit.brinfo.mispredict || In practice, means flushing everything prior to dispatch.
+  //                        rob.io.flush.valid || i.e. 'flush in-order part of the pipeline'
+  //                        io.ifu.sfence_take_pc
+
 
   assert (!(br_unit.brinfo.mispredict && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
 
@@ -206,22 +207,21 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       ("nop",       () => false.B))),
 
     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-      ("I$ blocked",                        () => icache_blocked),
+//      ("I$ blocked",                        () => icache_blocked),
       ("nop",                               () => false.B),
       ("branch misprediction",              () => br_unit.brinfo.mispredict),
       ("control-flow target misprediction", () => br_unit.brinfo.mispredict &&
-                                                  br_unit.brinfo.is_jr),
+                                                  br_unit.brinfo.cfi_type === CFI_JALR),
       ("flush",                             () => rob.io.flush.valid),
       ("branch resolved",                   () => br_unit.brinfo.valid))),
 
     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-      ("I$ miss",     () => io.ifu.perf.acquire),
+//      ("I$ miss",     () => io.ifu.perf.acquire),
 //      ("D$ miss",     () => io.dmem.perf.acquire),
 //      ("D$ release",  () => io.dmem.perf.release),
-      ("ITLB miss",   () => io.ifu.perf.tlbMiss),
+//      ("ITLB miss",   () => io.ifu.perf.tlbMiss),
 //      ("DTLB miss",   () => io.dmem.perf.tlbMiss),
       ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
-
   val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
   csr.io.inst foreach { c => c := DontCare }
   csr.io.rocc_interrupt := io.rocc.interrupt
@@ -229,8 +229,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val custom_csrs = Wire(new BoomCustomCSRs)
   (custom_csrs.csrs zip csr.io.customCSRs).map { case (lhs, rhs) => lhs := rhs }
 
-  // evaluate performance counters
-  val icache_blocked = !(io.ifu.fetchpacket.valid || RegNext(io.ifu.fetchpacket.valid))
+  //val icache_blocked = !(io.ifu.fetchpacket.valid || RegNext(io.ifu.fetchpacket.valid))
+  val icache_blocked = false.B
   csr.io.counters foreach { c => c.inc := RegNext(perfEvents.evaluate(c.eventSel)) }
 
   //****************************************
@@ -250,9 +250,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     if (enableAgePriorityIssue) " (Age-based Priority)"
     else " (Unordered Priority)"
 
-  val btbStr =
-    if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" + boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)")
-    else 0
+  // val btbStr =
+  //   if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" + boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)")
+  //   else 0
+  val btbStr = ""
 
   val fpPipelineStr =
     if (usingFPU) fp_pipeline.toString
@@ -274,8 +275,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         "Num Int Phys Registers: " + numIntPhysRegs,
         "Num FP  Phys Registers: " + numFpPhysRegs,
         "Max Branch Count      : " + maxBrCount)
-    + BoomCoreStringPrefix(
-        "RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0)) + "\n"
     + iregfile.toString + "\n"
     + BoomCoreStringPrefix(
         "Num Slow Wakeup Ports : " + numIrfWritePorts,
@@ -301,27 +300,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // **** Fetch Stage/Frontend ****
   //-------------------------------------------------------------
   //-------------------------------------------------------------
-
-  io.ifu.br_unit := br_unit
-  io.ifu.tsc_reg := debug_tsc_reg
+  io.ifu.redirect_val := false.B
 
   // Breakpoint info
   io.ifu.status  := csr.io.status
   io.ifu.bp      := csr.io.bp
 
-  // SFence needs access to the PC to inject an address into the TLB's CAM port. The ROB
-  // will have to later redirect the PC back to the regularly scheduled program.
-  io.ifu.sfence_take_pc := false.B
-  io.ifu.sfence_addr    := DontCare
-  for (i <- 0 until memWidth) {
-    when (io.lsu.exe(i).req.bits.sfence.valid) {
-      io.ifu.sfence_take_pc    := true.B
-      io.ifu.sfence_addr       := io.lsu.exe(i).req.bits.sfence.bits.addr
-    }
-  }
-
-  // We must redirect the PC the cycle after playing the SFENCE game.
-  io.ifu.flush_take_pc     := rob.io.flush.valid || RegNext(io.ifu.sfence_take_pc)
+  io.ifu.flush_icache := (0 until coreWidth).map { i =>
+    rob.io.commit.valids(i) && rob.io.commit.uops(i).is_fencei }.reduce(_||_)
 
   // TODO FIX THIS HACK
   // The below code works because of two quirks with the flush mechanism
@@ -330,34 +316,43 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //  2 ) We send out flush signals one cycle after the commit signal. We need to
   //      mux between one/two cycle delay for the following cases:
   //       ERETs are reported to the CSR two cycles before we send the flush
-  //       Exceptions are reported to the CSR one cycle before we send the flush
+  //       Exceptions are reported to the CSR on the cycle we send the flush
   // This discrepency should be resolved elsewhere.
-  io.ifu.flush_pc          := Mux(RegNext(RegNext(csr.io.eret)),
-                                  RegNext(RegNext(csr.io.evec)),
-                                  RegNext(csr.io.evec))
-  io.ifu.com_ftq_idx       := rob.io.com_xcpt.bits.ftq_idx
-
-  io.ifu.clear_fetchbuffer := flush_ifu
-
-  io.ifu.flush_info.valid  := rob.io.flush.valid
-  io.ifu.flush_info.bits   := rob.io.flush.bits
+  when (RegNext(rob.io.flush.valid)) {
+    io.ifu.redirect_val := true.B
+    val flush_typ = RegNext(rob.io.flush.bits.flush_typ)
+    when (FlushTypes.useCsrEvec(flush_typ)) {
+      io.ifu.redirect_pc  := Mux(flush_typ === FlushTypes.eret,
+                                 RegNext(RegNext(csr.io.evec)),
+                                 csr.io.evec)
+    } .otherwise {
+      val flush_pc = (AlignPCToBoundary(io.ifu.get_pc.fetch_pc, icBlockBytes)
+                      + RegNext(rob.io.flush.bits.pc_lob)
+                      - Mux(RegNext(rob.io.flush.bits.edge_inst), 2.U, 0.U))
+      val flush_pc_next = flush_pc + Mux(RegNext(rob.io.flush.bits.is_rvc), 2.U, 4.U)
+      io.ifu.redirect_pc := Mux(FlushTypes.useSamePC(flush_typ),
+                                flush_pc, flush_pc_next)
+    }
+    io.ifu.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
+  } .elsewhen (br_unit.brinfo.mispredict) {
+    io.ifu.redirect_val     := true.B
+    io.ifu.redirect_pc      := br_unit.target
+    io.ifu.redirect_ftq_idx := br_unit.brinfo.ftq_idx
+  }
 
   // Tell the FTQ it can deallocate entries by passing youngest ftq_idx.
   val youngest_com_idx = (coreWidth-1).U - PriorityEncoder(rob.io.commit.valids.reverse)
-  io.ifu.commit.valid := rob.io.commit.valids.reduce(_|_)
-  io.ifu.commit.bits  := rob.io.commit.uops(youngest_com_idx).ftq_idx
+  io.ifu.commit.valid := rob.io.commit.valids.reduce(_|_) || rob.io.com_xcpt.valid
+  io.ifu.commit.bits  := Mux(rob.io.com_xcpt.valid,
+                             rob.io.com_xcpt.bits.ftq_idx,
+                             rob.io.commit.uops(youngest_com_idx).ftq_idx)
 
-  io.ifu.flush_icache :=
-    Range(0,coreWidth).map{i => rob.io.commit.valids(i) && rob.io.commit.uops(i).is_fencei}.reduce(_|_) ||
-    (br_unit.brinfo.mispredict && br_unit.brinfo.is_jr &&  csr.io.status.debug)
+  assert(!(rob.io.commit.valids.reduce(_|_) && rob.io.com_xcpt.valid),
+    "ROB can't commit and except in same cycle!")
 
-  // Delay sfence to match pushing the sfence.addr into the TLB's CAM port.
-  io.ifu.sfence.valid := false.B
-  io.ifu.sfence.bits  := DontCare
   for (i <- 0 until memWidth) {
     when (RegNext(io.lsu.exe(i).req.bits.sfence.valid)) {
-      io.ifu.sfence.valid := true.B
-      io.ifu.sfence.bits  := RegNext(io.lsu.exe(i).req.bits.sfence.bits)
+      io.ifu.sfence := RegNext(io.lsu.exe(i).req.bits.sfence)
     }
   }
 
@@ -366,11 +361,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // **** Branch Prediction ****
   //-------------------------------------------------------------
   //-------------------------------------------------------------
-
-  io.ifu.flush := rob.io.flush.valid
-
-  io.ifu.status_prv    := csr.io.status.prv
-  io.ifu.status_debug  := csr.io.status.debug
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -413,11 +403,15 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   val bru_pc_req  = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
   val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
 
-  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 2))
+  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 3))
 
-  ftq_arb.io.in(0) <> bru_pc_req
-  ftq_arb.io.in(1) <> xcpt_pc_req
+  // Order by the oldest. Flushes come from the oldest instructions in pipe
+  // Decoding exceptions come from youngest
+  ftq_arb.io.in(0) <> flush_pc_req
+  ftq_arb.io.in(1) <> bru_pc_req
+  ftq_arb.io.in(2) <> xcpt_pc_req
 
   // Hookup FTQ
   io.ifu.get_pc.ftq_idx := ftq_arb.io.out.bits
@@ -426,15 +420,20 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Branch Unit Requests
   bru_pc_req.valid := RegNext(iss_valids(brunit_idx))
   bru_pc_req.bits  := RegNext(iss_uops(brunit_idx).ftq_idx)
-  exe_units(brunit_idx).io.get_ftq_pc.fetch_pc := RegNext(io.ifu.get_pc.fetch_pc)
-  exe_units(brunit_idx).io.get_ftq_pc.next_val := RegNext(io.ifu.get_pc.next_val)
-  exe_units(brunit_idx).io.get_ftq_pc.next_pc  := RegNext(io.ifu.get_pc.next_pc)
+  exe_units(brunit_idx).io.get_ftq_pc.fetch_pc := io.ifu.get_pc.fetch_pc
+  exe_units(brunit_idx).io.get_ftq_pc.com_pc   := DontCare // This shouldn't be used by brunit
+  exe_units(brunit_idx).io.get_ftq_pc.next_val := io.ifu.get_pc.next_val
+  exe_units(brunit_idx).io.get_ftq_pc.next_pc  := io.ifu.get_pc.next_pc
 
   // Frontend Exception Requests
   val xcpt_idx = PriorityEncoder(dec_xcpts)
   xcpt_pc_req.valid    := dec_xcpts.reduce(_||_)
   xcpt_pc_req.bits     := dec_uops(xcpt_idx).ftq_idx
-  rob.io.xcpt_fetch_pc := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
+  //rob.io.xcpt_fetch_pc := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
+  rob.io.xcpt_fetch_pc := io.ifu.get_pc.fetch_pc
+
+  flush_pc_req.valid   := rob.io.flush.valid
+  flush_pc_req.bits    := rob.io.flush.bits.ftq_idx
 
   //-------------------------------------------------------------
   // Decode/Rename1 pipeline logic
@@ -448,7 +447,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                       || rob.io.commit.rollback
                       || dec_xcpt_stall
                       || branch_mask_full(w)
-                      || flush_ifu))
+                      || io.ifu.redirect_val))
 
   val dec_stalls = dec_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
   dec_fire := (0 until coreWidth).map(w => dec_valids(w) && !dec_stalls(w))
@@ -456,7 +455,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // all decoders are empty and ready for new instructions
   dec_ready := dec_fire.last
 
-  when (dec_ready || flush_ifu) {
+  when (dec_ready || io.ifu.redirect_val) {
     dec_finished_mask := 0.U
   } .otherwise {
     dec_finished_mask := dec_fire.asUInt | dec_finished_mask
@@ -466,7 +465,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Branch Mask Logic
 
   dec_brmask_logic.io.brinfo := br_unit.brinfo
-  dec_brmask_logic.io.flush_pipeline := rob.io.flush.valid
+  dec_brmask_logic.io.flush_pipeline := RegNext(rob.io.flush.valid)
 
   for (w <- 0 until coreWidth) {
     dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).allocate_brtag
@@ -486,7 +485,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Inputs
   for (rename <- rename_stages) {
-    rename.io.kill := flush_ifu
+    rename.io.kill := io.ifu.redirect_val
     rename.io.brinfo := br_unit.brinfo
 
     rename.io.debug_rob_empty := rob.io.empty
@@ -568,7 +567,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                       || wait_for_rocc(w)
                       || dis_prior_slot_unique(w)
                       || dis_rocc_alloc_stall(w)
-                      || flush_ifu))
+                      || io.ifu.redirect_val))
 
 
   io.lsu.fence_dmem := (dis_valids zip wait_for_empty_pipeline).map {case (v,w) => v && w} .reduce(_||_)
@@ -758,13 +757,13 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   issue_units.map(_.io.tsc_reg := debug_tsc_reg)
   issue_units.map(_.io.brinfo := br_unit.brinfo)
-  issue_units.map(_.io.flush_pipeline := rob.io.flush.valid)
+  issue_units.map(_.io.flush_pipeline := RegNext(rob.io.flush.valid))
 
   // Load-hit Misspeculations
   require (mem_iss_unit.issueWidth <= 2)
   issue_units.map(_.io.ld_miss := io.lsu.ld_miss)
 
-  mem_units.map(u => u.io.com_exception := rob.io.flush.valid)
+  mem_units.map(u => u.io.com_exception := RegNext(rob.io.flush.valid))
 
   // Wakeup (Issue & Writeback)
   for {
@@ -795,7 +794,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   iregister_read.io.iss_uops map { u => u.iw_p1_poisoned := false.B; u.iw_p2_poisoned := false.B }
 
   iregister_read.io.brinfo := br_unit.brinfo
-  iregister_read.io.kill   := rob.io.flush.valid
+  iregister_read.io.kill   := RegNext(rob.io.flush.valid)
 
   iregister_read.io.bypass := bypasses
 
@@ -816,14 +815,16 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   csr.io.rw.wdata       := wb_wdata
 
   // Extra I/O
-  csr.io.retire    := PopCount(rob.io.commit.valids.asUInt)
-  csr.io.exception := rob.io.com_xcpt.valid
+  // Delay retire/exception 1 cycle
+  csr.io.retire    := RegNext(PopCount(rob.io.commit.valids.asUInt))
+  csr.io.exception := RegNext(rob.io.com_xcpt.valid)
   // csr.io.pc used for setting EPC during exception or CSR.io.trace.
-  csr.io.pc        := (boom.util.AlignPCToBoundary(io.ifu.com_fetch_pc, icBlockBytes)
-                     + rob.io.com_xcpt.bits.pc_lob
-                     - Mux(rob.io.com_xcpt.bits.edge_inst, 2.U, 0.U))
+
+  csr.io.pc        := (boom.util.AlignPCToBoundary(io.ifu.get_pc.com_pc, icBlockBytes)
+                     + RegNext(rob.io.com_xcpt.bits.pc_lob)
+                     - Mux(RegNext(rob.io.com_xcpt.bits.edge_inst), 2.U, 0.U))
   // Cause not valid for for CALL or BREAKPOINTs (CSRFile will override it).
-  csr.io.cause     := rob.io.com_xcpt.bits.cause
+  csr.io.cause     := RegNext(rob.io.com_xcpt.bits.cause)
   csr.io.ungated_clock := clock
 
   val tval_valid = csr.io.exception &&
@@ -840,7 +841,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       Causes.fetch_page_fault.U)
 
   csr.io.tval := Mux(tval_valid,
-    encodeVirtualAddress(rob.io.com_xcpt.bits.badvaddr, rob.io.com_xcpt.bits.badvaddr), 0.U)
+    RegNext(encodeVirtualAddress(rob.io.com_xcpt.bits.badvaddr, rob.io.com_xcpt.bits.badvaddr)), 0.U)
 
   // TODO move this function to some central location (since this is used elsewhere).
   def encodeVirtualAddress(a0: UInt, ea: UInt) =
@@ -919,7 +920,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   io.lsu.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
   //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
-  io.lsu.exception := rob.io.flush.valid
+  io.lsu.exception := RegNext(rob.io.flush.valid)
 
   // Handle Branch Mispeculations
   io.lsu.brinfo := br_unit.brinfo
@@ -1093,14 +1094,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // flush on exceptions, miniexeptions, and after some special instructions
 
   if (usingFPU) {
-    fp_pipeline.io.flush_pipeline := rob.io.flush.valid
+    fp_pipeline.io.flush_pipeline := RegNext(rob.io.flush.valid)
   }
 
   for (w <- 0 until exe_units.length) {
-    exe_units(w).io.req.bits.kill := rob.io.flush.valid
+    exe_units(w).io.req.bits.kill := RegNext(rob.io.flush.valid)
   }
 
-  assert (!(RegNext(rob.io.com_xcpt.valid) && !rob.io.flush.valid),
+  assert (!(rob.io.com_xcpt.valid && !rob.io.flush.valid),
     "[core] exception occurred, but pipeline flush signal not set!")
 
   //-------------------------------------------------------------
@@ -1129,121 +1130,121 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  if (DEBUG_PRINTF) {
-    println("   ~~Chisel Printout Enabled~~")
+  // if (DEBUG_PRINTF) {
+  //   println("   ~~Chisel Printout Enabled~~")
 
-    val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
-    val fetchWhitespace = if (fetchWidth >= 8) 2 else 0
-    var whitespace = (debugScreenheight - 25 + 3 -10 + 3 + 4 - coreWidth - (numLdqEntries max numStqEntries) -
-      issueParams.map(_.numEntries).sum - issueParams.length - (numRobEntries/coreWidth) -
-      numFtqWhitespace - fetchWhitespace)
+  //   val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
+  //   val fetchWhitespace = if (fetchWidth >= 8) 2 else 0
+  //   var whitespace = (debugScreenheight - 25 + 3 -10 + 3 + 4 - coreWidth - (numLdqEntries max numStqEntries) -
+  //     issueParams.map(_.numEntries).sum - issueParams.length - (numRobEntries/coreWidth) -
+  //     numFtqWhitespace - fetchWhitespace)
 
-    println(s"   Whitespace padded: ${whitespace}\n")
+  //   println(s"   Whitespace padded: ${whitespace}\n")
 
-    printf("--- Cycle=%d --- Retired Instrs=%d ----------------------------------------------\n",
-      debug_tsc_reg,
-      debug_irt_reg & (0xffffff).U)
+  //   printf("--- Cycle=%d --- Retired Instrs=%d ----------------------------------------------\n",
+  //     debug_tsc_reg,
+  //     debug_irt_reg & (0xffffff).U)
 
-    printf("Decode:\n")
-    for (w <- 0 until coreWidth) {
-      printf("    Slot:%d (PC:0x%x Valids:%c%c Inst:DASM(%x))\n",
-        w.U,
-        dec_uops(w).debug_pc(19,0),
-        BoolToChar(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), 'V'),
-        BoolToChar(dec_fire(w), 'V'),
-        dec_fbundle.uops(w).bits.debug_inst)
-    }
+  //   printf("Decode:\n")
+  //   for (w <- 0 until coreWidth) {
+  //     printf("    Slot:%d (PC:0x%x Valids:%c%c Inst:DASM(%x))\n",
+  //       w.U,
+  //       dec_uops(w).debug_pc(19,0),
+  //       BoolToChar(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), 'V'),
+  //       BoolToChar(dec_fire(w), 'V'),
+  //       dec_fbundle.uops(w).bits.debug_inst)
+  //   }
 
-    printf("Rename:\n")
-    for (w <- 0 until coreWidth) {
-      printf("    Slot:%d (PC:0x%x Valid:%c Inst:DASM(%x))\n",
-        w.U,
-        rename_stage.io.ren2_uops(w).debug_pc(19,0),
-        BoolToChar(rename_stage.io.ren2_mask(w), 'V'),
-        rename_stage.io.ren2_uops(w).debug_inst)
-    }
+  //   printf("Rename:\n")
+  //   for (w <- 0 until coreWidth) {
+  //     printf("    Slot:%d (PC:0x%x Valid:%c Inst:DASM(%x))\n",
+  //       w.U,
+  //       rename_stage.io.ren2_uops(w).debug_pc(19,0),
+  //       BoolToChar(rename_stage.io.ren2_mask(w), 'V'),
+  //       rename_stage.io.ren2_uops(w).debug_inst)
+  //   }
 
-    printf("Decode Finished:0x%x\n", dec_finished_mask)
+  //   printf("Decode Finished:0x%x\n", dec_finished_mask)
 
-    printf("Dispatch:\n")
-    for (w <- 0 until coreWidth) {
-      val ren_uop = dispatcher.io.ren_uops(w).bits
-      printf("    Slot:%d (ISAREG: DST:%d SRCS:%d,%d,%d) (PREG: (#,Bsy,Typ) %d[-](%c) %d[%c](%c) %d[%c](%c) %d[%c](%c))\n",
-        w.U,
-        ren_uop.ldst,
-        ren_uop.lrs1,
-        ren_uop.lrs2,
-        ren_uop.lrs3,
-        ren_uop.pdst,
-        Mux(ren_uop.dst_rtype   === RT_FIX, Str("X"),
-          Mux(ren_uop.dst_rtype === RT_X  , Str("-"),
-            Mux(ren_uop.dst_rtype === RT_FLT, Str("f"),
-              Mux(ren_uop.dst_rtype === RT_PAS, Str("C"), Str("?"))))),
-        ren_uop.prs1,
-        BoolToChar(rename_stage.io.ren2_uops(w).prs1_busy, 'B', 'R'),
-        Mux(ren_uop.lrs1_rtype    === RT_FIX, Str("X"),
-          Mux(ren_uop.lrs1_rtype === RT_X  , Str("-"),
-            Mux(ren_uop.lrs1_rtype === RT_FLT, Str("f"),
-              Mux(ren_uop.lrs1_rtype === RT_PAS, Str("C"), Str("?"))))),
-        ren_uop.prs2,
-        BoolToChar(rename_stage.io.ren2_uops(w).prs2_busy, 'B', 'R'),
-        Mux(ren_uop.lrs2_rtype    === RT_FIX, Str("X"),
-          Mux(ren_uop.lrs2_rtype === RT_X  , Str("-"),
-            Mux(ren_uop.lrs2_rtype === RT_FLT, Str("f"),
-              Mux(ren_uop.lrs2_rtype === RT_PAS, Str("C"), Str("?"))))),
-        ren_uop.prs3,
-        BoolToChar(rename_stage.io.ren2_uops(w).prs3_busy, 'B', 'R'),
-        BoolToChar(ren_uop.frs3_en, 'f', '-'))
-    }
+  //   printf("Dispatch:\n")
+  //   for (w <- 0 until coreWidth) {
+  //     val ren_uop = dispatcher.io.ren_uops(w).bits
+  //     printf("    Slot:%d (ISAREG: DST:%d SRCS:%d,%d,%d) (PREG: (#,Bsy,Typ) %d[-](%c) %d[%c](%c) %d[%c](%c) %d[%c](%c))\n",
+  //       w.U,
+  //       ren_uop.ldst,
+  //       ren_uop.lrs1,
+  //       ren_uop.lrs2,
+  //       ren_uop.lrs3,
+  //       ren_uop.pdst,
+  //       Mux(ren_uop.dst_rtype   === RT_FIX, Str("X"),
+  //         Mux(ren_uop.dst_rtype === RT_X  , Str("-"),
+  //           Mux(ren_uop.dst_rtype === RT_FLT, Str("f"),
+  //             Mux(ren_uop.dst_rtype === RT_PAS, Str("C"), Str("?"))))),
+  //       ren_uop.prs1,
+  //       BoolToChar(rename_stage.io.ren2_uops(w).prs1_busy, 'B', 'R'),
+  //       Mux(ren_uop.lrs1_rtype    === RT_FIX, Str("X"),
+  //         Mux(ren_uop.lrs1_rtype === RT_X  , Str("-"),
+  //           Mux(ren_uop.lrs1_rtype === RT_FLT, Str("f"),
+  //             Mux(ren_uop.lrs1_rtype === RT_PAS, Str("C"), Str("?"))))),
+  //       ren_uop.prs2,
+  //       BoolToChar(rename_stage.io.ren2_uops(w).prs2_busy, 'B', 'R'),
+  //       Mux(ren_uop.lrs2_rtype    === RT_FIX, Str("X"),
+  //         Mux(ren_uop.lrs2_rtype === RT_X  , Str("-"),
+  //           Mux(ren_uop.lrs2_rtype === RT_FLT, Str("f"),
+  //             Mux(ren_uop.lrs2_rtype === RT_PAS, Str("C"), Str("?"))))),
+  //       ren_uop.prs3,
+  //       BoolToChar(rename_stage.io.ren2_uops(w).prs3_busy, 'B', 'R'),
+  //       BoolToChar(ren_uop.frs3_en, 'f', '-'))
+  //   }
 
-    if (DEBUG_PRINTF_ROB) {
-      val robTypeStrs = RobTypeToChars(rob.io.debug.state)
-      printf("ROB:\n")
-      printf("    (State:%c%c%c Rdy:%c LAQFull:%c STQFull:%c Flush:%c BMskFull:%c) BMsk:0x%x Mode:%c\n",
-         robTypeStrs(0),
-         robTypeStrs(1),
-         robTypeStrs(2),
-         BoolToChar(           rob.io.ready, '_', '!'),
-         BoolToChar(          io.lsu.ldq_full(0), 'L'),
-         BoolToChar(          io.lsu.stq_full(0), 'S'),
-         BoolToChar(          rob.io.flush.valid, 'F'),
-         BoolToChar(branch_mask_full.reduce(_|_), 'B'),
-         dec_brmask_logic.io.debug.branch_mask,
-         Mux(csr.io.status.prv === (PRV.M).U, Str("M"),
-           Mux(csr.io.status.prv === (PRV.U).U, Str("U"),
-             Mux(csr.io.status.prv === (PRV.S).U, Str("S"), Str("?")))))
-    }
+  //   if (DEBUG_PRINTF_ROB) {
+  //     val robTypeStrs = RobTypeToChars(rob.io.debug.state)
+  //     printf("ROB:\n")
+  //     printf("    (State:%c%c%c Rdy:%c LAQFull:%c STQFull:%c Flush:%c BMskFull:%c) BMsk:0x%x Mode:%c\n",
+  //        robTypeStrs(0),
+  //        robTypeStrs(1),
+  //        robTypeStrs(2),
+  //        BoolToChar(           rob.io.ready, '_', '!'),
+  //        BoolToChar(          io.lsu.ldq_full(0), 'L'),
+  //        BoolToChar(          io.lsu.stq_full(0), 'S'),
+  //        BoolToChar(          rob.io.flush.valid, 'F'),
+  //        BoolToChar(branch_mask_full.reduce(_|_), 'B'),
+  //        dec_brmask_logic.io.debug.branch_mask,
+  //        Mux(csr.io.status.prv === (PRV.M).U, Str("M"),
+  //          Mux(csr.io.status.prv === (PRV.U).U, Str("U"),
+  //            Mux(csr.io.status.prv === (PRV.S).U, Str("S"), Str("?")))))
+  //   }
 
-    printf("Other:\n")
-    printf("    Expt:(V:%c Cause:%d) Commit:%x IFreeLst:0x%x TotFree:%d IPregLst:0x%x TotPreg:%d\n",
-      BoolToChar(rob.io.com_xcpt.valid, 'E'),
-      rob.io.com_xcpt.bits.cause,
-      rob.io.commit.valids.asUInt,
-      rename_stage.io.debug.freelist,
-      PopCount(rename_stage.io.debug.freelist),
-      rename_stage.io.debug.isprlist,
-      PopCount(rename_stage.io.debug.isprlist))
-    if (usingFPU) {
-      printf("    FFreeList:0x%x TotFree:%d FPrefLst:0x%x TotPreg:%d\n",
-        fp_rename_stage.io.debug.freelist,
-        PopCount(fp_rename_stage.io.debug.freelist),
-        fp_rename_stage.io.debug.isprlist,
-        PopCount(fp_rename_stage.io.debug.isprlist))
-    }
+  //   printf("Other:\n")
+  //   printf("    Expt:(V:%c Cause:%d) Commit:%x IFreeLst:0x%x TotFree:%d IPregLst:0x%x TotPreg:%d\n",
+  //     BoolToChar(rob.io.com_xcpt.valid, 'E'),
+  //     rob.io.com_xcpt.bits.cause,
+  //     rob.io.commit.valids.asUInt,
+  //     rename_stage.io.debug.freelist,
+  //     PopCount(rename_stage.io.debug.freelist),
+  //     rename_stage.io.debug.isprlist,
+  //     PopCount(rename_stage.io.debug.isprlist))
+  //   if (usingFPU) {
+  //     printf("    FFreeList:0x%x TotFree:%d FPrefLst:0x%x TotPreg:%d\n",
+  //       fp_rename_stage.io.debug.freelist,
+  //       PopCount(fp_rename_stage.io.debug.freelist),
+  //       fp_rename_stage.io.debug.isprlist,
+  //       PopCount(fp_rename_stage.io.debug.isprlist))
+  //   }
 
-    // branch unit
-    printf("Branch Unit:\n")
-    printf("    V:%c Mispred:%c T/NT:%c NPC:(V:%c PC:0x%x)\n",
-      BoolToChar(br_unit.brinfo.valid, 'V'),
-      BoolToChar(br_unit.brinfo.mispredict, 'M'),
-      BoolToChar(br_unit.brinfo.taken, 'T', 'N'),
-      BoolToChar(exe_units(brunit_idx).io.get_ftq_pc.next_val, 'V'),
-      exe_units(brunit_idx).io.get_ftq_pc.next_pc(19,0))
+  //   // branch unit
+  //   printf("Branch Unit:\n")
+  //   printf("    V:%c Mispred:%c T/NT:%c NPC:(V:%c PC:0x%x)\n",
+  //     BoolToChar(br_unit.brinfo.valid, 'V'),
+  //     BoolToChar(br_unit.brinfo.mispredict, 'M'),
+  //     BoolToChar(br_unit.brinfo.taken, 'T', 'N'),
+  //     BoolToChar(exe_units(brunit_idx).io.get_ftq_pc.next_val, 'V'),
+  //     exe_units(brunit_idx).io.get_ftq_pc.next_pc(19,0))
 
-    for (x <- 0 until whitespace) {
-      printf("|\n")
-    }
-  } // End DEBUG_PRINTF
+  //   for (x <- 0 until whitespace) {
+  //     printf("|\n")
+  //   }
+  // } // End DEBUG_PRINTF
 
 
   if (COMMIT_LOG_PRINTF) {
@@ -1380,7 +1381,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         printf("%d; O3PipeView:dispatch: %d\n", dispatcher.io.ren_uops(w).bits.debug_events.fetch_seq, debug_tsc_reg)
       }
 
-      when (dec_ready || flush_ifu) {
+      when (dec_ready || io.ifu.redirect_val) {
         dec_printed_mask := 0.U
       } .otherwise {
         dec_printed_mask := dec_valids.asUInt | dec_printed_mask

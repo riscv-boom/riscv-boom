@@ -47,10 +47,6 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
 
     // Was the pipeline redirected? Clear/reset the fetchbuffer.
     val clear = Input(Bool())
-
-    // Breakpoint info
-    val status = Input(new MStatus)
-    val bp = Input(Vec(nBreakpoints, new BP))
   })
 
   require (numEntries > fetchWidth)
@@ -93,11 +89,6 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   // Step 1: Convert FetchPacket into a vector of MicroOps.
   for (i <- 0 until fetchWidth) {
     val pc = (alignToFetchBoundary(io.enq.bits.pc) + (i << log2Ceil(coreInstBytes)).U)
-    val bkptu = Module(new BreakpointUnit(nBreakpoints))
-    bkptu.io.status := io.status
-    bkptu.io.bp     := io.bp
-    bkptu.io.pc     := pc
-    bkptu.io.ea     := DontCare
 
     in_uops(i)                := DontCare
     in_mask(i)                := io.enq.valid && io.enq.bits.mask(i)
@@ -120,13 +111,9 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
 
     in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
     in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
-    in_uops(i).replay_if      := io.enq.bits.replay_if
     in_uops(i).xcpt_ma_if     := io.enq.bits.xcpt_ma_if_oh(i)
-    in_uops(i).bp_debug_if    := bkptu.io.debug_if
-    in_uops(i).bp_xcpt_if     := bkptu.io.xcpt_if
-
-    in_uops(i).br_prediction  := io.enq.bits.bpu_info(i)
-    in_uops(i).debug_events   := io.enq.bits.debug_events(i)
+    in_uops(i).bp_debug_if    := io.enq.bits.bp_debug_if_oh(i)
+    in_uops(i).bp_xcpt_if     := io.enq.bits.bp_xcpt_if_oh(i)
   }
 
   // Step 2. Generate one-hot write indices.
@@ -210,7 +197,7 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
     // TODO a problem if we don't check the f3_valid?
     printf("    Fetch3: Enq:(V:%c Msk:0x%x PC:0x%x) Clear:%c\n",
       BoolToChar(io.enq.valid, 'V'),
-      io.enq.bits.mask,
+      io.enq.bits.mask.asUInt,
       io.enq.bits.pc,
       BoolToChar(io.clear, 'C'))
 
