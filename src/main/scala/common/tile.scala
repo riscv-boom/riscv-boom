@@ -47,7 +47,6 @@ case class BoomTileParams(
   icache: Option[ICacheParams] = Some(ICacheParams()),
   dcache: Option[DCacheParams] = Some(DCacheParams()),
   btb: Option[BTBParams] = Some(BTBParams()),
-  dataScratchpadBytes: Int = 0,
   trace: Boolean = false,
   name: Option[String] = Some("boom_tile"),
   hartId: Int = 0,
@@ -82,15 +81,8 @@ class BoomTile(
     (implicit p: Parameters) = this(params, crossing.crossingType, lookup, p, logicalTreeNode)
 
   val intOutwardNode = IntIdentityNode()
-  val slaveNode = TLIdentityNode()
   val masterNode = visibilityNode
-
-  val dtim_adapter = tileParams.dcache.flatMap { d => d.scratch.map(s =>
-    LazyModule(new ScratchpadSlavePort(AddressSet.misaligned(s, d.dataScratchpadBytes-1),
-                                       xBytes,
-                                       tileParams.core.useAtomics && !tileParams.core.useAtomicsOnlyForIO)))
-  }
-  dtim_adapter.foreach(lm => connectTLSlave(lm.node, xBytes))
+  val slaveNode = TLIdentityNode()
 
   val bus_error_unit = boomParams.beuAddr map { a =>
     val beu = LazyModule(new BusErrorUnit(new L1BusErrors, BusErrorUnitParams(a), logicalTreeNode))
@@ -109,13 +101,6 @@ class BoomTile(
   // TODO: this doesn't block other masters, e.g. RoCCs
   tlOtherMastersNode := tile_master_blocker.map { _.node := tlMasterXbar.node } getOrElse { tlMasterXbar.node }
   masterNode :=* tlOtherMastersNode
-  DisableMonitors { implicit p => tlSlaveXbar.node :*= slaveNode }
-
-  val dtimProperty = dtim_adapter.map(d => Map(
-    "sifive,dtim" -> d.device.asProperty)).getOrElse(Nil)
-
-  val itimProperty = tileParams.icache.flatMap(_.itimAddr.map(i => Map(
-    "sifive,itim" -> frontend.icache.device.asProperty))).getOrElse(Nil)
 
   val cpuDevice: SimpleDevice = new SimpleDevice("cpu", Seq("ucb-bar,boom0", "riscv")) {
     override def parent = Some(ResourceAnchors.cpus)
@@ -124,9 +109,7 @@ class BoomTile(
       Description(name, mapping ++
                         cpuProperties ++
                         nextLevelCacheProperty ++
-                        tileProperties ++
-                        dtimProperty ++
-                        itimProperty)
+                        tileProperties)
     }
   }
 
@@ -172,7 +155,7 @@ class BoomTile(
       mtvecWritable       = boomParams.core.mtvecWritable
     )
   )
-  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen))
+  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, None, p(XLen))
 
   override lazy val module = new BoomTileModuleImp(this)
 

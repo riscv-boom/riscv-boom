@@ -305,7 +305,6 @@ class Rob(
       rob_uop(rob_tail)       := io.enq_uops(w)
       rob_exception(rob_tail) := io.enq_uops(w).exception
       rob_fflags(rob_tail)    := 0.U
-      rob_uop(rob_tail).stat_brjmp_mispredicted := false.B
 
       assert (rob_val(rob_tail) === false.B, "[rob] overwriting a valid entry.")
       assert ((io.enq_uops(w).rob_idx >> log2Ceil(coreWidth)) === rob_tail)
@@ -358,13 +357,6 @@ class Rob(
       }
     }
 
-    when (io.brinfo.valid && MatchBank(GetBankIdx(io.brinfo.rob_idx))) {
-      rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_brjmp_mispredicted := io.brinfo.mispredict
-      rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_btb_mispredicted   := io.brinfo.btb_mispredict
-      rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_btb_made_pred      := io.brinfo.btb_made_pred
-      rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_bpd_mispredicted   := io.brinfo.bpd_mispredict
-      rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_bpd_made_pred      := io.brinfo.bpd_made_pred
-    }
 
     //-----------------------------------------------
     // Accruing fflags
@@ -573,18 +565,16 @@ class Rob(
   val flush_uop = Mux(exception_thrown, com_xcpt_uop, Mux1H(flush_commit_mask, io.commit.uops))
 
   // delay a cycle for critical path considerations
-  io.flush.valid          := RegNext(flush_val, init=false.B)
-  io.flush.bits.ftq_idx   := RegNext(flush_uop.ftq_idx)
-  io.flush.bits.pc_lob    := RegNext(flush_uop.pc_lob)
-  io.flush.bits.edge_inst := RegNext(flush_uop.edge_inst)
-  io.flush.bits.is_rvc    := RegNext(flush_uop.is_rvc)
-  io.flush.bits.flush_typ := RegNext(FlushTypes.getType(flush_val,
-                                                        exception_thrown && !is_mini_exception,
-                                                        flush_commit && flush_uop.uopc === uopERET,
-                                                        refetch_inst))
+  io.flush.valid          := flush_val
+  io.flush.bits.ftq_idx   := flush_uop.ftq_idx
+  io.flush.bits.pc_lob    := flush_uop.pc_lob
+  io.flush.bits.edge_inst := flush_uop.edge_inst
+  io.flush.bits.is_rvc    := flush_uop.is_rvc
+  io.flush.bits.flush_typ := FlushTypes.getType(flush_val,
+                                                exception_thrown && !is_mini_exception,
+                                                flush_commit && flush_uop.uopc === uopERET,
+                                                refetch_inst)
 
-  val com_lsu_misspec = RegNext(exception_thrown && io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING)
-  assert (!(com_lsu_misspec && !io.flush.valid), "[rob] pipeline flush not be exercised during a LSU misspeculation")
 
   // -----------------------------------------------
   // FP Exceptions
