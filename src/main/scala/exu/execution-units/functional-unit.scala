@@ -26,7 +26,6 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.tile
 import freechips.rocketchip.rocket.{PipelinedMultiplier,BP,BreakpointUnit,Causes,CSR}
 
-import boom.bpu.{BpredType, BranchPredInfo, BoomBTBUpdate}
 import boom.common._
 import boom.ifu._
 import boom.util._
@@ -120,7 +119,6 @@ class FunctionalUnitIo(
 class GetPredictionInfo(implicit p: Parameters) extends BoomBundle
 {
   val br_tag = Output(UInt(brTagSz.W))
-  val info = Input(new BranchPredInfo())
 }
 
 /**
@@ -188,14 +186,7 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle
   val stq_idx    = UInt(stqAddrSz.W)  // quickly reset the LSU on a mispredict
   val rxq_idx    = UInt(log2Ceil(numRxqEntries).W) // ditto for RoCC queue
   val taken      = Bool()                     // which direction did the branch go?
-  val is_jr      = Bool() // TODO remove use cfi_type instead
   val cfi_type   = UInt(CFI_SZ.W)
-
-  // for stats
-  val btb_made_pred  = Bool()
-  val btb_mispredict = Bool()
-  val bpd_made_pred  = Bool()
-  val bpd_mispredict = Bool()
 }
 
 /**
@@ -206,9 +197,7 @@ class BranchUnitResp(implicit p: Parameters) extends BoomBundle
 {
   val take_pc         = Bool()
   val target          = UInt(vaddrBitsExtended.W) // TODO XXX REMOVE this -- use FTQ to redirect instead
-
   val brinfo          = new BrResolutionInfo()
-  val btb_update      = Valid(new BoomBTBUpdate)
 
   val xcpt            = Valid(new Exception)
 }
@@ -415,13 +404,8 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
 
     val is_br          = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jump
     val is_br_or_jalr  = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jal
-
-    // did the BTB predict a br or jmp incorrectly?
-    // (do we need to reset its history and teach it a new target?)
-    val btb_mispredict = WireInit(false.B)
-
-    // did the bpd predict incorrectly (aka, should we correct its prediction?)
-    val bpd_mispredict = WireInit(false.B)
+    // TODO: This should be handled in frontend. We shouldn't see JALs here
+    val is_jal         = io.req.valid && !killed && uop.is_br_or_jmp &&  uop.is_jal
 
     // if b/j is taken, does it go to the wrong target?
     val wrong_taken_target = !io.get_ftq_pc.next_val || (io.get_ftq_pc.next_pc =/= bj_addr)
@@ -436,70 +420,22 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
         bj_addr)
     }
 
-    when (io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr) {
-      printf("[func] JAL went to the wrong target [curr: 0x%x+%x next: 0x%x, target: 0x%x]",
-        io.get_ftq_pc.fetch_pc,
-        uop.pc_lob,
-        io.get_ftq_pc.next_pc,
-        bj_addr)
-    }
 
-    assert (!(io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr),
-      "[func] JAL went to the wrong target.")
-
-    when (is_br_or_jalr) {
-      when (pc_sel === PC_JALR) {
-        // only the BTB can predict JALRs (must also check it predicted taken)
-        btb_mispredict := wrong_taken_target ||
-                          !uop.br_prediction.btb_hit ||
-                          !uop.br_prediction.btb_taken ||
-                          io.status.debug // fun HACK to perform fence.i on JALRs in debug mode
-        bpd_mispredict := false.B
-      }
-      when (pc_sel === PC_PLUS4) {
-        btb_mispredict := uop.br_prediction.btb_hit && uop.br_prediction.btb_taken
-        bpd_mispredict := uop.br_prediction.bpd_taken
-      }
-      when (pc_sel === PC_BRJMP) {
-        btb_mispredict := wrong_taken_target ||
-                          !uop.br_prediction.btb_hit ||
-                          (uop.br_prediction.btb_hit && !uop.br_prediction.btb_taken)
-        bpd_mispredict := !uop.br_prediction.bpd_taken
-      }
-    }
-
-    when (is_br_or_jalr && pc_sel === PC_BRJMP && !mispredict && io.get_ftq_pc.next_val) {
-      // ignore misaligned issues -- we'll catch that elsewhere as an exception.
-      when (io.get_ftq_pc.next_pc(vaddrBits-1, log2Ceil(coreInstBytes)) =/=
-            bj_addr(vaddrBits-1, log2Ceil(coreInstBytes))) {
-        printf ("[FuncUnit] Branch jumped to 0x%x, should have jumped to 0x%x.\n",
-          io.get_ftq_pc.next_pc,
-          bj_addr)
-      }
-      assert (io.get_ftq_pc.next_pc(vaddrBits-1, log2Ceil(coreInstBytes)) ===
-              bj_addr(vaddrBits-1, log2Ceil(coreInstBytes)),
-             "[FuncUnit] branch is taken to the wrong target.")
+    // assert (!(io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr),
+    //   "[func] JAL went to the wrong target.")
+    when (is_jal) {
+      mispredict := true.B
     }
 
     when (is_br_or_jalr) {
       when (pc_sel === PC_JALR) {
-        mispredict := btb_mispredict
+        mispredict := true.B
       }
       when (pc_sel === PC_PLUS4) {
-        mispredict :=
-          Mux(uop.br_prediction.btb_blame,
-            btb_mispredict,
-          Mux(uop.br_prediction.bpd_blame,
-            bpd_mispredict,
-            false.B)) // if neither BTB nor BPD predicted and it's not-taken, then no misprediction occurred.
+        mispredict := true.B
       }
       when (pc_sel === PC_BRJMP) {
-        mispredict :=
-          Mux(uop.br_prediction.btb_blame,
-            btb_mispredict,
-          Mux(uop.br_prediction.bpd_blame,
-            bpd_mispredict,
-            true.B)) // if neither BTB nor BPD predicted and it's taken, then a misprediction occurred.
+        mispredict := true.B
       }
     }
 
@@ -516,7 +452,8 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     val brinfo = Wire(new BrResolutionInfo)
 
     // note: jal doesn't allocate a branch-mask, so don't clear a br-mask bit
-    brinfo.valid          := io.req.valid && uop.is_br_or_jmp && !uop.is_jal && !killed
+    // TODO: Handle JAL in frontend
+    brinfo.valid          := io.req.valid && uop.is_br_or_jmp && !killed
     brinfo.mispredict     := mispredict
     brinfo.mask           := 1.U << uop.br_tag
     brinfo.exe_mask       := GetNewBrMask(io.brinfo, uop.br_mask)
@@ -527,44 +464,15 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     brinfo.ldq_idx        := uop.ldq_idx
     brinfo.stq_idx        := uop.stq_idx
     brinfo.rxq_idx        := uop.rxq_idx
-    brinfo.is_jr          := pc_sel === PC_JALR
     brinfo.cfi_type       := Mux(uop.is_jal, CFI_JAL,
                              Mux(pc_sel === PC_JALR, CFI_JALR,
                              Mux(uop.is_br_or_jmp, CFI_BR, CFI_X)))
     brinfo.taken          := is_taken
-    brinfo.btb_mispredict := btb_mispredict
-    brinfo.bpd_mispredict := bpd_mispredict
-    brinfo.btb_made_pred  := uop.br_prediction.btb_blame
-    brinfo.bpd_made_pred  := uop.br_prediction.bpd_blame
 
     br_unit.brinfo := brinfo
 
     // updates the BTB same cycle as PC redirect
     val lsb = log2Ceil(fetchWidth*coreInstBytes)
-
-    // did a branch or jalr occur AND did we mispredict? AND was it taken? (i.e., should we update the BTB)
-
-    if (enableBTBContainsBranches) {
-      br_unit.btb_update.valid := is_br_or_jalr && mispredict && is_taken && !uop.br_prediction.btb_hit
-    } else {
-       br_unit.btb_update.valid := is_br_or_jalr && mispredict && uop.is_jump
-    }
-
-    br_unit.btb_update.bits.pc       := io.get_ftq_pc.fetch_pc// tell the BTB which pc to tag check against
-    br_unit.btb_update.bits.cfi_idx  := uop.cfi_idx
-    br_unit.btb_update.bits.target   := (target.asSInt & (-coreInstBytes).S).asUInt
-    br_unit.btb_update.bits.taken    := is_taken   // was this branch/jal/jalr "taken"
-    br_unit.btb_update.bits.cfi_type :=
-      Mux(uop.is_jal                , CFI_JAL,
-      Mux(uop.is_jump && !uop.is_jal, CFI_JALR,
-                                      CFI_BR))
-    br_unit.btb_update.bits.bpd_type :=
-      Mux(uop.is_ret,  BpredType.RET,
-      Mux(uop.is_call, BpredType.CALL,
-      Mux(uop.is_jump, BpredType.JUMP,
-                       BpredType.BRANCH)))
-    br_unit.btb_update.bits.is_rvc  := uop.is_rvc
-    br_unit.btb_update.bits.is_edge := uop.edge_inst
 
     // Branch/Jump Target Calculation
     // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
