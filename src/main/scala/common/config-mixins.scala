@@ -284,7 +284,7 @@ class WithMegaBooms extends Config((site, here, up) => {
       decodeWidth = 4,
       numRobEntries = 128,
       issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4),
+        IssueParams(issueWidth=2, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4),
         IssueParams(issueWidth=3, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=4),
         IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
       numIntPhysRegisters = 128,
@@ -293,6 +293,8 @@ class WithMegaBooms extends Config((site, here, up) => {
       numStqEntries = 32,
       maxBrCount = 16,
       numFetchBufferEntries = 32,
+      enablePrefetching=true,
+      numDCacheBanks=2,
       ftq = FtqParameters(nEntries=32),
       btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=20),
       bpdBaseOnly = None,
@@ -302,7 +304,7 @@ class WithMegaBooms extends Config((site, here, up) => {
       fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                nSets=64, nWays=8, nMSHRs=8, nTLBEntries=32)),
-    icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
+    icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8, prefetch=true))
   )}
   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
   case XLen => 64
