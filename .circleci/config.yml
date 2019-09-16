@@ -494,11 +494,7 @@ workflows:
             - run-scala-checkstyle
 
             # Prepare the verilator builds
-            - prepare-smallboomconfig:
-                requires:
-                    - prepare-build-environment
-                    - install-riscv-tools
-            - prepare-mediumboomconfig:
+            - prepare-megaboomconfig:
                 requires:
                     - prepare-build-environment
                     - install-riscv-tools
@@ -506,11 +502,15 @@ workflows:
                 requires:
                     - prepare-build-environment
                     - install-riscv-tools
-            - prepare-megaboomconfig:
+            - prepare-mediumboomconfig:
                 requires:
                     - prepare-build-environment
                     - install-riscv-tools
             - prepare-smallboomandrocketconfig:
+                requires:
+                    - prepare-build-environment
+                    - install-riscv-tools
+            - prepare-smallboomconfig:
                 requires:
                     - prepare-build-environment
                     - install-riscv-tools
@@ -519,29 +519,7 @@ workflows:
                     - prepare-build-environment
                     - install-riscv-tools
 
-            # Run the SmallBoomConfig tests
-            - smallboomconfig-run-csmith-tests:
-                requires:
-                    - prepare-smallboomconfig
-            - smallboomconfig-run-riscv-tests:
-                requires:
-                    - prepare-smallboomconfig
 
-            # Run the MediumBoomConfig tests
-            - mediumboomconfig-run-csmith-tests:
-                requires:
-                    - prepare-mediumboomconfig
-            - mediumboomconfig-run-riscv-tests:
-                requires:
-                    - prepare-mediumboomconfig
-
-            # Run the LargeBoomConfig tests
-            - largeboomconfig-run-csmith-tests:
-                requires:
-                    - prepare-largeboomconfig
-            - largeboomconfig-run-riscv-tests:
-                requires:
-                    - prepare-largeboomconfig
 
             # Run the MegaBoomConfig tests
             - megaboomconfig-run-csmith-tests:
@@ -551,6 +529,22 @@ workflows:
                 requires:
                     - prepare-megaboomconfig
 
+            # Run the LargeBoomConfig tests
+            - largeboomconfig-run-csmith-tests:
+                requires:
+                    - prepare-largeboomconfig
+            - largeboomconfig-run-riscv-tests:
+                requires:
+                    - prepare-largeboomconfig
+
+            # Run the MediumBoomConfig tests
+            - mediumboomconfig-run-csmith-tests:
+                requires:
+                    - prepare-mediumboomconfig
+            - mediumboomconfig-run-riscv-tests:
+                requires:
+                    - prepare-mediumboomconfig
+
             # Run the SmallBoomAndRocketConfig tests
             - smallboomandrocketconfig-run-csmith-tests:
                 requires:
@@ -558,6 +552,14 @@ workflows:
             - smallboomandrocketconfig-run-riscv-tests:
                 requires:
                     - prepare-smallboomandrocketconfig
+
+            # Run the SmallBoomConfig tests
+            - smallboomconfig-run-csmith-tests:
+                requires:
+                    - prepare-smallboomconfig
+            - smallboomconfig-run-riscv-tests:
+                requires:
+                    - prepare-smallboomconfig
 
             # Run the SmallRV32UnifiedBoomConfig tests
             - smallrv32unifiedboomconfig-run-riscv-tests:
