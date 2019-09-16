@@ -225,7 +225,7 @@ class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
   // Request Logic
   io.request := is_valid && p1 && p2 && p3 && !io.kill
   val high_priority = slot_uop.is_br_or_jmp
-  io.request_hp := false.B
+  io.request_hp := io.request && high_priority
 
   when (state === s_valid_1) {
     io.request := p1 && p2 && p3 && !io.kill

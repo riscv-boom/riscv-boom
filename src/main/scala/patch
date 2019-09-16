@@ -1,0 +1,405 @@
+diff --git a/src/main/scala/common/configs.scala b/src/main/scala/common/configs.scala
+index 991ef8e..2921d1a 100644
+--- a/src/main/scala/common/configs.scala
++++ b/src/main/scala/common/configs.scala
+@@ -214,7 +214,7 @@ class WithLargeBooms extends Config((site, here, up) => {
+       tage = None,
+       bpdRandom = None),
+     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
+-                               nSets=64, nWays=8, nMSHRs=4, nTLBEntries=16)),
++                               nSets=16, nWays=4, nMSHRs=8, nTLBEntries=16)),
+     icache = Some(ICacheParams(fetchBytes = 4*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=8))
+     )}
+   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+diff --git a/src/main/scala/common/consts.scala b/src/main/scala/common/consts.scala
+index 20596ce..efd69b6 100644
+--- a/src/main/scala/common/consts.scala
++++ b/src/main/scala/common/consts.scala
+@@ -27,7 +27,7 @@ import freechips.rocketchip.rocket.RVCExpander
+ trait BOOMDebugConstants
+ {
+   val DEBUG_PRINTF        = false // use the Chisel printf functionality
+-  val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
++  val COMMIT_LOG_PRINTF   = true // dump commit state, for comparision against ISA sim
+   val MEMTRACE_PRINTF     = false // dump trace of memory accesses to L1D for debugging
+   val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
+   val O3_CYCLE_TIME       = (1000)// "cycle" time expected by o3pipeview.py
+diff --git a/src/main/scala/common/micro-op.scala b/src/main/scala/common/micro-op.scala
+index 3515ed8..11122ef 100644
+--- a/src/main/scala/common/micro-op.scala
++++ b/src/main/scala/common/micro-op.scala
+@@ -131,11 +131,13 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
+                                             // If it's non-ld/st it will write back exception bits to the fcsr.
+   val fp_single        = Bool()             // single-precision floating point instruction (F-extension)
+ 
+-  // exception information
++  // frontend exception information
+   val xcpt_pf_if       = Bool()             // I-TLB page fault.
+   val xcpt_ae_if       = Bool()             // I$ access exception.
+   val replay_if        = Bool()             // I$ wants us to replay our ifetch request
+   val xcpt_ma_if       = Bool()             // Misaligned fetch (jal/brjumping to misaligned addr).
++  val bp_debug_if      = Bool()             // Breakpoint
++  val bp_xcpt_if       = Bool()             // Breakpoint
+ 
+   // purely debug information
+   val debug_wdata      = UInt(xLen.W)
+diff --git a/src/main/scala/exu/core.scala b/src/main/scala/exu/core.scala
+index 0a9ded4..854455f 100644
+--- a/src/main/scala/exu/core.scala
++++ b/src/main/scala/exu/core.scala
+@@ -298,6 +298,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
+   io.ifu.br_unit := br_unit
+   io.ifu.tsc_reg := debug_tsc_reg
+ 
++  // Breakpoint info
++  io.ifu.status  := csr.io.status
++  io.ifu.bp      := csr.io.bp
++
+   // SFence needs access to the PC to inject an address into the TLB's CAM port. The ROB
+   // will have to later redirect the PC back to the regularly scheduled program.
+   io.ifu.sfence_take_pc    := io.lsu.exe.req.bits.sfence.valid
+@@ -972,6 +976,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
+   exe_units(brunit_idx).io.get_ftq_pc.next_pc        := RegNext(io.ifu.get_pc.next_pc)
+   exe_units(brunit_idx).io.status := csr.io.status
+ 
++  // Connect breakpoint info to memaddrcalcunit
++  exe_units.memory_unit.io.status := csr.io.status
++  exe_units.memory_unit.io.bp     := csr.io.bp
++
+   // LSU <> ROB
+   rob.io.lsu_clr_bsy    := io.lsu.clr_bsy
+   rob.io.lsu_clr_unsafe := io.lsu.clr_unsafe
+diff --git a/src/main/scala/exu/decode.scala b/src/main/scala/exu/decode.scala
+index 082f44e..b1ed464 100644
+--- a/src/main/scala/exu/decode.scala
++++ b/src/main/scala/exu/decode.scala
+@@ -502,6 +502,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
+ 
+   val (xcpt_valid, xcpt_cause) = checkExceptions(List(
+     (io.interrupt,     io.interrupt_cause),
++    (uop.bp_debug_if,  (CSR.debugTriggerCause).U),
++    (uop.bp_xcpt_if,   (Causes.breakpoint).U),
+     (uop.replay_if,    MINI_EXCEPTION_REPLAY),
+     (uop.xcpt_pf_if,   (Causes.fetch_page_fault).U),
+     (uop.xcpt_ae_if,   (Causes.fetch_access).U),
+diff --git a/src/main/scala/exu/execution-units/execution-unit.scala b/src/main/scala/exu/execution-units/execution-unit.scala
+index 1d9997e..4cbb50d 100644
+--- a/src/main/scala/exu/execution-units/execution-unit.scala
++++ b/src/main/scala/exu/execution-units/execution-unit.scala
+@@ -23,6 +23,7 @@ import chisel3._
+ import chisel3.util._
+ 
+ import freechips.rocketchip.config.{Parameters}
++import freechips.rocketchip.rocket.{BP}
+ import freechips.rocketchip.tile.{XLen, RoCCCoreIO}
+ import freechips.rocketchip.tile
+ 
+@@ -97,13 +98,14 @@ class ExecutionUnitIO(
+   // only used by the branch unit
+   val br_unit    = if (hasBrUnit) Output(new BranchUnitResp()) else null
+   val get_ftq_pc = if (hasBrUnit) Flipped(new GetPCFromFtqIO()) else null
+-  val status     = if (hasBrUnit || hasRocc) Input(new freechips.rocketchip.rocket.MStatus()) else null
++  val status     = if (hasBrUnit || hasRocc || hasMem) Input(new freechips.rocketchip.rocket.MStatus()) else null
+ 
+   // only used by the fpu unit
+   val fcsr_rm = if (hasFcsr) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
+ 
+   // only used by the mem unit
+   val lsu_io = if (hasMem) Flipped(new boom.lsu.LSUExeIO) else null
++  val bp = if (hasMem) Input(Vec(nBreakpoints, new BP)) else null
+ 
+   // TODO move this out of ExecutionUnit
+   val com_exception = if (hasMem || hasRocc) Input(Bool()) else null
+@@ -388,6 +390,8 @@ class ALUExeUnit(
+     maddrcalc.io.req        <> io.req
+     maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
+     maddrcalc.io.brinfo     <> io.brinfo
++    maddrcalc.io.status     := io.status
++    maddrcalc.io.bp         := io.bp
+     maddrcalc.io.resp.ready := DontCare
+     io.bypass <> maddrcalc.io.bypass // TODO this is not where the bypassing should
+                                      // occur from, is there any bypassing happening?!
+diff --git a/src/main/scala/exu/execution-units/functional-unit.scala b/src/main/scala/exu/execution-units/functional-unit.scala
+index 6dffb6d..c63cd8f 100644
+--- a/src/main/scala/exu/execution-units/functional-unit.scala
++++ b/src/main/scala/exu/execution-units/functional-unit.scala
+@@ -26,7 +26,7 @@ import freechips.rocketchip.config.Parameters
+ import freechips.rocketchip.rocket.ALU._
+ import freechips.rocketchip.util._
+ import freechips.rocketchip.tile
+-import freechips.rocketchip.rocket.PipelinedMultiplier
++import freechips.rocketchip.rocket.{PipelinedMultiplier,BP,BreakpointUnit,Causes,CSR}
+ 
+ import boom.bpu.{BpredType, BranchPredInfo, BoomBTBUpdate}
+ import boom.common._
+@@ -93,6 +93,7 @@ class FunctionalUnitIo(
+   val numBypassStages: Int,
+   val dataWidth: Int,
+   val isBrUnit: Boolean,
++  val isMemAddrCalcUnit: Boolean,
+   val needsFcsr: Boolean
+   )(implicit p: Parameters) extends BoomBundle
+ {
+@@ -109,7 +110,10 @@ class FunctionalUnitIo(
+   // only used by branch unit
+   val br_unit    = if (isBrUnit) Output(new BranchUnitResp()) else null
+   val get_ftq_pc = if (isBrUnit) Flipped(new GetPCFromFtqIO()) else null
+-  val status     = if (isBrUnit) Input(new freechips.rocketchip.rocket.MStatus()) else null
++  val status     = if (isBrUnit || isMemAddrCalcUnit) Input(new freechips.rocketchip.rocket.MStatus()) else null
++
++  // only used by memaddr calc unit
++  val bp = if (isMemAddrCalcUnit) Input(Vec(nBreakpoints, new BP)) else null
+ }
+ 
+ /**
+@@ -226,11 +230,12 @@ abstract class FunctionalUnit(
+   val numBypassStages: Int,
+   val dataWidth: Int,
+   val isBranchUnit: Boolean = false,
++  val isMemAddrCalcUnit: Boolean = false,
+   val needsFcsr: Boolean = false)
+   (implicit p: Parameters) extends BoomModule
+ {
+   val io = IO(new FunctionalUnitIo(numStages, numBypassStages, dataWidth,
+-    isBranchUnit, needsFcsr))
++    isBranchUnit, isMemAddrCalcUnit, needsFcsr))
+ }
+ 
+ /**
+@@ -251,6 +256,7 @@ abstract class PipelinedFunctionalUnit(
+   earliestBypassStage: Int,
+   dataWidth: Int,
+   isBranchUnit: Boolean = false,
++  isMemAddrCalcUnit: Boolean = false,
+   needsFcsr: Boolean = false
+   )(implicit p: Parameters) extends FunctionalUnit(
+     isPipelined = true,
+@@ -258,6 +264,7 @@ abstract class PipelinedFunctionalUnit(
+     numBypassStages = numBypassStages,
+     dataWidth = dataWidth,
+     isBranchUnit = isBranchUnit,
++    isMemAddrCalcUnit = isMemAddrCalcUnit,
+     needsFcsr = needsFcsr)
+ {
+   // Pipelined functional unit is always ready.
+@@ -646,7 +653,8 @@ class MemAddrCalcUnit(implicit p: Parameters)
+     numBypassStages = 0,
+     earliestBypassStage = 0,
+     dataWidth = 65, // TODO enable this only if FP is enabled?
+-    isBranchUnit = false)
++    isBranchUnit = false,
++    isMemAddrCalcUnit = true)
+   with freechips.rocketchip.rocket.constants.MemoryOpConstants
+   with freechips.rocketchip.rocket.constants.ScalarOpConstants
+ {
+@@ -680,12 +688,28 @@ class MemAddrCalcUnit(implicit p: Parameters)
+     (size === 2.U && (effective_address(1,0) =/= 0.U)) ||
+     (size === 3.U && (effective_address(2,0) =/= 0.U))
+ 
+-  val ma_ld = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
+-  val ma_st = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned
+-
+-  io.resp.bits.mxcpt.valid := ma_ld || ma_st
+-  io.resp.bits.mxcpt.bits  := Mux(ma_ld, freechips.rocketchip.rocket.Causes.misaligned_load.U,
+-                                         freechips.rocketchip.rocket.Causes.misaligned_store.U)
++  val bkptu = Module(new BreakpointUnit(nBreakpoints))
++  bkptu.io.status := io.status
++  bkptu.io.bp     := io.bp
++  bkptu.io.ea     := effective_address
++
++  val ma_ld  = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
++  val ma_st  = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned
++  val dbg_bp = io.req.valid && ((io.req.bits.uop.uopc === uopLD  && bkptu.io.debug_ld) ||
++                                (io.req.bits.uop.uopc === uopSTA && bkptu.io.debug_st))
++  val bp     = io.req.valid && ((io.req.bits.uop.uopc === uopLD  && bkptu.io.xcpt_ld) ||
++                                (io.req.bits.uop.uopc === uopSTA && bkptu.io.xcpt_st))
++
++  def checkExceptions(x: Seq[(Bool, UInt)]) =
++    (x.map(_._1).reduce(_||_), PriorityMux(x))
++  val (xcpt_val, xcpt_cause) = checkExceptions(List(
++    (ma_ld,  (Causes.misaligned_load).U),
++    (ma_st,  (Causes.misaligned_store).U),
++    (dbg_bp, (CSR.debugTriggerCause).U),
++    (bp,     (Causes.breakpoint).U)))
++
++  io.resp.bits.mxcpt.valid := xcpt_val
++  io.resp.bits.mxcpt.bits  := xcpt_cause
+   assert (!(ma_ld && ma_st), "Mutually-exclusive exceptions are firing.")
+ 
+   io.resp.bits.sfence.valid := io.req.valid && io.req.bits.uop.mem_cmd === M_SFENCE
+diff --git a/src/main/scala/ifu/fetch-buffer.scala b/src/main/scala/ifu/fetch-buffer.scala
+index 1dd03e8..7747714 100644
+--- a/src/main/scala/ifu/fetch-buffer.scala
++++ b/src/main/scala/ifu/fetch-buffer.scala
+@@ -21,6 +21,7 @@ import chisel3.experimental.{dontTouch}
+ import chisel3.core.{DontCare}
+ 
+ import freechips.rocketchip.config.{Parameters}
++import freechips.rocketchip.rocket.{MStatus, BP, BreakpointUnit}
+ 
+ import boom.common._
+ import boom.util.{BoolToChar, MaskUpper}
+@@ -50,6 +51,10 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
+ 
+     // Was the pipeline redirected? Clear/reset the fetchbuffer.
+     val clear = Input(Bool())
++
++    // Breakpoint info
++    val status = Input(new MStatus)
++    val bp = Input(Vec(nBreakpoints, new BP))
+   })
+ 
+   require (numEntries > fetchWidth)
+@@ -91,12 +96,17 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
+ 
+   // Step 1: Convert FetchPacket into a vector of MicroOps.
+   for (i <- 0 until fetchWidth) {
++    val pc = (alignToFetchBoundary(io.enq.bits.pc) + (i << log2Ceil(coreInstBytes)).U)
++    val bkptu = Module(new BreakpointUnit(nBreakpoints))
++    bkptu.io.status := io.status
++    bkptu.io.bp     := io.bp
++    bkptu.io.pc     := pc
++
+     in_uops(i)                := DontCare
+     in_mask(i)                := io.enq.valid && io.enq.bits.mask(i)
+     in_uops(i).edge_inst      := false.B
+-    in_uops(i).pc             := (alignToFetchBoundary(io.enq.bits.pc)
+-                                + (i << log2Ceil(coreInstBytes)).U)
+-    in_uops(i).pc_lob         := in_uops(i).pc // LHS width will cut off high-order bits.
++    in_uops(i).pc             := pc
++    in_uops(i).pc_lob         := pc // LHS width will cut off high-order bits.
+     in_uops(i).cfi_idx        := i.U
+     if (i == 0) {
+       when (io.enq.bits.edge_inst) {
+@@ -110,10 +120,14 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
+     in_uops(i).inst           := io.enq.bits.exp_insts(i)
+     in_uops(i).debug_inst     := io.enq.bits.insts(i)
+     in_uops(i).is_rvc         := io.enq.bits.insts(i)(1,0) =/= 3.U && usingCompressed.B
++
+     in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
+     in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
+     in_uops(i).replay_if      := io.enq.bits.replay_if
+     in_uops(i).xcpt_ma_if     := io.enq.bits.xcpt_ma_if_oh(i)
++    in_uops(i).bp_debug_if    := bkptu.io.debug_if
++    in_uops(i).bp_xcpt_if     := bkptu.io.xcpt_if
++
+     in_uops(i).br_prediction  := io.enq.bits.bpu_info(i)
+     in_uops(i).debug_events   := io.enq.bits.debug_events(i)
+   }
+diff --git a/src/main/scala/ifu/fetch-control-unit.scala b/src/main/scala/ifu/fetch-control-unit.scala
+index be34606..f7241fd 100644
+--- a/src/main/scala/ifu/fetch-control-unit.scala
++++ b/src/main/scala/ifu/fetch-control-unit.scala
+@@ -28,6 +28,7 @@ import chisel3.util._
+ import chisel3.core.{withReset, DontCare}
+ import chisel3.experimental.{dontTouch}
+ 
++import freechips.rocketchip.rocket.{MStatus, BP, BreakpointUnit}
+ import freechips.rocketchip.config.{Parameters}
+ import freechips.rocketchip.util._
+ 
+@@ -94,6 +95,10 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
+     val br_unit           = Input(new BranchUnitResp())
+     val get_pc            = new GetPCFromFtqIO()
+ 
++    // Breakpoint info
++    val status            = Input(new MStatus)
++    val bp                = Input(Vec(nBreakpoints, new BP))
++
+     val tsc_reg           = Input(UInt(xLen.W))
+ 
+     val clear_fetchbuffer = Input(Bool())
+@@ -554,6 +559,9 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
+   else                   fb.io.enq.bits := r_f4_fetch_bundle
+   fb.io.clear := io.clear_fetchbuffer
+ 
++  fb.io.status := io.status
++  fb.io.bp     := io.bp
++
+   for (i <- 0 until fetchWidth) {
+     if (i == 0) {
+       fb.io.enq.bits.debug_events(i).fetch_seq := fseq_reg
+diff --git a/src/main/scala/ifu/frontend.scala b/src/main/scala/ifu/frontend.scala
+index a09b26a..7781e09 100644
+--- a/src/main/scala/ifu/frontend.scala
++++ b/src/main/scala/ifu/frontend.scala
+@@ -117,6 +117,10 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
+   val status_prv        = Output(UInt(freechips.rocketchip.rocket.PRV.SZ.W))
+   val status_debug      = Output(Bool())
+ 
++  // Breakpoint info
++  val status            = Input(new MStatus)
++  val bp                = Input(Vec(nBreakpoints, new BP))
++
+   val perf              = Input(new FrontendPerfEvents())
+   val tsc_reg           = Output(UInt(xLen.W))
+ }
+@@ -255,6 +259,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
+   fetch_controller.io.br_unit           := io.cpu.br_unit
+   fetch_controller.io.tsc_reg           := io.cpu.tsc_reg
+ 
++  fetch_controller.io.status            := io.cpu.status
++  fetch_controller.io.bp                := io.cpu.bp
++
+   fetch_controller.io.f2_btb_resp       := bpdpipeline.io.f2_btb_resp
+   fetch_controller.io.f3_bpd_resp       := bpdpipeline.io.f3_bpd_resp
+   fetch_controller.io.f2_bpd_resp       := DontCare
+diff --git a/src/main/scala/system/BoomTestSuites.scala b/src/main/scala/system/BoomTestSuites.scala
+deleted file mode 100644
+index e3d3c85..0000000
+--- a/src/main/scala/system/BoomTestSuites.scala
++++ /dev/null
+@@ -1,23 +0,0 @@
+-//******************************************************************************
+-// Copyright (c) 2018 - 2019, The Regents of the University of California (Regents).
+-// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
+-//------------------------------------------------------------------------------
+-// Author: Christopher Celio
+-//------------------------------------------------------------------------------
+-
+-package boom.system
+-
+-/**
+- * Any BOOM-specific tests can go here to override default rocket-chip behavior.
+- */
+-object BoomTestSuites
+-{
+-  import freechips.rocketchip.system.DefaultTestSuites._
+-
+-  // We do not currently support breakpoints, so override the rv64mi and its descendents.
+-  val rv64miNames = rv32miNames + "access"
+-  val rv64mi = new freechips.rocketchip.system.AssemblyTestSuite("rv64mi", rv64miNames)(_)
+-  val rv64i  = List(rv64ui, rv64si, rv64mi)
+-  val rv64pi = List(rv64ui, rv64mi)
+-  val rv64uc = new freechips.rocketchip.system.AssemblyTestSuite("rv64uc", rv64ucNames)(_)
+-}
+diff --git a/src/main/scala/system/Generator.scala b/src/main/scala/system/Generator.scala
+index 6177957..6a36f16 100644
+--- a/src/main/scala/system/Generator.scala
++++ b/src/main/scala/system/Generator.scala
+@@ -62,7 +62,8 @@ object RegressionTestSuites
+  */
+ object TestSuiteHelper
+ {
+-  import freechips.rocketchip.system.DefaultTestSuites._
++  import freechips.rocketchip.system.DefaultTestSuites
++  import DefaultTestSuites._
+   import RegressionTestSuites._
+ 
+   /**
+@@ -97,14 +98,13 @@ object TestSuiteHelper
+ 
+       // Include our BOOM-specific overrides.
+       val (rvi, rvu) =
+-        if (xlen == 64) ((if (vm) BoomTestSuites.rv64i else BoomTestSuites.rv64pi), rv64u)
++        if (xlen == 64) ((if (vm) DefaultTestSuites.rv64i else DefaultTestSuites.rv64pi), rv64u)
+         else            ((if (vm) rv32i else rv32pi), rv32u)
+ 
+       TestGeneration.addSuites(rvi.map(_("p")))
+       TestGeneration.addSuites(rvu.map(_("p")))
+       TestGeneration.addSuites((if (vm) List("v") else List()).flatMap(env => rvu.map(_(env))))
+       TestGeneration.addSuite(benchmarks)
+-      rv64RegrTestNames -= "rv64mi-p-breakpoint" // TODO: breakpoints not implemented yet
+       TestGeneration.addSuite(new RegressionTestSuite(if (xlen == 64) rv64RegrTestNames else rv32RegrTestNames))
+     }
+   }
