@@ -123,7 +123,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 
   // Stores clear busy bit when stdata is received
   // memWidth for int, 1 for fp (to avoid back-pressure fpstdat)
-  val clr_bsy         = Output(Vec(memWidth + 1, Valid(UInt(robAddrSz.W))))
+  val clr_bsy         = Output(Valid(UInt(robAddrSz.W)))
 
   // Speculatively safe load (barring memory ordering failure)
   val clr_unsafe      = Output(Vec(memWidth, Valid(UInt(robAddrSz.W))))
@@ -188,6 +188,7 @@ class STQEntry(implicit p: Parameters) extends BoomBundle()(p)
 
   val committed           = Bool() // committed by ROB
   val succeeded           = Bool() // D$ has ack'd this, we don't need to maintain this anymore
+  val cleared             = Bool() // we cleared the busy bit for this store in the ROB
 
   val debug_wb_data       = UInt(xLen.W)
 }
@@ -207,6 +208,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val ldq_tail         = Reg(UInt(ldqAddrSz.W))
   val stq_head         = Reg(UInt(stqAddrSz.W)) // point to next store to clear from STQ (i.e., send to memory)
   val stq_tail         = Reg(UInt(stqAddrSz.W))
+  val stq_clr_head     = Reg(UInt(stqAddrSz.W))
   val stq_commit_head  = Reg(UInt(stqAddrSz.W)) // point to next store to commit
   val stq_execute_head = Reg(UInt(stqAddrSz.W)) // point to next store to execute
 
@@ -214,6 +216,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   assert (stq(stq_execute_head).valid ||
           stq_head === stq_execute_head || stq_tail === stq_execute_head,
             "stq_execute_head got off track.")
+
+  assert (stq(stq_clr_head).valid || stq_clr_head === stq_tail,
+    "stq_clr_head got off track")
 
   val h_ready :: h_s1 :: h_s2 :: h_s2_nack :: h_wait :: h_replay :: h_dead :: Nil = Enum(7)
   // s1 : do TLB, if success and not killed, fire request go to h_s2
@@ -315,6 +320,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       stq(st_enq_idx).bits.data.valid := false.B
       stq(st_enq_idx).bits.committed  := false.B
       stq(st_enq_idx).bits.succeeded  := false.B
+      stq(st_enq_idx).bits.cleared    := false.B
 
       assert (st_enq_idx === io.core.dis_uops(w).bits.stq_idx, "[lsu] mismatch enq store tag.")
       assert (!stq(st_enq_idx).valid, "[lsu] Enqueuing uop is overwriting stq entries")
@@ -898,83 +904,32 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val mem_paddr                = RegNext(widthMap(w => dmem_req(w).bits.addr))
 
   // Task 1: Clr ROB busy bit
-  val clr_bsy_valid   = RegInit(widthMap(w => false.B))
-  val clr_bsy_rob_idx = Reg(Vec(memWidth, UInt(robAddrSz.W)))
-  val clr_bsy_brmask  = Reg(Vec(memWidth, UInt(maxBrCount.W)))
+  val clr_bsy_valid = (stq(stq_clr_head).valid                &&
+                       stq(stq_clr_head).bits.addr.valid      &&
+                       stq(stq_clr_head).bits.data.valid      &&
+                      !stq(stq_clr_head).bits.uop.is_amo      &&
+                      !stq(stq_clr_head).bits.addr_is_virtual &&
+                      !stq(stq_clr_head).bits.cleared         &&
+                      !IsKilledByBranch(io.core.brinfo, stq(stq_clr_head).bits.uop) &&
+                      !io.core.exception && !RegNext(io.core.exception))
 
-  for (w <- 0 until memWidth) {
-    clr_bsy_valid   (w) := false.B
-    clr_bsy_rob_idx (w) := 0.U
-    clr_bsy_brmask  (w) := 0.U
+  val clr_bsy_uop   = Mux(fired_sfence.reduce(_||_), mem_incoming_uop(0), stq(stq_clr_head).bits.uop)
 
 
-    when (fired_stad_incoming(w)) {
-      clr_bsy_valid   (w) := mem_stq_incoming_e(w).valid           &&
-                            !mem_tlb_miss(w)                       &&
-                            !mem_stq_incoming_e(w).bits.uop.is_amo &&
-                            !IsKilledByBranch(io.core.brinfo, mem_stq_incoming_e(w).bits.uop)
-      clr_bsy_rob_idx (w) := mem_stq_incoming_e(w).bits.uop.rob_idx
-      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brinfo, mem_stq_incoming_e(w).bits.uop)
-    } .elsewhen (fired_sta_incoming(w)) {
-      clr_bsy_valid   (w) := mem_stq_incoming_e(w).valid            &&
-                             mem_stq_incoming_e(w).bits.data.valid  &&
-                            !mem_tlb_miss(w)                        &&
-                            !mem_stq_incoming_e(w).bits.uop.is_amo  &&
-                            !IsKilledByBranch(io.core.brinfo, mem_stq_incoming_e(w).bits.uop)
-      clr_bsy_rob_idx (w) := mem_stq_incoming_e(w).bits.uop.rob_idx
-      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brinfo, mem_stq_incoming_e(w).bits.uop)
-    } .elsewhen (fired_std_incoming(w)) {
-      clr_bsy_valid   (w) := mem_stq_incoming_e(w).valid                 &&
-                             mem_stq_incoming_e(w).bits.addr.valid       &&
-                            !mem_stq_incoming_e(w).bits.addr_is_virtual  &&
-                            !mem_stq_incoming_e(w).bits.uop.is_amo       &&
-                            !IsKilledByBranch(io.core.brinfo, mem_stq_incoming_e(w).bits.uop)
-      clr_bsy_rob_idx (w) := mem_stq_incoming_e(w).bits.uop.rob_idx
-      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brinfo, mem_stq_incoming_e(w).bits.uop)
-    } .elsewhen (fired_sfence(w)) {
-      clr_bsy_valid   (w) := (w == 0).B // SFence proceeds down all paths, only allow one to clr the rob
-      clr_bsy_rob_idx (w) := mem_incoming_uop(w).rob_idx
-      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brinfo, mem_incoming_uop(w))
-    } .elsewhen (fired_sta_retry(w)) {
-      clr_bsy_valid   (w) := mem_stq_retry_e.valid            &&
-                             mem_stq_retry_e.bits.data.valid  &&
-                            !mem_tlb_miss(w)                  &&
-                            !mem_stq_retry_e.bits.uop.is_amo  &&
-                            !IsKilledByBranch(io.core.brinfo, mem_stq_retry_e.bits.uop)
-      clr_bsy_rob_idx (w) := mem_stq_retry_e.bits.uop.rob_idx
-      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brinfo, mem_stq_retry_e.bits.uop)
-    }
 
-    io.core.clr_bsy(w).valid := clr_bsy_valid(w) &&
-                               !IsKilledByBranch(io.core.brinfo, clr_bsy_brmask(w)) &&
-                               !io.core.exception && !RegNext(io.core.exception) && !RegNext(RegNext(io.core.exception))
-    io.core.clr_bsy(w).bits  := clr_bsy_rob_idx(w)
+  io.core.clr_bsy.valid := RegNext(clr_bsy_valid || fired_sfence.reduce(_||_)) && !io.core.exception &&
+                          !IsKilledByBranch(io.core.brinfo, RegNext(clr_bsy_uop))
+  io.core.clr_bsy.bits  := RegNext(clr_bsy_uop.rob_idx)
+
+  when (clr_bsy_valid) {
+    stq(stq_clr_head).bits.cleared := true.B
   }
 
-  val stdf_clr_bsy_valid   = RegInit(false.B)
-  val stdf_clr_bsy_rob_idx = Reg(UInt(robAddrSz.W))
-  val stdf_clr_bsy_brmask  = Reg(UInt(maxBrCount.W))
-  stdf_clr_bsy_valid   := false.B
-  stdf_clr_bsy_rob_idx := 0.U
-  stdf_clr_bsy_brmask  := 0.U
-  when (fired_stdf_incoming) {
-    val s_idx = mem_stdf_uop.stq_idx
-    stdf_clr_bsy_valid   := stq(s_idx).valid                 &&
-                            stq(s_idx).bits.addr.valid       &&
-                            !stq(s_idx).bits.addr_is_virtual &&
-                            !stq(s_idx).bits.uop.is_amo      &&
-                            !IsKilledByBranch(io.core.brinfo, mem_stdf_uop)
-    stdf_clr_bsy_rob_idx := mem_stdf_uop.rob_idx
-    stdf_clr_bsy_brmask  := GetNewBrMask(io.core.brinfo, mem_stdf_uop)
+  when (clr_bsy_valid ||
+    (stq(stq_clr_head).valid && stq(stq_clr_head).bits.cleared) ||
+    (stq(stq_clr_head).valid && stq(stq_clr_head).bits.uop.is_fence)) {
+    stq_clr_head := WrapInc(stq_clr_head, NUM_STQ_ENTRIES)
   }
-
-
-
-  io.core.clr_bsy(memWidth).valid := stdf_clr_bsy_valid &&
-                                    !IsKilledByBranch(io.core.brinfo, stdf_clr_bsy_brmask) &&
-                                    !io.core.exception && !RegNext(io.core.exception) && !RegNext(RegNext(io.core.exception))
-  io.core.clr_bsy(memWidth).bits  := stdf_clr_bsy_rob_idx
-
 
 
   // Task 2: Do LD-LD. ST-LD searches for ordering failures
@@ -1300,7 +1255,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       val f_idx       = wb_forward_ldq_idx(w)
       val forward_uop = ldq(f_idx).bits.uop
       val stq_e       = stq(wb_forward_stq_idx(w))
-      val data_ready  = stq_e.bits.data.valid
+      val data_ready  = stq_e.bits.data.valid && stq_e.valid
       val live        = !IsKilledByBranch(io.core.brinfo, forward_uop)
       val storegen = new freechips.rocketchip.rocket.StoreGen(
                                 stq_e.bits.uop.mem_size, stq_e.bits.addr.bits,
@@ -1358,8 +1313,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       when (IsKilledByBranch(io.core.brinfo, stq(i).bits.uop))
       {
         stq(i).valid           := false.B
-        stq(i).bits.addr.valid := false.B
-        stq(i).bits.data.valid := false.B
         st_brkilled_mask(i)    := true.B
       }
     }
@@ -1377,7 +1330,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       when (IsKilledByBranch(io.core.brinfo, ldq(i).bits.uop))
       {
         ldq(i).valid           := false.B
-        ldq(i).bits.addr.valid := false.B
       }
     }
   }
@@ -1386,6 +1338,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   when (io.core.brinfo.valid && io.core.brinfo.mispredict && !io.core.exception)
   {
     stq_tail := io.core.brinfo.stq_idx
+    stq_clr_head := Mux(IsOlder(io.core.brinfo.stq_idx, stq_clr_head, stq_head),
+                        io.core.brinfo.stq_idx, stq_clr_head)
     ldq_tail := io.core.brinfo.ldq_idx
   }
 
@@ -1411,11 +1365,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         "[lsu] trying to commit an un-executed load entry.")
 
       ldq(idx).valid                 := false.B
-      ldq(idx).bits.addr.valid       := false.B
-      ldq(idx).bits.executed         := false.B
-      ldq(idx).bits.succeeded        := false.B
-      ldq(idx).bits.order_fail       := false.B
-      ldq(idx).bits.forward_std_val  := false.B
 
     }
 
@@ -1455,10 +1404,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   when (clear_store)
   {
     stq(stq_head).valid           := false.B
-    stq(stq_head).bits.addr.valid := false.B
-    stq(stq_head).bits.data.valid := false.B
-    stq(stq_head).bits.succeeded  := false.B
-    stq(stq_head).bits.committed  := false.B
 
     stq_head := WrapInc(stq_head, NUM_STQ_ENTRIES)
     when (stq(stq_head).bits.uop.is_fence)
@@ -1553,28 +1498,25 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     {
       stq_head := 0.U
       stq_tail := 0.U
+      stq_clr_head := 0.U
       stq_commit_head  := 0.U
       stq_execute_head := 0.U
 
       for (i <- 0 until NUM_STQ_ENTRIES)
       {
         stq(i).valid           := false.B
-        stq(i).bits.addr.valid := false.B
-        stq(i).bits.data.valid := false.B
-        stq(i).bits.uop        := NullMicroOp
       }
     }
       .otherwise // exception
     {
       stq_tail := stq_commit_head
+      stq_clr_head := stq_commit_head
 
       for (i <- 0 until NUM_STQ_ENTRIES)
       {
         when (!stq(i).bits.committed && !stq(i).bits.succeeded)
         {
           stq(i).valid           := false.B
-          stq(i).bits.addr.valid := false.B
-          stq(i).bits.data.valid := false.B
           st_exc_killed_mask(i)  := true.B
         }
       }
@@ -1583,8 +1525,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     for (i <- 0 until NUM_LDQ_ENTRIES)
     {
       ldq(i).valid           := false.B
-      ldq(i).bits.addr.valid := false.B
-      ldq(i).bits.executed   := false.B
     }
   }
 
