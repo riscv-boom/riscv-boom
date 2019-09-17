@@ -58,11 +58,7 @@ class IssueUnits(val numWakeupPorts: Int)(implicit val p: Parameters)
 
     // name the issue units
     if (issueParam.iqType == IQT_INT.litValue) {
-      if (usingUnifiedMemIntIQs) {
-        issue_unit.suggestName("intmem_issue_unit")
-      } else {
-        issue_unit.suggestName("int_issue_unit")
-      }
+      issue_unit.suggestName("int_issue_unit")
     } else if (issueParam.iqType == IQT_MEM.litValue) {
       issue_unit.suggestName("mem_issue_unit")
     }
@@ -75,12 +71,7 @@ class IssueUnits(val numWakeupPorts: Int)(implicit val p: Parameters)
    *
    * @return the IssueUnit used for memory uops
    */
-  def mem_iq = if (usingUnifiedMemIntIQs) {
-    // When using unified issue queues the IQT_INT handles everything
-    issue_units.find(_.iqType == IQT_INT.litValue).get
-  } else {
-    issue_units.find(_.iqType == IQT_MEM.litValue).get
-  }
+  def mem_iq = issue_units.find(_.iqType == IQT_MEM.litValue).get
 
   /**
    * Get the integer issue queue

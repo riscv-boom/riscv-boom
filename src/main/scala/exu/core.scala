@@ -768,7 +768,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   issue_units.map(_.io.flush_pipeline := rob.io.flush.valid)
 
   // Load-hit Misspeculations
-  require (issue_units.count(_.iqType == IQT_MEM.litValue) == 1 || usingUnifiedMemIntIQs)
+  require (issue_units.count(_.iqType == IQT_MEM.litValue) == 1)
   val mem_iq = issue_units.mem_iq
 
   require (mem_iq.issueWidth <= 2)

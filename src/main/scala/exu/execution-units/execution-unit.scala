@@ -383,7 +383,7 @@ class ALUExeUnit(
 
   // Mem Unit --------------------------
   if (hasMem) {
-    require(!hasAlu || usingUnifiedMemIntIQs)
+    require(!hasAlu)
     val maddrcalc = Module(new MemAddrCalcUnit)
     maddrcalc.io.req        <> io.req
     maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
