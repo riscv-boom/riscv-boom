@@ -123,7 +123,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 
   // Stores clear busy bit when stdata is received
   // memWidth for int, 1 for fp (to avoid back-pressure fpstdat)
-  val clr_bsy         = Output(Valid(UInt(robAddrSz.W)))
+  val clr_bsy         = Output(Vec(memWidth, Valid(UInt(robAddrSz.W))))
 
   // Speculatively safe load (barring memory ordering failure)
   val clr_unsafe      = Output(Vec(memWidth, Valid(UInt(robAddrSz.W))))
@@ -458,16 +458,12 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                 !ldq_retry_e.bits.order_fail))
 
   // Can we retry a store addrgen that missed in the TLB
-  // - Weird edge case when sta_retry and std_incoming for same entry in same cycle. Delay this
   val can_fire_sta_retry     = widthMap(w =>
                                ( stq_retry_e.valid                            &&
                                  stq_retry_e.bits.addr.valid                  &&
                                  stq_retry_e.bits.addr_is_virtual             &&
                                  (w == memWidth-1).B                          &&
-                                 RegNext(dtlb.io.miss_rdy)                    &&
-                                 !(widthMap(i => (i != w).B               &&
-                                                 can_fire_std_incoming(i) &&
-                                                 stq_incoming_idx(i) === stq_retry_idx).reduce(_||_))
+                                 RegNext(dtlb.io.miss_rdy)
                                ))
   // Can we commit a store
   val can_fire_store_commit  = widthMap(w =>
@@ -904,31 +900,41 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val mem_paddr                = RegNext(widthMap(w => dmem_req(w).bits.addr))
 
   // Task 1: Clr ROB busy bit
-  val clr_bsy_valid = (stq(stq_clr_head).valid                &&
-                       stq(stq_clr_head).bits.addr.valid      &&
-                       stq(stq_clr_head).bits.data.valid      &&
-                      !stq(stq_clr_head).bits.uop.is_amo      &&
-                      !stq(stq_clr_head).bits.addr_is_virtual &&
-                      !stq(stq_clr_head).bits.cleared         &&
-                      !IsKilledByBranch(io.core.brinfo, stq(stq_clr_head).bits.uop) &&
-                      !io.core.exception && !RegNext(io.core.exception))
+  var clr_idx = stq_clr_head
+  var block_advance_head = false.B
+  for (i <- 0 until memWidth) {
+    val clr_bsy_valid = (stq(clr_idx).valid                &&
+                         stq(clr_idx).bits.addr.valid      &&
+                         stq(clr_idx).bits.data.valid      &&
+                        !stq(clr_idx).bits.uop.is_amo      &&
+                        !stq(clr_idx).bits.addr_is_virtual &&
+                        !stq(clr_idx).bits.cleared         &&
+                        !IsKilledByBranch(io.core.brinfo, stq(clr_idx).bits.uop) &&
+                        !io.core.exception && !RegNext(io.core.exception))
 
-  val clr_bsy_uop   = Mux(fired_sfence.reduce(_||_), mem_incoming_uop(0), stq(stq_clr_head).bits.uop)
+    val clr_bsy_uop   = Mux(fired_sfence.reduce(_||_), mem_incoming_uop(0), stq(clr_idx).bits.uop)
+
+    val clr_sfence = fired_sfence.reduce(_||_) && (i == 0).B
+
+    io.core.clr_bsy(i).valid := RegNext(clr_bsy_valid || clr_sfence) && !io.core.exception &&
+                               !IsKilledByBranch(io.core.brinfo, RegNext(clr_bsy_uop))
+    io.core.clr_bsy(i).bits  := RegNext(clr_bsy_uop.rob_idx)
+
+    when (clr_bsy_valid) {
+      stq(clr_idx).bits.cleared := true.B
+    }
+
+    val advance_head = (clr_bsy_valid ||
+                        (stq(clr_idx).valid && stq(clr_idx).bits.cleared) ||
+                        (stq(clr_idx).valid && stq(clr_idx).bits.uop.is_fence))
 
 
+    clr_idx = WrapInc(clr_idx, NUM_STQ_ENTRIES)
+    when (advance_head && !block_advance_head) {
+      stq_clr_head := clr_idx
+    }
 
-  io.core.clr_bsy.valid := RegNext(clr_bsy_valid || fired_sfence.reduce(_||_)) && !io.core.exception &&
-                          !IsKilledByBranch(io.core.brinfo, RegNext(clr_bsy_uop))
-  io.core.clr_bsy.bits  := RegNext(clr_bsy_uop.rob_idx)
-
-  when (clr_bsy_valid) {
-    stq(stq_clr_head).bits.cleared := true.B
-  }
-
-  when (clr_bsy_valid ||
-    (stq(stq_clr_head).valid && stq(stq_clr_head).bits.cleared) ||
-    (stq(stq_clr_head).valid && stq(stq_clr_head).bits.uop.is_fence)) {
-    stq_clr_head := WrapInc(stq_clr_head, NUM_STQ_ENTRIES)
+    block_advance_head = !advance_head
   }
 
 
