@@ -43,7 +43,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     // +1 for recoding.
     val ll_wports        = Flipped(Vec(memWidth, Decoupled(new ExeUnitResp(fLen+1))))// from memory unit
     val from_int         = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from integer RF
-    val to_sdq           = Decoupled(new MicroOpWithData(fLen))           // to Load/Store Unit
+    val to_sdq           = Decoupled(new ExeUnitResp(fLen))           // to Load/Store Unit
     val to_int           = Decoupled(new ExeUnitResp(xLen))           // to integer RF
 
     val wakeups          = Vec(numWakeupPorts, Valid(new ExeUnitResp(fLen+1)))
