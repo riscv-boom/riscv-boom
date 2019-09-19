@@ -236,7 +236,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
   val debug_tsc_reg = RegInit(0.U(xLen.W))
   val debug_irt_reg = RegInit(0.U(xLen.W))
-  debug_tsc_reg := debug_tsc_reg + Mux(O3PIPEVIEW_PRINTF.B, O3_CYCLE_TIME.U, 1.U)
+  debug_tsc_reg := debug_tsc_reg + 1.U
   debug_irt_reg := debug_irt_reg + PopCount(rob.io.commit.valids.asUInt)
   dontTouch(debug_tsc_reg)
   dontTouch(debug_irt_reg)
@@ -1269,11 +1269,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         when (rob.io.commit.uops(w).dst_rtype === RT_FIX && rob.io.commit.uops(w).ldst =/= 0.U) {
           printf(" x%d 0x%x\n",
             rob.io.commit.uops(w).ldst,
-            rob.io.commit.uops(w).debug_wdata)
+            rob.io.commit.debug_wdata(w))
         } .elsewhen (rob.io.commit.uops(w).dst_rtype === RT_FLT) {
           printf(" f%d 0x%x\n",
             rob.io.commit.uops(w).ldst,
-            rob.io.commit.uops(w).debug_wdata)
+            rob.io.commit.debug_wdata(w))
         } .otherwise {
           printf("\n")
         }
@@ -1298,43 +1298,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   coreMonitorBundle.rd1val := DontCare
   coreMonitorBundle.inst   := DontCare
 
-  //-------------------------------------------------------------
-  //-------------------------------------------------------------
-  // Pipeview Visualization
-
-  if (O3PIPEVIEW_PRINTF) {
-    println("   O3Pipeview Visualization Enabled\n")
-
-    // did we already print out the instruction sitting at the front of the fetchbuffer/decode stage?
-    val dec_printed_mask = RegInit(0.U(coreWidth.W))
-
-    for (w <- 0 until coreWidth) {
-      when (dec_valids(w) && !dec_printed_mask(w)) {
-        printf("%d; O3PipeView:decode:%d\n", dec_uops(w).debug_events.fetch_seq, debug_tsc_reg)
-      }
-      // Rename begins when uop leaves fetch buffer (Dec+Ren1 are in same stage).
-      when (dec_fire(w)) {
-        printf("%d; O3PipeView:rename: %d\n", dec_uops(w).debug_events.fetch_seq, debug_tsc_reg)
-      }
-      when (dispatcher.io.ren_uops(w).valid) {
-        printf("%d; O3PipeView:dispatch: %d\n", dispatcher.io.ren_uops(w).bits.debug_events.fetch_seq, debug_tsc_reg)
-      }
-
-      when (dec_ready || io.ifu.redirect_val) {
-        dec_printed_mask := 0.U
-      } .otherwise {
-        dec_printed_mask := dec_valids.asUInt | dec_printed_mask
-      }
-    }
-
-    for (i <- 0 until coreWidth) {
-      when (rob.io.commit.valids(i)) {
-        printf("%d; O3PipeView:retire:%d:store: 0\n",
-          rob.io.commit.uops(i).debug_events.fetch_seq,
-          debug_tsc_reg)
-      }
-    }
-  }
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
