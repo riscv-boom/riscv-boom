@@ -40,7 +40,6 @@ case class BoomCoreParams(
   enableAgePriorityIssue: Boolean = true,
   enablePrefetching: Boolean = false,
   enableFastLoadUse: Boolean = true,
-  enableBrResolutionRegister: Boolean = true,
   enableCommitMapTable: Boolean = false,
   enableFastPNR: Boolean = false,
   enableFastWakeupsToRename: Boolean = true,
@@ -59,8 +58,6 @@ case class BoomCoreParams(
   bpdRandom: Option[RandomBpdParameters] = None,
   intToFpLatency: Int = 2,
   imulLatency: Int = 3,
-  fetchLatency: Int = 4,
-  renameLatency: Int = 2,
   nPerfCounters: Int = 0,
   numRXQEntries: Int = 4,
   numRCQEntries: Int = 8,
@@ -179,12 +176,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   require (sfmaLatency == dfmaLatency)
 
   val intToFpLatency = boomParams.intToFpLatency
-
-  val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
-  require (fetchLatency == 4) // Only 4-cycle fetch is supported
-  val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
-
-  val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
 
   //************************************
   // Issue Units

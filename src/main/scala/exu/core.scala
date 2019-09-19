@@ -278,8 +278,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         "Num FP  Phys Registers: " + numFpPhysRegs,
         "Max Branch Count      : " + maxBrCount)
     + BoomCoreStringPrefix(
-        "RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0),
-        "Rename Stage Latency  : " + renameLatency) + "\n"
+        "RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0)) + "\n"
     + iregfile.toString + "\n"
     + BoomCoreStringPrefix(
         "Num Slow Wakeup Ports : " + numIrfWritePorts,
