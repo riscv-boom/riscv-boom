@@ -681,9 +681,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       // Fast Wakeup (uses just-issued uops that have known latencies)
       fast_wakeup.bits.uop := iss_uops(i)
       fast_wakeup.valid    := iss_valids(i) &&
-                                iss_uops(i).bypassable &&
-                                iss_uops(i).dst_rtype === RT_FIX &&
-                                iss_uops(i).ldst_val
+                              iss_uops(i).bypassable &&
+                              iss_uops(i).dst_rtype === RT_FIX &&
+                              iss_uops(i).ldst_val &&
+                              !(io.lsu.ld_miss && (iss_uops(i).iw_p1_poisoned || iss_uops(i).iw_p2_poisoned))
 
       // Slow Wakeup (uses write-port to register file)
       slow_wakeup.bits.uop := resp.bits.uop
@@ -721,11 +722,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
 
   for ((renport, intport) <- rename_stage.io.wakeups zip int_ren_wakeups) {
-    // Stop wakeup for bypassable children of spec-loads trying to issue during a ldMiss.
-    renport.valid :=
-       intport.valid &&
-       !(io.lsu.ld_miss && (intport.bits.uop.iw_p1_poisoned || intport.bits.uop.iw_p2_poisoned))
-    renport.bits := intport.bits
+    renport <> intport
   }
   if (usingFPU) {
     for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
