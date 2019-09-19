@@ -127,6 +127,8 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle
   // Perform rollback of rename state (in conjuction with commit.uops).
   val rbk_valids = Vec(retireWidth, Bool())
   val rollback   = Bool()
+
+  val debug_wdata = Vec(retireWidth, UInt(xLen.W))
 }
 
 /**
@@ -307,6 +309,8 @@ class Rob(
     val rob_exception = Mem(numRobRows, Bool())
     val rob_fflags    = Mem(numRobRows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
 
+    val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
+
     //-----------------------------------------------
     // Dispatch: Add Entry to ROB
 
@@ -338,11 +342,6 @@ class Rob(
       when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx))) {
         rob_bsy(row_idx)      := false.B
         rob_unsafe(row_idx)   := false.B
-        if (O3PIPEVIEW_PRINTF) {
-          printf("%d; O3PipeView:complete:%d\n",
-            rob_uop(row_idx).debug_events.fetch_seq,
-            io.debug_tsc)
-        }
       }
       // TODO check that fflags aren't overwritten
       // TODO check that the wb is to a valid ROB entry, give it a time stamp
@@ -359,11 +358,6 @@ class Rob(
         rob_bsy(cidx)    := false.B
         assert (rob_val(cidx) === true.B, "[rob] store writing back to invalid entry.")
         assert (rob_bsy(cidx) === true.B, "[rob] store writing back to a not-busy entry.")
-
-        if (O3PIPEVIEW_PRINTF) {
-          printf("%d; O3PipeView:complete:%d\n",
-            rob_uop(GetRowIdx(clr_rob_idx.bits)).debug_events.fetch_seq, io.debug_tsc)
-        }
       }
     }
     for (clr <- io.lsu_clr_unsafe) {
@@ -493,7 +487,7 @@ class Rob(
     for (i <- 0 until numWakeupPorts) {
       val rob_idx = io.wb_resps(i).bits.uop.rob_idx
       when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
-        rob_uop(GetRowIdx(rob_idx)).debug_wdata := io.debug_wb_wdata(i)
+        rob_debug_wdata(GetRowIdx(rob_idx)) := io.debug_wb_wdata(i)
       }
       val temp_uop = rob_uop(GetRowIdx(rob_idx))
 
@@ -507,7 +501,7 @@ class Rob(
                temp_uop.ldst_val && temp_uop.pdst =/= io.wb_resps(i).bits.uop.pdst),
                "[rob] writeback (" + i + ") occurred to the wrong pdst.")
     }
-    io.commit.uops(w).debug_wdata := rob_uop(rob_head).debug_wdata
+    io.commit.debug_wdata(w) := rob_debug_wdata(rob_head)
 
     //--------------------------------------------------
     // Debug: handle passing out signals to printf in dpath
