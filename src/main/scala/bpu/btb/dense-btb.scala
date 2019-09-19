@@ -65,7 +65,7 @@ class DenseBTB(val bankBytes: Int)(implicit p: Parameters) extends BoomBTB
     val tag      = UInt(tagSz.W)
     val offset   = UInt(offsetSz.W)
     val bpd_type = BpredType()
-    val cfi_type = CfiType()
+    val cfi_type = UInt(CFI_SZ.W)
     val cfi_idx  = UInt(log2Ceil(fetchWidth).W)
   }
 

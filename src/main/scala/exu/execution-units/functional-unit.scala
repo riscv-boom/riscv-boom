@@ -189,7 +189,7 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle
   val rxq_idx    = UInt(log2Ceil(numRxqEntries).W) // ditto for RoCC queue
   val taken      = Bool()                     // which direction did the branch go?
   val is_jr      = Bool() // TODO remove use cfi_type instead
-  val cfi_type   = CfiType()
+  val cfi_type   = UInt(CFI_SZ.W)
 
   // for stats
   val btb_made_pred  = Bool()
@@ -532,9 +532,9 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     brinfo.stq_idx        := uop.stq_idx
     brinfo.rxq_idx        := uop.rxq_idx
     brinfo.is_jr          := pc_sel === PC_JALR
-    brinfo.cfi_type       := Mux(uop.is_jal, CfiType.jal,
-                             Mux(pc_sel === PC_JALR, CfiType.jalr,
-                             Mux(uop.is_br_or_jmp, CfiType.branch, CfiType.none)))
+    brinfo.cfi_type       := Mux(uop.is_jal, CFI_JAL,
+                             Mux(pc_sel === PC_JALR, CFI_JALR,
+                             Mux(uop.is_br_or_jmp, CFI_BR, CFI_X)))
     brinfo.taken          := is_taken
     brinfo.btb_mispredict := btb_mispredict
     brinfo.bpd_mispredict := bpd_mispredict
@@ -559,9 +559,9 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     br_unit.btb_update.bits.target   := (target.asSInt & (-coreInstBytes).S).asUInt
     br_unit.btb_update.bits.taken    := is_taken   // was this branch/jal/jalr "taken"
     br_unit.btb_update.bits.cfi_type :=
-      Mux(uop.is_jal                , CfiType.jal,
-      Mux(uop.is_jump && !uop.is_jal, CfiType.jalr,
-                                      CfiType.branch))
+      Mux(uop.is_jal                , CFI_JAL,
+      Mux(uop.is_jump && !uop.is_jal, CFI_JALR,
+                                      CFI_BR))
     br_unit.btb_update.bits.bpd_type :=
       Mux(uop.is_ret,  BpredType.RET,
       Mux(uop.is_call, BpredType.CALL,

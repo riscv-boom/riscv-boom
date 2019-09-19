@@ -183,18 +183,6 @@ class DebugStageEvents extends Bundle()
   val fetch_seq        = UInt(32.W)
 }
 
-/**
- * Object to get type of control flow instruction
- */
-object CfiType
-{
-  def SZ = 3
-  def apply() = UInt(SZ.W)
-  def none = 0.U
-  def branch = 1.U
-  def jal = 2.U
-  def jalr = 3.U
-}
 
 /**
  * MicroOp with data
