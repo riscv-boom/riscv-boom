@@ -40,7 +40,6 @@ case class BoomCoreParams(
   enableFastLoadUse: Boolean = true,
   enableCommitMapTable: Boolean = false,
   enableFastPNR: Boolean = false,
-  enableFastWakeupsToRename: Boolean = true,
   enableBTBContainsBranches: Boolean = true,
   enableBranchPredictor: Boolean = true,
   enableBTB: Boolean = true,
@@ -246,7 +245,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableCommitMapTable = boomParams.enableCommitMapTable
   require(!enableCommitMapTable) // TODO Fix the commit map table.
   val enableFastPNR = boomParams.enableFastPNR
-  val enableFastWakeupsToRename = boomParams.enableFastWakeupsToRename
 
   //************************************
   // Implicitly calculated constants

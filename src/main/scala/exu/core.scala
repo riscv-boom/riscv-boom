@@ -88,15 +88,15 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     fp_pipeline.io.wb_pdsts  := DontCare
   }
 
-  val numIrfWritePorts        = exe_units.numIrfWritePorts
+  val numIrfWritePorts        = exe_units.numIrfWritePorts + memWidth
   val numLlIrfWritePorts      = exe_units.numLlIrfWritePorts
   val numIrfReadPorts         = exe_units.numIrfReadPorts
 
   val numFastWakeupPorts      = exe_units.count(_.bypassable)
   val numAlwaysBypassable     = exe_units.count(_.alwaysBypassable)
 
-  val numIntIssueWakeupPorts  = numIrfWritePorts + memWidth + numFastWakeupPorts - numAlwaysBypassable // + memWidth for ll_wb
-  val numIntRenameWakeupPorts = if (enableFastWakeupsToRename) numIntIssueWakeupPorts else numIrfWritePorts + 1
+  val numIntIssueWakeupPorts  = numIrfWritePorts + numFastWakeupPorts - numAlwaysBypassable // + memWidth for ll_wb
+  val numIntRenameWakeupPorts = numIntIssueWakeupPorts
   val numFpWakeupPorts        = if (usingFPU) fp_pipeline.io.wakeups.length else 0
 
   val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
@@ -112,10 +112,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val iregfile         = Module(new RegisterFileSynthesizable(
                              numIntPhysRegs,
                              numIrfReadPorts,
-                             numIrfWritePorts + memWidth, // + memWidth for ll writebacks
+                             numIrfWritePorts,
                              xLen,
                              Seq.fill(memWidth) {true} ++ exe_units.bypassable_write_port_mask)) // bypassable ll_wb
-
 
   // wb arbiter for the 0th ll writeback
   // TODO: should this be a multi-arb?
@@ -130,7 +129,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                            exe_units.numTotalBypassPorts,
                            xLen))
   val rob              = Module(new Rob(
-                           numIrfWritePorts + memWidth + numFpWakeupPorts, // +memWidth for ll writebacks
+                           numIrfWritePorts + numFpWakeupPorts, // +memWidth for ll writebacks
                            numFpWakeupPorts))
   // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
   val int_iss_wakeups  = Wire(Vec(numIntIssueWakeupPorts, Valid(new ExeUnitResp(xLen))))
@@ -691,11 +690,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         iss_wu_idx += 1
       }
 
-      if (exe_units(i).bypassable && enableFastWakeupsToRename) {
+      if (exe_units(i).bypassable) {
         int_ren_wakeups(ren_wu_idx) := fast_wakeup
         ren_wu_idx += 1
       }
-      if (!exe_units(i).alwaysBypassable || !enableFastWakeupsToRename) {
+      if (!exe_units(i).alwaysBypassable) {
         int_ren_wakeups(ren_wu_idx) := slow_wakeup
         ren_wu_idx += 1
       }
@@ -703,7 +702,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
   require (iss_wu_idx == numIntIssueWakeupPorts)
   require (ren_wu_idx == numIntRenameWakeupPorts)
-  require (iss_wu_idx == ren_wu_idx || !enableFastWakeupsToRename)
+  require (iss_wu_idx == ren_wu_idx)
 
   // Perform load-hit speculative wakeup through a special port (performs a poison wake-up).
   issue_units map { iu =>
@@ -1045,7 +1044,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
   }
 
-  require(cnt == numIrfWritePorts + memWidth)
+  require(cnt == numIrfWritePorts)
   if (usingFPU) {
     for ((wdata, wakeup) <- fp_pipeline.io.debug_wb_wdata zip fp_pipeline.io.wakeups) {
       rob.io.wb_resps(cnt) <> wakeup
