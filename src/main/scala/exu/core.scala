@@ -110,21 +110,13 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val issue_units      = new boom.exu.IssueUnits(numIntIssueWakeupPorts)
   val dispatcher       = Module(new BasicDispatcher)
 
-  val iregfile         = if (enableCustomRf) {
-                           Module(new RegisterFileSeqCustomArray(
+  val iregfile         = Module(new RegisterFileSynthesizable(
                              numIntPhysRegs,
                              numIrfReadPorts,
                              numIrfWritePorts + memWidth, // + memWidth for ll writebacks
                              xLen,
                              Seq.fill(memWidth) {true} ++ exe_units.bypassable_write_port_mask)) // bypassable ll_wb
-                         } else {
-                           Module(new RegisterFileSynthesizable(
-                             numIntPhysRegs,
-                             numIrfReadPorts,
-                             numIrfWritePorts + memWidth, // + memWidth for ll writebacks
-                             xLen,
-                             Seq.fill(memWidth) {true} ++ exe_units.bypassable_write_port_mask)) // bypassable ll_wb
-                         }
+
 
   // wb arbiter for the 0th ll writeback
   // TODO: should this be a multi-arb?

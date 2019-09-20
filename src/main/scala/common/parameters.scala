@@ -33,8 +33,6 @@ case class BoomCoreParams(
   numStqEntries: Int = 16,
   numIntPhysRegisters: Int = 96,
   numFpPhysRegisters: Int = 64,
-  enableCustomRf: Boolean = false,
-  enableCustomRfModel: Boolean = true,
   maxBrCount: Int = 4,
   numFetchBufferEntries: Int = 16,
   enableAgePriorityIssue: Boolean = true,
@@ -274,10 +272,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   require ((numLdqEntries-1) > coreWidth)
   require ((numStqEntries-1) > coreWidth)
 
-  //************************************
-  // Custom Logic
-  val enableCustomRf      = boomParams.enableCustomRf
-  val enableCustomRfModel = boomParams.enableCustomRfModel
 
   //************************************
   // Other Non/Should-not-be sythesizable modules
