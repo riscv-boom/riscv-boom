@@ -265,7 +265,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         "Issue Width           : " + issueParams.map(_.issueWidth).sum,
         "ROB Size              : " + numRobEntries,
         "Issue Window Size     : " + issueParams.map(_.numEntries) + issStr,
-        "Load/Store Unit Size  : " + NUM_LDQ_ENTRIES + "/" + NUM_STQ_ENTRIES,
+        "Load/Store Unit Size  : " + numLdqEntries + "/" + numStqEntries,
         "Num Int Phys Registers: " + numIntPhysRegs,
         "Num FP  Phys Registers: " + numFpPhysRegs,
         "Max Branch Count      : " + maxBrCount)
