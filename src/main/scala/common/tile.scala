@@ -201,7 +201,7 @@ class BoomTile(
 }
 
 /**
- * BOOM tile implicit
+ * BOOM tile implementation
  *
  * @param outer top level BOOM tile
  */
