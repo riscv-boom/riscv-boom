@@ -172,9 +172,9 @@ class RegisterRead(
     for (b <- 0 until io.bypass.getNumPorts)
     {
       // can't use "io.bypass.valid(b) since it would create a combinational loop on branch kills"
-      rs1_cases ++= Array((io.bypass.valid(b) && (prs1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
+      rs1_cases ++= Array((io.bypass.valid(b) && (prs1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).rf_wen
         && io.bypass.uop(b).dst_rtype === RT_FIX && lrs1_rtype === RT_FIX && (prs1 =/= 0.U), io.bypass.data(b)))
-      rs2_cases ++= Array((io.bypass.valid(b) && (prs2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).ctrl.rf_wen
+      rs2_cases ++= Array((io.bypass.valid(b) && (prs2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).rf_wen
         && io.bypass.uop(b).dst_rtype === RT_FIX && lrs2_rtype === RT_FIX && (prs2 =/= 0.U), io.bypass.data(b)))
     }
 

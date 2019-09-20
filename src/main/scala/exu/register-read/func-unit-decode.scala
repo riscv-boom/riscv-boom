@@ -333,7 +333,6 @@ class RegisterReadDecode(supportedUnits: SupportedFuncUnits)(implicit p: Paramet
 
   // rrd_use_alupipe is unused
   io.rrd_uop.ctrl.br_type := rrd_cs.br_type
-  io.rrd_uop.ctrl.rf_wen  := rrd_cs.rf_wen
   io.rrd_uop.ctrl.op1_sel := rrd_cs.op1_sel
   io.rrd_uop.ctrl.op2_sel := rrd_cs.op2_sel
   io.rrd_uop.ctrl.imm_sel := rrd_cs.imm_sel
