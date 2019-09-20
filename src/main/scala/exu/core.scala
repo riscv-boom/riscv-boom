@@ -60,7 +60,6 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
     val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
     val trace = Output(Vec(coreParams.retireWidth,
       new freechips.rocketchip.rocket.TracedInstruction))
-    val release = Flipped(Valid(new boom.lsu.ReleaseInfo))
     val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
   }
 }

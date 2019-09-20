@@ -29,7 +29,6 @@ import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{ICacheLogicalTree
 import boom.bpu._
 import boom.common._
 import boom.exu.{BranchUnitResp, CommitExceptionSignals}
-import boom.lsu.{CanHaveBoomPTW, CanHaveBoomPTWModule}
 import boom.util.{BoomCoreStringPrefix}
 
 /**
@@ -334,31 +333,4 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     + icache.toString)
 }
 
-/**
- * Mix-in for constructing tiles that have an ICache-based pipeline frontend
- */
-trait HasBoomICacheFrontend extends CanHaveBoomPTW
-{
-  this: BaseTile =>
-  val module: HasBoomICacheFrontendModule
-  val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, hartId))
-  tlMasterXbar.node := frontend.masterNode
-  connectTLSlave(frontend.slaveNode, tileParams.core.fetchBytes)
-  nPTWPorts += 1
-  nPTWPorts += 1 // boom -- needs an extra PTW port for its LSU.
-
-  private val deviceOpt = if (tileParams.icache.get.itimAddr.isDefined) Some(frontend.icache.device) else None
-
-  val iCacheLogicalTreeNode = new ICacheLogicalTreeNode(deviceOpt, tileParams.icache.get)
-
-}
-
-/**
- * Mix-in for constructing tiles that have an ICache-based pipeline frontend
- */
-trait HasBoomICacheFrontendModule extends CanHaveBoomPTWModule
-{
-  val outer: HasBoomICacheFrontend
-  ptwPorts += outer.frontend.module.io.ptw
-}
 
