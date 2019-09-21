@@ -33,14 +33,11 @@ case class BoomCoreParams(
   numStqEntries: Int = 16,
   numIntPhysRegisters: Int = 96,
   numFpPhysRegisters: Int = 64,
-  enableCustomRf: Boolean = false,
-  enableCustomRfModel: Boolean = true,
   maxBrCount: Int = 4,
   numFetchBufferEntries: Int = 16,
   enableAgePriorityIssue: Boolean = true,
   enablePrefetching: Boolean = false,
   enableFastLoadUse: Boolean = true,
-  enableBrResolutionRegister: Boolean = true,
   enableCommitMapTable: Boolean = false,
   enableFastPNR: Boolean = false,
   enableFastWakeupsToRename: Boolean = true,
@@ -59,8 +56,6 @@ case class BoomCoreParams(
   bpdRandom: Option[RandomBpdParameters] = None,
   intToFpLatency: Int = 2,
   imulLatency: Int = 3,
-  fetchLatency: Int = 4,
-  renameLatency: Int = 2,
   nPerfCounters: Int = 0,
   numRXQEntries: Int = 4,
   numRCQEntries: Int = 8,
@@ -152,8 +147,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val numRcqEntries = boomParams.numRCQEntries       // number of RoCC commit queue entries. This can be large since it just keeps a pdst
   val numLdqEntries = boomParams.numLdqEntries       // number of LAQ entries
   val numStqEntries = boomParams.numStqEntries       // number of SAQ/SDQ entries
-  val NUM_LDQ_ENTRIES = numLdqEntries // TODO Remove these after
-  val NUM_STQ_ENTRIES = numStqEntries // completion of lsu refactor.
   val maxBrCount    = boomParams.maxBrCount          // number of branches we can speculate simultaneously
   val ftqSz         = boomParams.ftq.nEntries        // number of FTQ entries
   val numFetchBufferEntries = boomParams.numFetchBufferEntries // number of instructions that stored between fetch&decode
@@ -179,12 +172,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   require (sfmaLatency == dfmaLatency)
 
   val intToFpLatency = boomParams.intToFpLatency
-
-  val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
-  require (fetchLatency == 4) // Only 4-cycle fetch is supported
-  val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
-
-  val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
 
   //************************************
   // Issue Units
@@ -283,10 +270,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   require ((numLdqEntries-1) > coreWidth)
   require ((numStqEntries-1) > coreWidth)
 
-  //************************************
-  // Custom Logic
-  val enableCustomRf      = boomParams.enableCustomRf
-  val enableCustomRfModel = boomParams.enableCustomRfModel
 
   //************************************
   // Other Non/Should-not-be sythesizable modules

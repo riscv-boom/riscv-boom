@@ -109,21 +109,13 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val issue_units      = new boom.exu.IssueUnits(numIntIssueWakeupPorts)
   val dispatcher       = Module(new BasicDispatcher)
 
-  val iregfile         = if (enableCustomRf) {
-                           Module(new RegisterFileSeqCustomArray(
+  val iregfile         = Module(new RegisterFileSynthesizable(
                              numIntPhysRegs,
                              numIrfReadPorts,
                              numIrfWritePorts + memWidth, // + memWidth for ll writebacks
                              xLen,
                              Seq.fill(memWidth) {true} ++ exe_units.bypassable_write_port_mask)) // bypassable ll_wb
-                         } else {
-                           Module(new RegisterFileSynthesizable(
-                             numIntPhysRegs,
-                             numIrfReadPorts,
-                             numIrfWritePorts + memWidth, // + memWidth for ll writebacks
-                             xLen,
-                             Seq.fill(memWidth) {true} ++ exe_units.bypassable_write_port_mask)) // bypassable ll_wb
-                         }
+
 
   // wb arbiter for the 0th ll writeback
   // TODO: should this be a multi-arb?
@@ -272,13 +264,12 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         "Issue Width           : " + issueParams.map(_.issueWidth).sum,
         "ROB Size              : " + numRobEntries,
         "Issue Window Size     : " + issueParams.map(_.numEntries) + issStr,
-        "Load/Store Unit Size  : " + NUM_LDQ_ENTRIES + "/" + NUM_STQ_ENTRIES,
+        "Load/Store Unit Size  : " + numLdqEntries + "/" + numStqEntries,
         "Num Int Phys Registers: " + numIntPhysRegs,
         "Num FP  Phys Registers: " + numFpPhysRegs,
         "Max Branch Count      : " + maxBrCount)
     + BoomCoreStringPrefix(
-        "RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0),
-        "Rename Stage Latency  : " + renameLatency) + "\n"
+        "RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0)) + "\n"
     + iregfile.toString + "\n"
     + BoomCoreStringPrefix(
         "Num Slow Wakeup Ports : " + numIrfWritePorts,
