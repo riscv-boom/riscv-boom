@@ -106,7 +106,12 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                          else null
   val rename_stages    = if (usingFPU) Seq(rename_stage, fp_rename_stage) else Seq(rename_stage)
 
-  val issue_units      = new boom.exu.IssueUnits(numIntIssueWakeupPorts)
+  val mem_iss_unit     = Module(new IssueUnitCollapsing(memIssueParam, numIntIssueWakeupPorts))
+  mem_iss_unit.suggestName("mem_issue_unit")
+  val int_iss_unit     = Module(new IssueUnitCollapsing(intIssueParam, numIntIssueWakeupPorts))
+  int_iss_unit.suggestName("int_issue_unit")
+
+  val issue_units      = Seq(mem_iss_unit, int_iss_unit)
   val dispatcher       = Module(new BasicDispatcher)
 
   val iregfile         = Module(new RegisterFileSynthesizable(
@@ -737,14 +742,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       }
 
       if (exe_unit.hasMem) {
-        iss_valids(iss_idx) := issue_units.mem_iq.io.iss_valids(mem_iss_cnt)
-        iss_uops(iss_idx)   := issue_units.mem_iq.io.iss_uops(mem_iss_cnt)
-        issue_units.mem_iq.io.fu_types(mem_iss_cnt) := fu_types
+        iss_valids(iss_idx) := mem_iss_unit.io.iss_valids(mem_iss_cnt)
+        iss_uops(iss_idx)   := mem_iss_unit.io.iss_uops(mem_iss_cnt)
+        mem_iss_unit.io.fu_types(mem_iss_cnt) := fu_types
         mem_iss_cnt += 1
       } else {
-        iss_valids(iss_idx) := issue_units.int_iq.io.iss_valids(int_iss_cnt)
-        iss_uops(iss_idx)   := issue_units.int_iq.io.iss_uops(int_iss_cnt)
-        issue_units.int_iq.io.fu_types(int_iss_cnt) := fu_types
+        iss_valids(iss_idx) := int_iss_unit.io.iss_valids(int_iss_cnt)
+        iss_uops(iss_idx)   := int_iss_unit.io.iss_uops(int_iss_cnt)
+        int_iss_unit.io.fu_types(int_iss_cnt) := fu_types
         int_iss_cnt += 1
       }
       iss_idx += 1
@@ -757,10 +762,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   issue_units.map(_.io.flush_pipeline := rob.io.flush.valid)
 
   // Load-hit Misspeculations
-  require (issue_units.count(_.iqType == IQT_MEM.litValue) == 1)
-  val mem_iq = issue_units.mem_iq
-
-  require (mem_iq.issueWidth <= 2)
+  require (mem_iss_unit.issueWidth <= 2)
   issue_units.map(_.io.ld_miss := io.lsu.ld_miss)
 
   mem_units.map(u => u.io.com_exception := rob.io.flush.valid)
