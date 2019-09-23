@@ -391,8 +391,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val branch_mask_full = Wire(Vec(coreWidth, Bool()))
 
   for (w <- 0 until coreWidth) {
-    dec_valids(w)                      := io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid &&
-                                          !dec_finished_mask(w)
+    dec_valids(w)                      := !dec_finished_mask(w) &&
+                                          ((io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid) || csr.io.interrupt)
     decode_units(w).io.enq.uop         := dec_fbundle.uops(w).bits
     decode_units(w).io.status          := csr.io.status
     decode_units(w).io.csr_decode      <> csr.io.decode(w)
