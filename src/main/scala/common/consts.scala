@@ -68,6 +68,7 @@ trait IQType
   val IQT_MFP = 6.U(IQT_SZ.W)
 }
 
+
 /**
  * Mixin for scalar operation constants
  */
@@ -82,6 +83,13 @@ trait ScalarOpConstants
 
   //************************************
   // Control Signals
+
+  // CFI types
+  val CFI_SZ   = 3
+  val CFI_X    = 0.U(CFI_SZ.W) // Not a CFI instruction
+  val CFI_BR   = 1.U(CFI_SZ.W) // Branch
+  val CFI_JAL  = 2.U(CFI_SZ.W) // JAL
+  val CFI_JALR = 3.U(CFI_SZ.W) // JALR
 
   // PC Select Signal
   val PC_PLUS4 = 0.U(2.W)  // PC + 4

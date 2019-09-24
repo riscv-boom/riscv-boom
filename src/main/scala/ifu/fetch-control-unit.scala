@@ -435,7 +435,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     f3_btb_update_bits.target   := f3_bpd_target
     f3_btb_update_bits.cfi_idx  := f3_bpd_br_idx
     f3_btb_update_bits.bpd_type := BpredType.BRANCH
-    f3_btb_update_bits.cfi_type := CfiType.branch
+    f3_btb_update_bits.cfi_type := CFI_BR
     f3_btb_update_bits.is_rvc   := is_rvc(f3_bpd_br_idx)
     f3_btb_update_bits.is_edge  := f3_fetch_bundle.edge_inst && (f3_bpd_br_idx === 0.U)
   }
@@ -618,7 +618,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
   val last_pc         = Reg(UInt(vaddrBitsExtended.W))
   val last_target     = Reg(UInt(vaddrBitsExtended.W))
   val last_nextlinepc = Reg(UInt(vaddrBitsExtended.W))
-  val last_cfi_type   = Reg(UInt(CfiType.SZ.W))
+  val last_cfi_type   = Reg(UInt(CFI_SZ.W))
 
   val cfi_idx         = (fetchWidth-1).U - PriorityEncoder(Reverse(f3_fetch_bundle.mask))
   val fetch_pc        = f3_fetch_bundle.pc
@@ -640,16 +640,16 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
 
     val cfi_type = GetCfiType(curr_inst)
     last_cfi_type := cfi_type
-    last_target := Mux(cfi_type === CfiType.jal,
+    last_target := Mux(cfi_type === CFI_JAL,
       ComputeJALTarget(cfi_pc, curr_inst, xLen),
       ComputeBranchTarget(cfi_pc, curr_inst, xLen))
 
     when (last_valid) {
       // check for error
-      when (last_cfi_type === CfiType.none) {
+      when (last_cfi_type === CFI_X) {
         assert (fetch_pc ===  last_nextlinepc,
           "[fetch] A non-cfi instruction is followed by the wrong instruction.")
-      } .elsewhen (last_cfi_type === CfiType.jal) {
+      } .elsewhen (last_cfi_type === CFI_JAL) {
         // ignore misaligned fetches -- we should have marked the instruction as excepting,
         // but when it makes a misaligned fetch request the I$ gives us back an aligned PC.
         val f_pc = (fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
@@ -662,7 +662,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
             fetch_pc, last_target, last_nextlinepc)
         }
         assert (f_pc === targ, "[fetch] JAL is followed by the wrong instruction.")
-      } .elsewhen (last_cfi_type === CfiType.branch) {
+      } .elsewhen (last_cfi_type === CFI_BR) {
         // again, ignore misaligned fetches -- an exception should be caught.
         val f_pc = (fetch_pc(vaddrBitsExtended-1, log2Ceil(coreInstBytes))
                   - Mux(f3_fetch_bundle.edge_inst, 1.U, 0.U))
@@ -675,7 +675,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
           "[fetch] branch is followed by the wrong instruction.")
       } .otherwise {
         // we can't verify JALR instruction stream integrity --  /throws hands up.
-        assert (last_cfi_type === CfiType.jalr, "[fetch] Should be a JALR if none of the others were valid.")
+        assert (last_cfi_type === CFI_JALR, "[fetch] Should be a JALR if none of the others were valid.")
       }
     }
   }
@@ -694,7 +694,7 @@ class FetchControlUnit(implicit p: Parameters) extends BoomModule
     // <beq, jal, bne, ...>, either the beq or jal may be the last instruction, but because
     // the jal dominates everything after it, nothing valid can be after it.
     val f3_is_jal = VecInit(f3_fetch_bundle.insts map {x =>
-      GetCfiType(ExpandRVC(x)) === CfiType.jal}).asUInt & f3_fetch_bundle.mask
+      GetCfiType(ExpandRVC(x)) === CFI_JAL}).asUInt & f3_fetch_bundle.mask
     val f3_jal_idx = PriorityEncoder(f3_is_jal)
     val has_jal = f3_is_jal.orR
 

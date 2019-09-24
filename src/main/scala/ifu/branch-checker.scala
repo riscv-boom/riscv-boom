@@ -75,18 +75,18 @@ class BranchChecker(implicit p: Parameters) extends BoomModule
   val bpd_predicted_taken = io.bpd_resp.valid && io.bpd_resp.bits.takens(io.btb_resp.bits.cfi_idx)
 
   when (io.btb_resp.valid) {
-    when (io.btb_resp.bits.cfi_type === CfiType.branch && (io.btb_resp.bits.taken || bpd_predicted_taken)) {
+    when (io.btb_resp.bits.cfi_type === CFI_BR && (io.btb_resp.bits.taken || bpd_predicted_taken)) {
       wrong_cfi := !io.is_br(btb_idx)
       wrong_target := io.br_targs(btb_idx) =/= btb_target
-    } .elsewhen (io.btb_resp.bits.cfi_type === CfiType.jal) {
+    } .elsewhen (io.btb_resp.bits.cfi_type === CFI_JAL) {
       wrong_cfi := !io.is_jal(btb_idx)
       wrong_target := io.jal_targs(btb_idx) =/= btb_target
-    } .elsewhen (io.btb_resp.bits.cfi_type === CfiType.jalr) {
+    } .elsewhen (io.btb_resp.bits.cfi_type === CFI_JALR) {
       wrong_cfi := !io.is_jr(btb_idx)
     } .otherwise {
-      wrong_cfi := io.btb_resp.bits.cfi_type === CfiType.none && io.btb_resp.bits.taken
+      wrong_cfi := io.btb_resp.bits.cfi_type === CFI_X && io.btb_resp.bits.taken
       when (io.valid) {
-        assert (io.btb_resp.bits.cfi_type =/= CfiType.none, "[fetch] predicted on a non-cfi type.")
+        assert (io.btb_resp.bits.cfi_type =/= CFI_X, "[fetch] predicted on a non-cfi type.")
       }
     }
   }
@@ -132,7 +132,7 @@ class BranchChecker(implicit p: Parameters) extends BoomModule
   io.btb_update.bits.taken    := true.B
   io.btb_update.bits.cfi_idx  := jal_idx
   io.btb_update.bits.bpd_type := Mux(io.is_call(jal_idx), BpredType.CALL, BpredType.JUMP)
-  io.btb_update.bits.cfi_type := CfiType.jal
+  io.btb_update.bits.cfi_type := CFI_JAL
   io.btb_update.bits.is_rvc   := io.is_rvc(jal_idx)
   io.btb_update.bits.is_edge  := io.edge_inst && (jal_idx === 0.U)
 

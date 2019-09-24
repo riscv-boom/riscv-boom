@@ -592,7 +592,7 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
     val is_ret  = Output(Bool())
     val is_call = Output(Bool())
     val target = Output(UInt(vaddrBitsExtended.W))
-    val cfi_type = Output(UInt(CfiType.SZ.W))
+    val cfi_type = Output(UInt(CFI_SZ.W))
   })
 
   val bpd_csignals =
@@ -626,12 +626,12 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
                               ComputeJALTarget(io.pc, io.inst, xLen))
   io.cfi_type :=
     Mux(cs_is_jalr,
-      CfiType.jalr,
+      CFI_JALR,
     Mux(cs_is_jal,
-      CfiType.jal,
+      CFI_JAL,
     Mux(cs_is_br,
-      CfiType.branch,
-      CfiType.none)))
+      CFI_BR,
+      CFI_X)))
 }
 
 /**

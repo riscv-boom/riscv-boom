@@ -63,7 +63,7 @@ class BTBsa(val bankBytes: Int)(implicit p: Parameters) extends BoomBTB
     val target   = UInt((vaddrBits - log2Ceil(coreInstBytes)).W)
     val cfi_idx  = UInt(log2Ceil(fetchWidth).W)
     val bpd_type = BpredType()
-    val cfi_type = CfiType()
+    val cfi_type = UInt(CFI_SZ.W)
     val is_rvc   = Bool()
     val is_edge  = Bool()
   }
