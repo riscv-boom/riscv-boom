@@ -34,10 +34,12 @@ class BoomDCacheReqInternal(implicit p: Parameters) extends BoomDCacheReq()(p)
 }
 
 
-class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
+class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   with HasL1HellaCacheParameters
 {
   val io = IO(new Bundle {
+    val id = Input(UInt())
+
     val req_pri_val = Input(Bool())
     val req_pri_rdy = Output(Bool())
     val req_sec_val = Input(Bool())
@@ -209,7 +211,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     io.mem_acquire.valid := true.B
     // TODO: Use AcquirePerm if just doing permissions acquire
     io.mem_acquire.bits  := edge.AcquireBlock(
-      fromSource      = id.U,
+      fromSource      = io.id,
       toAddress       = Cat(req_tag, req_idx) << blockOffBits,
       lgSize          = lgCacheBlockBytes.U,
       growPermissions = grow_param)._2
@@ -220,7 +222,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     when (edge.hasData(io.mem_grant.bits)) {
       io.mem_grant.ready      := io.lb_write.ready
       io.lb_write.valid       := io.mem_grant.valid
-      io.lb_write.bits.id     := id.U
+      io.lb_write.bits.id     := io.id
       io.lb_write.bits.offset := refill_address_inc >> rowOffBits
       io.lb_write.bits.data   := io.mem_grant.bits.data
     } .otherwise {
@@ -255,7 +257,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
 
     rpq.io.deq.ready       := io.resp.ready && io.lb_read.ready && drain_load
     io.lb_read.valid       := rpq.io.deq.valid && drain_load
-    io.lb_read.bits.id     := id.U
+    io.lb_read.bits.id     := io.id
     io.lb_read.bits.offset := rpq.io.deq.bits.addr >> rowOffBits
 
     io.resp.valid     := rpq.io.deq.valid && io.lb_read.fire() && drain_load
@@ -308,7 +310,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     io.wb_req.bits.idx       := req_idx
     io.wb_req.bits.param     := shrink_param
     io.wb_req.bits.way_en    := req.way_en
-    io.wb_req.bits.source    := id.U
+    io.wb_req.bits.source    := io.id
     io.wb_req.bits.voluntary := true.B
     when (io.wb_req.fire()) {
       state := s_wb_resp
@@ -319,7 +321,7 @@ class BoomMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomMod
     }
   } .elsewhen (state === s_commit_line) {
     io.lb_read.valid       := true.B
-    io.lb_read.bits.id     := id.U
+    io.lb_read.bits.id     := io.id
     io.lb_read.bits.offset := refill_ctr
 
     io.refill.valid       := io.lb_read.fire()
@@ -610,7 +612,8 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   val pri_rdy = WireInit(false.B)
   val pri_val = req.valid && sdq_rdy && cacheable && !idx_match(req_idx)
   val mshrs = (0 until cfg.nMSHRs) map { i =>
-    val mshr = Module(new BoomMSHR(i))
+    val mshr = Module(new BoomMSHR)
+    mshr.io.id := i.U(log2Ceil(cfg.nMSHRs).W)
 
     for (w <- 0 until memWidth) {
       idx_matches(w)(i) := mshr.io.idx.valid && mshr.io.idx.bits === io.req(w).bits.addr(untagBits-1,blockOffBits)
