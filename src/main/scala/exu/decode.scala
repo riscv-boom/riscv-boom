@@ -515,9 +515,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
 
   uop.uopc       := cs.uopc
   uop.iq_type    := cs.iq_type
-  if (usingUnifiedMemIntIQs) {
-    when (cs.iq_type === IQT_MEM) { uop.iq_type := IQT_INT }
-  }
   uop.fu_code    := cs.fu_code
 
   // x-registers placed in 0-31, f-registers placed in 32-63.

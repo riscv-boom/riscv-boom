@@ -203,7 +203,7 @@ jobs:
                 key: smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/chipyard"
-    prepare-smallrv32unifiedboomconfig:
+    prepare-smallrv32boomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.10
         environment:
@@ -224,11 +224,11 @@ jobs:
                 keys:
                     - verilator-v12-{{ checksum "CHIPYARD.hash" }}
             - run:
-                name: Building SmallRV32UnifiedBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh rv32unifiedboom
+                name: Building SmallRV32BoomConfig using Verilator
+                command: .circleci/do-rtl-build.sh rv32boom
                 no_output_timeout: 120m
             - save_cache:
-                key: smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+                key: smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/chipyard"
     smallboomconfig-run-csmith-tests:
@@ -437,7 +437,7 @@ jobs:
             - run:
                 name: Run SmallBoomAndRocketConfig riscv tests
                 command: .circleci/run-tests.sh boomandrocket
-    smallrv32unifiedboomconfig-run-csmith-tests:
+    smallrv32boomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.10
         environment:
@@ -450,15 +450,15 @@ jobs:
                     - riscv-tools-installed-v4-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+                    - smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
             - restore_cache:
                 keys:
                     - verilator-v12-{{ checksum "CHIPYARD.hash" }}
             - run:
-                name: Run SmallRV32UnifiedBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh rv32unifiedboom 50
+                name: Run SmallRV32BoomConfig csmith tests
+                command: .circleci/build-run-csmith-tests.sh rv32boom 50
                 no_output_timeout: 30m
-    smallrv32unifiedboomconfig-run-riscv-tests:
+    smallrv32boomconfig-run-riscv-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.10
         environment:
@@ -471,13 +471,13 @@ jobs:
                     - riscv-tools-installed-v4-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+                    - smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
             - restore_cache:
                 keys:
                     - verilator-v12-{{ checksum "CHIPYARD.hash" }}
             - run:
-                name: Run SmallRV32UnifiedBoomConfig riscv tests
-                command: .circleci/run-tests.sh rv32unifiedboom
+                name: Run SmallRV32BoomConfig riscv tests
+                command: .circleci/run-tests.sh rv32boom
 
 # Order and dependencies of jobs to run
 workflows:
@@ -514,7 +514,7 @@ workflows:
                 requires:
                     - prepare-build-environment
                     - install-riscv-tools
-            - prepare-smallrv32unifiedboomconfig:
+            - prepare-smallrv32boomconfig:
                 requires:
                     - prepare-build-environment
                     - install-riscv-tools
@@ -559,7 +559,7 @@ workflows:
                 requires:
                     - prepare-smallboomandrocketconfig
 
-            # Run the SmallRV32UnifiedBoomConfig tests
-            - smallrv32unifiedboomconfig-run-riscv-tests:
+            # Run the SmallRV32BoomConfig tests
+            - smallrv32boomconfig-run-riscv-tests:
                 requires:
-                    - prepare-smallrv32unifiedboomconfig
+                    - prepare-smallrv32boomconfig

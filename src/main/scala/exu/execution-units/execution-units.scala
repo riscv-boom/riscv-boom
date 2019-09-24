@@ -109,18 +109,15 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
   if (!fpu) {
     val int_width = issueParams.find(_.iqType == IQT_INT.litValue).get.issueWidth
 
-    if (!usingUnifiedMemIntIQs) {
-      for (w <- 0 until memWidth) {
-        val memExeUnit = Module(new ALUExeUnit(
-          hasAlu = false,
-          hasMem = true))
+    for (w <- 0 until memWidth) {
+      val memExeUnit = Module(new ALUExeUnit(
+        hasAlu = false,
+        hasMem = true))
 
-        memExeUnit.io.ll_iresp.ready := DontCare
+      memExeUnit.io.ll_iresp.ready := DontCare
 
-        exe_units += memExeUnit
-      }
+      exe_units += memExeUnit
     }
-    require(!(usingUnifiedMemIntIQs && memWidth != 1))
 
     for (w <- 0 until int_width) {
       def is_nth(n: Int): Boolean = w == ((n) % int_width)
@@ -130,8 +127,7 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
         hasRocc        = is_nth(1) && usingRoCC,
         hasMul         = is_nth(2),
         hasDiv         = is_nth(3),
-        hasIfpu        = is_nth(4) && usingFPU,
-        hasMem         = is_nth(0) && usingUnifiedMemIntIQs))
+        hasIfpu        = is_nth(4) && usingFPU))
       exe_units += alu_exe_unit
     }
   } else {

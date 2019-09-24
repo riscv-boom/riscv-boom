@@ -40,19 +40,6 @@ class WithBoomRV32 extends Config((site, here, up) => {
 })
 
 /**
- * Combines the Memory and Integer Issue Queues. Similar to BOOM v1.
- */
-class WithUnifiedMemIntIQs extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
-    b.copy(core = b.core.copy(
-      issueParams = b.core.issueParams.filter(_.iqType != IQT_MEM.litValue)
-                      .map(iq => if (iq.iqType == IQT_INT.litValue && iq.issueWidth < b.core.decodeWidth)
-                                   iq.copy(issueWidth=b.core.decodeWidth) else iq)
-    ))
-  }
-})
-
-/**
  * Disable support for C-extension (RVC)
  */
 class WithoutBoomRVC extends Config((site, here, up) => {

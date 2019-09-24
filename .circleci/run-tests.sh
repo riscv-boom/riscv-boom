@@ -40,7 +40,7 @@ case $1 in
     boomandrocket)
         run_both ${mapping[$1]}
         ;;
-    rv32unifiedboom)
+    rv32boom)
         run_asm ${mapping[$1]}
         ;;
     *)
