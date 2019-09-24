@@ -184,13 +184,3 @@ class DebugStageEvents extends Bundle()
 }
 
 
-/**
- * MicroOp with data
- *
- * @param data_sz size of data to put with MicroOp
- */
-class MicroOpWithData(val data_sz: Int)(implicit p: Parameters) extends BoomBundle
-  with HasBoomUOP
-{
-  val data = UInt(data_sz.W)
-}

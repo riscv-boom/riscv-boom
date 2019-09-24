@@ -53,7 +53,7 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util.Str
 
 import boom.common._
-import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp, CommitSignals}
+import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp, CommitSignals, ExeUnitResp}
 import boom.util.{BoolToChar, AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, IsOlder, UpdateBrMask}
 
 class LSUExeIO(implicit p: Parameters) extends BoomBundle()(p)
@@ -116,7 +116,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val ldq_full    = Output(Vec(coreWidth, Bool()))
   val stq_full    = Output(Vec(coreWidth, Bool()))
 
-  val fp_stdata   = Flipped(Decoupled(new MicroOpWithData(fLen)))
+  val fp_stdata   = Flipped(Decoupled(new ExeUnitResp(fLen)))
 
   val commit      = Input(new CommitSignals)
   val commit_load_at_rob_head = Input(Bool())

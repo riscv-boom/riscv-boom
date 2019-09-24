@@ -32,7 +32,6 @@ import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue, BoomCoreStringP
 
 /**
  * Response from Execution Unit. Bundles a MicroOp with data
- * TODO rename to something like MicroOpWithData
  *
  * @param dataWidth width of the data coming from the execution unit
  */
