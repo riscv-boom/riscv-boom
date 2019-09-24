@@ -665,7 +665,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       slow_wakeup := DontCare
 
       val resp = exe_units(i).io.iresp
-      assert(!(resp.valid && resp.bits.uop.ctrl.rf_wen && resp.bits.uop.dst_rtype =/= RT_FIX))
+      assert(!(resp.valid && resp.bits.uop.rf_wen && resp.bits.uop.dst_rtype =/= RT_FIX))
 
       // Fast Wakeup (uses just-issued uops that have known latencies)
       fast_wakeup.bits.uop := iss_uops(i)
@@ -677,7 +677,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       // Slow Wakeup (uses write-port to register file)
       slow_wakeup.bits.uop := resp.bits.uop
       slow_wakeup.valid    := resp.valid &&
-                                resp.bits.uop.ctrl.rf_wen &&
+                                resp.bits.uop.rf_wen &&
                                 !resp.bits.uop.bypassable &&
                                 resp.bits.uop.dst_rtype === RT_FIX
 
@@ -953,7 +953,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       val wbdata = wbresp.bits.data
 
       def wbIsValid(rtype: UInt) =
-        wbresp.valid && wbresp.bits.uop.ctrl.rf_wen && wbresp.bits.uop.dst_rtype === rtype
+        wbresp.valid && wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype === rtype
       val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N
 
       iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
@@ -968,12 +968,12 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       assert (!wbIsValid(RT_FLT), "[fppipeline] An FP writeback is being attempted to the Int Regfile.")
 
       assert (!(wbresp.valid &&
-        !wbresp.bits.uop.ctrl.rf_wen &&
+        !wbresp.bits.uop.rf_wen &&
         wbresp.bits.uop.dst_rtype === RT_FIX),
         "[fppipeline] An Int writeback is being attempted with rf_wen disabled.")
 
       assert (!(wbresp.valid &&
-        wbresp.bits.uop.ctrl.rf_wen &&
+        wbresp.bits.uop.rf_wen &&
         wbresp.bits.uop.dst_rtype =/= RT_FIX),
         "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+i+").iresp")
       w_cnt += 1
@@ -1028,7 +1028,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
       rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo)
       rob.io.wb_resps(cnt).bits  <> resp.bits
-      rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.ctrl.rf_wen && wb_uop.dst_rtype === RT_FIX
+      rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
       if (eu.hasFFlags) {
         rob.io.fflags(f_cnt) <> resp.bits.fflags
         f_cnt += 1

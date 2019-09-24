@@ -142,6 +142,9 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val debug_events     = new DebugStageEvents
 
 
+  // Does this register write-back
+  def rf_wen           = dst_rtype =/= RT_X
+
   // Is it possible for this uop to misspeculate, preventing the commit of subsequent uops?
   def unsafe           = uses_ldq || (uses_stq && !is_fence) || (is_br_or_jmp && !is_jal)
 
@@ -150,12 +153,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
 /**
  * Control signals within a MicroOp
- *
- * NOTE: I can't promise these signals get killed/cleared on a mispredict,
- * so I should listen to the corresponding valid bit
- * For example, on a bypassing, we listen to rf_wen to see if bypass is valid,
- * but we "could" be bypassing to a branch which kills us (a false positive combinational loop),
- * so we have to keep the rf_wen enabled, and not dependent on a branch kill signal
  *
  * TODO REFACTOR this, as this should no longer be true, as bypass occurs in stage before branch resolution
  */
@@ -167,7 +164,6 @@ class CtrlSignals extends Bundle()
   val imm_sel     = UInt(IS_X.getWidth.W)
   val op_fcn      = UInt(freechips.rocketchip.rocket.ALU.SZ_ALU_FN.W)
   val fcn_dw      = Bool()
-  val rf_wen      = Bool()
   val csr_cmd     = UInt(freechips.rocketchip.rocket.CSR.SZ.W)
   val is_load     = Bool()   // will invoke TLB address lookup
   val is_sta      = Bool()   // will invoke TLB address lookup
