@@ -1,9 +1,8 @@
-The Chisel HCL
-==============
+The Chisel Hardware Construction Language
+=========================================
 
-The Chisel Hardware Construction Language
------------------------------------------
+BOOM is implemented in the `Chisel hardware construction language <chisel-lang.org>`__.
+Chisel is an embedded DSL within Scala that supports advanced hardware design using highly parameterized generators.
+It is used within multiple projects in academia (e.g. `Rocket Chip <https://github.com/chipsalliance/rocket-chip>`__, `FireSim <https://fires.im/>`__, etc) as well as in industry (`Google Edge TPU <https://www.youtube.com/watch?v=x85342Cny8c>`__).
 
-BOOM is implemented in the Chisel hardware construction language. It
-is a embedded within Scala which allows highly parameterized designs.
-More information about can be found at http://chisel.eecs.berkeley.edu.
+More information about can be found at http://chisel-lang.org.

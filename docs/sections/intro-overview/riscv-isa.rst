@@ -1,11 +1,12 @@
 The RISC-V ISA
 ==============
 
-BOOM implements the RV64GC variant of the RISC-V ISA. This includes the
+The `RISC-V ISA <riscv.org>`__ is a widely adopted open-source ISA suited for a variety of applications.
+It includes a base ISA as well as multiple optional extensions that implement different features.
+BOOM implements the RV64GC variant of the RISC-V ISA (otherwise known as IMAFDC) [1]_. This includes the
 MAFDC extensions and the privileged specification (multiply/divide, AMOs,
-load-reserve/store-conditional, single- and double-precision IEEE
-754-2008 floating point). More information about the RISC-V ISA can be
-found at http://riscv.org.
+load-reserve/store-conditional, single-precision and double-precision IEEE
+754-2008 floating point).
 
 RISC-V provides the following features which make it easy to target with
 high-performance designs:
@@ -44,4 +45,6 @@ high-performance designs:
 
     * This allows decode and rename to proceed in parallel.
 
-BOOM (currently) does not implement the proposed “V" vector extension.
+More information about the RISC-V ISA can be found at http://riscv.org.
+
+.. [1] Currently, BOOM does not implement the proposed “V" vector extension.

@@ -1,5 +1,24 @@
-The BOOM Ecosystem
-==================
+The BOOM Development Ecosystem
+==============================
+
+The BOOM Repository
+------------------------------------
+
+The BOOM repository holds the source code to the BOOM core; it is not a full processor and thus is **NOT A SELF-RUNNING** repository.
+To instantiate a BOOM core, you must use a top-level project to integrate the core into an SoC.
+
+The BOOM core source code can be found in ``boom/src/main/scala``.
+
+The core code structure is shown below:
+
+* ``boom/src/main/scala/``
+
+  * ``bpu/`` - branch predictor unit
+  * ``common/`` - configs mixins, constants, bundles, tile definitions
+  * ``exu/`` - execute/core unit
+  * ``ifu/`` - instruction fetch unit
+  * ``lsu/`` - load/store/memory unit
+  * ``util/`` - utilities
 
 Scala, Chisel, Generators, Configs, Oh My!
 ------------------------------------------

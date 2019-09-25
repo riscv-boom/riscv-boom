@@ -3,9 +3,9 @@ The BOOM Pipeline
 
 .. _boom-pipeline:
 .. figure:: /figures/boom-pipeline.svg
-    :alt: Default BOOM Pipeline with Stages
+    :alt: Simplified BOOM Pipeline with Stages
 
-    Default BOOM Pipeline with Stages
+    Simplified BOOM Pipeline with Stages
 
 Overview
 --------
@@ -15,8 +15,8 @@ Conceptually, BOOM is broken up into 10 stages: **Fetch**, **Decode**,
 **Writeback** and **Commit**. However, many of those stages are
 combined in the current implementation, yielding **seven** stages:
 **Fetch**, **Decode/Rename**, **Rename/Dispatch**, **Issue/RegisterRead**, **Execute**,
-**Memory** and **Writeback** (**Commit** occurs asynchronously, so
-it is not counted as part of the “pipeline").
+**Memory** and **Writeback** (**Commit** occurs asynchronously, so it is not counted as part of the “pipeline").
+:numref:`boom-pipeline` shows a simplified BOOM pipeline that has all of the pipeline stages listed.
 
 Stages
 ------
@@ -107,10 +107,18 @@ depended on that branch. When a branch instructions passes through
 List** are made. On a mispredict, the saved processor state is
 restored.
 
-Although :numref:`boom-pipeline` shows a simplified pipeline, BOOM
-implements the RV64G and privileged ISAs, which includes single- and
-double-precision floating point, atomic memory support, and page-based
-virtual memory.
+Detailed BOOM Pipeline
+----------------------
+
+Although :numref:`boom-pipeline` shows a simplified BOOM pipeline, BOOM supports RV64GC and the privileged ISA
+which includes single-precision and double-precision floating point, atomic memory support, and page-based virtual memory.
+A more detailed diagram is shown below in :numref:`boom-pipeline-detailed`.
+
+.. _boom-pipeline:
+.. figure:: /figures/boom-pipeline-detailed.png
+    :alt: Detailed BOOM Pipeline
+
+    Detailed BOOM Pipeline. \*'s denote where the core can be configured.
 
 .. [1] While the Fetch Buffer is N-entries deep, it can instantly read
     out the first instruction on the front of the FIFO. Put another way,
