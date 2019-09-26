@@ -149,6 +149,7 @@ RUN apt-get install -y \
             pkg-config \
             python \
             python-pexpect \
+            python3 \
             texinfo \
             zlib1g-dev \
             rsync
