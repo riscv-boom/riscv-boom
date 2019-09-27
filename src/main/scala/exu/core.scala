@@ -1352,7 +1352,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     exe_units.rocc_unit.io.rocc.dis_uops     := dis_uops
     exe_units.rocc_unit.io.rocc.rob_head_idx := rob.io.rob_head_idx
     exe_units.rocc_unit.io.rocc.rob_pnr_idx  := rob.io.rob_pnr_idx
-    exe_units.rocc_unit.io.com_exception     := rob.io.com_xcpt.valid
+    exe_units.rocc_unit.io.com_exception     := rob.io.flush.valid
     exe_units.rocc_unit.io.status            := csr.io.status
 
     for (w <- 0 until coreWidth) {
