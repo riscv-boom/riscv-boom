@@ -9,9 +9,9 @@ Rocket Chip SoC Generator
 
 As BOOM is just a core, an entire SoC infrastructure must be provided.
 BOOM was developed to use the open-source `Rocket Chip SoC generator <https://github.com/chipsalliance/rocket-chip>`__
-The Rocket Chip generator can instantiate a wide range of SoC designs, including cache-coherent
+The **Rocket Chip generator** can instantiate a wide range of SoC designs, including cache-coherent
 multi-tile designs, cores with and without accelerators, and chips with or without a last-level shared cache.
-It comes bundled with a 5-stage in-order core, called Rocket, by default.
+It comes bundled with a 5-stage in-order core, called **Rocket**, by default.
 BOOM uses the Rocket Chip infrastructure to instantiate it's core/tile complex (tile is a core, L1D/I$, and PTW) instead of a
 Rocket tile.
 

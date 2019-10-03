@@ -10,9 +10,9 @@ Branch Prediction
 This chapter discusses how BOOM predicts branches and then resolves
 these predictions.
 
-BOOM uses two levels of branch prediction - a fast "next-line predictor" (NLP)
-and a slower but more complex "backing predictor" (BPD) [1]_. In this case,
-the next-line predictor is a Branch Target Buffer and the backing predictor
+BOOM uses two levels of branch prediction - a fast :term:`"Next-Line Predictor" (NLP) <Next-Line Predictor>`
+and a slower but more complex :term:`"Backing Predictor" (BPD) <Backing Predictor>` [1]_. In this case,
+the :term:`Next-Line Predictor` is a Branch Target Buffer and the :term:`Backing Predictor`
 is a more complicated structure like a GShare predictor.
 
 .. toctree::
@@ -24,15 +24,14 @@ is a more complicated structure like a GShare predictor.
 
 .. [1] Unfortunately, the terminology in the literature gets a bit
     muddled here in what to call different types and levels of branch
-    predictor. I have seen “micro-BTB" versus “BTB", “NLP" versus “BHT",
-    and “cache-line predictor" versus “overriding predictor". Although
-    the Rocket code calls its own predictor the “BTB", I have chosen to
-    refer to it in documentation as the “next-line predictor", to denote
+    predictor. Literature has references to different structures; "micro-BTB" versus "BTB", "NLP" versus "BHT",
+    and "cache-line predictor" versus "overriding predictor". Although
+    the Rocket core calls its own predictor the "BTB", BOOM
+    refers to it as the :term:`Next-Line Predictor`, to denote
     that it is a combinational predictor that provides single-cycle
-    predictions for fetching “the next line", and the Rocket BTB
-    encompasses far more complexity than just a “branch target buffer"
-    structure. Likewise, I have chosen the name “backing predictor" as I
-    believe it is the most accurate name, while simultaneously avoiding
+    predictions for fetching "the next line", and the Rocket BTB
+    encompasses far more complexity than just a "branch target buffer"
+    structure. Likewise, the name :term:`Backing Predictor` was chosen to avoid
     being overly descriptive of the internal design (is it a simple BHT?
-    Is it tagged? Does it override the NLP?). But in short, I am open
-    to better names!
+    Is it tagged? Does it override the NLP?) while being accurate. If you have recommendations for
+    better names, feel free to reach out!

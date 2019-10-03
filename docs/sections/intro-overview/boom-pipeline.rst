@@ -25,41 +25,41 @@ Fetch
 ^^^^^
 
 Instructions are *fetched* from the Instruction Memory and
-pushed into a FIFO queue, known as the **Fetch Buffer**. Branch
+pushed into a FIFO queue, known as the :term:`Fetch Buffer`. Branch
 prediction also occurs in this stage, redirecting the fetched
 instructions as necessary. [1]_
 
 Decode
 ^^^^^^
 
-**Decode** pulls instructions out of the Fetch Buffer and
-generates the appropriate **Micro-Op(s)** to place into the
+**Decode** pulls instructions out of the :term:`Fetch Buffer` and
+generates the appropriate :term:`Micro-Op`(s) to place into the
 pipeline. [2]_
 
 Rename
 ^^^^^^
 
-The ISA, or “logical", register specifiers (e.g. x0-x31) are
-then *renamed* into “physical" register specifiers.
+The ISA, or "logical", register specifiers (e.g. x0-x31) are
+then *renamed* into "physical" register specifiers.
 
 Dispatch
 ^^^^^^^^
 
-The Micro-Op is then *dispatched*, or written, into
-a set of **Issue Queues**.
+The :term:`Micro-Op` is then *dispatched*, or written, into
+a set of :term:`Issue Queue`s.
 
 Issue
 ^^^^^
 
-Micro-Ops sitting in a Issue Queue wait until all of
+:term:`Micro-Op`s sitting in a :term:`Issue Queue` wait until all of
 their operands are ready and are then *issued*. [3]_ This is
 the beginning of the out–of–order piece of the pipeline.
 
 Register Read
 ^^^^^^^^^^^^^
 
-Issued Micro-Ops first **read** their register operands from the unified
-physical register file (or from the bypass network)...
+Issued :term:`Micro-Op`s first **read** their register operands from the **unified
+physical register file** (or from the **bypass network**)...
 
 Execute
 ^^^^^^^
@@ -67,32 +67,32 @@ Execute
 ... and then enter the **Execute** stage where the functional
 units reside. Issued memory operations perform their address
 calculations in the **Execute** stage, and then store the
-calculated addresses in the Load/Store Unit which resides in the
+calculated addresses in the **Load/Store Unit** which resides in the
 **Memory** stage.
 
 Memory
 ^^^^^^
 
-The Load/Store Unit consists of three queues: a **Load Address Queue
+The **Load/Store Unit** consists of three queues: a **Load Address Queue
 (LAQ)**, a **Store Address Queue (SAQ)**, and a **Store Data Queue (SDQ)**.
 Loads are fired to memory when their address is present in the
-LAQ. Stores are fired to memory at **Commit** time (and
-naturally, stores cannot be **committed** until both their
-address and data have been placed in the SAQ and SDQ).
+**LAQ**. Stores are fired to memory at **Commit** time (and
+naturally, stores cannot be *committed* until both their
+address and data have been placed in the **SAQ** and **SDQ**).
 
 Writeback
 ^^^^^^^^^
 
-ALU operations and load operations are **written** back to the
+ALU operations and load operations are *written* back to the
 physical register file.
 
 Commit
 ^^^^^^
 
 The **Reorder Buffer (ROB)**, tracks the status of each instruction
-in the pipeline. When the head of the ROB is not-busy, the ROB
-**commits** the instruction. For stores, the ROB signals to the
-store at the head of the Store Queue (SAQ/SDQ) that it can now write its
+in the pipeline. When the head of the **ROB** is not-busy, the **ROB**
+*commits* the instruction. For stores, the **ROB** signals to the
+store at the head of the **Store Queue (SAQ/SDQ)** that it can now write its
 data to memory.
 
 Branch Support
@@ -100,7 +100,7 @@ Branch Support
 
 BOOM supports full branch speculation and branch prediction. Each
 instruction, no matter where it is in the pipeline, is accompanied by a
-branch tag that marks which branches the instruction is “speculated
+**branch tag** that marks which branches the instruction is "speculated
 under". A mispredicted branch requires killing all instructions that
 depended on that branch. When a branch instructions passes through
 **Rename**, copies of the **Register Rename Table** and the **Free
@@ -120,15 +120,15 @@ A more detailed diagram is shown below in :numref:`boom-pipeline-detailed`.
 
     Detailed BOOM Pipeline. \*'s denote where the core can be configured.
 
-.. [1] While the Fetch Buffer is N-entries deep, it can instantly read
+.. [1] While the :term:`Fetch Buffer` is N-entries deep, it can instantly read
     out the first instruction on the front of the FIFO. Put another way,
     instructions don’t need to spend N cycles moving their way through
-    the Fetch Buffer if there are no instructions in front of
+    the :term:`Fetch Buffer` if there are no instructions in front of
     them.
 
 .. [2] Because RISC-V is a RISC ISA, currently all instructions generate
-    only a single Micro-Op. More details on how store Micro-Ops are
+    only a single :term:`Micro-Op`. More details on how store :term:`Micro-Op`s are
     handled can be found in :ref:`The Memory System and the Data-cache Shim`.
 
-.. [3] More precisely, Micro-Ops that are ready assert their request, and the
-    issue scheduler chooses which Micro-Ops to issue that cycle.
+.. [3] More precisely, :term:`Micro-Op`s that are ready assert their request, and the
+    :term:`Issue Scheduler` chooses which :term:`Micro-Op`s to issue that cycle.
