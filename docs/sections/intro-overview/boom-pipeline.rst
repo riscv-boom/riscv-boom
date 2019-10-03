@@ -111,7 +111,7 @@ Detailed BOOM Pipeline
 ----------------------
 
 Although :numref:`boom-pipeline` shows a simplified BOOM pipeline, BOOM supports RV64GC and the privileged ISA
-which includes single-precision and double-precision floating point, atomic memory support, and page-based virtual memory.
+which includes single-precision and double-precision floating point, atomics support, and page-based virtual memory.
 A more detailed diagram is shown below in :numref:`boom-pipeline-detailed`.
 
 .. _boom-pipeline:
