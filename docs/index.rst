@@ -1,11 +1,30 @@
 Welcome to RISCV-BOOM's documentation!
 ======================================
 
-.. _boom-pipeline:
+
+
 .. figure:: figures/boom-pipeline-detailed.png
     :alt: Berkeley Out-of-Order Machine (BOOM)
 
    Berkeley Out-of-Order Machine (BOOM)
+
+.. figure:: /figures/boom-pipeline-detailed.png
+    :alt: Berkeley Out-of-Order Machine (BOOM)
+
+   Berkeley Out-of-Order Machine (BOOM)
+
+dummy test
+
+.. figure:: figures/boom-pipeline-detailed.png
+    :alt: Berkeley Out-of-Order Machine (BOOM)
+
+   Berkeley Out-of-Order Machine (BOOM)
+
+.. figure:: /figures/boom-pipeline-detailed.png
+    :alt: Berkeley Out-of-Order Machine (BOOM)
+
+   Berkeley Out-of-Order Machine (BOOM)
+
 
 Welcome!
 --------
