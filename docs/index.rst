@@ -2,7 +2,7 @@ Welcome to RISCV-BOOM's documentation!
 ======================================
 
 .. _boom-pipeline:
-.. figure:: /figures/boom-pipeline-detailed.png
+.. figure:: figures/boom-pipeline-detailed.png
     :alt: Berkeley Out-of-Order Machine (BOOM)
 
    Berkeley Out-of-Order Machine (BOOM)
@@ -58,10 +58,18 @@ Table of Contents
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
-   :numbered:
+   :caption: Introduction:
 
-   sections/intro-overview/index
+   sections/intro-overview/boom
+   sections/intro-overview/boom-pipeline
+   sections/intro-overview/chisel
+   sections/intro-overview/riscv-isa
+   sections/intro-overview/rocket-chip
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Core Overview:
+
    sections/instruction-fetch-stage
    sections/branch-prediction/index
    sections/decode-stage
@@ -72,17 +80,25 @@ Table of Contents
    sections/execution-stages
    sections/load-store-unit
    sections/memory-system
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Usage:
+
+   sections/parameterization
+   sections/boom-ecosystem
+   sections/debugging
    sections/uarch-counters
    sections/verification
-   sections/debugging
    sections/physical-realization
-   sections/future-work
-   sections/parameterization
-   sections/faq
-   sections/boom-ecosystem
-   sections/terminology
-   sections/bibliography/bibliography
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Other:
+
+   sections/future-work
+   sections/faq
+   sections/terminology
 
 Indices and tables
 ==================
