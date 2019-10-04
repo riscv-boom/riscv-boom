@@ -1,28 +1,28 @@
-The :term:`Backing Predictor (BPD) <Backing Predictor>`
-=======================================================
+The Backing Predictor (BPD)
+===========================
 
-When the :term:`Next-Line Predictor (NLP) <Next-Line Predictor>` is predicting well, the processor’s
+When the :term:`Next-Line Predictor (NLP)` is predicting well, the processor’s
 :term:`Back-end` is provided an unbroken stream of instructions to execute. The
-:term:`NLP <Next-Line Predictor>` is able to provide fast, single-cycle predictions by being expensive
+:term:`NLP<Next-Line Predictor (NLP)>` is able to provide fast, single-cycle predictions by being expensive
 (in terms of both area and power), very small (only a few dozen branches
-can be remembered), and very simple (the :term:`BIM <Bi-Modal Table>` hysteresis bits
+can be remembered), and very simple (the :term:`Bi-Modal Table (BIM)` hysteresis bits
 are not able to learn very complicated or long history patterns).
 
 To capture more branches and more complicated branching behaviors, BOOM
-provides support for a :term:`Backing Predictor (BPD) <Backing Predictor>`.
+provides support for a :term:`Backing Predictor (BPD)`.
 
-The :term:`BPD <Backing Predictor>`'s goal is to provide very high accuracy in a (hopefully) dense
-area. The :term:`BPD <Backing Predictor>` only makes taken/not-taken predictions; it therefore relies
+The :term:`BPD<Backing Predictor (BPD)>` 's goal is to provide very high accuracy in a (hopefully) dense
+area. The :term:`BPD<Backing Predictor (BPD)>` only makes taken/not-taken predictions; it therefore relies
 on some other agent to provide information on what instructions are
-branches and what their targets are. The :term:`BPD <Backing Predictor>` can either use the BTB
+branches and what their targets are. The :term:`BPD<Backing Predictor (BPD)>` can either use the BTB
 for this information or it can wait and decode the instructions themselves
 once they have been fetched from the i-cache. This saves on needing to
-store the PC tags and branch targets within the :term:`BPD <Backing Predictor>` [7]_.
+store the PC tags and branch targets within the :term:`BPD<Backing Predictor (BPD)>` [7]_.
 
-The :term:`BPD <Backing Predictor>` is accessed throughout the **Fetch** stages and in parallel with the instruction cache access and BTB (see
-:numref:`front-end-bpu-bpd`). This allows the :term:`BPD <Backing Predictor>` to be stored in sequential
+The :term:`BPD<Backing Predictor (BPD)>` is accessed throughout the **Fetch** stages and in parallel with the instruction cache access and BTB (see
+:numref:`front-end-bpu-bpd`). This allows the :term:`BPD<Backing Predictor (BPD)>` to be stored in sequential
 memory (i.e., SRAM instead of flip-flops). With some clever
-architecting, the :term:`BPD <Backing Predictor>` can be stored in single-ported SRAM to achieve the
+architecting, the :term:`BPD<Backing Predictor (BPD)>` can be stored in single-ported SRAM to achieve the
 density desired.
 
 .. _front-end-bpu-bpd:
@@ -31,122 +31,122 @@ density desired.
 
     The BOOM :term:`Front-end`. Here you can see the BTB and Branch Predictor on the lower portion of the diagram.
     The instructions returning from the instruction cache are quickly decoded; any branches that are predicted as taken
-    from the BTB or :term:`Backing Predictor` will redirect the :term:`Front-end` from the F4 stage. Prediction snapshots and metadata
-    are stored in the :term:`Branch Rename Snapshots` (for fixing the predictor after mispredictions) and the :term:`Fetch Target Queue (FTQ) <Fetch Target Queue>`
-    (for updating the predictors in the Commit stage).
+    from the BTB or :term:`Backing Predictor (BPD)` will redirect the :term:`Front-end` from the **F4** stage. Prediction snapshots and metadata
+    are stored in the :term:`Branch Rename Snapshots` (for fixing the predictor after mispredictions) and the :term:`Fetch Target Queue (FTQ)`
+    (for updating the predictors in the **Commit** stage).
 
 Making Predictions
 ------------------
 
-When making a prediction, the :term:`Backing Predictor` must provide the
+When making a prediction, the :term:`BPD<Backing Predictor (BPD)>` must provide the
 following:
 
 -   is a prediction being made?
 
 -   a bit-vector of taken/not-taken predictions
 
-As per the first bullet-point, the :term:`BPD <Backing Predictor>` may decide to not make a
+As per the first bullet-point, the :term:`BPD<Backing Predictor (BPD)>` may decide to not make a
 prediction. This may be because the predictor uses tags to inform
 whether its prediction is valid or there may be a structural hazard that
 prevented a prediction from being made.
 
-The :term:`BPD <Backing Predictor>` provides a bit-vector of taken/not-taken predictions, the size
+The :term:`BPD<Backing Predictor (BPD)>` provides a bit-vector of taken/not-taken predictions, the size
 of the bit-vector matching the :term:`Fetch Width` of the pipeline (one
-bit for each instruction in the :term:`Fetch Packet`). A later **Fetch** stage will
-will decode the instructions in the :term:`Fetch Packet`, compute the branch targets, and decide in conjunction with
-the :term:`BPD <Backing Predictor>`'s prediction bit-vector if a :term:`Front-end` redirect should be made.
+bit for each instruction in the :term:`Fetch Packet` ). A later **Fetch** stage will
+will decode the instructions in the :term:`Fetch Packet` , compute the branch targets, and decide in conjunction with
+the :term:`BPD<Backing Predictor (BPD)>` 's prediction bit-vector if a :term:`Front-end` redirect should be made.
 
 Jump and Jump-Register Instructions
 -----------------------------------
 
-The :term:`BPD <Backing Predictor>` makes predictions only on the direction (taken versus not-taken)
+The :term:`BPD<Backing Predictor (BPD)>` makes predictions only on the direction (taken versus not-taken)
 of conditional branches. Non-conditional "jumps" (JAL) and "jump-register"
-(JALR) instructions are handled separately from the :term:`BPD <Backing Predictor>`. [8]_
+(JALR) instructions are handled separately from the :term:`BPD<Backing Predictor (BPD)>` . [8]_
 
-The :term:`NLP <Next-Line Predictor>` learns any "taken" instruction's PC and target PC -
-thus, the :term:`NLP <Next-Line Predictor>` is able to predict jumps and jump-register instructions.
+The :term:`NLP<Next-Line Predictor (NLP)>` learns any "taken" instruction's PC and target PC -
+thus, the :term:`NLP<Next-Line Predictor (NLP)>` is able to predict jumps and jump-register instructions.
 
-If the :term:`NLP <Next-Line Predictor>` does not make a prediction on a JAL instruction, the pipeline
+If the :term:`NLP<Next-Line Predictor (NLP)>` does not make a prediction on a JAL instruction, the pipeline
 will redirect the :term:`Front-end` in **F4** (see :numref:`:term:`Front-end``). [9]_
 
-Jump-register instructions that were not predicted by the :term:`NLP <Next-Line Predictor>` will be
+Jump-register instructions that were not predicted by the :term:`NLP<Next-Line Predictor (NLP)>` will be
 sent down the pipeline with no prediction made. As JALR instructions require
-reading the register file to deduce the jump target, there’s nothing
-that can be done if the :term:`NLP <Next-Line Predictor>` does not make a prediction.
+reading the register file to deduce the jump target, there's nothing
+that can be done if the :term:`NLP<Next-Line Predictor (NLP)>` does not make a prediction.
 
 Updating the :term:`Backing Predictor`
 --------------------------------------
 
-Generally speaking, the :term:`BPD <Backing Predictor>` is updated during the **Commit** stage.
-This prevents the :term:`BPD <Backing Predictor>` from being polluted by wrong-path
-information. [10]_ However, as the :term:`BPD <Backing Predictor>` makes use of global history, this
+Generally speaking, the :term:`BPD<Backing Predictor (BPD)>` is updated during the **Commit** stage.
+This prevents the :term:`BPD<Backing Predictor (BPD)>` from being polluted by wrong-path
+information. [10]_ However, as the :term:`BPD<Backing Predictor (BPD)>` makes use of global history, this
 history must be reset whenever the :term:`Front-end` is redirected. Thus, the
-:term:`BPD <Backing Predictor>` must also be (partially) updated during **Execute** when a
+:term:`BPD<Backing Predictor (BPD)>` must also be (partially) updated during **Execute** when a
 misprediction occurs to reset any speculative updates that had occurred
 during the **Fetch** stages.
 
-When making a prediction, the :term:`BPD <Backing Predictor>` passes to the pipeline a "response
-info packet". This "info packet" is stored in the :term:`Fetch Target Queue (FTQ) <Fetch Target Queue>`
+When making a prediction, the :term:`BPD<Backing Predictor (BPD)>` passes to the pipeline a "response
+info packet". This "info packet" is stored in the :term:`Fetch Target Queue (FTQ)`
 until commit time. [11]_ Once all of the instructions
 corresponding to the "info packet" is committed, the "info packet" is
-set to the :term:`BPD <Backing Predictor>` (along with the eventual outcome of the branches) and the
-:term:`BPD <Backing Predictor>` is updated. :ref:`Fetch Target Queue` covers the :term:`FTQ <Fetch Target Queue>`, which handles the
+set to the :term:`BPD<Backing Predictor (BPD)>` (along with the eventual outcome of the branches) and the
+:term:`BPD<Backing Predictor (BPD)>` is updated. :ref:`Fetch Target Queue` covers the :term:`FTQ<Fetch Target Queue (FTQ)>` , which handles the
 snapshot information needed for update the predictor during
-**Commit**. :ref:`Rename Snapshot State` covers the :term:`Branch (BPD) Rename Snapshots <Branch Rename Snapshot>`,
+**Commit**. :ref:`Rename Snapshot State` covers the :term:`Branch Rename Snapshots` ,
 which handles the snapshot information needed to update the
 predictor during a misspeculation in the **Execute** stage.
 
-Managing the Global History Register
-------------------------------------
+Managing the Global History Register (GHR)
+------------------------------------------
 
 The :term:`Global History Register (GHR)` is an important piece of a branch
 predictor. It contains the outcomes of the previous ``N`` branches (where
-N is the size of the :term:`GHR <Global History Register (GHR)>`). [12]_
+N is the size of the :term:`GHR<Global History Register (GHR)>` ). [12]_
 
 When fetching branch ``i``, it is important that the direction of the
 previous ``i-N`` branches is available so an accurate prediction can be
-made. Waiting till the **Commit** stage to update the :term:`GHR <Global History Register (GHR)>`
+made. Waiting until the **Commit** stage to update the :term:`GHR<Global History Register (GHR)>`
 would be too late (dozens of branches would be inflight and not
-reflected!). Therefore, the :term:`GHR <Global History Register (GHR)>` must be updated
+reflected!). Therefore, the :term:`GHR<Global History Register (GHR)>` must be updated
 *speculatively*, once the branch is fetched and predicted.
 
-If a misprediction occurs, the :term:`GHR <Global History Register (GHR)>` must be reset and
+If a misprediction occurs, the :term:`GHR<Global History Register (GHR)>` must be reset and
 updated to reflect the actual history. This means that each branch (more
-accurately, each :term:`Fetch Packet`) must snapshot the :term:`GHR <Global History Register (GHR)>` in case of a misprediction. [13]_
+accurately, each :term:`Fetch Packet` ) must snapshot the :term:`GHR<Global History Register (GHR)>` in case of a misprediction. [13]_
 
 There is one final wrinkle - exceptional pipeline behavior. While each
-branch contains a snapshot of the :term:`GHR <Global History Register (GHR)>`, any
+branch contains a snapshot of the :term:`GHR<Global History Register (GHR)>` , any
 instruction can potential throw an exception that will cause a :term:`Front-end`
-redirect. Such an event will cause the :term:`GHR <Global History Register (GHR)>` to become
+redirect. Such an event will cause the :term:`GHR<Global History Register (GHR)>` to become
 corrupted. For exceptions, this may seem acceptable - exceptions should
-be rare and the trap handlers will cause a pollution of the :term:`GHR <Global History Register (GHR)>`
+be rare and the trap handlers will cause a pollution of the :term:`GHR<Global History Register (GHR)>`
 anyways (from the point of view of the user code).
 However, some exceptional events include "pipeline replays" - events
 where an instruction causes a pipeline flush and the instruction is
 refetched and re-executed. [14]_ For this reason, a *commit copy* of
-the :term:`GHR <Global History Register (GHR)>` is also maintained by the :term:`BPD <Backing Predictor>` and reset on
+the :term:`GHR<Global History Register (GHR)>` is also maintained by the :term:`BPD<Backing Predictor (BPD)>` and reset on
 any sort of pipeline flush event.
 
-The :term:`Fetch Target Queue (FTQ) <Fetch Target Queue>`
----------------------------------------------------------
+The Fetch Target Queue (FTQ)
+----------------------------
 
-The Reorder Buffer (see :ref:`The Reorder Buffer (ROB) and the Dispatch Stage`)
-maintains a record of all inflight instructions. Likewise, the :term:`Fetch Target Queue <Fetch Target Queue>`
+The Reorder Buffer (see :ref:`The Reorder Buffer (ROB) and the Dispatch Stage` )
+maintains a record of all inflight instructions. Likewise, the :term:`FTQ<Fetch Target Queue (FTQ)>`
 maintains a record of all inflight branch predictions and PC information. These two
-structures are decoupled as :term:`FTQ <Fetch Target Queue>` entries are *incredibly* expensive
+structures are decoupled as :term:`FTQ<Fetch Target Queue (FTQ)>` entries are *incredibly* expensive
 and not all ROB entries will contain a branch instruction. As only
-roughly one in every six instructions is a branch, the :term:`FTQ <Fetch Target Queue>` can be made
+roughly one in every six instructions is a branch, the :term:`FTQ<Fetch Target Queue (FTQ)>` can be made
 to have fewer entries than the ROB to leverage additional savings.
 
-Each :term:`FTQ <Fetch Target Queue>` entry corresponds to one **Fetch** cycle. For each prediction made, the
+Each :term:`FTQ<Fetch Target Queue (FTQ)>` entry corresponds to one **Fetch** cycle. For each prediction made, the
 branch predictor packs up data that it will need later to perform an
 update. For example, a branch predictor will want to remember what
 *index* a prediction came from so it can update the counters at that
-index later. This data is stored in the :term:`FTQ <Fetch Target Queue>`.
+index later. This data is stored in the :term:`FTQ<Fetch Target Queue (FTQ)>` .
 
-When the last instruction in a :term:`Fetch Packet` is committed, the :term:`FTQ <Fetch Target Queue>` entry
+When the last instruction in a :term:`Fetch Packet` is committed, the :term:`FTQ<Fetch Target Queue (FTQ)>` entry
 is deallocated and returned to the branch predictor. Using the data
-stored in the :term:`FTQ <Fetch Target Queue>` entry, the branch predictor can perform any desired
+stored in the :term:`FTQ<Fetch Target Queue (FTQ)>` entry, the branch predictor can perform any desired
 updates to its prediction state.
 
 There are a number of reasons to update the branch predictor after
@@ -163,24 +163,24 @@ aliasing.
 
 Of course, the latency between **Fetch** and **Commit** is
 inconvenient and can cause extra branch mispredictions to occur if
-multiple loop iterations are inflight. However, the :term:`FTQ <Fetch Target Queue>` could be used
+multiple loop iterations are inflight. However, the :term:`FTQ<Fetch Target Queue (FTQ)>` could be used
 to bypass branch predictions to mitigate this issue. Currently, this
 bypass behavior is not supported in BOOM.
 
 Rename Snapshot State
 ---------------------
 
-The :term:`FTQ <Fetch Target Queue>` holds branch predictor data that will be needed to update the
+The :term:`FTQ<Fetch Target Queue (FTQ)>` holds branch predictor data that will be needed to update the
 branch predictor during **Commit** (for both correct and incorrect
 predictions). However, there is additional state needed for when the
 branch predictor makes an incorrect prediction *and must be updated
 immediately*. For example, if a misprediction occurs, the
-speculatively-updated :term:`GHR <Global History Register (GHR)>` must be reset to the correct value
+speculatively-updated :term:`GHR<Global History Register (GHR)>` must be reset to the correct value
 before the processor can begin fetching (and predicting) again.
 
 This state can be very expensive but it can be deallocated once the
 branch is resolved in the **Execute** stage. Therefore, the state is
-stored in parallel with the :term:`Branch Rename Snapshot`s. During **Decode**
+stored in parallel with the :term:`Branch Rename Snapshot` s. During **Decode**
 and **Rename**, a **Branch Tag** is allocated to each branch and a
 snapshot of the rename tables are made to facilitate single-cycle
 rollback if a misprediction occurs. Like the branch tag and **Rename
@@ -193,16 +193,16 @@ can be deallocated once the branch is resolved by the :term:`Branch Unit` in
     :alt: The Branch Predictor Pipeline
 
     The Branch Predictor Pipeline. Although a simple diagram, this helps show the I/O within the Branch Prediction
-    Pipeline. The :term:`Front-end` sends the "next PC" (shown as ``req``) to the pipeline in the **F0** stage. Within the ``Abstract Predictor``,
-    hashing is managed by the ``Abstract Predictor`` wrapper. The ``Abstract Predictor`` then returns a ":term:`BPD <Backing Predictor>` response"
-    or in other words a prediction for each instruction in the :term:`Fetch Packet`.
+    Pipeline. The :term:`Front-end` sends the "next PC" (shown as ``req``) to the pipeline in the **F0** stage. Within the "Abstract Predictor",
+    hashing is managed by the "Abstract Predictor" wrapper. The "Abstract Predictor" then returns a :term:`BPD<Backing Predictor (BPD)>` response
+    or in other words a prediction for each instruction in the :term:`Fetch Packet` .
 
 The Abstract Branch Predictor Class
 -----------------------------------
 
-To facilitate exploring different global history-based :term:`BPD <Backing Predictor>` designs, an
+To facilitate exploring different global history-based :term:`BPD<Backing Predictor (BPD)>` designs, an
 abstract “BrPredictor" class is provided. It provides a standard
-interface into the :term:`BPD <Backing Predictor>` and the control logic for managing the global
+interface into the :term:`BPD<Backing Predictor (BPD)>` and the control logic for managing the global
 history register. This abstract class can be found in
 :numref:`predictor-pipeline` labeled "Abstract Predictor". For a more detailed view of the predictor
 with an example look at :numref:`gshare-predictor-pipeline`.
@@ -300,7 +300,7 @@ The GShare Predictor
 --------------------
 
 **GShare** is a simple but very effective branch predictor.
-Predictions are made by hashing the instruction address and the :term:`Global History Register (GHR)`
+Predictions are made by hashing the instruction address and the :term:`GHR <Global History Register (GHR)>`
 (typically a simple XOR) and then indexing into a table of
 two-bit counters. :numref:`Gshare-Predictor` shows the logical
 architecture and :numref:`gshare-predictor-pipeline` shows the physical implementation
@@ -443,13 +443,13 @@ BOOM provides a number of other predictors that may provide useful.
 The Base Only Predictor
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-The Base Only Predictor uses the BTBs :term:`BIM <Bi-Modal Table>` to make a prediction on
+The Base Only Predictor uses the BTBs :term:`BIM<Bi-Modal Table (BIM)>` to make a prediction on
 whether the branch was taken or not.
 
 The Null Predictor
 ^^^^^^^^^^^^^^^^^^
 
-The Null Predictor is used when no :term:`BPD <Backing Predictor>` predictor is desired. It will
+The Null Predictor is used when no :term:`BPD<Backing Predictor (BPD)>` predictor is desired. It will
 always predict "not taken".
 
 The Random Predictor
@@ -462,7 +462,7 @@ providing a worse-case performance baseline for comparing branch
 predictors.
 
 .. [7] It’s the *PC Tag* storage and *Branch Target* storage that
-    makes the BTB within the :term:`NLP <Next-Line Predictor>` so expensive.
+    makes the BTB within the :term:`Next-Line Predictor (NLP)` so expensive.
 
 .. [8] JAL instructions jump to a ``PC+Immediate`` location, whereas
      JALR instructions jump to a ``PC+Register[rs1]+Immediate`` location.
@@ -474,7 +474,7 @@ predictors.
 .. [10] In the data-cache, it can be useful to fetch data from the wrong
     path - it is possible that future code executions may want to access
     the data. Worst case, the cache’s effective capacity is reduced. But
-    it can be quite dangerous to add wrong-path information to the :term:`BPD <Backing Predictor>` -
+    it can be quite dangerous to add wrong-path information to the :term:`Backing Predictor (BPD)` -
     it truly represents a code-path that is never exercised, so the
     information will *never* be useful in later code executions.
     Worst, aliasing is a problem in branch predictors (at most partial
@@ -487,7 +487,7 @@ predictors.
 .. [11] These *info packets* are not stored in the ROB for two
     reasons - first, they correspond to :term:`Fetch Packet`s, not
     instructions. Second, they are very expensive and so it is
-    reasonable to size the :term:`FTQ <Fetch Target Queue>` to be smaller than the ROB.
+    reasonable to size the :term:`Fetch Target Queue (FTQ)` to be smaller than the ROB.
 
 .. [12] Actually, the direction of all conditional branches within a
     :term:`Fetch Packet` are compressed (via an OR-reduction) into a

@@ -25,7 +25,7 @@ Fetch
 ^^^^^
 
 Instructions are *fetched* from instruction memory and
-pushed into a FIFO queue, known as the :term:`Fetch Buffer`. Branch
+pushed into a FIFO queue, known as the :term:`Fetch Buffer` . Branch
 prediction also occurs in this stage, redirecting the fetched
 instructions as necessary. [1]_
 
@@ -45,20 +45,20 @@ then *renamed* into "physical" register specifiers.
 Dispatch
 ^^^^^^^^
 
-The :term:`Micro-Op<Micro-Op (UOP)>` is then *dispatched*, or written, into
-a set of :term:`Issue Queue`s.
+The :term:`UOP<Micro-Op (UOP)>` is then *dispatched*, or written, into
+a set of :term:`Issue Queue` s.
 
 Issue
 ^^^^^
 
-:term:`Micro-Ops<Micro-Op (UOP)>` sitting in a :term:`Issue Queue` wait until all of
+:term:`UOPs<Micro-Op (UOP)>` sitting in a :term:`Issue Queue` wait until all of
 their operands are ready and are then *issued*. [3]_ This is
 the beginning of the out–of–order piece of the pipeline.
 
 Register Read
 ^^^^^^^^^^^^^
 
-Issued :term:`Micro-Ops<Micro-Op (UOP)>`s first *read* their register operands from the unified
+Issued :term:`UOPsMicro-Ops<Micro-Op (UOP)>` s first *read* their register operands from the unified
 **Physical Register File** (or from the **Bypass Network**)...
 
 Execute
@@ -120,15 +120,15 @@ A more detailed diagram is shown below in :numref:`boom-pipeline-detailed`.
 
     Detailed BOOM Pipeline. \*'s denote where the core can be configured.
 
-.. [1] While the :term:`Fetch Buffer` is N-entries deep, it can instantly read
+.. [1] While the :term:`Fetch Buffer` is ``N``-entries deep, it can instantly read
     out the first instruction on the front of the FIFO. Put another way,
     instructions don’t need to spend ``N`` cycles moving their way through
     the :term:`Fetch Buffer` if there are no instructions in front of
     them.
 
 .. [2] Because RISC-V is a RISC ISA, currently all instructions generate
-    only a single :term:`Micro-Op<Micro-Op (UOP)>`. More details on how store :term:`Micro-Ops<Micro-Op (UOP)>` are
+    only a single :term:`Micro-Op (UOP)` . More details on how store :term:`UOPs<Micro-Op (UOP)>` are
     handled can be found in :ref:`The Memory System and the Data-cache Shim`.
 
-.. [3] More precisely, :term:`Micro-Ops<Micro-Op (UOP)>` that are ready assert their request, and the
-    :term:`Issue Scheduler` chooses which :term:`Micro-Ops<Micro-Op (UOP)>` to issue that cycle.
+.. [3] More precisely, :term:`Micro-Ops (UOPs)<Micro-Op (UOP)>` that are ready assert their request, and the
+    :term:`Issue Scheduler` chooses which :term:`UOPs<Micro-Op (UOP)>` to issue that cycle.

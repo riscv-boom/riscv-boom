@@ -5,7 +5,7 @@ Instruction Fetch
 .. figure:: /figures/front-end.svg
     :alt: BOOM :term:`Front-end`
 
-    The BOOM Front-end
+    The BOOM :term:`Front-end`
 
 
 BOOM instantiates its own :term:`Front-end` , similar to how the Rocket core(s)
@@ -51,7 +51,7 @@ the i-cache to start fetching along the correct path.
 Fetching Compressed Instructions
 --------------------------------
 
-This section describes how the `RISC-V Compressed ISA extension <https://riscv.org/specifications/>`
+This section describes how the `RISC-V Compressed ISA extension <https://riscv.org/specifications/>`__
 was implemented in BOOM. The Compressed ISA Extension, or RVC enables smaller, 16
 bit encodings of common instructions to decrease the static and dynamic
 code size. "RVC" comes with a number of features that are of particular
@@ -83,19 +83,19 @@ as fetching all of the pieces of an instruction may take multiple cycles.
 The following describes the implementation of RVC in BOOM by describing
 the lifetime of a instruction.
 
--  The :term:`Front-end` returns :term:`Fetch Packets<Fetch Packet>` of :term:`fetchWidth<Fetch Width>` \*16 bits wide. This
-   was supported inherently in the BOOM :term:`Front-end<Front-end>`.
+-  The :term:`Front-end` returns :term:`Fetch Packet` s of :term:`fetchWidth<Fetch Width>` \*16 bits wide. This
+   was supported inherently in the BOOM :term:`Front-end` .
 
--  Maintain statefulness in **F3**, in the cycle where :term:`Fetch Packets<Fetch Packet>`
+-  Maintain statefulness in **F3**, in the cycle where :term:`Fetch Packet` s
    are dequeued from the i-cache response queue and enqueued onto the
-   :term:`Fetch Buffer`.
+   :term:`Fetch Buffer` .
 
 -  **F3** tracks the trailing 16b, PC, and instruction boundaries of the
-   last :term:`Fetch Packet`. These bits are combined with the current
-   :term:`Fetch Packet` and expanded to :term:`fetchWidth <Fetch Width>` \*32 bits for enqueuing onto the
-   :term:`Fetch Buffer`. Predecode determines the start address of every
+   last :term:`Fetch Packet` . These bits are combined with the current
+   :term:`Fetch Packet` and expanded to :term:`fetchWidth<Fetch Width>` \*32 bits for enqueuing onto the
+   :term:`Fetch Buffer` . Predecode determines the start address of every
    instruction in this :term:`Fetch Packet` and masks the :term:`Fetch Packet` for the
-   :term:`Fetch Buffer`.
+   :term:`Fetch Buffer` .
 
 -  The :term:`Fetch Buffer` now compacts away invalid, or misaligned instructions
    when storing to its memory.
@@ -106,7 +106,7 @@ The following section describes miscellaneous implementation details.
    :term:`Fetch Boundary`. We track these instructions as belonging to the
    :term:`Fetch Packet` that contains their higher-order 16 bits. We have to
    be careful when determining the PC of these instructions, by tracking
-   all instructions which were initially misaligned across a :term:`Fetch Boundary`.
+   all instructions which were initially misaligned across a :term:`Fetch Boundary` .
 
 -  The pipeline must also track whether an instruction was originally
    16b or 32b, for calculating ``PC+4`` or ``PC+2``.
@@ -114,20 +114,20 @@ The following section describes miscellaneous implementation details.
 The Fetch Buffer
 ----------------
 
-:term:`Fetch Packets<Fetch Packet>` coming from the i-cache are placed into a :term:`Fetch Buffer` . The :term:`Fetch Buffer` helps to decouple the instruction
-fetch :term:`Front-end` from the execution pipeline in the :term:`Back-end`.
+:term:`Fetch Packet` s coming from the i-cache are placed into a :term:`Fetch Buffer` . The :term:`Fetch Buffer` helps to decouple the instruction
+fetch :term:`Front-end` from the execution pipeline in the :term:`Back-end` .
 
 The :term:`Fetch Buffer` is parameterizable. The number of entries can be
 changed and whether the buffer is implemented as a “flow-through"
 queue [2]_ or not can be toggled.
 
-The :term:`Fetch Target Queue`
+The Fetch Target Queue
 ----------------------
 
 The :term:`Fetch Target Queue` is a queue that holds the PC
 received from the i-cache and the branch prediction info associated
 with that address. It holds this information for the pipeline to
-reference during the executions of its :term:`Micro-Op (UOP)` s. It is dequeued by
+reference during the executions of its :term:`Micro-Ops (UOPs)<Micro-Op (UOP)>` . It is dequeued by
 the ROB once an instruction is committed and is updated during pipeline
 redirection/mispeculation.
 
