@@ -1,15 +1,15 @@
 The Memory System and the Data-cache Shim
 =========================================
 
-BOOM uses the Rocket-Chip non-blocking cache (“Hellacache"). Designed for use
-in in-order processors, a “shim” is used to connect BOOM to the
+BOOM uses the Rocket Chip non-blocking cache ("Hellacache"). Designed for use
+in in-order processors, a "shim" is used to connect BOOM to the
 data cache. The source code for the cache can be found in
-``nbdcache.scala`` in the Rocket-Chip repository (https://github.com/freechipsproject/rocket-chip).
+``nbdcache.scala`` in the `Rocket Chip repository <https://github.com/chipsalliance/rocket-chip>`.
 
 The contract with the cache is that it may execute all memory operations
 sent to it (barring structural hazards). As BOOM will send speculative
-load instructions to the cache, the shim (dcacheshim.scala) must
-track all “inflight load requests" and their status. If an inflight load
+load instructions to the cache, the shim (``dcacheshim.scala``) must
+track all "inflight load requests" and their status. If an inflight load
 is discovered to be misspeculated, it is marked as such in the shim.
 Upon return from the data cache, the load’s response to the pipeline is
 suppressed and it is removed from the inflight load queue.

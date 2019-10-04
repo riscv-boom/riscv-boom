@@ -1,41 +1,40 @@
 The Issue Unit
 ==============
 
-The Issue Queues hold dispatched Micro-Ops that have not yet executed.
-When all of the operands for the Micro-Op are ready, the issue slot sets
-its “request" bit high. The issue select logic then chooses to issue a
-slot which is asserting its “request" signal. Once a Micro-Op is issued,
+The **Issue Queue**s hold dispatched :term:`Micro-Op`s that have not yet executed.
+When all of the operands for the :term:`Micro-Op` are ready, the issue slot sets
+its "request" bit high. The issue select logic then chooses to issue a
+slot which is asserting its "request" signal. Once a :term:`Micro-Op` is issued,
 it is removed from the Issue Queue to make room for more dispatched
 instructions.
 
 BOOM uses a split Issue Queues - instructions of specific types are placed
-into a unique Issue Queue (integer, floating point, memory). Note: Current
-BOOM also allows for a unified Issue Queue (but only with integer and memory types).
+into a unique Issue Queue (integer, floating point, memory).
 
 Speculative Issue
 -----------------
 
 Although not yet supported, future designs may choose to speculatively
-issue Micro-Ops for improved performance (e.g., speculating that a load
-instruction will hit in the cache and thus issuing dependent Micro-Ops
+issue :term:`Micro-Op`s for improved performance (e.g., speculating that a load
+instruction will hit in the cache and thus issuing dependent :term:`Micro-Op`s
 assuming the load data will be available in the bypass network). In such
 a scenario, the Issue Queue cannot remove speculatively issued
-Micro-Ops until the speculation has been resolved. If a
-speculatively-issued Micro-Op failure occurs, then all issued Micro-Ops
+:term:`Micro-Op`s until the speculation has been resolved. If a
+speculatively-issued :term:`Micro-Op` failure occurs, then all issued :term:`Micro-Op`s
 that fall within the speculated window must be killed and retried from
-the issue window. More advanced techniques are also available.
+the Issue Queue. More advanced techniques are also available.
 
 Issue Slot
 ----------
 
-:numref:`single-issue-slot` shows a single issue slot from the
-*Issue Window*. [1]_
+:numref:`single-issue-slot` shows a single **issue slot** from the
+Issue Queue. [1]_
 
-Instructions are *dispatched* into the *Issue Queue*. From here, they
-wait for all of their operands to be ready (“p" stands for *presence*
+Instructions are *dispatched* into the Issue Queue. From here, they
+wait for all of their operands to be ready ("p" stands for *presence*
 bit, which marks when an operand is *present* in the register file).
 
-Once ready, the *issue slot* will assert its “request" signal, and wait
+Once ready, the issue slot will assert its "request" signal, and wait
 to be *issued*.
 
 Issue Select Logic
@@ -48,13 +47,13 @@ Issue Select Logic
     A single issue slot from the Issue Queue.
 
 Each issue select logic port is a static-priority encoder that picks
-that first available Micro-Op in the Issue Queue. Each port will only
-schedule a Micro-Op that its port can handle (e.g., floating point
-Micro-Ops will only be scheduled onto the port governing the Floating
+that first available :term:`Micro-Op` in the Issue Queue. Each port will only
+schedule a :term:`Micro-Op` that its port can handle (e.g., floating point
+:term:`Micro-Op`s will only be scheduled onto the port governing the Floating
 Point Unit). This creates a cascading priority encoder for ports that
-can schedule the same Micro-Ops as each other.
+can schedule the same :term:`Micro-Op`s as each other.
 
-If a Functional Unit is unavailable, it de-asserts its available signal
+If a **Functional Unit** is unavailable, it de-asserts its available signal
 and instructions will not be issued to it (e.g., an un-pipelined
 divider).
 
@@ -74,7 +73,7 @@ branches are only *implicitly* dependent on the branch, there is no
 other forcing function that enables the branches to issue earlier,
 except the filling of the ROB.
 
-Age-ordered Issue Queue 
+Age-ordered Issue Queue
 ------------------------
 
 The second available policy is an Age-ordered Issue Queue. Dispatched
@@ -90,8 +89,8 @@ Wake-up
 -------
 
 There are two types of wake-up in BOOM - *fast* wakeup and *slow*
-wakeup (also called a long latency wakeup). Because ALU Micro-Ops can send their write-back data through the
-bypass network, issued ALU Micro-Ops will broadcast their wakeup to the
+wakeup (also called a long latency wakeup). Because ALU :term:`Micro-Op`s can send their write-back data through the
+bypass network, issued ALU :term:`Micro-Op`s will broadcast their wakeup to the
 Issue Queue as they are issued.
 
 However, floating-point operations, loads, and variable latency
@@ -101,5 +100,5 @@ stage.
 
 .. [1]
    Conceptually, a bus is shown for implementing the driving of the
-   signals sent to the *Register Read* Stage. In reality BOOM actually
+   signals sent to the **Register Read** Stage. In reality BOOM actually
    uses muxes.

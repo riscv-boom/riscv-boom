@@ -81,7 +81,8 @@ out-of-order terminology.
 
     Global History Register (GHR)
         A register holding the last N taken/not taken results of branches
-        in the processor.
+        in the processor. However, in BOOM, each bit does not correspond to a
+        bit of history. Instead this is a hashed history.
 
     Rename Snapshots
         Saved state used to reset the pipeline to a correct state after a
@@ -93,3 +94,7 @@ out-of-order terminology.
     Branch Unit
 
     Branch Rename Snapshot
+
+    Execution Unit
+
+    Functional Unit

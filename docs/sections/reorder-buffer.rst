@@ -3,12 +3,12 @@
 The Reorder Buffer (ROB) and the Dispatch Stage
 ===============================================
 
-The ROB tracks the state of all inflight instructions in the pipeline.
+The **Reorder Buffer (ROB)** tracks the state of all inflight instructions in the pipeline.
 The role of the ROB is to provide the illusion to the programmer that
-his program executes in-order. After instructions are decoded and
-renamed, they are then dispatched to the ROB and the issue window and
+his program executes in-order. After instructions are *decoded* and
+*renamed*, they are then *dispatched* to the ROB and the **Issue Queue** and
 marked as *busy*. As instructions finish execution, they inform the ROB
-and are marked *not busy*. Once the “head" of the ROB is no longer busy,
+and are marked *not busy*. Once the "head" of the ROB is no longer busy,
 the instruction is *committed*, and it’s architectural state now
 visible. If an exception occurs and the excepting instruction is at the
 head of the ROB, the pipeline is flushed and no architectural changes
@@ -33,17 +33,17 @@ instructions in-order. The oldest instruction is pointed to by the
 *commit head*, and the newest instruction will be added at the *rob
 tail*.
 
-To facilitate superscalar *Dispatch* and *Commit*, the ROB is
-implemented as a circular buffer with W banks (where W
+To facilitate superscalar *dispatch* and *commit*, the ROB is
+implemented as a circular buffer with ``W`` banks (where ``W``
 is the *dispatch* and *commit* width of the machine [1]_). This
 organization is shown in :numref:`rob`.
 
-At *dispatch*, up to W instructions are written from the *fetch
-packet* into an ROB row, where each instruction is written to a
-different bank across the row. As the instructions within a *fetch
-packet* are all consecutive (and aligned) in memory, this allows a
-single PC to be associated with the entire *Fetch Packet* (and the
-instruction’s position within the *Fetch Packet* provides the low-order
+At *dispatch*, up to ``W`` instructions are written from the :term:`Fetch Packet`
+into an ROB row, where each instruction is written to a
+different bank across the row. As the instructions within a :term:`Fetch Packet`
+are all consecutive (and aligned) in memory, this allows a
+single PC to be associated with the entire :term:`Fetch Packet` (and the
+instruction’s position within the :term:`Fetch Packet` provides the low-order
 bits to its own PC). While this means that branching code will leave
 bubbles in the ROB, it makes adding more instructions to the ROB very
 cheap as the expensive costs are amortized across each ROB row.
@@ -69,7 +69,7 @@ Each ROB entry contains relatively little state:
 -  other miscellaneous data (e.g., helpful for statistic tracking)
 
 The PC and the branch prediction information is stored on a per-row
-basis (see :ref:`PC Storage`). The Exception State only tracks the
+basis (see :ref:`PC Storage`). The **Exception State** only tracks the
 oldest known excepting instruction (see :ref:`Exception State`).
 
 Exception State
@@ -90,7 +90,7 @@ PC Storage
 The ROB must know the PC of every inflight instruction. This information
 is used in the following situations:
 
--  Any instruction could cause an exception, in which the “exception pc"
+-  Any instruction could cause an exception, in which the "exception pc"
    (epc) must be known.
 
 -  Branch and jump instructions need to know their own PC for for target
@@ -98,11 +98,11 @@ is used in the following situations:
 
 -  Jump-register instructions must know both their own PC **and the PC
    of the following instruction** in the program to verify if the
-   Front-end predicted the correct JR target.
+   `:term:`Front-end` predicted the correct JR target.
 
 This information is incredibly expensive to store. Instead of passing
-PCs down the pipeline, branch and jump instructions access the ROB’s “PC
-File" during the *Register-read* stage for use in the Branch Unit. Two
+PCs down the pipeline, branch and jump instructions access the ROB's "PC
+File" during the **Register-read** stage for use in the :term:`Branch Unit`. Two
 optimizations are used:
 
 -  only a single PC is stored per ROB row. [2]_
@@ -124,7 +124,7 @@ release resource as soon as possible. However, the ROB does not
 (currently) look across multiple rows to find commit-able instructions.
 
 Only once a store has been committed may it be sent to memory. For
-superscalar committing of stores, the LSU is told “how many stores" may
+superscalar committing of stores, the **Load/Store Unit (LSU)** is told "how many stores" may
 be marked as committed. The LSU will then drain the committed stores to
 memory as it sees fit.
 
@@ -136,19 +136,19 @@ Exceptions and Flushes
 ----------------------
 
 Exceptions are handled when the instruction at the *commit head* is
-excepting. The pipeline is then flushed and the ROB emptied. The rename
-Map Tables must be reset to represent the true, non-speculative
-*committed* state. The Front-end is then directed to the appropriate PC.
+excepting. The pipeline is then flushed and the ROB emptied. The **Rename
+Map Tables** must be reset to represent the true, non-speculative
+*committed* state. The :term:`Front-end` is then directed to the appropriate PC.
 If it is an architectural exception, the excepting instruction’s PC
 (referred to as the *exception vector*) is sent to the Control/Status
-Register file. If it is a micro-architectural exception (e.g., a
+Register (CSR) file. If it is a micro-architectural exception (e.g., a
 load/store ordering misspeculation) the failing instruction is refetched
 and execution can begin anew.
 
 Parameterization - Rollback versus Single-cycle Reset
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The behavior of resetting the Map Tables is parameterizable. The first
+The behavior of resetting the Rename Map Tables is parameterizable. The first
 option is to rollback the ROB one row per cycle to unwind the rename
 state (this is the behavior of the MIPS
 R10k). For each instruction, the *stale
@@ -157,7 +157,7 @@ its *logical destination* specifier.
 
 A faster single-cycle reset is available. This is accomplished by using
 another rename snapshot that tracks the *committed* state of the rename
-tables. This *committed Map Table* is updated as instructions
+tables. This *Committed Map Table* is updated as instructions
 commit. [3]_
 
 Causes
@@ -168,31 +168,16 @@ The RV64G ISA provides relatively few exception sources:
     Load/Store Unit
         - page faults
 
-    Branch Unit
+    :term:`Branch Unit`
         - misaligned fetches
 
-    Decode Stage
+    **Decode** Stage
         - all other exceptions and interrupts can be handled before the
           instruction is dispatched to the ROB
 
 Note that memory ordering speculation errors also originate from the
 Load/Store Unit, and are treated as exceptions in the BOOM pipeline
 (actually they only cause a pipeline “retry").
-
-.. [1]
-   This design sets up the *Dispatch* and *Commit* widths of BOOM to be
-   the same. However, that is not necessarily a fundamental constraint,
-   and it would be possible to orthogonalize the *Dispatch* and *Commit*
-   widths, just with more added control complexity.
-
-.. [2]
-   Because instructions within an ROB row are consecutive in the
-   program, the instruction’s ROB bank implicitly provides the lower PC
-   bits.
-
-.. [3]
-   The tradeoff here is between longer latencies on exceptions versus an
-   increase in area and wiring.
 
 Point of No Return (PNR)
 ------------------------
@@ -208,3 +193,18 @@ Currently the PNR is only used for RoCC instructions. RoCC co-processors
 typically expect their instructions in-order, and do not tolerate misspeculation.
 Thus we can only issue a instruction to our co-processor when it has past the
 PNR head, and thus is no longer speculative.
+
+.. [1]
+   This design sets up the *dispatch* and *commit* widths of BOOM to be
+   the same. However, that is not necessarily a fundamental constraint,
+   and it would be possible to orthogonalize the *dispatch* and *commit*
+   widths, just with more added control complexity.
+
+.. [2]
+   Because instructions within an ROB row are consecutive in the
+   program, the instruction’s ROB bank implicitly provides the lower PC
+   bits.
+
+.. [3]
+   The tradeoff here is between longer latencies on exceptions versus an
+   increase in area and wiring.

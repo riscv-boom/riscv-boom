@@ -5,17 +5,17 @@ The Register Files and Bypass Network
 .. figure:: /figures/boom-pipeline.svg
     :alt: Multi-Issue Pipeline
 
-    An example multi-issue pipeline. The integer register file needs 6 read ports and 3 write ports for the 
+    An example multi-issue pipeline. The integer register file needs 6 read ports and 3 write ports for the
     execution units present. The FP register file needs 3 read ports and 2 write ports. FP and memory
-    operations share a long latency write port to both the integer and FP 
+    operations share a long latency write port to both the integer and FP
     register file. To make scheduling of the write port trivial, the ALU’s pipeline is lengthened to match
     the FPU latency. The ALU is able to bypass from any of these stages to dependent instructions in the
     Register Read stage.
 
-BOOM is a unified, physical register file (PRF) design. The register
-files hold both the committed and speculative state. Additionally, 
+BOOM is a unified, **Physical Register File (PRF)** design. The register
+files hold both the committed and speculative state. Additionally,
 there are two register files: one for integer and one for floating point
-register values. The Map Tables track which physical register corresponds
+register values. The **Rename Map Tables** track which physical register corresponds
 to which ISA register.
 
 BOOM uses the Berkeley hardfloat floating point units which use an
@@ -42,11 +42,11 @@ them. This is particularly helpful as most instructions need only one
 operand. However, it does add extra complexity to the design, which is
 often manifested as extra pipeline stages to arbitrate and detect
 structural hazards. It also requires the ability to kill issued
-Micro-Ops and re-issue them from the Issue Queue on a later cycle.
+:term:`Micro-Op`s and re-issue them from the **Issue Queue** on a later cycle.
 
 Bypass Network
 --------------
 
 ALU operations can be issued back-to-back by having the write-back
-values forwarded through the bypass network. Bypassing occurs at the end
-of the *Register Read* stage.
+values forwarded through the **Bypass Network**. Bypassing occurs at the end
+of the **Register Read** stage.
