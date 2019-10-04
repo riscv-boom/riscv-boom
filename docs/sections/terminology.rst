@@ -35,7 +35,7 @@ out-of-order terminology.
     Bi-Modal Table (BIM)
         A counter table.
 
-    Micro-Op
+    Micro-Op (UOP)
         Element sent throughout the pipeline holding information about the type of
         Micro-Op, its PC, pointers to the FTQ, ROB, LDQ, STQs, and more.
 

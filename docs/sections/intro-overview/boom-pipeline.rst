@@ -24,7 +24,7 @@ Stages
 Fetch
 ^^^^^
 
-Instructions are *fetched* from the Instruction Memory and
+Instructions are *fetched* from instruction memory and
 pushed into a FIFO queue, known as the :term:`Fetch Buffer`. Branch
 prediction also occurs in this stage, redirecting the fetched
 instructions as necessary. [1]_
@@ -33,7 +33,7 @@ Decode
 ^^^^^^
 
 **Decode** pulls instructions out of the :term:`Fetch Buffer` and
-generates the appropriate :term:`Micro-Op`(s) to place into the
+generates the appropriate :term:`Micro-Op(s) (UOPs)<Micro-Op (UOP)>` to place into the
 pipeline. [2]_
 
 Rename
