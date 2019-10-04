@@ -181,7 +181,7 @@ before the processor can begin fetching (and predicting) again.
 This state can be very expensive but it can be deallocated once the
 branch is resolved in the **Execute** stage. Therefore, the state is
 stored in parallel with the :term:`Branch Rename Snapshot`s. During **Decode**
-and **Rename**, a branch tag is allocated to each branch and a
+and **Rename**, a **Branch Tag** is allocated to each branch and a
 snapshot of the rename tables are made to facilitate single-cycle
 rollback if a misprediction occurs. Like the branch tag and **Rename
 Map Table** snapshots, the corresponding :term:`Branch Rename Snapshot`

@@ -45,21 +45,21 @@ then *renamed* into "physical" register specifiers.
 Dispatch
 ^^^^^^^^
 
-The :term:`Micro-Op` is then *dispatched*, or written, into
+The :term:`Micro-Op<Micro-Op (UOP)>` is then *dispatched*, or written, into
 a set of :term:`Issue Queue`s.
 
 Issue
 ^^^^^
 
-:term:`Micro-Op`s sitting in a :term:`Issue Queue` wait until all of
+:term:`Micro-Ops<Micro-Op (UOP)>` sitting in a :term:`Issue Queue` wait until all of
 their operands are ready and are then *issued*. [3]_ This is
 the beginning of the out–of–order piece of the pipeline.
 
 Register Read
 ^^^^^^^^^^^^^
 
-Issued :term:`Micro-Op`s first **read** their register operands from the **unified
-physical register file** (or from the **bypass network**)...
+Issued :term:`Micro-Ops<Micro-Op (UOP)>`s first *read* their register operands from the unified
+**Physical Register File** (or from the **Bypass Network**)...
 
 Execute
 ^^^^^^^
@@ -84,7 +84,7 @@ Writeback
 ^^^^^^^^^
 
 ALU operations and load operations are *written* back to the
-physical register file.
+**Physical Register File**.
 
 Commit
 ^^^^^^
@@ -100,7 +100,7 @@ Branch Support
 
 BOOM supports full branch speculation and branch prediction. Each
 instruction, no matter where it is in the pipeline, is accompanied by a
-**branch tag** that marks which branches the instruction is "speculated
+**Branch Tag** that marks which branches the instruction is "speculated
 under". A mispredicted branch requires killing all instructions that
 depended on that branch. When a branch instructions passes through
 **Rename**, copies of the **Register Rename Table** and the **Free
@@ -114,7 +114,7 @@ Although :numref:`boom-pipeline` shows a simplified BOOM pipeline, BOOM supports
 which includes single-precision and double-precision floating point, atomics support, and page-based virtual memory.
 A more detailed diagram is shown below in :numref:`boom-pipeline-detailed`.
 
-.. _boom-pipeline:
+.. _boom-pipeline-detailed:
 .. figure:: /figures/boom-pipeline-detailed.png
     :alt: Detailed BOOM Pipeline
 
@@ -122,13 +122,13 @@ A more detailed diagram is shown below in :numref:`boom-pipeline-detailed`.
 
 .. [1] While the :term:`Fetch Buffer` is N-entries deep, it can instantly read
     out the first instruction on the front of the FIFO. Put another way,
-    instructions don’t need to spend N cycles moving their way through
+    instructions don’t need to spend ``N`` cycles moving their way through
     the :term:`Fetch Buffer` if there are no instructions in front of
     them.
 
 .. [2] Because RISC-V is a RISC ISA, currently all instructions generate
-    only a single :term:`Micro-Op`. More details on how store :term:`Micro-Op`s are
+    only a single :term:`Micro-Op<Micro-Op (UOP)>`. More details on how store :term:`Micro-Ops<Micro-Op (UOP)>` are
     handled can be found in :ref:`The Memory System and the Data-cache Shim`.
 
-.. [3] More precisely, :term:`Micro-Op`s that are ready assert their request, and the
-    :term:`Issue Scheduler` chooses which :term:`Micro-Op`s to issue that cycle.
+.. [3] More precisely, :term:`Micro-Ops<Micro-Op (UOP)>` that are ready assert their request, and the
+    :term:`Issue Scheduler` chooses which :term:`Micro-Ops<Micro-Op (UOP)>` to issue that cycle.

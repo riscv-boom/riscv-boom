@@ -1,37 +1,6 @@
 Welcome to RISCV-BOOM's documentation!
 ======================================
 
-.. figure:: _static/boom-pipeline-detailed.png
-    :alt: Berkeley Out-of-Order Machine (BOOM)
-
-   Berkeley Out-of-Order Machine (BOOM)
-
-.. figure:: figures/boom-pipeline-detailed.png
-    :alt: Berkeley Out-of-Order Machine (BOOM)
-
-   Berkeley Out-of-Order Machine (BOOM)
-
-.. figure:: /figures/boom-pipeline-detailed.png
-    :alt: Berkeley Out-of-Order Machine (BOOM)
-
-   Berkeley Out-of-Order Machine (BOOM)
-
-dummy test
-
-.. figure:: figures/boom-pipeline-detailed.png
-    :alt: Berkeley Out-of-Order Machine (BOOM)
-
-   Berkeley Out-of-Order Machine (BOOM)
-
-.. figure:: /figures/boom-pipeline-detailed.png
-    :alt: Berkeley Out-of-Order Machine (BOOM)
-
-   Berkeley Out-of-Order Machine (BOOM)
-
-
-Welcome!
---------
-
 The Berkeley Out-of-Order Machine (BOOM) is a synthesizable and parameterizable open-source `RISC-V <riscv.org>`__ out-of-order core written in the `Chisel <chisel-lang.org>`__ hardware construction language.
 The goal of this document is to describe the design and implementation of the core as well as provide other helpful information to use the core.
 
@@ -51,7 +20,7 @@ Quick-start
 
 The best way to get started with the BOOM core is to use the `Chipyard project template <https://github.com/ucb-bar/chipyard>`__.
 There you will find the main steps to setup your environment, build, and run the BOOM core on a C++ emulator.
-Here is a selected set of steps from Chipyards `documentation <https://chipyard.readthedocs.io/en/latest/>`__:
+Here is a selected set of steps from `Chipyard's documentation <https://chipyard.readthedocs.io/en/latest/>`__:
 
 .. _quick-start-code:
 .. code-block:: bash
@@ -72,8 +41,7 @@ Here is a selected set of steps from Chipyards `documentation <https://chipyard.
     cd sims/verilator
     make CONFIG=LargeBoomConfig
 
-Note: :numref:`quick-start-code` assumes you don't have riscv-tools toolchain installed.
-It will pull and build the toolchain for you.
+.. Note:: :numref:`quick-start-code` assumes you don't have riscv-tools toolchain installed. It will pull and build the toolchain for you.
 
 Table of Contents
 -----------------

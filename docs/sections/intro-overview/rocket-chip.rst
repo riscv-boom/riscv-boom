@@ -8,7 +8,7 @@ Rocket Chip SoC Generator
     A single-core "BOOM-chip", with no L2 last-level cache
 
 As BOOM is just a core, an entire SoC infrastructure must be provided.
-BOOM was developed to use the open-source `Rocket Chip SoC generator <https://github.com/chipsalliance/rocket-chip>`__
+BOOM was developed to use the open-source `Rocket Chip SoC generator <https://github.com/chipsalliance/rocket-chip>`__.
 The **Rocket Chip generator** can instantiate a wide range of SoC designs, including cache-coherent
 multi-tile designs, cores with and without accelerators, and chips with or without a last-level shared cache.
 It comes bundled with a 5-stage in-order core, called **Rocket**, by default.
@@ -20,10 +20,10 @@ To get more information, please visit the `Chipyard Rocket Chip documentation <>
 The Rocket Core - a Library of Processor Components!
 ----------------------------------------------------
 
-From BOOM’s point of view, the Rocket core can be thought of as a
+From BOOM's point of view, the Rocket core can be thought of as a
 "Library of Processor Components." There are a number of modules created
 for Rocket that are also used by BOOM - the functional units, the
-caches, the translation look-aside buffers, the page table walker, and
+caches, the translation look-aside buffers (TLBs), the page table walker (PTW), and
 more. Throughout this document you will find references to these
 Rocket components and descriptions on how they fit into BOOM.
 
