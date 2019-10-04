@@ -5,13 +5,13 @@ Instruction Fetch
 .. figure:: /figures/front-end.svg
     :alt: BOOM :term:`Front-end`
 
-    The BOOM :term:`Front-end`
+    The BOOM Front-end
 
 
-BOOM instantiates its own :term:`:term:`Front-end``, similar to how the Rocket core(s)
-instantiates its own :term:`:term:`Front-end``. This :term:`Front-end` fetches instructions and
+BOOM instantiates its own :term:`Front-end` , similar to how the Rocket core(s)
+instantiates its own :term:`Front-end` . This :term:`Front-end` fetches instructions and
 makes predictions throughout the Fetch stage to redirect the instruction
-stream in multiple Fetch cycles (F0, F1...). If a misprediction is detected in BOOM’s
+stream in multiple fetch cycles (**F0**, **F1**...). If a misprediction is detected in BOOM’s
 :term:`Back-end` (execution pipeline), or one of BOOM’s own predictors wants to redirect the pipeline in
 a different direction, a request is sent to the :term:`Front-end` and it begins
 fetching along a new instruction path. See :ref:`Branch Prediction` for
@@ -30,8 +30,7 @@ The Rocket Core I-Cache
 -----------------------
 
 BOOM instantiates the i-cache taken from the Rocket processor source code.
-The i-cache is a virtually indexed, physically tagged set-associative
-cache.
+The i-cache is a virtually indexed, physically tagged set-associative cache.
 
 To save power, the i-cache reads out a fixed number of bytes (aligned)
 and stores the instruction bits into a register. Further instruction
@@ -52,9 +51,8 @@ the i-cache to start fetching along the correct path.
 Fetching Compressed Instructions
 --------------------------------
 
-This section describes how the RISC-V Compressed ISA extension
-was implemented in BOOM. The Compressed ISA Extension, or RVC
-(http://riscv.org/download.html#spec_compressed_isa) enables smaller, 16
+This section describes how the `RISC-V Compressed ISA extension <https://riscv.org/specifications/>`
+was implemented in BOOM. The Compressed ISA Extension, or RVC enables smaller, 16
 bit encodings of common instructions to decrease the static and dynamic
 code size. "RVC" comes with a number of features that are of particular
 interest to micro-architects:
@@ -73,32 +71,31 @@ doing this brings up a particular set of issues to manage:
 
 -  Finding *where* the instruction begins.
 
--  Removing +4 assumptions throughout the code base,
+-  Removing ``+4`` assumptions throughout the code base,
    particularly with branch handling.
 
 -  Unaligned instructions, in particular, running off cache lines and
    virtual pages.
 
-The last point requires some additional "statefulness" in the :term:`Fetch Unit`,
-as fetching all of the pieces of an instruction may take multiple
-cycles.
+The last point requires some additional "statefulness" in the :term:`Fetch Unit` ,
+as fetching all of the pieces of an instruction may take multiple cycles.
 
 The following describes the implementation of RVC in BOOM by describing
 the lifetime of a instruction.
 
--  The :term:`Front-end` returns :term:`Fetch Packet`s of :term:`fetchWidth <Fetch Width>`*16 bits wide. This
-   was supported inherently in the BOOM :term:`Front-end`.
+-  The :term:`Front-end` returns :term:`Fetch Packets<Fetch Packet>` of :term:`fetchWidth<Fetch Width>` \*16 bits wide. This
+   was supported inherently in the BOOM :term:`Front-end<Front-end>`.
 
--  Maintain statefulness in F3, in the cycle where :term:`Fetch Packet`s
+-  Maintain statefulness in **F3**, in the cycle where :term:`Fetch Packets<Fetch Packet>`
    are dequeued from the i-cache response queue and enqueued onto the
-   :term:`Fetch Buffer`
+   :term:`Fetch Buffer`.
 
--  F3 tracks the trailing 16b, PC, and instruction boundaries of the
+-  **F3** tracks the trailing 16b, PC, and instruction boundaries of the
    last :term:`Fetch Packet`. These bits are combined with the current
-   :term:`Fetch Packet` and expanded to :term:`fetchWidth <Fetch Width>`*32 bits for enqueuing onto the
+   :term:`Fetch Packet` and expanded to :term:`fetchWidth <Fetch Width>` \*32 bits for enqueuing onto the
    :term:`Fetch Buffer`. Predecode determines the start address of every
    instruction in this :term:`Fetch Packet` and masks the :term:`Fetch Packet` for the
-   :term:`Fetch Buffer`
+   :term:`Fetch Buffer`.
 
 -  The :term:`Fetch Buffer` now compacts away invalid, or misaligned instructions
    when storing to its memory.
@@ -112,12 +109,12 @@ The following section describes miscellaneous implementation details.
    all instructions which were initially misaligned across a :term:`Fetch Boundary`.
 
 -  The pipeline must also track whether an instruction was originally
-   16b or 32b, for calculating PC+4 or PC+2.
+   16b or 32b, for calculating ``PC+4`` or ``PC+2``.
 
-The :term:`Fetch Buffer`
+The Fetch Buffer
 ----------------
 
-:term:`Fetch Packet`s coming from the i-cache are placed into a :term:`Fetch Buffer`. The :term:`Fetch Buffer` helps to decouple the instruction
+:term:`Fetch Packets<Fetch Packet>` coming from the i-cache are placed into a :term:`Fetch Buffer` . The :term:`Fetch Buffer` helps to decouple the instruction
 fetch :term:`Front-end` from the execution pipeline in the :term:`Back-end`.
 
 The :term:`Fetch Buffer` is parameterizable. The number of entries can be
@@ -130,7 +127,7 @@ The :term:`Fetch Target Queue`
 The :term:`Fetch Target Queue` is a queue that holds the PC
 received from the i-cache and the branch prediction info associated
 with that address. It holds this information for the pipeline to
-reference during the executions of its :term:`Micro-Op`s. It is dequeued by
+reference during the executions of its :term:`Micro-Op (UOP)` s. It is dequeued by
 the ROB once an instruction is committed and is updated during pipeline
 redirection/mispeculation.
 
@@ -143,4 +140,4 @@ redirection/mispeculation.
 
 .. [2] A flow-through queue allows entries being enqueued to be
     immediately dequeued if the queue is empty and the consumer is
-    requesting (the packet “flows through" instantly).
+    requesting (the packet "flows through" instantly).
