@@ -178,6 +178,8 @@ Floating Point Units
 
 .. _fp-fu:
 .. figure:: /figures/functional-unit-fpu.png
+    :scale: 25 %
+    :align: center
     :alt: Functional Unit for FPU
 
     The class hierarchy of the FPU is shown. The expert-written code is contained within
