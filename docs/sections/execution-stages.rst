@@ -178,7 +178,7 @@ Floating Point Units
 
 .. _fp-fu:
 .. figure:: /figures/functional-unit-fpu.png
-    :scale: 25 %
+    :scale: 15 %
     :align: center
     :alt: Functional Unit for FPU
 
