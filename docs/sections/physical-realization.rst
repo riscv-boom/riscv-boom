@@ -63,7 +63,7 @@ EnableBrResolutionRegister
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The branch unit resolves branches, detects mispredictions, fans out the
-branch kill signal to *all* inflight Micro-Ops, redirects the PC select
+branch kill signal to *all* inflight :term:`Micro-Ops (UOPs)<Micro-Op (UOP)>`, redirects the PC select
 stage to begin fetching down the correct path, and sends snapshot
 information to the branch predictor to reset its state properly so it
 can begin predicting down the correct path. Turning this option **on**

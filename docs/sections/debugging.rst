@@ -11,23 +11,24 @@ can find the documentation and website at https://fires.im/.
 
 Chicken Bits
 ------------
+
 BOOM supports a chicken-bit to delay all instructions from issue until the
 pipeline clears. This effectively turns BOOM into a unpipelined in-order
-core. The chicken bit is controlled by the third bit of the CSR at 0x7c1.
+core. The chicken bit is controlled by the third bit of the CSR at ``0x7c1``.
 Writing this CSR with `csrwi 0x7c1, 0x8` will turn off all out-of-orderiness
 in the core. High-performance can be re-enabled with `csrwi 0x7c1, 0x0`.
 
 Pipeline Visualization
 ----------------------
 
-“Pipeview" is a useful diagnostic and visualization tool for seeing how
+"Pipeview" is a useful diagnostic and visualization tool for seeing how
 instructions are scheduled on an out-of-order pipeline.
 
 Pipeview displays every fetched instruction and shows when it is
 fetched, decoded, renamed, dispatched, issued, completed, and committed
-(“retired"). It shows both committed and misspeculated instructions. It
+("retired"). It shows both committed and misspeculated instructions. It
 also shows when stores were successfully acknowledged by the memory
-system (“store-completion"). It is useful for programmers who wish to
+system ("store-completion"). It is useful for programmers who wish to
 see how their code is performing and for architects to see which
 bottlenecks are constricting machine performance.
 
@@ -65,7 +66,7 @@ compatible with the O3 Pipeline Viewer included in the gem5 simulator
 suite.
 
 To enable pipeline visualization, first set ``O3PIPEVIEW_PRINTF`` in
-``boom/src/main/scala/consts.scala`` to ``true``:
+``src/main/scala/common/consts.scala`` to ``true``:
 
 .. code-block:: bash
 

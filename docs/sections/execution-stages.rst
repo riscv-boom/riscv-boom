@@ -5,22 +5,22 @@ The Execute Pipeline
 .. figure:: /figures/execution-pipeline-2w.png
     :alt: Dual Issue Pipeline
 
-    An example pipeline for a dual-issue BOOM. The first issue port schedules :term:`Micro-Op`s onto
+    An example pipeline for a dual-issue BOOM. The first issue port schedules :term:`UOP<Micro-Op (UOP)`s onto
     Execute Unit #0, which can accept ALU operations, FPU operations, and integer multiply instructions.
     The second issue port schedules ALU operations, integer divide instructions (unpipelined), and load/store
-    operations. The ALU operations can bypass to dependent instructions. Note that the ALU in EU#0 is
+    operations. The ALU operations can bypass to dependent instructions. Note that the ALU in Execution Unit #0 is
     padded with pipeline registers to match latencies with the FPU and iMul units to make scheduling for the
     write-port trivial. Each :term:`Execution Unit` has a single issue-port dedicated to it but contains within it a number
     of lower-level :term:`Functional Unit`s.
 
-The **Execution Pipeline** covers the execution and write-back of :term:`Micro-Op`s.
-Although the :term:`Micro-Op`s will travel down the pipeline one after the other
-(in the order they have been issued), the :term:`Micro-Op`s themselves are
+The **Execution Pipeline** covers the execution and write-back of :term:`Micro-Ops (UOPs)<Micro-Op (UOP)>`.
+Although the :term:`UOPs<Micro-Op (UOP)` will travel down the pipeline one after the other
+(in the order they have been issued), the :term:`UOPs<Micro-Op (UOP)` themselves are
 likely to have been issued to the Execution Pipeline out-of-order.
 :numref:`dual-issue-pipeline` shows an example Execution Pipeline for a
 dual-issue BOOM.
 
-:term:`Execution Unit`s
+Execution Units
 ---------------
 
 .. _example-fu:
@@ -30,30 +30,30 @@ dual-issue BOOM.
     An example :term:`Execution Unit`. This particular example shows an integer ALU (that can bypass
     results to dependent instructions) and an unpipelined divider that becomes busy during operation. Both
     :term:`Functional Unit`s share a single write-port. The :term:`Execution Unit` accepts both kill signals and branch resolution
-    signals and passes them to the internal :term:`Functional Unit`s as required.
+    signals and passes them to the internal :term:`Functional Unit` s as required.
 
 
 An :term:`Execution Unit` is a module that a single issue port will schedule
-:term:`Micro-Op`s onto and contains some mix of :term:`Functional Unit`s. Phrased in
+:term:`UOPs<Micro-Op (UOP)` onto and contains some mix of :term:`Functional Unit` s. Phrased in
 another way, each issue port from the **Issue Queue** talks to one and only
 one :term:`Execution Unit`. An :term:`Execution Unit` may contain just a single simple
 integer ALU, or it could contain a full complement of floating point
 units, a integer ALU, and an integer multiply unit.
 
 The purpose of the :term:`Execution Unit` is to provide a flexible abstraction
-which gives a lot of control over what kind of :term:`Execution Unit`s the
+which gives a lot of control over what kind of :term:`Execution Unit` s the
 architect can add to their pipeline
 
 Scheduling Readiness
 ~~~~~~~~~~~~~~~~~~~~
 
-An :term:`Execution Unit` provides a bit-vector of the :term:`Functional Unit`s it has
+An :term:`Execution Unit` provides a bit-vector of the :term:`Functional Unit` s it has
 available to the issue scheduler. The issue scheduler will only schedule
-:term:`Micro-Op`s that the :term:`Execution Unit` supports. For :term:`Functional Unit`s that
+:term:`UOPs<Micro-Op (UOP)` that the :term:`Execution Unit` supports. For :term:`Functional Unit` s that
 may not always be ready (e.g., an un-pipelined divider), the appropriate
 bit in the bit-vector will be disabled (See :numref:`dual-issue-pipeline`).
 
-:term:`Functional Unit`s
+Functional Unit
 ----------------
 
 .. _abstract-fu:
@@ -62,39 +62,39 @@ bit in the bit-vector will be disabled (See :numref:`dual-issue-pipeline`).
 
     The abstract Pipelined :term:`Functional Unit` class. An expert-written, low-level :term:`Functional Unit`
     is instantiated within the :term:`Functional Unit`. The request and response ports are abstracted and bypass and
-    branch speculation support is provided. :term:`Micro-Op`s are individually killed by gating off their response as they
-    exit the low-level :term:`Functional Unit`.
+    branch speculation support is provided. :term:`UOPs<Micro-Op (UOP)` are individually killed by gating off their response as they
+    exit the low-level :term:`Functional Unit` .
 
-:term:`Functional Unit`s are the muscle of the CPU, computing the necessary
-operations as required by the instructions. :term:`Functional Unit`s typically
+:term:`Functional Unit` s are the muscle of the CPU, computing the necessary
+operations as required by the instructions. :term:`Functional Unit` s typically
 require a knowledgable domain expert to implement them correctly and
 efficiently.
 
 For this reason, BOOM uses an abstract :term:`Functional Unit` class to "wrap"
-expert-written, low-level :term:`Functional Unit`s from the Rocket repository
-(see :ref:`The Rocket-Chip Repository`). However, the expert-written :term:`Functional Unit`s
+expert-written, low-level :term:`Functional Unit` s from the Rocket repository
+(see :ref:`Rocket Chip SoC Generator`). However, the expert-written :term:`Functional Unit` s
 created for the Rocket in-order processor make assumptions about
 in-order issue and commit points (namely, that once an instruction has
 been dispatched to them it will never need to be killed). These
 assumptions break down for BOOM.
 
-However, instead of re-writing or forking the :term:`Functional Unit`s, BOOM
+However, instead of re-writing or forking the :term:`Functional Unit` s, BOOM
 provides an abstract :term:`Functional Unit` class (see :numref:`abstract-fu`)
 that “wraps" the lower-level functional
 units with the parameterized auto-generated support code needed to make
 them work within BOOM. The request and response ports are abstracted,
-allowing :term:`Functional Unit`s to provide a unified, interchangeable
+allowing :term:`Functional Unit` s to provide a unified, interchangeable
 interface.
 
-Pipelined :term:`Functional Unit`s
+Pipelined Functional Units
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A pipelined :term:`Functional Unit` can accept a new :term:`Micro-Op` every cycle. Each
-:term:`Micro-Op` will take a known, fixed latency.
+A pipelined :term:`Functional Unit` can accept a new :term:`UOP<Micro-Op (UOP)` every cycle. Each
+:term:`UOP<Micro-Op (UOP)` will take a known, fixed latency.
 
 Speculation support is provided by auto-generating a pipeline that
-passes down the :term:`Micro-Op` meta-data and *branch mask* in parallel with
-the :term:`Micro-Op` within the expert-written :term:`Functional Unit`. If a :term:`Micro-Op` is
+passes down the :term:`UOP<Micro-Op (UOP)` meta-data and *branch mask* in parallel with
+the :term:`UOP<Micro-Op (UOP)` within the expert-written :term:`Functional Unit` . If a :term:`UOP<Micro-Op (UOP)` is
 misspeculated, it’s response is de-asserted as it exits the functional
 unit.
 
@@ -103,27 +103,27 @@ An example pipelined :term:`Functional Unit` is shown in :numref:`abstract-fu`.
 Un-pipelined :term:`Functional Unit`s
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Un-pipelined :term:`Functional Unit`s (e.g., a divider) take an variable (and
+Un-pipelined :term:`Functional Unit` s (e.g., a divider) take an variable (and
 unknown) number of cycles to complete a single operation. Once occupied,
-they de-assert their ready signal and no additional :term:`Micro-Op`s may be
+they de-assert their ready signal and no additional :term:`UOPs<Micro-Op (UOP)` may be
 scheduled to them.
 
 Speculation support is provided by tracking the **branch mask** of the
-:term:`Micro-Op` in the :term:`Functional Unit`.
+:term:`UOP<Micro-Op (UOP)` in the :term:`Functional Unit`.
 
 The only requirement of the expert-written un-pipelined :term:`Functional Unit`
 is to provide a *kill* signal to quickly remove misspeculated
-:term:`Micro-Op`s. [1]_
+:term:`UOPs<Micro-Op (UOP)`. [1]_
 
 .. _fu-hierarchy:
 .. figure:: /figures/functional-unit-hierarchy.png
-    :alt: :term:`Functional Unit` Hierarchy
+    :alt: Functional Unit Hierarchy
 
-    The dashed ovals are the low-level :term:`Functional Unit`s written by experts, the squares are
-    concrete classes that instantiate the low-level :term:`Functional Unit`s, and the octagons are abstract classes that
+    The dashed ovals are the low-level :term:`Functional Unit` s written by experts, the squares are
+    concrete classes that instantiate the low-level :term:`Functional Unit` s, and the octagons are abstract classes that
     provide generic speculation support and interfacing with the BOOM pipeline. The floating point divide
-    and squart-root unit doesn’t cleanly fit either the Pipelined nor Unpipelined abstract class, and so directly
-    inherits from the FunctionalUnit super class.
+    and squart-root unit doesn’t cleanly fit either the ``Pipelined`` nor ``Unpipelined`` abstract class, and so directly
+    inherits from the ``FunctionalUnit`` super class.
 
 :term:`Branch Unit` & Branch Speculation
 --------------------------------
@@ -131,24 +131,24 @@ is to provide a *kill* signal to quickly remove misspeculated
 The :term:`Branch Unit` handles the resolution of all branch and jump
 instructions.
 
-All :term:`Micro-Op`s that are "inflight" in the pipeline (have an allocated ROB
+All :term:`UOPs<Micro-Op (UOP)` that are "inflight" in the pipeline (have an allocated ROB
 entry) are given a branch mask, where each bit in the branch mask
-corresponds to an un-executed, inflight branch that the :term:`Micro-Op` is
+corresponds to an un-executed, inflight branch that the :term:`UOP<Micro-Op (UOP)` is
 speculated under. Each branch in *Decode* is allocated a branch tag,
-and all following :term:`Micro-Op`s will have the corresponding bit in the
+and all following :term:`UOPs<Micro-Op (UOP)` will have the corresponding bit in the
 branch mask set (until the branch is resolved by the :term:`Branch Unit`).
 
 If the branches (or jumps) have been correctly speculated by the
-:term:`Front-end`, then the :term:`Branch Unit`’s only action is to broadcast the
-corresponding branch tag to *all* inflight :term:`Micro-Op`s that the branch has
-been resolved correctly. Each :term:`Micro-Op` can then clear the corresponding
+:term:`Front-end`, then the :term:`Branch Unit` s only action is to broadcast the
+corresponding branch tag to *all* inflight :term:`UOPs<Micro-Op (UOP)` that the branch has
+been resolved correctly. Each :term:`UOP<Micro-Op (UOP)` can then clear the corresponding
 bit in its branch mask, and that branch tag can then be allocated to a
 new branch in the *Decode* stage.
 
 If a branch (or jump) is misspeculated, the :term:`Branch Unit` must redirect
 the PC to the correct target, kill the :term:`Front-end` and :term:`Fetch Buffer`, and
 broadcast the misspeculated branch tag so that all dependent, inflight
-:term:`Micro-Op`s may be killed. The PC redirect signal goes out immediately, to
+:term:`UOPs<Micro-Op (UOP)` may be killed. The PC redirect signal goes out immediately, to
 decrease the misprediction penalty. However, the *kill* signal is
 delayed a cycle for critical path reasons.
 
@@ -160,7 +160,7 @@ ROB (if not available, then a misprediction is assumed). Jumps are
 evaluated and handled in the :term:`Front-end` (as their direction and target
 are both known once the instruction can be decoded).
 
-BOOM (currently) only supports having one :term:`Branch Unit`.
+BOOM (currently) only supports having one :term:`Branch Unit` .
 
 Load/Store Unit
 ---------------
@@ -171,17 +171,17 @@ and fence operations.
 BOOM (currently) only supports having one LSU (and thus can only send
 one load or store per cycle to memory). [2]_
 
-See `The Load/Store Unit (LSU)` for more details on the LSU.
+See :ref:`The Load/Store Unit (LSU)` for more details on the LSU.
 
 Floating Point Units
 --------------------
 
 .. _fp-fu:
 .. figure:: /figures/functional-unit-fpu.png
-    :alt: :term:`Functional Unit` for FPU
+    :alt: Functional Unit for FPU
 
     The class hierarchy of the FPU is shown. The expert-written code is contained within
-    the hardfloat and rocket repositories. The “FPU” class instantiates the Rocket components, which itself
+    the hardfloat and rocket repositories. The "FPU" class instantiates the Rocket components, which itself
     is further wrapped by the abstract :term:`Functional Unit` classes (which provides the out-of-order speculation
     support).
 
@@ -197,7 +197,7 @@ Floating Point Divide and Square-root Unit
 ------------------------------------------
 
 BOOM fully supports floating point divide and square-root operations
-using a single **FDiv/Sqrt** (or **fdiv** for short). BOOM accomplishes this by
+using a single **FDiv/Sqrt** (or fdiv for short). BOOM accomplishes this by
 instantiating a double-precision unit from the hardfloat repository. The
 unit comes with the following features/constraints:
 
@@ -216,7 +216,7 @@ Single-precision operations have their operands upscaled to
 double-precision (and then the output downscaled). [4]_
 
 Although the unit is unpipelined, it does not fit cleanly into the
-Pipelined/Unpipelined abstraction used by the other :term:`Functional Unit`s
+Pipelined/Unpipelined abstraction used by the other :term:`Functional Unit` s
 (see :numref:`fu-hierarchy`). This is because the unit provides
 an unstable FIFO interface: although the unit may provide a *ready*
 signal on Cycle ``i``, there is no guarantee that it will continue
@@ -234,7 +234,7 @@ Parameterization
 ----------------
 
 BOOM provides flexibility in specifying the issue width and the mix of
-:term:`Functional Unit`s in the execution pipeline. See ``src/main/scala/exu/execution-units.scala``
+:term:`Functional Unit` s in the execution pipeline. See ``src/main/scala/exu/execution-units.scala``
 for a detailed view on how to instantiate the execution pipeline in BOOM.
 
 Additional parameterization, regarding things like the latency of the FP
@@ -331,5 +331,4 @@ all be straightforward to add, and will be completed as demand arises.
 
 .. [7]
    The CSRFile is a Rocket component.
-
 

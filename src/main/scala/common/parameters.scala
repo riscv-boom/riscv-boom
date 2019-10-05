@@ -84,7 +84,7 @@ case class BoomCoreParams(
   useRVE: Boolean = false,
   useBPWatch: Boolean = false,
   clockGate: Boolean = false
-// DOC include start: BOOM Parameters
+// DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams
 {
   val haveFSDirty = false

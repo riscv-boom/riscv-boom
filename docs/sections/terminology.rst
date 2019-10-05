@@ -11,18 +11,18 @@ out-of-order terminology.
         some set of consecutive instructions with a mask
         denoting which instructions are valid, amongst
         other meta-data related to instruction fetch and
-        branch prediction. The **Fetch PC** will point
+        branch prediction. The Fetch PC will point
         to the first valid instruction in the
-        **Fetch Packet**, as it is the PC used by the
-        Front End to fetch the **Fetch Packet**.
+        Fetch Packet, as it is the PC used by the
+        Front End to fetch the Fetch Packet.
 
     Fetch PC
         The PC corresponding to the head of a
-        **Fetch Packet** instruction group.
+        Fetch Packet instruction group.
 
     Fetch Buffer
-        Buffer that holds **Fetch Packets** that are sent to the
-        **Back-end**.
+        Buffer that holds Fetch Packets that are sent to the
+        Back-end.
 
     TAGE Predictor
         A high performance branch predictor. For more information
@@ -44,7 +44,7 @@ out-of-order terminology.
         from the i-cache.
 
     Back-end
-        The stages starting from **Dispatch** to **Writeback**. Here instructions
+        The stages starting from Dispatch to Writeback. Here instructions
         are executed, dependencies resolved, branches resolved, etc.
 
     Fetch Boundary
@@ -52,19 +52,19 @@ out-of-order terminology.
         used in RVC.
 
     Fetch Target Queue (FTQ)
-        Queue used to track the branch prediction information for inflight **Micro-Ops**.
-        This is dequeued once all instructions in its **Fetch Packet** entry are
+        Queue used to track the branch prediction information for inflight Micro-Ops.
+        This is dequeued once all instructions in its Fetch Packet entry are
         committed.
 
     Next-Line Predictor (NLP)
         Consists of a Branch Target Buffer (BTB),
         Return Address Stack (RAS) and Bi-Modal Table (BIM).
-        This is used to make quick predictions to redirect the **Front-end**
+        This is used to make quick predictions to redirect the Front-end
 
     Backing predictor (BPD)
         Slower but more complicated predictor used to track longer
         histories. In BOOM you can have multiple different types of
-        a **Backing predictor** (TAGE, GShare...).
+        a Backing predictor (TAGE, GShare...).
 
     Branch Target Buffer (BTB)
         Tagged entry table in which a PC is used to find a matching
@@ -77,7 +77,7 @@ out-of-order terminology.
 
     Fetch Width
         The amount of instructions retrieved from the i-cache from the
-        **Front-end** of the processor.
+        Front-end of the processor.
 
     Global History Register (GHR)
         A register holding the last N taken/not taken results of branches
@@ -88,13 +88,16 @@ out-of-order terminology.
         Saved state used to reset the pipeline to a correct state after a
         misspeculation or other redirecting event.
 
-    Issue Scheduler
-        <TODO: ADD DESCRIPTION HERE>
-
     Branch Unit
+        The functional unit that resolves a branch in the Execute Pipeline.
 
     Branch Rename Snapshot
+        Metadata and prediction snapshots that are used to fix the branch predictor after
+        mispredictions.
 
     Execution Unit
+        A module that wraps multiple Functional Units within it.
+        It is attached to one issue port only.
 
     Functional Unit
+        A specific hardware module to compute some function (i.e. ALU, FPU, etc).

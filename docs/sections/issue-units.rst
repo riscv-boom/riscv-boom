@@ -1,10 +1,10 @@
 The Issue Unit
 ==============
 
-The **Issue Queue**s hold dispatched :term:`Micro-Op`s that have not yet executed.
-When all of the operands for the :term:`Micro-Op` are ready, the issue slot sets
+The **Issue Queue** s hold dispatched :term:`Micro-Ops (UOPs) <Micro-Op (UOP)>` that have not yet executed.
+When all of the operands for the :term:`UOP<Micro-Op (UOP)` are ready, the issue slot sets
 its "request" bit high. The issue select logic then chooses to issue a
-slot which is asserting its "request" signal. Once a :term:`Micro-Op` is issued,
+slot which is asserting its "request" signal. Once a :term:`UOP<Micro-Op (UOP)` is issued,
 it is removed from the Issue Queue to make room for more dispatched
 instructions.
 
@@ -15,12 +15,12 @@ Speculative Issue
 -----------------
 
 Although not yet supported, future designs may choose to speculatively
-issue :term:`Micro-Op`s for improved performance (e.g., speculating that a load
-instruction will hit in the cache and thus issuing dependent :term:`Micro-Op`s
+issue :term:`UOPs<Micro-Op (UOP)` for improved performance (e.g., speculating that a load
+instruction will hit in the cache and thus issuing dependent :term:`UOPs<Micro-Op (UOP)`
 assuming the load data will be available in the bypass network). In such
 a scenario, the Issue Queue cannot remove speculatively issued
-:term:`Micro-Op`s until the speculation has been resolved. If a
-speculatively-issued :term:`Micro-Op` failure occurs, then all issued :term:`Micro-Op`s
+:term:`UOPs<Micro-Op (UOP)` until the speculation has been resolved. If a
+speculatively-issued :term:`UOP<Micro-Op (UOP)` failure occurs, then all issued :term:`UOPs<Micro-Op (UOP)`
 that fall within the speculated window must be killed and retried from
 the Issue Queue. More advanced techniques are also available.
 
@@ -47,11 +47,11 @@ Issue Select Logic
     A single issue slot from the Issue Queue.
 
 Each issue select logic port is a static-priority encoder that picks
-that first available :term:`Micro-Op` in the Issue Queue. Each port will only
-schedule a :term:`Micro-Op` that its port can handle (e.g., floating point
-:term:`Micro-Op`s will only be scheduled onto the port governing the Floating
+that first available :term:`UOP<Micro-Op (UOP)` in the Issue Queue. Each port will only
+schedule a :term:`UOP<Micro-Op (UOP)` that its port can handle (e.g., floating point
+:term:`UOPs<Micro-Op (UOP)` will only be scheduled onto the port governing the Floating
 Point Unit). This creates a cascading priority encoder for ports that
-can schedule the same :term:`Micro-Op`s as each other.
+can schedule the same :term:`UOPs<Micro-Op (UOP)` as each other.
 
 If a **Functional Unit** is unavailable, it de-asserts its available signal
 and instructions will not be issued to it (e.g., an un-pipelined
@@ -62,7 +62,7 @@ Un-ordered Issue Queue
 
 There are two scheduling policies available in BOOM.
 
-The first is a R10K-style Un-ordered Issue
+The first is a MIPS R10K-style Un-ordered Issue
 Queue. Dispatching instructions are placed
 into the first available Issue Queue slot and remain there until they
 are *issued*. This can lead to pathologically poor performance,
@@ -89,8 +89,8 @@ Wake-up
 -------
 
 There are two types of wake-up in BOOM - *fast* wakeup and *slow*
-wakeup (also called a long latency wakeup). Because ALU :term:`Micro-Op`s can send their write-back data through the
-bypass network, issued ALU :term:`Micro-Op`s will broadcast their wakeup to the
+wakeup (also called a long latency wakeup). Because ALU :term:`UOPs<Micro-Op (UOP)` can send their write-back data through the
+bypass network, issued ALU :term:`UOPs<Micro-Op (UOP)` will broadcast their wakeup to the
 Issue Queue as they are issued.
 
 However, floating-point operations, loads, and variable latency

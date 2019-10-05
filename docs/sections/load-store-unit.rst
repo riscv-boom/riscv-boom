@@ -7,17 +7,17 @@ The Load/Store Unit (LSU)
 
     The Load/Store Unit
 
-The Load/Store Unit is responsible for deciding when to fire memory
-operations to the memory system. There are two queues: the Load
-Queue (LDQ), and the Store Queue (STQ). Load instructions generate a
-“uopLD" Micro-Op. When issued, "uopLD" calculates the load address and
+The **Load/Store Unit (LSU)** is responsible for deciding when to fire memory
+operations to the memory system. There are two queues: the **Load
+Queue (LDQ)**, and the **Store Queue (STQ)**. Load instructions generate a
+“uopLD" :term:`Micro-Op (UOP)`. When issued, "uopLD" calculates the load address and
 places its result in the LDQ. Store instructions (may) generate *two*
-Micro-Ops, “uopSTA" (Store Address Generation) and “uopSTD" (Store Data
-Generation). The STA Micro-Op calculates the store address and places its
-result in the SAQ queue. The STD Micro-Op moves the store data from the
-register file to the SDQ. Each of these Micro-Ops will issue out of the
+:term:`UOP<Micro-Op (UOP)>` s, “uopSTA" (Store Address Generation) and “uopSTD" (Store Data
+Generation). The STA :term:`UOP<Micro-Op (UOP)>` calculates the store address and places its
+result in the SAQ queue. The STD :term:`UOP<Micro-Op (UOP)>` moves the store data from the
+register file to the SDQ. Each of these :term:`UOP<Micro-Op (UOP)>` s will issue out of the
 *Issue Window* as soon their operands are ready. See :ref:`Store Micro-Ops`
-for more details on the store Micro-Op specifics.
+for more details on the store :term:`UOP<Micro-Op (UOP)>` specifics.
 
 Store Instructions
 ------------------
@@ -35,10 +35,10 @@ Store Micro-Ops
 
 Stores are inserted into the issue window as a single instruction (as
 opposed to being broken up into separate addr-gen and data-gen
-Micro-Ops). This prevents wasteful usage of the expensive issue window
+:term:`UOP<Micro-Op (UOP)>` s). This prevents wasteful usage of the expensive issue window
 entries and extra contention on the issue ports to the LSU. A store in
 which both operands are ready can be issued to the LSU as a single
-Micro-Op which provides both the address and the data to the LSU. While
+:term:`UOP<Micro-Op (UOP)>` which provides both the address and the data to the LSU. While
 this requires store instructions to have access to two register file
 read ports, this is motivated by a desire to not cut performance in half
 on store-heavy code. Sequences involving stores to the stack should
@@ -47,7 +47,7 @@ operate at IPC=1!
 However, it is common for store addresses to be known well in advance of
 the store data. Store addresses should be moved to the SAQ as soon as
 possible to allow later loads to avoid any memory ordering failures.
-Thus, the issue window will emit uopSTA or uopSTD Micro-Ops as required,
+Thus, the issue window will emit uopSTA or uopSTD :term:`UOP<Micro-Op (UOP)>` s as required,
 but retain the remaining half of the store until the second operand is
 ready.
 
@@ -55,13 +55,13 @@ Load Instructions
 -----------------
 
 Entries in the Load Queue (LDQ) are allocated in the *Decode* stage
-(ldq(i).valid). In *Decode*, each load entry is also given a *store
-mask* (ldq(i).bits.st\_dep\_mask), which marks which stores in the Store
+(``ldq(i).valid``). In **Decode**, each load entry is also given a *store
+mask* (``ldq(i).bits.st\_dep\_mask``), which marks which stores in the Store
 Queue the given load depends on. When a store is fired to memory and
 leaves the Store Queue, the appropriate bit in the *store mask* is cleared.
 
 Once a load address has been computed and placed in the LDQ, the
-corresponding *valid* bit is set (ldq(i).addr.valid).
+corresponding *valid* bit is set (``ldq(i).addr.valid``).
 
 Loads are optimistically fired to memory on arrival to the LSU (getting
 loads fired early is a huge benefit of out–of–order pipelines).
@@ -106,8 +106,9 @@ The Load/Store Unit has to be careful regarding
 store -> load dependences. For the best performance,
 loads need to be fired to memory as soon as possible.
 
-    sw x1 -> 0(x2)
+.. code-block:: bash
 
+    sw x1 -> 0(x2)
     ld x3 <- 0(x4)
 
 However, if x2 and x4 reference the same memory address, then the load

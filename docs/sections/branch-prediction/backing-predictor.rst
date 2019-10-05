@@ -74,8 +74,8 @@ sent down the pipeline with no prediction made. As JALR instructions require
 reading the register file to deduce the jump target, there's nothing
 that can be done if the :term:`NLP<Next-Line Predictor (NLP)>` does not make a prediction.
 
-Updating the :term:`Backing Predictor`
---------------------------------------
+Updating the Backing Predictor
+------------------------------
 
 Generally speaking, the :term:`BPD<Backing Predictor (BPD)>` is updated during the **Commit** stage.
 This prevents the :term:`BPD<Backing Predictor (BPD)>` from being polluted by wrong-path
@@ -90,7 +90,7 @@ info packet". This "info packet" is stored in the :term:`Fetch Target Queue (FTQ
 until commit time. [11]_ Once all of the instructions
 corresponding to the "info packet" is committed, the "info packet" is
 set to the :term:`BPD<Backing Predictor (BPD)>` (along with the eventual outcome of the branches) and the
-:term:`BPD<Backing Predictor (BPD)>` is updated. :ref:`Fetch Target Queue` covers the :term:`FTQ<Fetch Target Queue (FTQ)>` , which handles the
+:term:`BPD<Backing Predictor (BPD)>` is updated. :ref:`The Fetch Target Queue (FTQ) for Predictions` covers the :term:`FTQ<Fetch Target Queue (FTQ)>` , which handles the
 snapshot information needed for update the predictor during
 **Commit**. :ref:`Rename Snapshot State` covers the :term:`Branch Rename Snapshots` ,
 which handles the snapshot information needed to update the
@@ -127,8 +127,8 @@ refetched and re-executed. [14]_ For this reason, a *commit copy* of
 the :term:`GHR<Global History Register (GHR)>` is also maintained by the :term:`BPD<Backing Predictor (BPD)>` and reset on
 any sort of pipeline flush event.
 
-The Fetch Target Queue (FTQ)
-----------------------------
+The Fetch Target Queue (FTQ) for Predictions
+--------------------------------------------
 
 The Reorder Buffer (see :ref:`The Reorder Buffer (ROB) and the Dispatch Stage` )
 maintains a record of all inflight instructions. Likewise, the :term:`FTQ<Fetch Target Queue (FTQ)>`

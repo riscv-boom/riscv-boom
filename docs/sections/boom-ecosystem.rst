@@ -5,7 +5,8 @@ The BOOM Repository
 ------------------------------------
 
 The BOOM repository holds the source code to the BOOM core; it is not a full processor and thus is **NOT A SELF-RUNNING** repository.
-To instantiate a BOOM core, you must use a top-level project to integrate the core into an SoC.
+To instantiate a BOOM core, you must use a top-level project to integrate the core into an SoC. For this purpose you can use
+the `Chipyard Template <https://github.com/ucb-bar/chipyard>`__.
 
 The BOOM core source code can be found in ``src/main/scala``.
 
@@ -24,7 +25,7 @@ Scala, Chisel, Generators, Configs, Oh My!
 ------------------------------------------
 
 Working with BOOM has a large learning curve for those people new to *Chisel* and the BOOM ecosystem.
-To be productive, it takes time to learn about the micro-architecture, *Rocket-chip* components, *Chisel* (maybe *Firrtl*), *Scala*, and the build system.
+To be productive, it takes time to learn about the micro-architecture, *Rocket chip* components, *Chisel* (maybe *Firrtl*), *Scala*, and the build system.
 Luckily, the micro-architecture is detailed in this documentation and some of the other topics (*Chisel*, *Firrtl*, *Scala*) are discussed in their respective websites. [1]_
 Instead of focusing solely on those topics, this section hopes to show how they all fit together by giving a high level of the entire build process.
 Put in more specific terms: How do you get from *Scala*/*Chisel* to Verilog? [2]_
@@ -103,7 +104,14 @@ Now that the flow of ecosystem has been briefly explained here is a quick recap.
 7. Deal with runtime errors (*Firrtl* compile errors, which occur from compiler passes that perform checks e.g. for uninitialized wires)
 8. Done. A Verilog file was created!!!
 
-.. [1] Unfortunately, one of the big components of the BOOM system, Rocket-Chip, lacks alot of meaningful documentation. This is a known issue that the Rocket-Chip maintainers hope to fix one day.
+More Resources
+--------------
+
+If you would like more detail on top-level integration, how accelerators work in the Rocket Chip system, and much more please visit the
+`Chipyard Documentation <https://chipyard.readthedocs.io/en/latest/>`__.
+
+
+.. [1] Unfortunately, one of the big components of the BOOM system, Rocket Chip, lacks alot of meaningful documentation. This is a known issue that the Rocket Chip maintainers hope to fix one day.
 
 .. [2] This section describes the current build process that is used in `Chipyard <https://github.com/ucb-bar/chipyard>`__.
 

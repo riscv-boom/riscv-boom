@@ -1,5 +1,7 @@
-The Memory System and the Data-cache Shim
-=========================================
+The Memory System
+=================
+
+.. Note:: This section is out-of-date as of 8/26/19 due to a new DCache implementation.
 
 BOOM uses the Rocket Chip non-blocking cache ("Hellacache"). Designed for use
 in in-order processors, a "shim" is used to connect BOOM to the

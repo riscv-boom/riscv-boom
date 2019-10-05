@@ -30,7 +30,7 @@ The Explicit Renaming Design
 BOOM is an "explicit renaming" or "physical register file" out-of-order
 core design. A **Physical Register File**, containing many more registers
 than the ISA dictates, holds both the committed architectural register
-state and speculative register state. The **Rename Map Table**s contain the
+state and speculative register state. The **Rename Map Table** s contain the
 information needed to recover the committed state. As instructions are
 renamed, their register specifiers are explicitly updated to point to
 physical registers located in the Physical Register File. [1]_
@@ -48,7 +48,7 @@ The Rename Map Table
 .. figure:: /figures/rename-pipeline.png
     :alt: The Rename Stage
 
-    The Rename Stage. Logical register specifiers read the Map Table to get their physical specifier.
+    The **Rename Stage**. Logical register specifiers read the **Rename Map Table** to get their physical specifier.
     For superscalar rename, any changes to the Map Tables must be bypassed to dependent instructions. The
     physical source specifiers can then read the Busy Table. The Stale specifier is used to track which physical
     register will be freed when the instruction later commits. P0 in the Physical Register File is always 0.

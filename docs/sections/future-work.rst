@@ -5,7 +5,6 @@ This chapter lays out some of the potential future directions that BOOM
 can be taken. To help facilitate such work, the preliminary design
 sketches are described below.
 
-
 The BOOM Custom Co-processor Interface (BOCC)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

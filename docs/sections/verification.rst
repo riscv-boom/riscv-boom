@@ -2,8 +2,8 @@ Verification
 ============
 
 This chapter covers the current recommended techniques for verifying
-BOOM. Although not provided as part of the BOOM or Rocket-Chip
-repositories, it is also recommended that BOOM be tested on “hello-world
+BOOM. Although not provided as part of the BOOM or Rocket Chip
+repositories, it is also recommended that BOOM be tested on "hello-world
 + riscv-pk" and the RISC-V port of Linux to properly stress the
 processor.
 
@@ -13,7 +13,7 @@ RISC-V Tests
 A basic set of functional tests and micro-benchmarks can be found at
 (https://github.com/riscv/riscv-tests). These are invoked by the ``make
 run`` targets in the ``verilator`` and ``vcs`` directories located in the
-BOOM template repository.
+Chipyard template repository.
 
 RISC-V Torture Tester
 ---------------------
@@ -33,18 +33,5 @@ are run using which BOOM configurations. Additionally, the DockerFile used to
 build the CI docker images resides in ``.circleci/images``. Finally, all
 scripts that are used during the CI run are located at ``.circleci/``. Note that even
 though BOOM template is cloned during the CI process, the BOOM repository specifies
-which version of Rocket-Chip to use (which in turn determines the proper version of
+which version of Rocket Chip to use (which in turn determines the proper version of
 riscv-tools).
-
-Current Configurations Tested:
-
-* SmallBoomConfig
-* MediumBoomConfig
-* SmallRV32UnifiedBoomConfig
-
-Current Tests Used:
-
-* riscv-tools assembly tests
-* riscv-tools benchmarks
-* csmith random C tests
-* scala style checks

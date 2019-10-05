@@ -131,4 +131,4 @@ A more detailed diagram is shown below in :numref:`boom-pipeline-detailed`.
     handled can be found in :ref:`The Memory System and the Data-cache Shim`.
 
 .. [3] More precisely, :term:`Micro-Ops (UOPs)<Micro-Op (UOP)>` that are ready assert their request, and the
-    :term:`Issue Scheduler` chooses which :term:`UOPs<Micro-Op (UOP)>` to issue that cycle.
+    issue scheduler within the Issue Queue chooses which :term:`UOPs<Micro-Op (UOP)>` to issue that cycle.

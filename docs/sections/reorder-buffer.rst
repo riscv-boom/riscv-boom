@@ -98,7 +98,7 @@ is used in the following situations:
 
 -  Jump-register instructions must know both their own PC **and the PC
    of the following instruction** in the program to verify if the
-   `:term:`Front-end` predicted the correct JR target.
+   :term:`Front-end` predicted the correct JR target.
 
 This information is incredibly expensive to store. Instead of passing
 PCs down the pipeline, branch and jump instructions access the ROB's "PC

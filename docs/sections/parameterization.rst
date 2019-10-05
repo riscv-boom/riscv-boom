@@ -17,7 +17,7 @@ Sample Configurations
 ---------------------
 
 Sample configurations of the core and the parameters used can be seen in ``src/main/scala/common/config-mixins.scala``.
-Listing :numref:`large-boom-config` shows an example of the "Large BOOM Configuration".
+The following code shows an example of the "Large BOOM Configuration".
 
 .. _large-boom-config:
 .. literalinclude:: ../../src/main/scala/common/config-mixins.scala
