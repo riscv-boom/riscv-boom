@@ -2,7 +2,7 @@ The Berkeley Out-of-Order Machine (BOOM)
 ========================================
 
 .. figure:: /figures/boom-pipeline-detailed.png
-    :scale: 35 %
+    :scale: 25 %
     :align: center
     :alt: Detailed BOOM Pipeline
 
