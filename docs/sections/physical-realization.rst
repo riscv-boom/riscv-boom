@@ -6,8 +6,8 @@ BOOM processor. Although BOOM VLSI work is very preliminary, it has been
 synthesized at 1 GHz on a high-end mobile 28 nm process. Unfortunately,
 while VLSI flows are difficult to share or make portable (and encumbered
 with proprietary libraries and tools), an enterprising individual may
-want to visit the https://github.com/ucb-bar/plsi portable “Palmer’s
-VLSI Scripts” repository which describes one way to push BOOM through a
+want to visit the https://github.com/ucb-bar/plsi portable "Palmer’s
+VLSI Scripts" repository which describes one way to push BOOM through a
 VLSI flow.
 
 Register Retiming
@@ -50,10 +50,10 @@ implementor trade off CPI performance for cycle-time.
 EnableFetchBufferFlowThrough
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The Front-end fetches instructions and places them into a *Fetch
-Buffer*. The Back-end pulls instructions out of the Fetch Buffer and
+The :term:`Front-end` fetches instructions and places them into a :term:`Fetch Buffer`.
+The :term:`Back-end` pulls instructions out of the :term:`Fetch Buffer` and
 then decodes, renames, and dispatches the instructions into the *Issue
-Queue*. This Fetch Buffer can be optionally set to be a *flow-through*
+Queue*. This :term:`Fetch Buffer` can be optionally set to be a *flow-through*
 queue – instructions enqueued into the buffer can be immediately
 dequeued on the other side on the same clock cycle. Turning this option
 **off** forces all instructions to spend at least one cycle in the queue
