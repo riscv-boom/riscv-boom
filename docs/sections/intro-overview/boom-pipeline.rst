@@ -58,7 +58,7 @@ the beginning of the out–of–order piece of the pipeline.
 Register Read
 ^^^^^^^^^^^^^
 
-Issued :term:`UOPsMicro-Ops<Micro-Op (UOP)>` s first *read* their register operands from the unified
+Issued :term:`UOPs<Micro-Op (UOP)>` s first *read* their register operands from the unified
 **Physical Register File** (or from the **Bypass Network**)...
 
 Execute

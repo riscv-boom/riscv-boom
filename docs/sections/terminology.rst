@@ -51,7 +51,7 @@ out-of-order terminology.
         The bytes at the end of a i-cache response that might be half of an instruction
         used in RVC.
 
-    Fetch Target Queue
+    Fetch Target Queue (FTQ)
         Queue used to track the branch prediction information for inflight **Micro-Ops**.
         This is dequeued once all instructions in its **Fetch Packet** entry are
         committed.

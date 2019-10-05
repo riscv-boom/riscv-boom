@@ -14,11 +14,11 @@ where the next instructions should be fetched for the next cycle. If
 predicted correctly, there are no pipeline bubbles.
 
 The :term:`NLP<Next-Line Predictor (NLP)>` is an amalgamation of a fully-associative **Branch
-Target Buffer (BTB)**, :tabe:`Bi-Modal Table (BIM)` and a **Return Address Stack (RAS)** which work together
+Target Buffer (BTB)**, :term:`Bi-Modal Table (BIM)` and a **Return Address Stack (RAS)** which work together
 to make a fast, but reasonably accurate prediction.
 
-:term:`NLP <Next-Line Predictor>` Predictions
----------------------------------------------
+NLP Predictions
+---------------
 
 The :term:`Fetch PC` first performs a tag match to find a uniquely
 matching BTB entry. If a hit occurs, the BTB entry will make a
@@ -52,8 +52,8 @@ actual RAS management (of when to or the stack) is governed externally.
 For area-efficiency, the high-order bits of the PC tags and PC targets
 are stored in a compressed file.
 
-:term:`NLP <Next-Line Predictor>` Updates
------------------------------------------
+NLP Updates
+-----------
 
 Each branch passed down the pipeline remembers not only its own PC, but
 also its :term:`Fetch PC` (the PC of the head instruction of its :term:`Fetch Packet` ). [2]_

@@ -67,7 +67,7 @@ The :term:`NLP<Next-Line Predictor (NLP)>` learns any "taken" instruction's PC a
 thus, the :term:`NLP<Next-Line Predictor (NLP)>` is able to predict jumps and jump-register instructions.
 
 If the :term:`NLP<Next-Line Predictor (NLP)>` does not make a prediction on a JAL instruction, the pipeline
-will redirect the :term:`Front-end` in **F4** (see :numref:`:term:`Front-end``). [9]_
+will redirect the :term:`Front-end` in **F4** (see :numref:`Front-end`). [9]_
 
 Jump-register instructions that were not predicted by the :term:`NLP<Next-Line Predictor (NLP)>` will be
 sent down the pipeline with no prediction made. As JALR instructions require
@@ -194,7 +194,7 @@ can be deallocated once the branch is resolved by the :term:`Branch Unit` in
 
     The Branch Predictor Pipeline. Although a simple diagram, this helps show the I/O within the Branch Prediction
     Pipeline. The :term:`Front-end` sends the "next PC" (shown as ``req``) to the pipeline in the **F0** stage. Within the "Abstract Predictor",
-    hashing is managed by the "Abstract Predictor" wrapper. The "Abstract Predictor" then returns a :term:`BPD<Backing Predictor (BPD)>` response
+    hashing is managed by the "Abstract Predictor" wrapper. The "Abstract Predictor" then returns a :term:`Backing Predictor (BPD)` response
     or in other words a prediction for each instruction in the :term:`Fetch Packet` .
 
 The Abstract Branch Predictor Class
