@@ -100,7 +100,7 @@ unit.
 
 An example pipelined :term:`Functional Unit` is shown in :numref:`abstract-fu`.
 
-Un-pipelined :term:`Functional Unit`s
+Un-pipelined Functional Units
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Un-pipelined :term:`Functional Unit` s (e.g., a divider) take an variable (and
@@ -125,7 +125,7 @@ is to provide a *kill* signal to quickly remove misspeculated
     and squart-root unit doesn’t cleanly fit either the ``Pipelined`` nor ``Unpipelined`` abstract class, and so directly
     inherits from the ``FunctionalUnit`` super class.
 
-:term:`Branch Unit` & Branch Speculation
+Branch Unit & Branch Speculation
 --------------------------------
 
 The :term:`Branch Unit` handles the resolution of all branch and jump

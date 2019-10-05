@@ -15,7 +15,7 @@ maximize de-coupling. Speculation can be handled by either by epoch tags
 mask bits (to allow for fine-grain killing of instructions).
 
 The Vector (“V") ISA Extension
-------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Implementing the Vector Extension in BOOM would open up the ability to
 leverage performance (or energy-efficiency) improvements in running

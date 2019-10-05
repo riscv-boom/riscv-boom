@@ -2,7 +2,7 @@ The Berkeley Out-of-Order Machine (BOOM)
 ========================================
 
 .. figure:: /figures/boom-pipeline-detailed.png
-    :scale: 50 %
+    :scale: 10 %
     :alt: Detailed BOOM Pipeline
 
     Detailed BOOM Pipeline. \*'s denote where the core can be configured.
