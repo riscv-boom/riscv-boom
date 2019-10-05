@@ -6,7 +6,7 @@ can be taken. To help facilitate such work, the preliminary design
 sketches are described below.
 
 The BOOM Custom Co-processor Interface (BOCC)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------------------------
 
 Some accelerators may wish to take advantage of speculative instructions
 (or even out-of-order issue) to begin executing instructions earlier to
@@ -15,7 +15,7 @@ maximize de-coupling. Speculation can be handled by either by epoch tags
 mask bits (to allow for fine-grain killing of instructions).
 
 The Vector (“V") ISA Extension
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+------------------------------
 
 Implementing the Vector Extension in BOOM would open up the ability to
 leverage performance (or energy-efficiency) improvements in running
