@@ -224,6 +224,7 @@ class WithMediumBooms extends Config((site, here, up) => {
 
 })
 
+// DOC include start: LargeBoomConfig
 /**
  * 3-wide BOOM. Try to match the Cortex-A15.
  */
@@ -259,6 +260,7 @@ class WithLargeBooms extends Config((site, here, up) => {
   case XLen => 64
   case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
 })
+// DOC include end: LargeBoomConfig
 
 /**
  * 4-wide BOOM.

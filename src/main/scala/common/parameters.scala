@@ -22,6 +22,7 @@ import boom.lsu._
  * Default BOOM core parameters
  */
 case class BoomCoreParams(
+// DOC include start: BOOM Parameters
   fetchWidth: Int = 1,
   decodeWidth: Int = 1,
   numRobEntries: Int = 64,
@@ -83,6 +84,7 @@ case class BoomCoreParams(
   useRVE: Boolean = false,
   useBPWatch: Boolean = false,
   clockGate: Boolean = false
+// DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams
 {
   val haveFSDirty = false
