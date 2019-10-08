@@ -105,7 +105,7 @@ PCs down the pipeline, branch and jump instructions access the ROB's "PC
 File" during the **Register-read** stage for use in the :term:`Branch Unit`. Two
 optimizations are used:
 
--  only a single PC is stored per ROB row. [2]_
+-  only a single PC is stored per ROB row.
 
 -  the PC File is stored in two banks, allowing a single read-port to
    read two consecutive entries simultaneously (for use with JR
@@ -113,7 +113,6 @@ optimizations are used:
 
 The Commit Stage
 ----------------
-
 When the instruction at the *commit head* is no longer busy (and it is
 not excepting), it may be *committed*, i.e., its changes to the
 architectural state of the machine are made visible. For superscalar
@@ -158,7 +157,7 @@ its *logical destination* specifier.
 A faster single-cycle reset is available. This is accomplished by using
 another rename snapshot that tracks the *committed* state of the rename
 tables. This *Committed Map Table* is updated as instructions
-commit. [3]_
+commit. [2]_
 
 Causes
 ~~~~~~
@@ -201,10 +200,5 @@ PNR head, and thus is no longer speculative.
    widths, just with more added control complexity.
 
 .. [2]
-   Because instructions within an ROB row are consecutive in the
-   program, the instruction’s ROB bank implicitly provides the lower PC
-   bits.
-
-.. [3]
    The tradeoff here is between longer latencies on exceptions versus an
    increase in area and wiring.

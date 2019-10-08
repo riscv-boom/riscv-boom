@@ -26,9 +26,9 @@ Scala, Chisel, Generators, Configs, Oh My!
 
 Working with BOOM has a large learning curve for those people new to *Chisel* and the BOOM ecosystem.
 To be productive, it takes time to learn about the micro-architecture, *Rocket chip* components, *Chisel* (maybe *Firrtl*), *Scala*, and the build system.
-Luckily, the micro-architecture is detailed in this documentation and some of the other topics (*Chisel*, *Firrtl*, *Scala*) are discussed in their respective websites. [1]_
+Luckily, the micro-architecture is detailed in this documentation and some of the other topics (*Chisel*, *Firrtl*, *Scala*) are discussed in their respective websites.
 Instead of focusing solely on those topics, this section hopes to show how they all fit together by giving a high level of the entire build process.
-Put in more specific terms: How do you get from *Scala*/*Chisel* to Verilog? [2]_
+Put in more specific terms: How do you get from *Scala*/*Chisel* to Verilog? [1]_
 
 Recap on Coding in Scala/Chisel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -63,7 +63,7 @@ The word "generator" used in many *Chisel* projects refers to a program that tak
 The generator for BOOM and Rocket SoC's can be found in Chipyard under the ``Generator.scala`` file.
 The *Chisel Module* used in the generator is normally the top-level *Chisel Module* class that you (the developer) want to make a circuit of.
 The *Configuration* is just a set of *Scala* variables used to configure the parameters of the passed in *Chisel Module*.
-In BOOM's case, the top-level *Module* would be something like the BoomRocketSystem found in ``src/main/scala/system/BoomRocketSystem.scala`` and a *Configuration* like MediumBoomConfig found in ``src/main/scala/common/configs.scala``. [3]_
+In BOOM's case, the top-level *Module* would be something like the BoomRocketSystem found in ``src/main/scala/system/BoomRocketSystem.scala`` and a *Configuration* like MediumBoomConfig found in ``src/main/scala/common/configs.scala``. [2]_
 In this case, the parameters specified in MediumBoomConfig would set the necessary *Scala* variables needed throughout the ExampleBoomSystem *Module*.
 Once the *Module* and *Configuration* is passed into the generator, they will be combined to form a piece of RTL representing the circuit given by the *Module* parameterized by the *Configuration*.
 
@@ -111,8 +111,6 @@ If you would like more detail on top-level integration, how accelerators work in
 `Chipyard Documentation <https://chipyard.readthedocs.io/en/latest/>`__.
 
 
-.. [1] Unfortunately, one of the big components of the BOOM system, Rocket Chip, lacks alot of meaningful documentation. This is a known issue that the Rocket Chip maintainers hope to fix one day.
+.. [1] This section describes the current build process that is used in `Chipyard <https://github.com/ucb-bar/chipyard>`__.
 
-.. [2] This section describes the current build process that is used in `Chipyard <https://github.com/ucb-bar/chipyard>`__.
-
-.. [3] This is not exactly true since to be able to run BOOM in simulations we wrap the BoomRocketSystem in a TestHarness found in Chipyard.
+.. [2] This is not exactly true since to be able to run BOOM in simulations we wrap the BoomRocketSystem in a TestHarness found in Chipyard.
