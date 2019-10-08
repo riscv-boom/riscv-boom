@@ -154,6 +154,12 @@ RUN apt-get install -y \
             zlib1g-dev \
             rsync
 
+# Add minimal QEMU dependencies
+RUN apt-get install -y \
+            libfdt-dev \
+            libglib2.0-dev \
+            libpixman-1-dev
+
 # Update PATH for Java tools
 ENV PATH="/opt/sbt/bin:/opt/apache-maven/bin:/opt/apache-ant/bin:/opt/gradle/bin:$PATH"
 
