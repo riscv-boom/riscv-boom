@@ -20,6 +20,7 @@ Quick-start
 
 The best way to get started with the BOOM core is to use the `Chipyard project template <https://github.com/ucb-bar/chipyard>`__.
 There you will find the main steps to setup your environment, build, and run the BOOM core on a C++ emulator.
+Chipyard also provides supported flows for pushing a BOOM-based SoC through both the FireSim FPGA simulation flow and the HAMMER ASIC flow.
 Here is a selected set of steps from `Chipyard's documentation <https://chipyard.readthedocs.io/en/latest/>`__:
 
 .. _quick-start-code:
