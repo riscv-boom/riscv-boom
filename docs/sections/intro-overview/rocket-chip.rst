@@ -15,7 +15,7 @@ It comes bundled with a 5-stage in-order core, called **Rocket**, by default.
 BOOM uses the Rocket Chip infrastructure to instantiate it's core/tile complex (tile is a core, L1D/I$, and PTW) instead of a
 Rocket tile.
 
-To get more information, please visit the `Chipyard Rocket Chip documentation <>`__.
+To get more information, please visit the `Chipyard Rocket Chip documentation <https://chipyard.readthedocs.io/en/dev/Generators/Rocket-Chip.html>`__.
 
 The Rocket Core - a Library of Processor Components!
 ----------------------------------------------------
@@ -27,4 +27,6 @@ caches, the translation look-aside buffers (TLBs), the page table walker (PTW), 
 more. Throughout this document you will find references to these
 Rocket components and descriptions on how they fit into BOOM.
 
-To get more information about the Rocket core, please visit the `Chipyard Rocket Core documentation <>`__.
+To get more information about the Rocket core, please visit the `Chipyard Rocket Core documentation <https://chipyard.readthedocs.io/en/dev/Generators/Rocket.html>`__.
+
+.. Note:: Both Chipyard links point to the ``dev`` documentation of Chipyard to get the most recent documentation changes.
