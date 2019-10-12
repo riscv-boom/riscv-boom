@@ -1383,7 +1383,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       io.trace(w).priv       := csr.io.status.prv
       io.trace(w).exception  := csr.io.exception
       io.trace(w).interrupt  := csr.io.interrupt
-      io.trace(w).cause      := csr.io.cause
+      io.trace(w).cause      := Mux(csr.io.interrupt, csr.io.interrupt_cause, csr.io.cause)
       io.trace(w).tval       := csr.io.tval
     }
     dontTouch(io.trace)
