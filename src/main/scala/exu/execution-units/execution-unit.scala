@@ -529,7 +529,7 @@ class FPUExeUnit(
     // TODO instantiate our own fpiu; and remove it from fpu.scala.
     // buffer up results since we share write-port on integer regfile.
     val queue = Module(new BranchKillableQueue(new ExeUnitResp(dataWidth),
-      entries = dfmaLatency + 3)) // TODO being overly conservative
+      entries = dfmaLatency + 6)) // TODO being overly conservative
     queue.io.enq.valid       := (fpu.io.resp.valid &&
                                  fpu.io.resp.bits.uop.fu_code_is(FU_F2I) &&
                                  fpu.io.resp.bits.uop.uopc =/= uopSTA) // STA means store data gen for floating point
@@ -542,7 +542,7 @@ class FPUExeUnit(
     assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
 
     val fp_sdq = Module(new BranchKillableQueue(new ExeUnitResp(dataWidth),
-      entries = 3)) // Lets us backpressure floating point store data
+      entries = 6)) // Lets us backpressure floating point store data
     fp_sdq.io.enq.valid      := io.req.valid && io.req.bits.uop.uopc === uopSTA && !IsKilledByBranch(io.brinfo, io.req.bits.uop)
     fp_sdq.io.enq.bits.uop   := io.req.bits.uop
     fp_sdq.io.enq.bits.data  := ieee(io.req.bits.rs2_data)
