@@ -52,7 +52,7 @@ class RenameStageIO(
   val ren2_uops = Vec(plWidth, Output(new MicroOp()))
 
   // branch resolution (execute)
-  val brinfo = Input(new BrResolutionInfo())
+  val brupdate = Input(new BrUpdateInfo())
 
   val dis_fire  = Input(Vec(coreWidth, Bool()))
   val dis_ready = Input(Bool())
@@ -216,7 +216,7 @@ class RenameStage(
   maptable.io.map_reqs    := map_reqs
   maptable.io.remap_reqs  := remap_reqs
   maptable.io.ren_br_tags := ren2_br_tags
-  maptable.io.brinfo      := io.brinfo
+  maptable.io.brupdate      := io.brupdate
   maptable.io.rollback    := io.rollback
 
   // Maptable outputs.
@@ -249,7 +249,7 @@ class RenameStage(
       next_uop := r_uop
     }
 
-    r_uop := GetNewUopAndBrMask(BypassAllocations(next_uop, ren2_uops, ren2_alloc_reqs), io.brinfo)
+    r_uop := GetNewUopAndBrMask(BypassAllocations(next_uop, ren2_uops, ren2_alloc_reqs), io.brupdate)
 
     ren2_valids(w) := r_valid
     ren2_uops(w)   := r_uop
@@ -265,7 +265,7 @@ class RenameStage(
   freelist.io.dealloc_pregs zip io.com_uops map
     {case (d,c) => d.bits := Mux(io.rollback, c.pdst, c.stale_pdst)}
   freelist.io.ren_br_tags := ren2_br_tags
-  freelist.io.brinfo := io.brinfo
+  freelist.io.brupdate := io.brupdate
   freelist.io.debug.pipeline_empty := io.debug_rob_empty
 
   assert (ren2_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
@@ -315,7 +315,7 @@ class RenameStage(
     if (w > 0) bypassed_uop := BypassAllocations(ren2_uops(w), ren2_uops.slice(0,w), ren2_alloc_reqs.slice(0,w))
     else       bypassed_uop := ren2_uops(w)
 
-    io.ren2_uops(w) := GetNewUopAndBrMask(bypassed_uop, io.brinfo)
+    io.ren2_uops(w) := GetNewUopAndBrMask(bypassed_uop, io.brupdate)
   }
 
   //-------------------------------------------------------------

@@ -28,7 +28,7 @@ import freechips.rocketchip.util.property._
 import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{ICacheLogicalTreeNode}
 
 import boom.common._
-import boom.exu.{BranchUnitResp, CommitExceptionSignals, BranchDecode}
+import boom.exu.{CommitExceptionSignals, BranchDecode}
 import boom.util.{BoomCoreStringPrefix}
 
 
@@ -101,9 +101,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
   val mask          = Vec(fetchWidth, Bool()) // mark which words are valid instructions
   val xcpt_pf_if    = Bool() // I-TLB miss (instruction fetch fault).
   val xcpt_ae_if    = Bool() // Access exception.
-  val xcpt_ma_if_oh = Vec(fetchWidth, Bool())
-                           // A cfi branched to a misaligned address --
-                           // one-hot encoding (1:1 with insts).
+
   val bp_debug_if_oh= Vec(fetchWidth, Bool())
   val bp_xcpt_if_oh = Vec(fetchWidth, Bool())
 }
@@ -117,7 +115,6 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   // Give the backend a packet of instructions.
   val fetchpacket       = Flipped(new DecoupledIO(new FetchBufferResp))
 
-  val br_unit           = Output(new BranchUnitResp())
   val get_pc            = Flipped(new GetPCFromFtqIO())
 
   // Breakpoint info
@@ -178,6 +175,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   implicit val edge = outer.masterNode.edges.out(0)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
+  // val bpd = Module(new SwBranchPredictor)
+
   val icache = outer.icache.module
   dontTouch(icache.io)
   icache.io.hartid     := io.hartid
@@ -204,6 +203,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   icache.io.req.valid     := s0_valid
   icache.io.req.bits.addr := s0_vpc
+
+  // bpd.io.f0_req.valid     := s0_valid
+  // bpd.io.f0_req.bits      := s0_vpc
 
   // --------------------------------------------------------
   // **** ICache Access (F1) ****
@@ -293,16 +295,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // Tracks if last fetchpacket contained a half-inst
   val f3_prev_is_half = RegInit(false.B)
 
-  assert(fetchWidth >= 4 || !usingCompressed) // Logic gets kind of annoying with fetchWidth = 2
+  assert(fetchWidth >= 4) // Logic gets kind of annoying with fetchWidth = 2
   for (i <- 0 until fetchWidth) {
     val bpd_decoder = Module(new BranchDecode)
     val is_valid = Wire(Bool())
     val inst = Wire(UInt((2*coreInstBits).W))
-    if (!usingCompressed) {
-      is_valid := true.B
-      inst     := f3_data(i*coreInstBits+coreInstBits-1,i*coreInstBits)
-      f3_fetch_bundle.edge_inst := false.B
-    } else if (i == 0) {
+    if (i == 0) {
       when (f3_prev_is_half) {
         inst := Cat(f3_data(15,0), f3_prev_half)
         f3_fetch_bundle.edge_inst := true.B
@@ -350,8 +348,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
     f3_fetch_bundle.mask(i) := f3.io.deq.valid && f3_imemresp.mask(i) && is_valid
     f3_targs(i)        := bpd_decoder.io.target
-    f3_fetch_bundle.xcpt_ma_if_oh(i) := (f3_targs(i)(1) && bpd_decoder.io.is_jal
-                        && f3_imemresp.mask(i) && !usingCompressed.B)
 
     f3_fetch_bundle.bp_debug_if_oh(i) := bpu.io.debug_if
     f3_fetch_bundle.bp_xcpt_if_oh (i) := bpu.io.xcpt_if
@@ -360,8 +356,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   when (f3.io.deq.fire()) {
     val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
                       (fetchWidth/2-1).U, (fetchWidth-1).U)
-    f3_prev_is_half := (usingCompressed.B
-                     && !(f3_fetch_bundle.mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
+    f3_prev_is_half := (!(f3_fetch_bundle.mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
                      && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
     f3_prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
   }
@@ -442,5 +437,3 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     (BoomCoreStringPrefix("====Overall Frontend Params====") + "\n"
     + icache.toString)
 }
-
-

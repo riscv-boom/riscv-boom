@@ -18,7 +18,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.rocket._
 
 import boom.common._
-import boom.exu.BrResolutionInfo
+import boom.exu.BrUpdateInfo
 import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder, UpdateBrMask, AgePriorityEncoder, WrapInc, Transpose}
 
 
@@ -399,7 +399,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val prober = Module(new BoomProbeUnit)
   val mshrs = Module(new BoomMSHRFile)
   mshrs.io.clear_all    := io.lsu.force_order
-  mshrs.io.brinfo       := io.lsu.brinfo
+  mshrs.io.brupdate       := io.lsu.brupdate
   mshrs.io.exception    := io.lsu.exception
   mshrs.io.rob_pnr_idx  := io.lsu.rob_pnr_idx
   mshrs.io.rob_head_idx := io.lsu.rob_head_idx
@@ -566,11 +566,11 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
   val s1_req          = RegNext(s0_req)
   for (w <- 0 until memWidth)
-    s1_req(w).uop.br_mask := GetNewBrMask(io.lsu.brinfo, s0_req(w).uop)
+    s1_req(w).uop.br_mask := GetNewBrMask(io.lsu.brupdate, s0_req(w).uop)
   val s2_store_failed = Wire(Bool())
   val s1_valid = widthMap(w =>
                  RegNext(s0_valid(w)                                     &&
-                         !IsKilledByBranch(io.lsu.brinfo, s0_req(w).uop) &&
+                         !IsKilledByBranch(io.lsu.brupdate, s0_req(w).uop) &&
                          !(io.lsu.exception && s0_req(w).uop.uses_ldq)   &&
                          !(s2_store_failed && io.lsu.req.fire() && s0_req(w).uop.uses_stq),
                          init=false.B))
@@ -601,11 +601,11 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_valid = widthMap(w =>
                   RegNext(s1_valid(w) &&
                          !io.lsu.s1_kill(w) &&
-                         !IsKilledByBranch(io.lsu.brinfo, s1_req(w).uop) &&
+                         !IsKilledByBranch(io.lsu.brupdate, s1_req(w).uop) &&
                          !(io.lsu.exception && s1_req(w).uop.uses_ldq) &&
                          !(s2_store_failed && (s1_type === t_lsu) && s1_req(w).uop.uses_stq)))
   for (w <- 0 until memWidth)
-    s2_req(w).uop.br_mask := GetNewBrMask(io.lsu.brinfo, s1_req(w).uop)
+    s2_req(w).uop.br_mask := GetNewBrMask(io.lsu.brupdate, s1_req(w).uop)
 
   val s2_tag_match_way = RegNext(s1_tag_match_way)
   val s2_tag_match     = s2_tag_match_way.map(_.orR)
@@ -717,7 +717,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                             !s2_nack_data(w)      &&
                             !s2_nack_wb(w)        &&
                              s2_type.isOneOf(t_lsu, t_prefetch)             &&
-                            !IsKilledByBranch(io.lsu.brinfo, s2_req(w).uop) &&
+                            !IsKilledByBranch(io.lsu.brupdate, s2_req(w).uop) &&
                             !(io.lsu.exception && s2_req(w).uop.uses_ldq)   &&
                              (isPrefetch(s2_req(w).uop.mem_cmd) ||
                               isRead(s2_req(w).uop.mem_cmd)     ||
@@ -725,7 +725,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
     assert(!(mshrs.io.req(w).valid && s2_type === t_replay), "Replays should not need to go back into MSHRs")
     mshrs.io.req(w).bits             := DontCare
     mshrs.io.req(w).bits.uop         := s2_req(w).uop
-    mshrs.io.req(w).bits.uop.br_mask := GetNewBrMask(io.lsu.brinfo, s2_req(w).uop)
+    mshrs.io.req(w).bits.uop.br_mask := GetNewBrMask(io.lsu.brupdate, s2_req(w).uop)
     mshrs.io.req(w).bits.addr        := s2_req(w).addr
     mshrs.io.req(w).bits.tag_match   := s2_tag_match(w)
     mshrs.io.req(w).bits.old_meta    := Mux(s2_tag_match(w), L1Metadata(s2_repl_meta(w).tag, s2_hit_state(w)), s2_repl_meta(w))
@@ -816,13 +816,13 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   for (w <- 0 until memWidth) {
     io.lsu.resp(w).valid := resp(w).valid &&
                             !(io.lsu.exception && resp(w).bits.uop.uses_ldq) &&
-                            !IsKilledByBranch(io.lsu.brinfo, resp(w).bits.uop)
-    io.lsu.resp(w).bits  := UpdateBrMask(io.lsu.brinfo, resp(w).bits)
+                            !IsKilledByBranch(io.lsu.brupdate, resp(w).bits.uop)
+    io.lsu.resp(w).bits  := UpdateBrMask(io.lsu.brupdate, resp(w).bits)
 
     io.lsu.nack(w).valid := s2_valid(w) && s2_send_nack(w) &&
                             !(io.lsu.exception && s2_req(w).uop.uses_ldq) &&
-                            !IsKilledByBranch(io.lsu.brinfo, s2_req(w).uop)
-    io.lsu.nack(w).bits  := UpdateBrMask(io.lsu.brinfo, s2_req(w))
+                            !IsKilledByBranch(io.lsu.brupdate, s2_req(w).uop)
+    io.lsu.nack(w).bits  := UpdateBrMask(io.lsu.brupdate, s2_req(w))
     assert(!(io.lsu.nack(w).valid && s2_type =/= t_lsu))
   }
 
