@@ -12,11 +12,11 @@ source $SCRIPT_DIR/defaults.sh
 export VERILATOR_ROOT=$LOCAL_VERILATOR_DIR/install/share/verilator
 
 run_bmark () {
-    make run-bmark-tests-fast -C $LOCAL_SIM_DIR VERILATOR_INSTALL_DIR=$LOCAL_VERILATOR_DIR $@
+    make -j$NPROC run-bmark-tests-fast -C $LOCAL_SIM_DIR VERILATOR_INSTALL_DIR=$LOCAL_VERILATOR_DIR $@
 }
 
 run_asm () {
-    make run-asm-tests-fast -C $LOCAL_SIM_DIR VERILATOR_INSTALL_DIR=$LOCAL_VERILATOR_DIR $@
+    make -j$NPROC run-asm-tests-fast -C $LOCAL_SIM_DIR VERILATOR_INSTALL_DIR=$LOCAL_VERILATOR_DIR $@
 }
 
 run_both () {
@@ -40,7 +40,7 @@ case $1 in
     boomandrocket)
         run_both ${mapping[$1]}
         ;;
-    rv32unifiedboom)
+    rv32boom)
         run_asm ${mapping[$1]}
         ;;
     hwachaboom)

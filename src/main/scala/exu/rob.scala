@@ -2,8 +2,6 @@
 // Copyright (c) 2013 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -56,6 +54,8 @@ class RobIo(
                                        // and stalling on the rest of it (don't
                                        // advance the tail ptr)
 
+  val xcpt_fetch_pc = Input(UInt(vaddrBitsExtended.W))
+
   val rob_tail_idx = Output(UInt(robAddrSz.W))
   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
   val rob_head_idx = Output(UInt(robAddrSz.W))
@@ -69,12 +69,12 @@ class RobIo(
   val wb_resps = Flipped(Vec(numWakeupPorts, Valid(new ExeUnitResp(xLen max fLen+1))))
 
   // Unbusying ports for stores.
-  val lsu_clr_bsy_valid      = Input(Vec(2, Bool()))
-  val lsu_clr_bsy_rob_idx    = Input(Vec(2, UInt(robAddrSz.W)))
+  // +1 for fpstdata
+  val lsu_clr_bsy      = Input(Vec(memWidth + 1, Valid(UInt(robAddrSz.W))))
 
   // Port for unmarking loads/stores as speculation hazards..
-  val lsu_clr_unsafe_valid   = Input(Bool())
-  val lsu_clr_unsafe_rob_idx = Input(UInt(robAddrSz.W))
+  val lsu_clr_unsafe   = Input(Vec(memWidth, Valid(UInt(robAddrSz.W))))
+
 
   // Track side-effects for debug purposes.
   // Also need to know when loads write back, whereas we don't need loads to unbusy.
@@ -124,10 +124,6 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle
   // Perform rollback of rename state (in conjuction with commit.uops).
   val rbk_valids = Vec(retireWidth, Bool())
   val rollback   = Bool()
-
-  // tell the LSU how many stores and loads are being committed
-  val st_mask    = Vec(retireWidth, Bool())
-  val ld_mask    = Vec(retireWidth, Bool())
 }
 
 /**
@@ -242,8 +238,8 @@ class Rob(
   val rob_pnr_unsafe      = Wire(Vec(coreWidth, Bool())) // are the instructions at the pnr unsafe?
   val rob_head_vals       = Wire(Vec(coreWidth, Bool())) // are the instructions at the head valid?
   val rob_tail_vals       = Wire(Vec(coreWidth, Bool())) // are the instructions at the tail valid? (to track partial row dispatches)
-  val rob_head_is_store   = Wire(Vec(coreWidth, Bool()))
-  val rob_head_is_load    = Wire(Vec(coreWidth, Bool()))
+  val rob_head_uses_stq   = Wire(Vec(coreWidth, Bool()))
+  val rob_head_uses_ldq   = Wire(Vec(coreWidth, Bool()))
   val rob_head_fflags     = Wire(Vec(coreWidth, UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W)))
 
   val exception_thrown = Wire(Bool())
@@ -342,23 +338,24 @@ class Rob(
     }
 
     // Stores have a separate method to clear busy bits
-    for ((clr_valid, clr_rob_idx) <- io.lsu_clr_bsy_valid zip io.lsu_clr_bsy_rob_idx) {
-      when (clr_valid && MatchBank(GetBankIdx(clr_rob_idx))) {
-        val cidx = GetRowIdx(clr_rob_idx)
+    for (clr_rob_idx <- io.lsu_clr_bsy) {
+      when (clr_rob_idx.valid && MatchBank(GetBankIdx(clr_rob_idx.bits))) {
+        val cidx = GetRowIdx(clr_rob_idx.bits)
         rob_bsy(cidx)    := false.B
         assert (rob_val(cidx) === true.B, "[rob] store writing back to invalid entry.")
         assert (rob_bsy(cidx) === true.B, "[rob] store writing back to a not-busy entry.")
 
         if (O3PIPEVIEW_PRINTF) {
           printf("%d; O3PipeView:complete:%d\n",
-            rob_uop(GetRowIdx(clr_rob_idx)).debug_events.fetch_seq, io.debug_tsc)
+            rob_uop(GetRowIdx(clr_rob_idx.bits)).debug_events.fetch_seq, io.debug_tsc)
         }
       }
     }
-
-    when (io.lsu_clr_unsafe_valid && MatchBank(GetBankIdx(io.lsu_clr_unsafe_rob_idx))) {
-      val cidx = GetRowIdx(io.lsu_clr_unsafe_rob_idx)
-      rob_unsafe(cidx) := false.B
+    for (clr <- io.lsu_clr_unsafe) {
+      when (clr.valid && MatchBank(GetBankIdx(clr.bits))) {
+        val cidx = GetRowIdx(clr.bits)
+        rob_unsafe(cidx) := false.B
+      }
     }
 
     when (io.brinfo.valid && MatchBank(GetBankIdx(io.brinfo.rob_idx))) {
@@ -466,8 +463,8 @@ class Rob(
     rob_head_vals(w)     := rob_val(rob_head)
     rob_tail_vals(w)     := rob_val(rob_tail)
     rob_head_fflags(w)   := rob_fflags(rob_head)
-    rob_head_is_store(w) := rob_uop(rob_head).is_store
-    rob_head_is_load(w)  := rob_uop(rob_head).is_load
+    rob_head_uses_stq(w) := rob_uop(rob_head).uses_stq
+    rob_head_uses_ldq(w) := rob_uop(rob_head).uses_ldq
 
     //------------------------------------------------
     // Invalid entries are safe; thrown exceptions are unsafe.
@@ -600,7 +597,7 @@ class Rob(
     fflags_val(w) :=
       io.commit.valids(w) &&
       io.commit.uops(w).fp_val &&
-      !(io.commit.uops(w).is_load || io.commit.uops(w).is_store)
+      !(io.commit.uops(w).uses_ldq || io.commit.uops(w).uses_stq)
 
     fflags(w) := Mux(fflags_val(w), rob_head_fflags(w), 0.U)
 
@@ -610,7 +607,7 @@ class Rob(
              "Committed non-FP instruction has non-zero fflag bits.")
     assert (!(io.commit.valids(w) &&
              io.commit.uops(w).fp_val &&
-             (io.commit.uops(w).is_load || io.commit.uops(w).is_store) &&
+             (io.commit.uops(w).uses_ldq || io.commit.uops(w).uses_stq) &&
              rob_head_fflags(w) =/= 0.U),
              "Committed FP load or store has non-zero fflag bits.")
   }
@@ -648,7 +645,7 @@ class Rob(
       // if no exception yet, dispatch exception wins
       r_xcpt_val      := true.B
       next_xcpt_uop   := io.enq_uops(idx)
-      r_xcpt_badvaddr := io.enq_uops(idx).pc + Mux(io.enq_uops(idx).edge_inst, 2.U, 0.U)
+      r_xcpt_badvaddr := AlignPCToBoundary(io.xcpt_fetch_pc, icBlockBytes) | io.enq_uops(idx).pc_lob
 
       assert(!(usingCompressed.B && (io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR),
         "when using RVC, JAL exceptions should not be seen")
@@ -870,13 +867,9 @@ class Rob(
   // -----------------------------------------------
   // Outputs
 
-  for (w <- 0 until coreWidth) {
-    // tell LSU it is ready to its stores and loads
-    io.commit.st_mask(w) := io.commit.valids(w) && rob_head_is_store(w)
-    io.commit.ld_mask(w) := io.commit.valids(w) && rob_head_is_load(w)
-  }
+  io.com_load_is_at_rob_head := RegNext(rob_head_uses_ldq(PriorityEncoder(rob_head_vals.asUInt)) &&
+                                        !will_commit.reduce(_||_))
 
-  io.com_load_is_at_rob_head := rob_head_is_load(PriorityEncoder(rob_head_vals.asUInt))
 
   //--------------------------------------------------
   // Handle passing out signals to printf in dpath
@@ -916,7 +909,7 @@ class Rob(
           BoolToChar( debug_entry(r_idx+0).valid, 'V'),
           BoolToChar(  debug_entry(r_idx+0).busy, 'B'),
           BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
-          debug_entry(r_idx+0).uop.pc(31,0),
+          debug_entry(r_idx+0).uop.debug_pc(31,0),
           debug_entry(r_idx+0).uop.debug_inst,
           BoolToChar(debug_entry(r_idx+0).exception, 'E'))
       } else if (coreWidth == 2) {
@@ -928,8 +921,8 @@ class Rob(
           BoolToChar(  debug_entry(r_idx+1).busy, 'B'),
           BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
           BoolToChar(debug_entry(r_idx+1).unsafe, 'U'),
-          debug_entry(r_idx+0).uop.pc(31,0),
-          debug_entry(r_idx+1).uop.pc(15,0),
+          debug_entry(r_idx+0).uop.debug_pc(31,0),
+          debug_entry(r_idx+1).uop.debug_pc(15,0),
           debug_entry(r_idx+0).uop.debug_inst,
           debug_entry(r_idx+1).uop.debug_inst,
           BoolToChar(debug_entry(r_idx+0).exception, 'E'),
@@ -951,10 +944,10 @@ class Rob(
           BoolToChar(debug_entry(r_idx+1).unsafe, 'U'),
           BoolToChar(debug_entry(r_idx+2).unsafe, 'U'),
           BoolToChar(debug_entry(r_idx+3).unsafe, 'U'),
-          debug_entry(r_idx+0).uop.pc(23,0),
-          debug_entry(r_idx+1).uop.pc(15,0),
-          debug_entry(r_idx+2).uop.pc(15,0),
-          debug_entry(r_idx+3).uop.pc(15,0),
+          debug_entry(r_idx+0).uop.debug_pc(23,0),
+          debug_entry(r_idx+1).uop.debug_pc(15,0),
+          debug_entry(r_idx+2).uop.debug_pc(15,0),
+          debug_entry(r_idx+3).uop.debug_pc(15,0),
           debug_entry(r_idx+0).uop.debug_inst,
           debug_entry(r_idx+1).uop.debug_inst,
           debug_entry(r_idx+2).uop.debug_inst,

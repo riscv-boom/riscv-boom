@@ -2,8 +2,6 @@
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 package boom.common
 
@@ -24,6 +22,7 @@ import boom.lsu._
  * Default BOOM core parameters
  */
 case class BoomCoreParams(
+// DOC include start: BOOM Parameters
   fetchWidth: Int = 1,
   decodeWidth: Int = 1,
   numRobEntries: Int = 64,
@@ -35,17 +34,13 @@ case class BoomCoreParams(
   numStqEntries: Int = 16,
   numIntPhysRegisters: Int = 96,
   numFpPhysRegisters: Int = 64,
-  enableCustomRf: Boolean = false,
-  enableCustomRfModel: Boolean = true,
   maxBrCount: Int = 4,
   numFetchBufferEntries: Int = 16,
-  useNewFetchBuffer: Boolean = true,
   enableAgePriorityIssue: Boolean = true,
   enablePrefetching: Boolean = false,
-  enableBrResolutionRegister: Boolean = true,
+  enableFastLoadUse: Boolean = true,
   enableCommitMapTable: Boolean = false,
   enableFastPNR: Boolean = false,
-  enableFastWakeupsToRename: Boolean = true,
   enableBTBContainsBranches: Boolean = true,
   enableBranchPredictor: Boolean = true,
   enableBTB: Boolean = true,
@@ -61,11 +56,10 @@ case class BoomCoreParams(
   bpdRandom: Option[RandomBpdParameters] = None,
   intToFpLatency: Int = 2,
   imulLatency: Int = 3,
-  fetchLatency: Int = 4,
-  renameLatency: Int = 2,
   nPerfCounters: Int = 0,
   numRXQEntries: Int = 4,
   numRCQEntries: Int = 8,
+  numDCacheBanks: Int = 1,
   /* more stuff */
 
   useFetchMonitor: Boolean = true,
@@ -78,7 +72,7 @@ case class BoomCoreParams(
   mtvecWritable: Boolean = true,
   haveCFlush: Boolean = false,
   mulDiv: Option[freechips.rocketchip.rocket.MulDivParams] = Some(MulDivParams(divEarlyOut=true)),
-  nBreakpoints: Int = 1,
+  nBreakpoints: Int = 0, // TODO Fix with better frontend breakpoint unit
   nL2TLBEntries: Int = 512,
   nLocalInterrupts: Int = 0,
   useAtomics: Boolean = true,
@@ -90,6 +84,7 @@ case class BoomCoreParams(
   useRVE: Boolean = false,
   useBPWatch: Boolean = false,
   clockGate: Boolean = false
+// DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams
 {
   val haveFSDirty = false
@@ -98,7 +93,7 @@ case class BoomCoreParams(
   val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
   val retireWidth = decodeWidth
   val jumpInFrontend: Boolean = false // unused in boom
-  val nPMPs: Int = 0 // TODO Fix this!!!!!
+  val nPMPs: Int = 8
 
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
 }
@@ -153,12 +148,9 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val numRcqEntries = boomParams.numRCQEntries       // number of RoCC commit queue entries. This can be large since it just keeps a pdst
   val numLdqEntries = boomParams.numLdqEntries       // number of LAQ entries
   val numStqEntries = boomParams.numStqEntries       // number of SAQ/SDQ entries
-  val NUM_LDQ_ENTRIES = numLdqEntries // TODO Remove these after
-  val NUM_STQ_ENTRIES = numStqEntries // completion of lsu refactor.
   val maxBrCount    = boomParams.maxBrCount          // number of branches we can speculate simultaneously
   val ftqSz         = boomParams.ftq.nEntries        // number of FTQ entries
   val numFetchBufferEntries = boomParams.numFetchBufferEntries // number of instructions that stored between fetch&decode
-  val useNewFetchBuffer = boomParams.useNewFetchBuffer
 
   val numIntPhysRegs= boomParams.numIntPhysRegisters // size of the integer physical register file
   val numFpPhysRegs = boomParams.numFpPhysRegisters  // size of the floating point physical register file
@@ -182,27 +174,20 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   val intToFpLatency = boomParams.intToFpLatency
 
-  val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
-  require (Seq(3, 4).contains(fetchLatency)) // 3 and 4 cycle fetch supported
-  val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
-
-  val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
-
   //************************************
   // Issue Units
 
   val issueParams: Seq[IssueParams] = boomParams.issueParams
   val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
-  val usingUnifiedMemIntIQs = issueParams.count(_.iqType == IQT_MEM.litValue) == 0
 
   // currently, only support one of each.
   require (issueParams.count(_.iqType == IQT_FP.litValue) == 1 || !usingFPU)
-  require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1 || usingUnifiedMemIntIQs)
+  require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1)
   require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
 
-  // Currently, require issue dispatch widths all equal coreWidth
-  issueParams.map(x => require(x.dispatchWidth == coreWidth))
-  // TODO: In future, relax this constraint
+  val intWidth = issueParams.find(_.iqType == IQT_INT.litValue).get.issueWidth
+  val memWidth = issueParams.find(_.iqType == IQT_MEM.litValue).get.issueWidth
+
   issueParams.map(x => require(x.dispatchWidth <= coreWidth && x.dispatchWidth > 0))
 
   //************************************
@@ -212,6 +197,10 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val icBlockBytes = icacheParams.blockBytes
 
   require(icacheParams.nSets <= 64, "Handling aliases in the ICache is buggy.")
+
+  val enableFastLoadUse = boomParams.enableFastLoadUse
+  val enablePrefetching = boomParams.enablePrefetching
+  val nLBEntries = dcacheParams.nMSHRs
 
   //************************************
   // Branch Prediction
@@ -257,7 +246,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableCommitMapTable = boomParams.enableCommitMapTable
   require(!enableCommitMapTable) // TODO Fix the commit map table.
   val enableFastPNR = boomParams.enableFastPNR
-  val enableFastWakeupsToRename = boomParams.enableFastWakeupsToRename
 
   //************************************
   // Implicitly calculated constants
@@ -281,10 +269,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   require ((numLdqEntries-1) > coreWidth)
   require ((numStqEntries-1) > coreWidth)
 
-  //************************************
-  // Custom Logic
-  val enableCustomRf      = boomParams.enableCustomRf
-  val enableCustomRfModel = boomParams.enableCustomRfModel
 
   //************************************
   // Other Non/Should-not-be sythesizable modules

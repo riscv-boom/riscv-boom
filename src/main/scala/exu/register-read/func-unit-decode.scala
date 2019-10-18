@@ -2,8 +2,6 @@
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -335,7 +333,6 @@ class RegisterReadDecode(supportedUnits: SupportedFuncUnits)(implicit p: Paramet
 
   // rrd_use_alupipe is unused
   io.rrd_uop.ctrl.br_type := rrd_cs.br_type
-  io.rrd_uop.ctrl.rf_wen  := rrd_cs.rf_wen
   io.rrd_uop.ctrl.op1_sel := rrd_cs.op1_sel
   io.rrd_uop.ctrl.op2_sel := rrd_cs.op2_sel
   io.rrd_uop.ctrl.imm_sel := rrd_cs.imm_sel

@@ -22,7 +22,7 @@
 <!--    (examples)
     - version: `git commit hash`
     - os: `Linux knight 4.4.0-92-generic #115-Ubuntu SMP Thu Aug 10 09:04:33 UTC 2017 x86_64 x86_64 x86_64 GNU/Linux`
-    - build environment: `riscv-boom/boom-template` `git commit hash`
+    - build environment: `ucb-bar/chipyard` `git commit hash`
 -->
 
 **What is the use case for changing the behavior?**

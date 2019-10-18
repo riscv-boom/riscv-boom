@@ -2,8 +2,6 @@
 // Copyright (c) 2015 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -65,7 +63,7 @@ class CfiMissInfo(implicit p: Parameters) extends BoomBundle
   val mispredicted = Bool()  // Was a branch or jump mispredicted in this fetch group?
   val taken = Bool()         // If a branch, was it taken?
   val cfi_idx = UInt(log2Ceil(fetchWidth).W) // which instruction in fetch group?
-  val cfi_type = CfiType()   // What kind of instruction is stored here?
+  val cfi_type = UInt(CFI_SZ.W) // What kind of instruction is stored here?
 }
 
 /**
@@ -143,7 +141,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     b.mispredicted := false.B
     b.taken := false.B
     b.cfi_idx := cfi_idx
-    b.cfi_type := Mux(br_seen, CfiType.branch, CfiType.none)
+    b.cfi_type := Mux(br_seen, CFI_BR, CFI_X)
     b
   }
 
@@ -229,7 +227,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     val saturated = (com_cntr === 0.U && !com_taken) || (com_cntr === 3.U && com_taken)
 
     io.bim_update.valid :=
-      miss_data.cfi_type === CfiType.branch &&
+      miss_data.cfi_type === CFI_BR &&
       (miss_data.mispredicted) ||
       (!miss_data.mispredicted && miss_data.executed && !saturated)
 

@@ -2,8 +2,6 @@
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -40,7 +38,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val inst             = UInt(32.W)
   val debug_inst       = UInt(32.W)
   val is_rvc           = Bool()
-  val pc               = UInt(coreMaxAddrBits.W) // TODO remove -- use FTQ to get PC. Change to debug_pc.
+  val debug_pc         = UInt(coreMaxAddrBits.W)
   val iq_type          = UInt(IQT_SZ.W)        // which issue unit do we use?
   val fu_code          = UInt(FUConstants.FUC_SZ.W) // which functional unit do we use?
   val ctrl             = new CtrlSignals
@@ -107,9 +105,9 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val mem_signed       = Bool()
   val is_fence         = Bool()
   val is_fencei        = Bool()
-  val is_store         = Bool()                      // anything that goes into the STQ, including fences and AMOs
   val is_amo           = Bool()
-  val is_load          = Bool()
+  val uses_ldq         = Bool()
+  val uses_stq         = Bool()
   val is_sys_pc2epc    = Bool()                      // Is a ECall or Breakpoint -- both set EPC to PC.
   val is_unique        = Bool()                      // only allow this instruction in the pipeline, wait for STQ to
                                                      // drain, clear fetcha fter it (tell ROB to un-ready until empty)
@@ -131,31 +129,30 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
                                             // If it's non-ld/st it will write back exception bits to the fcsr.
   val fp_single        = Bool()             // single-precision floating point instruction (F-extension)
 
-  // exception information
+  // frontend exception information
   val xcpt_pf_if       = Bool()             // I-TLB page fault.
   val xcpt_ae_if       = Bool()             // I$ access exception.
   val replay_if        = Bool()             // I$ wants us to replay our ifetch request
   val xcpt_ma_if       = Bool()             // Misaligned fetch (jal/brjumping to misaligned addr).
+  val bp_debug_if      = Bool()             // Breakpoint
+  val bp_xcpt_if       = Bool()             // Breakpoint
 
   // purely debug information
   val debug_wdata      = UInt(xLen.W)
   val debug_events     = new DebugStageEvents
 
 
+  // Does this register write-back
+  def rf_wen           = dst_rtype =/= RT_X
+
   // Is it possible for this uop to misspeculate, preventing the commit of subsequent uops?
-  def unsafe           = is_load || is_store && !is_fence || is_br_or_jmp && !is_jal
+  def unsafe           = uses_ldq || (uses_stq && !is_fence) || (is_br_or_jmp && !is_jal)
 
   def fu_code_is(_fu: UInt) = (fu_code & _fu) =/= 0.U
 }
 
 /**
  * Control signals within a MicroOp
- *
- * NOTE: I can't promise these signals get killed/cleared on a mispredict,
- * so I should listen to the corresponding valid bit
- * For example, on a bypassing, we listen to rf_wen to see if bypass is valid,
- * but we "could" be bypassing to a branch which kills us (a false positive combinational loop),
- * so we have to keep the rf_wen enabled, and not dependent on a branch kill signal
  *
  * TODO REFACTOR this, as this should no longer be true, as bypass occurs in stage before branch resolution
  */
@@ -167,7 +164,6 @@ class CtrlSignals extends Bundle()
   val imm_sel     = UInt(IS_X.getWidth.W)
   val op_fcn      = UInt(freechips.rocketchip.rocket.ALU.SZ_ALU_FN.W)
   val fcn_dw      = Bool()
-  val rf_wen      = Bool()
   val csr_cmd     = UInt(freechips.rocketchip.rocket.CSR.SZ.W)
   val is_load     = Bool()   // will invoke TLB address lookup
   val is_sta      = Bool()   // will invoke TLB address lookup
@@ -183,26 +179,4 @@ class DebugStageEvents extends Bundle()
   val fetch_seq        = UInt(32.W)
 }
 
-/**
- * Object to get type of control flow instruction
- */
-object CfiType
-{
-  def SZ = 3
-  def apply() = UInt(SZ.W)
-  def none = 0.U
-  def branch = 1.U
-  def jal = 2.U
-  def jalr = 3.U
-}
 
-/**
- * MicroOp with data
- *
- * @param data_sz size of data to put with MicroOp
- */
-class MicroOpWithData(val data_sz: Int)(implicit p: Parameters) extends BoomBundle
-  with HasBoomUOP
-{
-  val data = UInt(data_sz.W)
-}

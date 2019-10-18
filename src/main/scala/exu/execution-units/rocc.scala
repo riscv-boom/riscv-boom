@@ -2,13 +2,11 @@
 // Copyright (c) 2013 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Jerry Zhao
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 // The RoCC shim unit. Similar to the LSU, in that we need to allocate entries
-// for instruction bits at decode, and send commands strictly in order.
+// for instruction bits at dispatch, and send commands strictly in order.
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
@@ -31,11 +29,11 @@ import boom.util._
 class RoCCShimCoreIO(implicit p: Parameters) extends BoomBundle
 {
   // Decode Stage
-  val dec_rocc_vals    = Input(Vec(coreWidth, Bool()))
-  val dec_uops         = Input(Vec(coreWidth, new MicroOp))
+  val dis_rocc_vals    = Input(Vec(coreWidth, Bool()))
+  val dis_uops         = Input(Vec(coreWidth, new MicroOp))
   val rxq_full         = Output(Bool())
   val rxq_empty        = Output(Bool())
-  val rxq_idx          = Output(UInt(log2Ceil(numRxqEntries).W))
+  val rxq_idx          = Output(Vec(coreWidth, UInt(log2Ceil(numRxqEntries).W)))
   val rob_pnr_idx      = Input(UInt(robAddrSz.W))
   val rob_head_idx     = Input(UInt(robAddrSz.W))
 
@@ -68,8 +66,6 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new RoCCShimIO)
 
-  val enq_val      = WireInit(false.B)
-
   // RoCC execute queue. Wait for PNR, holds operands and inst bits
   val rxq_val       = Reg(Vec(numRxqEntries, Bool()))
   val rxq_op_val    = Reg(Vec(numRxqEntries, Bool()))
@@ -88,31 +84,36 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   val rxq_com_head = RegInit(0.U(log2Ceil(numRxqEntries).W))
   val rxq_tail     = RegInit(0.U(log2Ceil(numRxqEntries).W))
 
-  io.core.rxq_idx := rxq_tail
 
   // Decode
   val rocc_idx = WireInit(0.U)
   val br_mask = WireInit(0.U(maxBrCount.W))
+  var enq_val = false.B
 
+  assert(PopCount(io.core.dis_rocc_vals) <= 1.U)
   for (w <- 0 until coreWidth) {
-    when (io.core.dec_rocc_vals(w)
-       && io.core.dec_uops(w).uopc === uopROCC) {
-      enq_val      := true.B
-      rocc_idx     := w.U
+    val enq_this = !enq_val && io.core.dis_rocc_vals(w) && io.core.dis_uops(w).uopc === uopROCC
+    when (enq_this) {
+      rocc_idx := w.U
     }
+
+    io.core.rxq_idx(w) := Mux(enq_val, WrapInc(rxq_tail, numRxqEntries), rxq_tail)
+
+    enq_val = enq_val || enq_this
   }
 
   when (enq_val) {
     rxq_val      (rxq_tail) := true.B
     rxq_op_val   (rxq_tail) := false.B
     rxq_committed(rxq_tail) := false.B
-    rxq_uop      (rxq_tail) := io.core.dec_uops(rocc_idx)
-    rxq_inst     (rxq_tail) := io.core.dec_uops(rocc_idx).debug_inst
+    rxq_uop      (rxq_tail) := io.core.dis_uops(rocc_idx)
+    rxq_inst     (rxq_tail) := io.core.dis_uops(rocc_idx).inst
     rxq_tail                := WrapInc(rxq_tail, numRxqEntries)
   }
 
   // Wait for operands
-  when (io.req.valid) {
+  when (io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop)
+     && !io.exception && !RegNext(io.exception)) {
     val rxq_idx = io.req.bits.uop.rxq_idx
     assert(io.req.bits.uop.rob_idx === rxq_uop(rxq_idx).rob_idx,
       "Mismatch between RoCCUnit request and RoCC execute head")

@@ -2,8 +2,6 @@
 // Copyright (c) 2011 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -28,6 +26,7 @@ trait BOOMDebugConstants
 {
   val DEBUG_PRINTF        = false // use the Chisel printf functionality
   val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
+  val MEMTRACE_PRINTF     = false // dump trace of memory accesses to L1D for debugging
   val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
   val O3_CYCLE_TIME       = (1000)// "cycle" time expected by o3pipeview.py
 
@@ -69,6 +68,7 @@ trait IQType
   val IQT_MFP = 6.U(IQT_SZ.W)
 }
 
+
 /**
  * Mixin for scalar operation constants
  */
@@ -83,6 +83,13 @@ trait ScalarOpConstants
 
   //************************************
   // Control Signals
+
+  // CFI types
+  val CFI_SZ   = 3
+  val CFI_X    = 0.U(CFI_SZ.W) // Not a CFI instruction
+  val CFI_BR   = 1.U(CFI_SZ.W) // Branch
+  val CFI_JAL  = 2.U(CFI_SZ.W) // JAL
+  val CFI_JALR = 3.U(CFI_SZ.W) // JALR
 
   // PC Select Signal
   val PC_PLUS4 = 0.U(2.W)  // PC + 4
@@ -292,8 +299,8 @@ trait ScalarOpConstants
     uop.uopc       := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
     uop.bypassable := false.B
     uop.fp_val     := false.B
-    uop.is_store   := false.B
-    uop.is_load    := false.B
+    uop.uses_stq   := false.B
+    uop.uses_ldq   := false.B
     uop.pdst       := 0.U
     uop.dst_rtype  := RT_X
     // TODO these unnecessary? used in regread stage?
@@ -302,7 +309,6 @@ trait ScalarOpConstants
     val cs = Wire(new boom.common.CtrlSignals())
     cs             := DontCare // Overridden in the following lines
     cs.br_type     := BR_N
-    cs.rf_wen      := false.B
     cs.csr_cmd     := freechips.rocketchip.rocket.CSR.N
     cs.is_load     := false.B
     cs.is_sta      := false.B
@@ -341,7 +347,7 @@ trait RISCVConstants
   // memory consistency model
   // The C/C++ atomics MCM requires that two loads to the same address maintain program order.
   // The Cortex A9 does NOT enforce load/load ordering (which leads to buggy behavior).
-  val MCM_ORDER_DEPENDENT_LOADS = false
+  val MCM_ORDER_DEPENDENT_LOADS = true
 
   val jal_opc = (0x6f).U
   val jalr_opc = (0x67).U

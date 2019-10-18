@@ -7,7 +7,7 @@ version: 2
 jobs:
     install-riscv-toolchain:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -55,7 +55,7 @@ jobs:
                     - "/home/riscvuser/esp-tools-install"
     prepare-build-environment:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -85,7 +85,7 @@ jobs:
                     - "/home/riscvuser/verilator"
     run-scala-checkstyle:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -96,7 +96,7 @@ jobs:
                 command: make checkstyle
     prepare-smallboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -128,7 +128,7 @@ jobs:
                     - "/home/riscvuser/chipyard"
     prepare-mediumboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -160,7 +160,7 @@ jobs:
                     - "/home/riscvuser/chipyard"
     prepare-largeboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -192,7 +192,7 @@ jobs:
                     - "/home/riscvuser/chipyard"
     prepare-megaboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -217,14 +217,14 @@ jobs:
             - run:
                 name: Building MegaBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh megaboom
-                no_output_timeout: 120m
+                no_output_timeout: 240m
             - save_cache:
                 key: megaboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/chipyard"
     prepare-smallboomandrocketconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -254,9 +254,9 @@ jobs:
                 key: smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/chipyard"
-    prepare-smallrv32unifiedboomconfig:
+    prepare-smallrv32boomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -279,11 +279,11 @@ jobs:
                 keys:
                     - verilator-v12-{{ checksum "CHIPYARD.hash" }}
             - run:
-                name: Building SmallRV32UnifiedBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh rv32unifiedboom
+                name: Building SmallRV32BoomConfig using Verilator
+                command: .circleci/do-rtl-build.sh rv32boom
                 no_output_timeout: 120m
             - save_cache:
-                key: smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+                key: smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/chipyard"
     prepare-hwachaboomconfig:
@@ -320,7 +320,7 @@ jobs:
                     - "/home/riscvuser/chipyard"
     smallboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -345,7 +345,7 @@ jobs:
                 no_output_timeout: 30m
     smallboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -369,7 +369,7 @@ jobs:
                 command: .circleci/run-tests.sh smallboom
     mediumboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -394,7 +394,7 @@ jobs:
                 no_output_timeout: 30m
     mediumboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -418,7 +418,7 @@ jobs:
                 command: .circleci/run-tests.sh mediumboom
     largeboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -443,7 +443,7 @@ jobs:
                 no_output_timeout: 30m
     largeboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -467,7 +467,7 @@ jobs:
                 command: .circleci/run-tests.sh largeboom
     megaboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -492,7 +492,7 @@ jobs:
                 no_output_timeout: 30m
     megaboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -514,9 +514,10 @@ jobs:
             - run:
                 name: Run MegaBoomConfig riscv tests
                 command: .circleci/run-tests.sh megaboom
+                no_output_timeout: 30m
     smallboomandrocketconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -541,7 +542,7 @@ jobs:
                 no_output_timeout: 30m
     smallboomandrocketconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -563,9 +564,9 @@ jobs:
             - run:
                 name: Run SmallBoomAndRocketConfig riscv tests
                 command: .circleci/run-tests.sh boomandrocket
-    smallrv32unifiedboomconfig-run-csmith-tests:
+    smallrv32boomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -580,17 +581,17 @@ jobs:
                     - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+                    - smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
             - restore_cache:
                 keys:
                     - verilator-v12-{{ checksum "CHIPYARD.hash" }}
             - run:
-                name: Run SmallRV32UnifiedBoomConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh rv32unifiedboom 50
+                name: Run SmallRV32BoomConfig csmith tests
+                command: .circleci/build-run-csmith-tests.sh rv32boom 50
                 no_output_timeout: 30m
-    smallrv32unifiedboomconfig-run-riscv-tests:
+    smallrv32boomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.10
+            - image: riscvboom/riscvboom-images:0.0.12
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -605,13 +606,13 @@ jobs:
                     - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
             - restore_cache:
                 keys:
-                    - smallrv32unifiedboomconfig-{{ .Branch }}-{{ .Revision }}
+                    - smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
             - restore_cache:
                 keys:
                     - verilator-v12-{{ checksum "CHIPYARD.hash" }}
             - run:
-                name: Run SmallRV32UnifiedBoomConfig riscv tests
-                command: .circleci/run-tests.sh rv32unifiedboom
+                name: Run SmallRV32BoomConfig riscv tests
+                command: .circleci/run-tests.sh rv32boom
     hwachaboomconfig-run-riscv-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.10
@@ -673,7 +674,7 @@ workflows:
                 requires:
                     - prepare-build-environment
                     - install-riscv-toolchain
-            - prepare-smallrv32unifiedboomconfig:
+            - prepare-smallrv32boomconfig:
                 requires:
                     - prepare-build-environment
                     - install-riscv-toolchain
@@ -722,10 +723,10 @@ workflows:
                 requires:
                     - prepare-smallboomandrocketconfig
 
-            # Run the SmallRV32UnifiedBoomConfig tests
-            - smallrv32unifiedboomconfig-run-riscv-tests:
+            # Run the SmallRV32BoomConfig tests
+            - smallrv32boomconfig-run-riscv-tests:
                 requires:
-                    - prepare-smallrv32unifiedboomconfig
+                    - prepare-smallrv32boomconfig
 
             # Run the HwachaBoomConfig tests
             - hwachaboomconfig-run-riscv-tests:

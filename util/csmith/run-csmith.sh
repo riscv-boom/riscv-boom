@@ -7,6 +7,7 @@ P_INST=1
 SEED=-1
 WDEBUG_EXT=false
 NDEBUG=false
+PK=false
 
 # Make output directory
 OUTPUT_DIR=output
@@ -26,6 +27,8 @@ usage(){
     echo "                                          main sim is not debug version)"
     echo "                                          (just appends -debug to sim name)"
     echo "    --nodebug -n                          just error when there is a sim mismatch (no vpd)"
+    echo "    -k                                    run tests with the proxy kernel (slower, but"
+    echo "                                          uses virtual memory)"
 }
 
 # Exit everything on one ctrl+c
@@ -55,35 +58,44 @@ run_once () {
     RV=$?
     if [ $RV -ne 0 ]; then
         echo "[$1] x86-64 binary timed out. Discard and start over."
-        rm $BASE_NAME.bin $BASE_NAME.host.out $BASE_NAME.c
+        rm $BASE_NAME.*
         return 0
     fi
 
     # Test RISCV spike version
-    riscv64-unknown-elf-gcc -w -I./$SRC_DIR -DPREALLOCATE=1 -mcmodel=medany -static -std=gnu99 -O2 -ffast-math -fno-common -o $BASE_NAME.riscv $BASE_NAME.c $SRC_DIR/syscalls.c $SRC_DIR/crt.S -static -nostdlib -nostartfiles -lm -lgcc -T $SRC_DIR/link.ld -I$RISCV/include/csmith-2.4.0
-    timeout --foreground 10s spike $BASE_NAME.riscv 1> $BASE_NAME.spike.out 2> $BASE_NAME.spike.log
+    if [ $PK == false ]; then
+        riscv64-unknown-elf-gcc -w -I./$SRC_DIR -DPREALLOCATE=1 -mcmodel=medany -static -std=gnu99 -O2 -ffast-math -fno-common -o $BASE_NAME.riscv $BASE_NAME.c $SRC_DIR/syscalls.c $SRC_DIR/crt.S -static -nostdlib -nostartfiles -lm -lgcc -T $SRC_DIR/link.ld -I$RISCV/include/csmith-2.4.0
+        timeout --foreground 10s spike $BASE_NAME.riscv 1> $BASE_NAME.spike.out 2> $BASE_NAME.spike.log
+    else
+        riscv64-unknown-elf-gcc $BASE_NAME.c -I$RISCV/include/csmith-2.4.0 -o $BASE_NAME.riscv -w
+        timeout --foreground 1m spike pk $BASE_NAME.riscv 1> $BASE_NAME.spike.out 2> $BASE_NAME.spike.log
+    fi
     RV=$?
     if [ $RV -ne 0 ]; then
         echo "[$1] Spike timed out. Discard and start over."
-        rm $BASE_NAME.bin $BASE_NAME.host.out $BASE_NAME.c $BASE_NAME.riscv $BASE_NAME.spike.out $BASE_NAME.spike.log
+        rm $BASE_NAME.*
         return 0
     fi
 
     # Compare x86-64 and Spike
-    cmp -s $BASE_NAME.spike.out $BASE_NAME.host.out
+    cmp -s <(tr [a-z] [A-Z] <$BASE_NAME.spike.out) <(tr [a-z] [A-Z] <$BASE_NAME.host.out)
     RV=$?
     if [ $RV -ne 0 ]; then
         echo "[$1] Spike produces wrong result compared to x86-64 binary. Discard and start over."
-        rm $BASE_NAME.bin $BASE_NAME.host.out $BASE_NAME.c $BASE_NAME.riscv $BASE_NAME.spike.out $BASE_NAME.spike.log
+        rm $BASE_NAME.*
         return 0
     fi
 
     # Compare simulator output versus spike
-    timeout 15m $SIM $BASE_NAME.riscv 1> $BASE_NAME.sim.out
+    if [ $PK == false ]; then
+        timeout 15m $SIM $BASE_NAME.riscv 1> $BASE_NAME.sim.out 2> $BASE_NAME.sim.log
+    else
+        timeout 120m $SIM pk $BASE_NAME.riscv +verbose +vcdplusfile=$BASE_NAME.vpd 1> $BASE_NAME.sim.out 2> $BASE_NAME.sim.log
+    fi
     RV=$?
     if [ $RV == 124 ]; then
         echo "[$1] Simulator timed out. Discard and start over."
-        rm $BASE_NAME.bin $BASE_NAME.host.out $BASE_NAME.c $BASE_NAME.riscv $BASE_NAME.spike.out $BASE_NAME.spike.log $BASE_NAME.sim.out
+        rm $BASE_NAME.*
         return 0
     fi
 
@@ -104,7 +116,7 @@ run_once () {
         kill_group
     else
         echo "[$1] Simulator and spike agree."
-        rm $BASE_NAME.bin $BASE_NAME.host.out $BASE_NAME.c $BASE_NAME.riscv $BASE_NAME.spike.out $BASE_NAME.spike.log $BASE_NAME.sim.out
+        rm $BASE_NAME.*
         return 0
     fi
 }
@@ -140,6 +152,8 @@ do
     case $1 in
         -s | --sim )        shift
                             SIM=$1
+                            ;;
+        -k | --pk )         PK=true
                             ;;
         -r | --run )        shift
                             RUN_AMT=$1

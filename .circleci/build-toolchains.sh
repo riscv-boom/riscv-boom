@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# create the riscv tools binaries from riscv-boom/boom-template with rocket-chip hash given by riscv-boom
+# create the riscv tools binaries from ucb-bar/chipyard with rocket-chip hash given by riscv-boom
 
 # turn echo on and error on earliest command
 set -ex
@@ -21,5 +21,6 @@ if [ ! -d "$HOME/$1-install" ]; then
 
     cd $HOME
 
-    CHIPYARD_DIR=$LOCAL_CHIPYARD_DIR $LOCAL_CHIPYARD_DIR/scripts/build-toolchains.sh $1
+    # init all submodules including the tools
+    CHIPYARD_DIR="$LOCAL_CHIPYARD_DIR" NPROC=2 $LOCAL_CHIPYARD_DIR/scripts/build-toolchains.sh $1
 fi

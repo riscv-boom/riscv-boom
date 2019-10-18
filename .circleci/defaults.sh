@@ -17,6 +17,9 @@ clean () {
     run "rm -rf $REMOTE_WORK_DIR"
 }
 
+#make parallelism
+NPROC=8
+
 # remote variables
 REMOTE_WORK_DIR=$CI_DIR/$CIRCLE_PROJECT_REPONAME-$CIRCLE_BRANCH-$CIRCLE_SHA1-$CIRCLE_JOB
 REMOTE_RISCV_DIR=$REMOTE_WORK_DIR/riscv-tools-install
@@ -24,6 +27,7 @@ REMOTE_ESP_DIR=$REMOTE_WORK_DIR/esp-tools-install
 REMOTE_CHIPYARD_DIR=$REMOTE_WORK_DIR/chipyard
 REMOTE_VERILATOR_DIR=$REMOTE_WORK_DIR/verilator
 REMOTE_SIM_DIR=$REMOTE_CHIPYARD_DIR/sims/verilator
+REMOTE_JAVA_ARGS="-Xmx8G -Xss8M -Dsbt.ivy.home=$REMOTE_WORK_DIR/.ivy2 -Dsbt.global.base=$REMOTE_WORK_DIR/.sbt -Dsbt.boot.directory=$REMOTE_WORK_DIR/.sbt/boot"
 
 # local variables (aka within the docker container)
 LOCAL_CHECKOUT_DIR=$HOME/project
@@ -35,10 +39,10 @@ LOCAL_SIM_DIR=$LOCAL_CHIPYARD_DIR/sims/verilator
 
 # key value store to get the build strings
 declare -A mapping
-mapping["smallboom"]="SUB_PROJECT=boom CONFIG=SmallBoomConfig"
-mapping["mediumboom"]="SUB_PROJECT=boom CONFIG=MediumBoomConfig"
-mapping["largeboom"]="SUB_PROJECT=boom CONFIG=LargeBoomConfig"
-mapping["megaboom"]="SUB_PROJECT=boom CONFIG=MegaBoomConfig"
-mapping["boomandrocket"]="SUB_PROJECT=boom CONFIG=SmallBoomAndRocketConfig"
-mapping["rv32unifiedboom"]="SUB_PROJECT=boom CONFIG=SmallRV32UnifiedBoomConfig"
-mapping["hwachaboom"]="SUB_PROJECT=example CONFIG=HwachaBoomConfig"
+mapping["smallboom"]="CONFIG=SmallBoomConfig"
+mapping["mediumboom"]="CONFIG=MediumBoomConfig"
+mapping["largeboom"]="CONFIG=LargeBoomConfig"
+mapping["megaboom"]="CONFIG=MegaBoomConfig"
+mapping["boomandrocket"]="CONFIG=SmallBoomAndRocketConfig"
+mapping["rv32boom"]="CONFIG=SmallRV32BoomConfig"
+mapping["hwachaboom"]="CONFIG=HwachaLargeBoomConfig"

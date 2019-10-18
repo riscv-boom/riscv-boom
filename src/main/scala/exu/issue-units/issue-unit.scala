@@ -2,8 +2,6 @@
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -78,14 +76,14 @@ class IssueUnitIO(
   val iss_uops         = Output(Vec(issueWidth, new MicroOp()))
   val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(maxPregSz))))
 
-  val mem_ldSpecWakeup = Flipped(Valid(UInt(width=maxPregSz.W)))
+  val spec_ld_wakeup  = Flipped(Valid(UInt(width=maxPregSz.W)))
 
   // tell the issue unit what each execution pipeline has in terms of functional units
   val fu_types         = Input(Vec(issueWidth, Bits(width=FUC_SZ.W)))
 
   val brinfo           = Input(new BrResolutionInfo())
   val flush_pipeline   = Input(Bool())
-  val sxt_ldMiss       = Input(Bool())
+  val ld_miss          = Input(Bool())
 
   val event_empty      = Output(Bool()) // used by HPM events; is the issue unit empty?
 
@@ -155,14 +153,6 @@ abstract class IssueUnit(
 
   assert (PopCount(issue_slots.map(s => s.grant)) <= issueWidth.U, "[issue] window giving out too many grants.")
 
-  // Check that a ldMiss signal was preceded by a ldSpecWakeup.
-  // However, if the load gets killed before it hits SXT stage, we may see
-  // the sxt_ldMiss signal (from some other load) by not the ldSpecWakeup signal.
-  // So track branch kills for the last 4 cycles to remove false negatives.
-  val brKills = RegInit(0.asUInt(width=4.W))
-  brKills := Cat(brKills, (io.brinfo.valid && io.brinfo.mispredict) || io.flush_pipeline)
-  assert (!(io.sxt_ldMiss && !RegNext(io.mem_ldSpecWakeup.valid, init=false.B) && brKills === 0.U),
-    "[issue] IQ-" + iqType + " a ld miss was not preceded by a spec wakeup.")
 
   //-------------------------------------------------------------
 
@@ -199,7 +189,7 @@ abstract class IssueUnit(
         issue_slots(i).uop.prs1,
         issue_slots(i).uop.prs2,
         issue_slots(i).uop.prs3,
-        issue_slots(i).uop.pc(31,0),
+        issue_slots(i).uop.debug_pc(31,0),
         issue_slots(i).uop.debug_inst,
         issue_slots(i).uop.uopc,
         issue_slots(i).uop.rob_idx,

@@ -2,8 +2,6 @@
 // Copyright (c) 2017 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -65,7 +63,7 @@ class BTBsa(val bankBytes: Int)(implicit p: Parameters) extends BoomBTB
     val target   = UInt((vaddrBits - log2Ceil(coreInstBytes)).W)
     val cfi_idx  = UInt(log2Ceil(fetchWidth).W)
     val bpd_type = BpredType()
-    val cfi_type = CfiType()
+    val cfi_type = UInt(CFI_SZ.W)
     val is_rvc   = Bool()
     val is_edge  = Bool()
   }

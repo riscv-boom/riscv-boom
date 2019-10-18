@@ -25,10 +25,10 @@ if [ ! -d "$LOCAL_VERILATOR_DIR" ] && [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then
     git fetch
     git checkout $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)
 
-    # init all submodules (according to what boom-template wants)
+    # init all submodules (according to what chipyard wants)
     ./scripts/init-submodules-no-riscv-tools.sh
 
-    # move the pull request riscv-boom repo into boom-template
+    # move the pull request riscv-boom repo into chipyard
     rm -rf $LOCAL_CHIPYARD_DIR/generators/boom
     cp -r $LOCAL_CHECKOUT_DIR $LOCAL_CHIPYARD_DIR/generators/boom/
 
@@ -40,7 +40,7 @@ if [ ! -d "$LOCAL_VERILATOR_DIR" ] && [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then
     run "mkdir -p $REMOTE_CHIPYARD_DIR"
     copy $LOCAL_CHIPYARD_DIR/ $SERVER:$REMOTE_CHIPYARD_DIR
 
-    run "make -C $REMOTE_SIM_DIR VERILATOR_INSTALL_DIR=$REMOTE_VERILATOR_DIR verilator_install"
+    run "make -j$NPROC -C $REMOTE_SIM_DIR VERILATOR_INSTALL_DIR=$REMOTE_VERILATOR_DIR verilator_install"
 
     # copy so that circleci can cache
     mkdir -p $LOCAL_CHIPYARD_DIR
