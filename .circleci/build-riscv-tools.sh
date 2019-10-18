@@ -17,7 +17,7 @@ if [ ! -d "$LOCAL_RISCV_DIR" ]; then
 
     echo "Checking out Chipyard version: $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)"
     git fetch
-    git checkout $(cat $LOCAL_CHIPYARD_DIR/CHIPYARD.hash)
+    git checkout $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)
 
     git submodule update --init --recursive toolchains/riscv-tools
     cd toolchains/riscv-tools
