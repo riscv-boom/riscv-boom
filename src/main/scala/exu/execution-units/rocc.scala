@@ -49,7 +49,7 @@ class RoCCShimIO(implicit p: Parameters) extends BoomBundle
 
   val req              = Flipped(new DecoupledIO(new FuncUnitReq(xLen)))
   val resp             = new DecoupledIO(new FuncUnitResp(xLen))
-  val brinfo           = Input(new BrResolutionInfo())
+  val brupdate           = Input(new BrUpdateInfo())
   val status           = Input(new MStatus)
   val exception        = Input(Bool())
 }
@@ -111,7 +111,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   }
 
   // Wait for operands
-  when (io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop)
+  when (io.req.valid && !IsKilledByBranch(io.brupdate, io.req.bits.uop)
      && !io.exception && !RegNext(io.exception)) {
     val rxq_idx = io.req.bits.uop.rxq_idx
     assert(io.req.bits.uop.rob_idx === rxq_uop(rxq_idx).rob_idx,
@@ -160,15 +160,15 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   // Branches
   for (i <- 0 until numRxqEntries) {
     when (rxq_val(i)) {
-      rxq_uop(i).br_mask := GetNewBrMask(io.brinfo, rxq_uop(i))
-      when (IsKilledByBranch(io.brinfo, rxq_uop(i))) {
+      rxq_uop(i).br_mask := GetNewBrMask(io.brupdate, rxq_uop(i))
+      when (IsKilledByBranch(io.brupdate, rxq_uop(i))) {
         rxq_val(i)      := false.B
         rxq_op_val(i)   := false.B
       }
     }
   }
-  when (io.brinfo.valid && io.brinfo.mispredict && !io.exception) {
-    rxq_tail := io.brinfo.rxq_idx
+  when (io.brupdate.b2.mispredict && !io.exception) {
+    rxq_tail := io.brupdate.b2.rxq_idx
   }
 
 

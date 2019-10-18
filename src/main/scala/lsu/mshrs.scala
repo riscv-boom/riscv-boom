@@ -17,7 +17,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.rocket._
 
 import boom.common._
-import boom.exu.BrResolutionInfo
+import boom.exu.BrUpdateInfo
 import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder, UpdateBrMask, AgePriorityEncoder, WrapInc}
 
 class BoomDCacheReqInternal(implicit p: Parameters) extends BoomDCacheReq()(p)
@@ -45,7 +45,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     val req_sec_rdy = Output(Bool())
 
     val clear_prefetch = Input(Bool())
-    val brinfo       = Input(new BrResolutionInfo)
+    val brupdate       = Input(new BrUpdateInfo)
     val exception    = Input(Bool())
     val rob_pnr_idx  = Input(UInt(robAddrSz.W))
     val rob_head_idx = Input(UInt(robAddrSz.W))
@@ -126,7 +126,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
                  !state.isOneOf(s_invalid, s_meta_write_req, s_mem_finish_1, s_mem_finish_2))// Always accept secondary misses
 
   val rpq = Module(new BranchKillableQueue(new BoomDCacheReqInternal, cfg.nRPQ, u => u.uses_ldq, false))
-  rpq.io.brinfo := io.brinfo
+  rpq.io.brupdate := io.brupdate
   rpq.io.flush  := io.exception
   assert(!(state === s_invalid && !rpq.io.empty))
 
@@ -397,7 +397,7 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
     val mem_access = Decoupled(new TLBundleA(edge.bundle))
     val mem_ack    = Flipped(Valid(new TLBundleD(edge.bundle)))
 
-    // We don't need brinfo in here because uncacheable operations are guaranteed non-speculative
+    // We don't need brupdate in here because uncacheable operations are guaranteed non-speculative
   })
 
   def beatOffset(addr: UInt) = addr.extract(beatOffBits-1, wordOffBits)
@@ -508,7 +508,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     val secondary_miss = Output(Vec(memWidth, Bool()))
     val block_hit = Output(Vec(memWidth, Bool()))
 
-    val brinfo       = Input(new BrResolutionInfo)
+    val brupdate       = Input(new BrUpdateInfo)
     val exception    = Input(Bool())
     val rob_pnr_idx  = Input(UInt(robAddrSz.W))
     val rob_head_idx = Input(UInt(robAddrSz.W))
@@ -644,7 +644,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     mshr.io.clear_prefetch := ((io.clear_all && !req.valid)||
       (req.valid && idx_matches(req_idx)(i) && cacheable && !tag_match(req_idx)) ||
       (req_is_probe && idx_matches(req_idx)(i)))
-    mshr.io.brinfo       := io.brinfo
+    mshr.io.brupdate       := io.brupdate
     mshr.io.exception    := io.exception
     mshr.io.rob_pnr_idx  := io.rob_pnr_idx
     mshr.io.rob_head_idx := io.rob_head_idx

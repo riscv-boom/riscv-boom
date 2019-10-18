@@ -61,7 +61,7 @@ class RobIo(
   val rob_head_idx = Output(UInt(robAddrSz.W))
 
   // Handle Branch Misspeculations
-  val brinfo = Input(new BrResolutionInfo())
+  val brupdate = Input(new BrUpdateInfo())
 
   // Write-back Stage
   // (Update of ROB)
@@ -83,7 +83,6 @@ class RobIo(
 
   val fflags = Flipped(Vec(numFpuPorts, new ValidIO(new FFlagsResp())))
   val lxcpt = Flipped(new ValidIO(new Exception())) // LSU
-  val bxcpt = Flipped(new ValidIO(new Exception())) // BRU
 
   // Commit stage (free resources; also used for rollback).
   val commit = Output(new CommitSignals())
@@ -389,12 +388,6 @@ class Rob(
           "An instruction marked as safe is causing an exception")
       }
     }
-    when (io.bxcpt.valid && MatchBank(GetBankIdx(io.bxcpt.bits.uop.rob_idx))) {
-      rob_exception(GetRowIdx(io.bxcpt.bits.uop.rob_idx)) := true.B
-      assert(rob_unsafe(GetRowIdx(io.bxcpt.bits.uop.rob_idx)),
-        "An instruction marked as safe is causing an exception")
-
-    }
     can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)
 
     //-----------------------------------------------
@@ -438,15 +431,15 @@ class Rob(
     // Kill speculated entries on branch mispredict
     for (i <- 0 until numRobRows) {
       val br_mask = rob_uop(i).br_mask
-      val entry_match = rob_val(i) && maskMatch(io.brinfo.mask, br_mask)
 
       //kill instruction if mispredict & br mask match
-      when (io.brinfo.valid && io.brinfo.mispredict && entry_match) {
+      when (IsKilledByBranch(io.brupdate, br_mask))
+      {
         rob_val(i) := false.B
         rob_uop(i.U).debug_inst := BUBBLE
-      } .elsewhen (io.brinfo.valid && !io.brinfo.mispredict && entry_match) {
+      } .elsewhen (rob_val(i)) {
         // clear speculation bit even on correct speculation
-        rob_uop(i).br_mask := (br_mask & ~io.brinfo.mask)
+        rob_uop(i).br_mask := GetNewBrMask(io.brupdate, br_mask)
       }
     }
 
@@ -529,7 +522,7 @@ class Rob(
   // Finally, don't throw an exception if there are instructions in front of
   // it that want to commit (only throw exception when head of the bundle).
 
-  var block_commit = (rob_state =/= s_normal) && (rob_state =/= s_wait_till_empty) || RegNext(exception_thrown)
+  var block_commit = (rob_state =/= s_normal) && (rob_state =/= s_wait_till_empty) || RegNext(exception_thrown) || RegNext(RegNext(exception_thrown))
   var will_throw_exception = false.B
   var block_xcpt   = false.B
 
@@ -621,18 +614,14 @@ class Rob(
   }
 
   when (!(io.flush.valid || exception_thrown) && rob_state =/= s_rollback) {
-    when (io.lxcpt.valid || io.bxcpt.valid) {
-      val load_is_older =
-        (io.lxcpt.valid && !io.bxcpt.valid) ||
-        (io.lxcpt.valid && io.bxcpt.valid &&
-        IsOlder(io.lxcpt.bits.uop.rob_idx, io.bxcpt.bits.uop.rob_idx, rob_head_idx))
-      val new_xcpt_uop = Mux(load_is_older, io.lxcpt.bits.uop, io.bxcpt.bits.uop)
+    when (io.lxcpt.valid) {
+      val new_xcpt_uop = io.lxcpt.bits.uop
 
       when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_head_idx)) {
         r_xcpt_val              := true.B
         next_xcpt_uop           := new_xcpt_uop
-        next_xcpt_uop.exc_cause := Mux(io.lxcpt.valid, io.lxcpt.bits.cause, io.bxcpt.bits.cause)
-        r_xcpt_badvaddr         := Mux(io.lxcpt.valid, io.lxcpt.bits.badvaddr, io.bxcpt.bits.badvaddr)
+        next_xcpt_uop.exc_cause := io.lxcpt.bits.cause
+        r_xcpt_badvaddr         := io.lxcpt.bits.badvaddr
       }
     } .elsewhen (!r_xcpt_val && enq_xcpts.reduce(_|_)) {
       val idx = enq_xcpts.indexWhere{i: Bool => i}
@@ -642,17 +631,12 @@ class Rob(
       next_xcpt_uop   := io.enq_uops(idx)
       r_xcpt_badvaddr := AlignPCToBoundary(io.xcpt_fetch_pc, icBlockBytes) | io.enq_uops(idx).pc_lob
 
-      assert(!(usingCompressed.B && (io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR),
-        "when using RVC, JAL exceptions should not be seen")
-      when (!usingCompressed.B && (io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR) {
-        r_xcpt_badvaddr := 0.U
-      }
     }
   }
 
   r_xcpt_uop         := next_xcpt_uop
-  r_xcpt_uop.br_mask := GetNewBrMask(io.brinfo, next_xcpt_uop)
-  when (io.flush.valid || IsKilledByBranch(io.brinfo, next_xcpt_uop)) {
+  r_xcpt_uop.br_mask := GetNewBrMask(io.brupdate, next_xcpt_uop)
+  when (io.flush.valid || IsKilledByBranch(io.brupdate, next_xcpt_uop)) {
     r_xcpt_val := false.B
   }
 
@@ -756,8 +740,8 @@ class Rob(
   } .elsewhen (rob_state === s_rollback && (rob_tail === rob_head) && !maybe_full) {
     // Rollback an entry
     rob_tail_lsb := rob_head_lsb
-  } .elsewhen (io.brinfo.mispredict) {
-    rob_tail     := WrapInc(GetRowIdx(io.brinfo.rob_idx), numRobRows)
+  } .elsewhen (io.brupdate.b2.mispredict) {
+    rob_tail     := WrapInc(GetRowIdx(io.brupdate.b2.rob_idx), numRobRows)
     rob_tail_lsb := 0.U
   } .elsewhen (io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall) {
     rob_tail     := WrapInc(rob_tail, numRobRows)
@@ -784,7 +768,7 @@ class Rob(
   // I.E. at least one entry will be empty when in a steady state of dispatching and committing a row each cycle.
   // TODO should we add an extra 'parity bit' onto the ROB pointers to simplify this logic?
 
-  maybe_full := !rob_deq && (rob_enq || maybe_full) || io.brinfo.mispredict
+  maybe_full := !rob_deq && (rob_enq || maybe_full) || io.brupdate.b1.mispredict_mask =/= 0.U
   full       := rob_tail === rob_head && maybe_full
   empty      := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
 
@@ -805,7 +789,8 @@ class Rob(
         rob_state := s_normal
       }
       is (s_normal) {
-        when (RegNext(exception_thrown)) {
+        // Delay rollback 2 cycles so branch mispredictions can drain
+        when (RegNext(RegNext(exception_thrown))) {
           rob_state := s_rollback
         } .otherwise {
           for (w <- 0 until coreWidth) {

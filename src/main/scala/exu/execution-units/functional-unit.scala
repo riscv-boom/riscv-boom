@@ -39,7 +39,7 @@ object FUConstants
   val FUC_SZ = 10
   val FU_X   = BitPat.dontCare(FUC_SZ)
   val FU_ALU =   1.U(FUC_SZ.W)
-  val FU_BRU =   2.U(FUC_SZ.W)
+  val FU_JMP =   2.U(FUC_SZ.W)
   val FU_MEM =   4.U(FUC_SZ.W)
   val FU_MUL =   8.U(FUC_SZ.W)
   val FU_DIV =  16.U(FUC_SZ.W)
@@ -68,7 +68,7 @@ import FUConstants._
  */
 class SupportedFuncUnits(
   val alu: Boolean  = false,
-  val bru: Boolean  = false,
+  val jmp: Boolean  = false,
   val mem: Boolean  = false,
   val muld: Boolean = false,
   val fpu: Boolean  = false,
@@ -78,48 +78,6 @@ class SupportedFuncUnits(
 {
 }
 
-/**
- * IO bundle to connect to a functional unit
- *
- * @param numStages number of pipeline stages for functional unit
- * @param numBypassStages number of bypass stages for functional unit
- * @param dataWidth width of the data out of the functional unit
- */
-class FunctionalUnitIo(
-  val numStages: Int,
-  val numBypassStages: Int,
-  val dataWidth: Int,
-  val isBrUnit: Boolean,
-  val isMemAddrCalcUnit: Boolean,
-  val needsFcsr: Boolean
-  )(implicit p: Parameters) extends BoomBundle
-{
-  val req    = Flipped(new DecoupledIO(new FuncUnitReq(dataWidth)))
-  val resp   = (new DecoupledIO(new FuncUnitResp(dataWidth)))
-
-  val brinfo = Input(new BrResolutionInfo())
-
-  val bypass = Output(new BypassData(numBypassStages, dataWidth))
-
-  // only used by the fpu unit
-  val fcsr_rm = if (needsFcsr) Input(UInt(tile.FPConstants.RM_SZ.W)) else null
-
-  // only used by branch unit
-  val br_unit    = if (isBrUnit) Output(new BranchUnitResp()) else null
-  val get_ftq_pc = if (isBrUnit) Flipped(new GetPCFromFtqIO()) else null
-  val status     = if (isBrUnit || isMemAddrCalcUnit) Input(new freechips.rocketchip.rocket.MStatus()) else null
-
-  // only used by memaddr calc unit
-  val bp = if (isMemAddrCalcUnit) Input(Vec(nBreakpoints, new BP)) else null
-}
-
-/**
- * Bundle for branch prediction information
- */
-class GetPredictionInfo(implicit p: Parameters) extends BoomBundle
-{
-  val br_tag = Output(UInt(brTagSz.W))
-}
 
 /**
  * Bundle for signals sent to the functional unit
@@ -175,10 +133,8 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle
 {
   val valid      = Bool()
   val mispredict = Bool()
-  val mask       = UInt(maxBrCount.W) // the resolve mask
+//  val mask       = UInt(maxBrCount.W) // the resolve mask
   val tag        = UInt(brTagSz.W)    // the branch tag that was resolved
-  val exe_mask   = UInt(maxBrCount.W) // the br_mask of the actual branch uop
-                                               // used to reset the dec_br_mask
   val cfi_idx    = UInt(log2Ceil(fetchWidth).W)
   val ftq_idx    = UInt(ftqSz.W)
   val rob_idx    = UInt(robAddrSz.W)
@@ -187,19 +143,51 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle
   val rxq_idx    = UInt(log2Ceil(numRxqEntries).W) // ditto for RoCC queue
   val taken      = Bool()                     // which direction did the branch go?
   val cfi_type   = UInt(CFI_SZ.W)
+
+  // Info for recalculating the pc for this branch
+  val pc_sel     = UInt(2.W)
+  val is_rvc     = Bool()
+  val edge_inst  = Bool()
+  val pc_lob     = UInt(log2Ceil(icBlockBytes).W)
+
+  val jalr_target = UInt(vaddrBitsExtended.W)
+  val target_offset = SInt()
 }
 
-/**
- * Response from the branch unit. Contains branch resolution information.
- * Note: for critical path reasons, some of the elements in this bundle may be delayed.
- */
-class BranchUnitResp(implicit p: Parameters) extends BoomBundle
+class BrUpdateInfo(implicit p: Parameters) extends BoomBundle
 {
-  val take_pc         = Bool()
-  val target          = UInt(vaddrBitsExtended.W) // TODO XXX REMOVE this -- use FTQ to redirect instead
-  val brinfo          = new BrResolutionInfo()
+  // On the first cycle we get masks to kill registers
+  val b1 = new BrUpdateMasks
+  // On the second cycle we get indices to reset pointers
+  val b2 = new BrUpdateIndices
+  val b3 = new BrUpdateIndices
+}
 
-  val xcpt            = Valid(new Exception)
+class BrUpdateMasks(implicit p: Parameters) extends BoomBundle
+{
+  val resolve_mask = UInt(maxBrCount.W)
+  val mispredict_mask = UInt(maxBrCount.W)
+}
+
+class BrUpdateIndices(implicit p: Parameters) extends BoomBundle
+{
+  val mispredict = Bool()
+  val tag        = UInt(brTagSz.W)
+  val pc_sel     = UInt(2.W)
+  val is_rvc     = Bool()
+  val edge_inst  = Bool()
+  val pc_lob     = UInt(log2Ceil(icBlockBytes).W)
+  val cfi_type   = UInt(CFI_SZ.W)
+  val jalr_target = UInt(vaddrBitsExtended.W)
+  val target_offset = SInt()
+
+  val cfi_idx    = UInt(log2Ceil(fetchWidth).W)
+  val ftq_idx    = UInt(ftqSz.W)
+  val rob_idx    = UInt(robAddrSz.W)
+  val ldq_idx    = UInt(ldqAddrSz.W)  // track the "tail" of loads and stores, so we can
+  val stq_idx    = UInt(stqAddrSz.W)  // quickly reset the LSU on a mispredict
+  val rxq_idx    = UInt(log2Ceil(numRxqEntries).W) // ditto for RoCC queue
+
 }
 
 /**
@@ -216,13 +204,32 @@ abstract class FunctionalUnit(
   val numStages: Int,
   val numBypassStages: Int,
   val dataWidth: Int,
-  val isBranchUnit: Boolean = false,
+  val isJmpUnit: Boolean = false,
+  val isAluUnit: Boolean = false,
   val isMemAddrCalcUnit: Boolean = false,
   val needsFcsr: Boolean = false)
   (implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new FunctionalUnitIo(numStages, numBypassStages, dataWidth,
-    isBranchUnit, isMemAddrCalcUnit, needsFcsr))
+  val io = IO(new Bundle {
+    val req    = Flipped(new DecoupledIO(new FuncUnitReq(dataWidth)))
+    val resp   = (new DecoupledIO(new FuncUnitResp(dataWidth)))
+
+    val brupdate = Input(new BrUpdateInfo())
+
+    val bypass = Output(new BypassData(numBypassStages, dataWidth))
+
+    // only used by the fpu unit
+    val fcsr_rm = if (needsFcsr) Input(UInt(tile.FPConstants.RM_SZ.W)) else null
+
+    // only used by branch unit
+    val brinfo     = if (isAluUnit) Output(new BrResolutionInfo()) else null
+    val get_ftq_pc = if (isJmpUnit) Flipped(new GetPCFromFtqIO()) else null
+    val status     = if (isMemAddrCalcUnit) Input(new freechips.rocketchip.rocket.MStatus()) else null
+
+    // only used by memaddr calc unit
+    val bp = if (isMemAddrCalcUnit) Input(Vec(nBreakpoints, new BP)) else null
+
+  })
 }
 
 /**
@@ -242,7 +249,8 @@ abstract class PipelinedFunctionalUnit(
   numBypassStages: Int,
   earliestBypassStage: Int,
   dataWidth: Int,
-  isBranchUnit: Boolean = false,
+  isJmpUnit: Boolean = false,
+  isAluUnit: Boolean = false,
   isMemAddrCalcUnit: Boolean = false,
   needsFcsr: Boolean = false
   )(implicit p: Parameters) extends FunctionalUnit(
@@ -250,7 +258,8 @@ abstract class PipelinedFunctionalUnit(
     numStages = numStages,
     numBypassStages = numBypassStages,
     dataWidth = dataWidth,
-    isBranchUnit = isBranchUnit,
+    isJmpUnit = isJmpUnit,
+    isAluUnit = isAluUnit,
     isMemAddrCalcUnit = isMemAddrCalcUnit,
     needsFcsr = needsFcsr)
 {
@@ -262,15 +271,15 @@ abstract class PipelinedFunctionalUnit(
     val r_uops   = Reg(Vec(numStages, new MicroOp()))
 
     // handle incoming request
-    r_valids(0) := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop) && !io.req.bits.kill
+    r_valids(0) := io.req.valid && !IsKilledByBranch(io.brupdate, io.req.bits.uop) && !io.req.bits.kill
     r_uops(0)   := io.req.bits.uop
-    r_uops(0).br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
+    r_uops(0).br_mask := GetNewBrMask(io.brupdate, io.req.bits.uop)
 
     // handle middle of the pipeline
     for (i <- 1 until numStages) {
-      r_valids(i) := r_valids(i-1) && !IsKilledByBranch(io.brinfo, r_uops(i-1)) && !io.req.bits.kill
+      r_valids(i) := r_valids(i-1) && !IsKilledByBranch(io.brupdate, r_uops(i-1)) && !io.req.bits.kill
       r_uops(i)   := r_uops(i-1)
-      r_uops(i).br_mask := GetNewBrMask(io.brinfo, r_uops(i-1))
+      r_uops(i).br_mask := GetNewBrMask(io.brupdate, r_uops(i-1))
 
       if (numBypassStages > 0) {
         io.bypass.uop(i-1) := r_uops(i-1)
@@ -279,9 +288,9 @@ abstract class PipelinedFunctionalUnit(
 
     // handle outgoing (branch could still kill it)
     // consumer must also check for pipeline flushes (kills)
-    io.resp.valid    := r_valids(numStages-1) && !IsKilledByBranch(io.brinfo, r_uops(numStages-1))
+    io.resp.valid    := r_valids(numStages-1) && !IsKilledByBranch(io.brupdate, r_uops(numStages-1))
     io.resp.bits.uop := r_uops(numStages-1)
-    io.resp.bits.uop.br_mask := GetNewBrMask(io.brinfo, r_uops(numStages-1))
+    io.resp.bits.uop.br_mask := GetNewBrMask(io.brupdate, r_uops(numStages-1))
 
     // bypassing (TODO allow bypass vector to have a different size from numStages)
     if (numBypassStages > 0 && earliestBypassStage == 0) {
@@ -297,9 +306,9 @@ abstract class PipelinedFunctionalUnit(
 
     // valid doesn't check kill signals, let consumer deal with it.
     // The LSU already handles it and this hurts critical path.
-    io.resp.valid    := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop)
+    io.resp.valid    := io.req.valid && !IsKilledByBranch(io.brupdate, io.req.bits.uop)
     io.resp.bits.uop := io.req.bits.uop
-    io.resp.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
+    io.resp.bits.uop.br_mask := GetNewBrMask(io.brupdate, io.req.bits.uop)
   }
 }
 
@@ -311,13 +320,14 @@ abstract class PipelinedFunctionalUnit(
  * @param dataWidth width of the data being operated on in the functional unit
  */
 @chiselName
-class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(implicit p: Parameters)
+class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(implicit p: Parameters)
   extends PipelinedFunctionalUnit(
     numStages = numStages,
     numBypassStages = numStages,
+    isAluUnit = true,
     earliestBypassStage = 0,
     dataWidth = dataWidth,
-    isBranchUnit = isBranchUnit)
+    isJmpUnit = isJmpUnit)
 {
   val uop = io.req.bits.uop
 
@@ -326,8 +336,8 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
 
   // operand 1 select
   var op1_data: UInt = null
-  if (isBranchUnit) {
-    // Get the uop PC for branch resolution.
+  if (isJmpUnit) {
+    // Get the uop PC for jumps
     val block_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
     val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
 
@@ -353,34 +363,22 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
   alu.io.fn  := uop.ctrl.op_fcn
   alu.io.dw  := uop.ctrl.fcn_dw
 
-  if (isBranchUnit) {
-    val block_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
-    val uop_maybe_pc = block_pc | uop.pc_lob // Don't consider edge instructions yet.
-    val uop_pc = uop_maybe_pc - Mux(uop.edge_inst, 2.U, 0.U)
-    // The Branch Unit redirects the PC immediately, but delays the mispredict
-    // signal a cycle (for critical path reasons)
 
-    // Did I just get killed by the previous cycle's branch,
-    // or by a flush pipeline?
-    val killed = WireInit(false.B)
-    when (io.req.bits.kill ||
-           (io.brinfo.valid &&
-             io.brinfo.mispredict &&
-             maskMatch(io.brinfo.mask, uop.br_mask)
-          )) {
-      killed := true.B
-    }
+  // Did I just get killed by the previous cycle's branch,
+  // or by a flush pipeline?
+  val killed = WireInit(false.B)
+  when (io.req.bits.kill || IsKilledByBranch(io.brupdate, uop)) {
+    killed := true.B
+  }
 
-    val rs1 = io.req.bits.rs1_data
-    val rs2 = io.req.bits.rs2_data
-    val br_eq  = (rs1 === rs2)
-    val br_ltu = (rs1.asUInt < rs2.asUInt)
-    val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
-                   rs1(xLen-1) & ~rs2(xLen-1)).asBool
+  val rs1 = io.req.bits.rs1_data
+  val rs2 = io.req.bits.rs2_data
+  val br_eq  = (rs1 === rs2)
+  val br_ltu = (rs1.asUInt < rs2.asUInt)
+  val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
+                rs1(xLen-1) & ~rs2(xLen-1)).asBool
 
-    val npc = uop_maybe_pc + Mux(uop.is_rvc || uop.edge_inst, 2.U, 4.U)
-
-    val pc_sel = MuxLookup(uop.ctrl.br_type, PC_PLUS4,
+  val pc_sel = MuxLookup(uop.ctrl.br_type, PC_PLUS4,
                  Seq(   BR_N   -> PC_PLUS4,
                         BR_NE  -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
                         BR_EQ  -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
@@ -392,91 +390,77 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
                         BR_JR  -> PC_JALR
                         ))
 
-    val bj_addr = Wire(UInt(vaddrBitsExtended.W))
+  //val bj_addr = Wire(UInt(vaddrBitsExtended.W))
 
-    val is_taken = io.req.valid &&
+  val is_taken = io.req.valid &&
                    !killed &&
                    uop.is_br_or_jmp &&
                    (pc_sel =/= PC_PLUS4)
 
-    // "mispredict" means that a branch has been resolved and it must be killed
-    val mispredict = WireInit(false.B)
+  // "mispredict" means that a branch has been resolved and it must be killed
+  val mispredict = WireInit(false.B)
 
-    val is_br          = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jump
-    val is_br_or_jalr  = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jal
-    // TODO: This should be handled in frontend. We shouldn't see JALs here
-    val is_jal         = io.req.valid && !killed && uop.is_br_or_jmp &&  uop.is_jal
+  val is_br          = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jump
+  val is_br_or_jalr  = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jal
+  // TODO: This should be handled in frontend. We shouldn't see JALs here
+  val is_jal         = io.req.valid && !killed && uop.is_br_or_jmp &&  uop.is_jal
 
-    // if b/j is taken, does it go to the wrong target?
-    val wrong_taken_target = !io.get_ftq_pc.next_val || (io.get_ftq_pc.next_pc =/= bj_addr)
+  when (is_jal) {
+    mispredict := true.B
+  }
 
-    if (DEBUG_PRINTF) {
-      printf("BR-UNIT:\n")
-      printf("    PC:0x%x+0x%x Next:(V:%c PC:0x%x) BJAddr:0x%x\n",
-        io.get_ftq_pc.fetch_pc,
-        uop.pc_lob,
-        BoolToChar(io.get_ftq_pc.next_val, 'V'),
-        io.get_ftq_pc.next_pc,
-        bj_addr)
-    }
-
-
-    // assert (!(io.req.valid && uop.is_jal && io.get_ftq_pc.next_val && io.get_ftq_pc.next_pc =/= bj_addr),
-    //   "[func] JAL went to the wrong target.")
-    when (is_jal) {
+  when (is_br_or_jalr) {
+    when (pc_sel === PC_JALR) {
       mispredict := true.B
     }
-
-    when (is_br_or_jalr) {
-      when (pc_sel === PC_JALR) {
-        mispredict := true.B
-      }
-      when (pc_sel === PC_PLUS4) {
-        mispredict := true.B
-      }
-      when (pc_sel === PC_BRJMP) {
-        mispredict := true.B
-      }
+    when (pc_sel === PC_PLUS4) {
+      mispredict := true.B
     }
+    when (pc_sel === PC_BRJMP) {
+      mispredict := true.B
+    }
+  }
 
-    val br_unit = RegInit((0.U).asTypeOf(new BranchUnitResp))
+  // val target = Mux(pc_sel === PC_PLUS4, npc, bj_addr)
+  // br_unit.target := target
+
+  // Delay branch resolution a cycle for critical path reasons.
+  // If the rest of "br_unit" is being registered too, then we don't need to
+  // register "brinfo" here, since in that case we would be double counting.
+  val brinfo = Wire(new BrResolutionInfo)
+
+  // note: jal doesn't allocate a branch-mask, so don't clear a br-mask bit
+  // TODO: Handle JAL in frontend
+  brinfo.valid          := io.req.valid && uop.is_br_or_jmp && !killed
+  brinfo.mispredict     := mispredict
+  brinfo.tag            := uop.br_tag
+  brinfo.ftq_idx        := uop.ftq_idx
+  brinfo.cfi_idx        := uop.cfi_idx
+  brinfo.rob_idx        := uop.rob_idx
+  brinfo.ldq_idx        := uop.ldq_idx
+  brinfo.stq_idx        := uop.stq_idx
+  brinfo.rxq_idx        := uop.rxq_idx
+  brinfo.cfi_type       := Mux(uop.is_jal, CFI_JAL,
+                           Mux(pc_sel === PC_JALR, CFI_JALR,
+                           Mux(uop.is_br_or_jmp, CFI_BR, CFI_X)))
+  brinfo.taken          := is_taken
+  brinfo.pc_sel         := pc_sel
+  brinfo.is_rvc         := uop.is_rvc
+  brinfo.edge_inst      := uop.edge_inst
+  brinfo.pc_lob         := uop.pc_lob
+
+  brinfo.jalr_target    := DontCare
 
 
-    br_unit.take_pc := mispredict
-    val target = Mux(pc_sel === PC_PLUS4, npc, bj_addr)
-    br_unit.target := target
+    // // updates the BTB same cycle as PC redirect
+    // val lsb = log2Ceil(fetchWidth*coreInstBytes)
 
-    // Delay branch resolution a cycle for critical path reasons.
-    // If the rest of "br_unit" is being registered too, then we don't need to
-    // register "brinfo" here, since in that case we would be double counting.
-    val brinfo = Wire(new BrResolutionInfo)
+    // // Branch/Jump Target Calculation
+    // // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
 
-    // note: jal doesn't allocate a branch-mask, so don't clear a br-mask bit
-    // TODO: Handle JAL in frontend
-    brinfo.valid          := io.req.valid && uop.is_br_or_jmp && !killed
-    brinfo.mispredict     := mispredict
-    brinfo.mask           := 1.U << uop.br_tag
-    brinfo.exe_mask       := GetNewBrMask(io.brinfo, uop.br_mask)
-    brinfo.tag            := uop.br_tag
-    brinfo.ftq_idx        := uop.ftq_idx
-    brinfo.cfi_idx        := uop.cfi_idx
-    brinfo.rob_idx        := uop.rob_idx
-    brinfo.ldq_idx        := uop.ldq_idx
-    brinfo.stq_idx        := uop.stq_idx
-    brinfo.rxq_idx        := uop.rxq_idx
-    brinfo.cfi_type       := Mux(uop.is_jal, CFI_JAL,
-                             Mux(pc_sel === PC_JALR, CFI_JALR,
-                             Mux(uop.is_br_or_jmp, CFI_BR, CFI_X)))
-    brinfo.taken          := is_taken
-
-    br_unit.brinfo := brinfo
-
-    // updates the BTB same cycle as PC redirect
-    val lsb = log2Ceil(fetchWidth*coreInstBytes)
-
-    // Branch/Jump Target Calculation
-    // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
-
+  val target_offset = imm_xprlen(20,0).asSInt
+  brinfo.jalr_target := DontCare
+  if (isJmpUnit) {
     def encodeVirtualAddress(a0: UInt, ea: UInt) = if (vaddrBitsExtended == vaddrBits) {
       ea
     } else {
@@ -487,30 +471,27 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
       Cat(msb, ea(vaddrBits-1,0))
     }
 
-    val target_offset = imm_xprlen(20,0).asSInt
 
     val jalr_target_base = io.req.bits.rs1_data.asSInt
     val jalr_target_xlen = Wire(UInt(xLen.W))
     jalr_target_xlen := (jalr_target_base + target_offset).asUInt
-
     val jalr_target = (encodeVirtualAddress(jalr_target_xlen, jalr_target_xlen).asSInt & -2.S).asUInt
 
-    val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
-    jal_br_target := (uop_maybe_pc.asSInt + target_offset +
-                     (Fill(vaddrBitsExtended-1, uop.edge_inst) << 1).asSInt).asUInt
-
-    bj_addr := Mux(uop.uopc === uopJALR, jalr_target, jal_br_target)
-
-    // handle misaligned branch/jmp targets
-    br_unit.xcpt.valid     := bj_addr(1) && !usingCompressed.B &&
-                              io.req.valid && is_taken && !killed
-    br_unit.xcpt.bits.uop  := uop
-    br_unit.xcpt.bits.cause:= freechips.rocketchip.rocket.Causes.misaligned_fetch.U
-    // TODO is there a better way to get this information to the CSR file? maybe use brinfo.target?
-    br_unit.xcpt.bits.badvaddr:= bj_addr
-
-    io.br_unit := br_unit
+    brinfo.jalr_target := jalr_target
   }
+
+  brinfo.target_offset := target_offset
+
+    // val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
+    // jal_br_target := (uop_maybe_pc.asSInt + target_offset +
+    //                  (Fill(vaddrBitsExtended-1, uop.edge_inst) << 1).asSInt).asUInt
+
+    // bj_addr := Mux(uop.uopc === uopJALR, jalr_target, jal_br_target)
+
+
+  io.brinfo := brinfo
+
+
 
 // Response
 // TODO add clock gate on resp bits from functional units
@@ -555,7 +536,6 @@ class MemAddrCalcUnit(implicit p: Parameters)
     numBypassStages = 0,
     earliestBypassStage = 0,
     dataWidth = 65, // TODO enable this only if FP is enabled?
-    isBranchUnit = false,
     isMemAddrCalcUnit = true)
   with freechips.rocketchip.rocket.constants.MemoryOpConstants
   with freechips.rocketchip.rocket.constants.ScalarOpConstants
@@ -715,8 +695,7 @@ abstract class IterativeFunctionalUnit(dataWidth: Int)(implicit p: Parameters)
     isPipelined = false,
     numStages = 1,
     numBypassStages = 0,
-    dataWidth = dataWidth,
-    isBranchUnit = false)
+    dataWidth = dataWidth)
 {
   val r_uop = Reg(new MicroOp())
 
@@ -725,12 +704,12 @@ abstract class IterativeFunctionalUnit(dataWidth: Int)(implicit p: Parameters)
 
   when (io.req.fire()) {
     // update incoming uop
-    do_kill := IsKilledByBranch(io.brinfo, io.req.bits.uop) || io.req.bits.kill
+    do_kill := IsKilledByBranch(io.brupdate, io.req.bits.uop) || io.req.bits.kill
     r_uop := io.req.bits.uop
-    r_uop.br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
+    r_uop.br_mask := GetNewBrMask(io.brupdate, io.req.bits.uop)
   } .otherwise {
-    do_kill := IsKilledByBranch(io.brinfo, r_uop) || io.req.bits.kill
-    r_uop.br_mask := GetNewBrMask(io.brinfo, r_uop)
+    do_kill := IsKilledByBranch(io.brupdate, r_uop) || io.req.bits.kill
+    r_uop.br_mask := GetNewBrMask(io.brupdate, r_uop)
   }
 
   // assumes at least one pipeline register between request and response
