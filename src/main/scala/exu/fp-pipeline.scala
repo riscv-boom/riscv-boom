@@ -34,9 +34,10 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   val fpPregSz = log2Ceil(numFpPhysRegs)
 
   val io = IO(new Bundle {
-    val brinfo           = Input(new BrResolutionInfo())
+    val brupdate         = Input(new BrUpdateInfo())
     val flush_pipeline   = Input(Bool())
     val fcsr_rm          = Input(UInt(width=freechips.rocketchip.tile.FPConstants.RM_SZ.W))
+    val status           = Input(new freechips.rocketchip.rocket.MStatus())
 
     val dis_uops         = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
@@ -87,7 +88,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   val iss_uops   = Wire(Vec(exe_units.numFrfReaders, new MicroOp()))
 
   issue_unit.io.tsc_reg := io.debug_tsc_reg
-  issue_unit.io.brinfo := io.brinfo
+  issue_unit.io.brupdate := io.brupdate
   issue_unit.io.flush_pipeline := io.flush_pipeline
   // Don't support ld-hit speculation to FP window.
   issue_unit.io.spec_ld_wakeup.valid := false.B
@@ -141,14 +142,14 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   fregister_read.io.iss_valids <> iss_valids
   fregister_read.io.iss_uops := iss_uops
 
-  fregister_read.io.brinfo := io.brinfo
+  fregister_read.io.brupdate := io.brupdate
   fregister_read.io.kill := io.flush_pipeline
 
   //-------------------------------------------------------------
   // **** Execute Stage ****
   //-------------------------------------------------------------
 
-  exe_units.map(_.io.brinfo := io.brinfo)
+  exe_units.map(_.io.brupdate := io.brupdate)
 
   for ((ex,w) <- exe_units.withFilter(_.readsFrf).map(x=>x).zipWithIndex) {
     ex.io.req <> fregister_read.io.exe_reqs(w)
@@ -247,6 +248,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   }
 
   exe_units.map(_.io.fcsr_rm := io.fcsr_rm)
+  exe_units.map(_.io.status := io.status)
 
   //-------------------------------------------------------------
   // **** Flush Pipeline ****

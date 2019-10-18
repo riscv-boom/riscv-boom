@@ -213,15 +213,15 @@ object XDecode extends DecodeConstants
   REMW    -> List(Y, N, X, uopREMW , IQT_INT, FU_DIV , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, N, N, CSR.N),
   REMUW   -> List(Y, N, X, uopREMUW, IQT_INT, FU_DIV , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, N, N, CSR.N),
 
-  AUIPC   -> List(Y, N, X, uopAUIPC, IQT_INT, FU_BRU , RT_FIX, RT_X  , RT_X  , N, IS_U, N, N, N, N, N, M_X  , 1.U, N, N, N, N, N, N, N, CSR.N), // use BRU for the PC read
-  JAL     -> List(Y, N, X, uopJAL  , IQT_INT, FU_BRU , RT_FIX, RT_X  , RT_X  , N, IS_J, N, N, N, N, N, M_X  , 1.U, N, Y, Y, Y, N, N, N, CSR.N), // TODO: Handle JAL in frontend
-  JALR    -> List(Y, N, X, uopJALR , IQT_INT, FU_BRU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , 1.U, N, Y, N, Y, N, N, N, CSR.N),
-  BEQ     -> List(Y, N, X, uopBEQ  , IQT_INT, FU_BRU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , 0.U, N, Y, N, Y, N, N, N, CSR.N),
-  BNE     -> List(Y, N, X, uopBNE  , IQT_INT, FU_BRU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , 0.U, N, Y, N, Y, N, N, N, CSR.N),
-  BGE     -> List(Y, N, X, uopBGE  , IQT_INT, FU_BRU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , 0.U, N, Y, N, Y, N, N, N, CSR.N),
-  BGEU    -> List(Y, N, X, uopBGEU , IQT_INT, FU_BRU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , 0.U, N, Y, N, Y, N, N, N, CSR.N),
-  BLT     -> List(Y, N, X, uopBLT  , IQT_INT, FU_BRU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , 0.U, N, Y, N, Y, N, N, N, CSR.N),
-  BLTU    -> List(Y, N, X, uopBLTU , IQT_INT, FU_BRU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , 0.U, N, Y, N, Y, N, N, N, CSR.N),
+  AUIPC   -> List(Y, N, X, uopAUIPC, IQT_INT, FU_JMP , RT_FIX, RT_X  , RT_X  , N, IS_U, N, N, N, N, N, M_X  , 1.U, N, N, N, N, N, N, N, CSR.N), // use BRU for the PC read
+  JAL     -> List(Y, N, X, uopJAL  , IQT_INT, FU_JMP , RT_FIX, RT_X  , RT_X  , N, IS_J, N, N, N, N, N, M_X  , 1.U, N, Y, Y, Y, N, N, N, CSR.N), // TODO: Handle JAL in frontend
+  JALR    -> List(Y, N, X, uopJALR , IQT_INT, FU_JMP , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , 1.U, N, Y, N, Y, N, N, N, CSR.N),
+  BEQ     -> List(Y, N, X, uopBEQ  , IQT_INT, FU_ALU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , 0.U, N, Y, N, Y, N, N, N, CSR.N),
+  BNE     -> List(Y, N, X, uopBNE  , IQT_INT, FU_ALU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , 0.U, N, Y, N, Y, N, N, N, CSR.N),
+  BGE     -> List(Y, N, X, uopBGE  , IQT_INT, FU_ALU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , 0.U, N, Y, N, Y, N, N, N, CSR.N),
+  BGEU    -> List(Y, N, X, uopBGEU , IQT_INT, FU_ALU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , 0.U, N, Y, N, Y, N, N, N, CSR.N),
+  BLT     -> List(Y, N, X, uopBLT  , IQT_INT, FU_ALU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , 0.U, N, Y, N, Y, N, N, N, CSR.N),
+  BLTU    -> List(Y, N, X, uopBLTU , IQT_INT, FU_ALU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, N, N, M_X  , 0.U, N, Y, N, Y, N, N, N, CSR.N),
 
   // I-type, the immediate12 holds the CSR register.
   CSRRW   -> List(Y, N, X, uopCSRRW, IQT_INT, FU_CSR , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, Y, Y, CSR.W),
@@ -505,7 +505,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     (uop.replay_if,    MINI_EXCEPTION_REPLAY),
     (uop.xcpt_pf_if,   (Causes.fetch_page_fault).U),
     (uop.xcpt_ae_if,   (Causes.fetch_access).U),
-    (uop.xcpt_ma_if,   (Causes.misaligned_fetch).U),
     (id_illegal_insn,  (Causes.illegal_instruction).U)))
 
   uop.exception := xcpt_valid
@@ -664,7 +663,7 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
      // of an individual micro-op (so some micro-ops can go through)
     val is_full   = Output(Vec(pl_width, Bool()))
 
-    val brinfo         = Input(new BrResolutionInfo())
+    val brupdate         = Input(new BrUpdateInfo())
     val flush_pipeline = Input(Bool())
 
     val debug = Output(new DebugBranchMaskGenerationLogicIO())
@@ -704,7 +703,7 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
 
   var curr_mask = branch_mask
   for (w <- 0 until pl_width) {
-    io.br_mask(w) := GetNewBrMask(io.brinfo, curr_mask)
+    io.br_mask(w) := GetNewBrMask(io.brupdate, curr_mask)
     curr_mask = Mux(io.will_fire(w), tag_masks(w) | curr_mask, curr_mask)
   }
 
@@ -713,10 +712,8 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
 
   when (io.flush_pipeline) {
     branch_mask := 0.U
-  } .elsewhen (io.brinfo.valid && io.brinfo.mispredict) {
-    branch_mask := io.brinfo.exe_mask
   } .otherwise {
-    branch_mask := GetNewBrMask(io.brinfo, curr_mask)
+    branch_mask := GetNewBrMask(io.brupdate, curr_mask)
   }
 
   io.debug.branch_mask := branch_mask
