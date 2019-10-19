@@ -107,11 +107,13 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
     in_uops(i).inst           := io.enq.bits.exp_insts(i)
     in_uops(i).debug_inst     := io.enq.bits.insts(i)
     in_uops(i).is_rvc         := io.enq.bits.insts(i)(1,0) =/= 3.U
+    in_uops(i).taken          := io.enq.bits.cfi_idx.bits === i.U && io.enq.bits.cfi_idx.valid
 
     in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
     in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
     in_uops(i).bp_debug_if    := io.enq.bits.bp_debug_if_oh(i)
     in_uops(i).bp_xcpt_if     := io.enq.bits.bp_xcpt_if_oh(i)
+
   }
 
   // Step 2. Generate one-hot write indices.

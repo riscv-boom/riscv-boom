@@ -96,6 +96,9 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
   val edge_inst     = Bool() // True if 1st instruction in this bundle is pc - 2
   val insts         = Vec(fetchWidth, Bits(32.W))
   val exp_insts     = Vec(fetchWidth, Bits(32.W))
+
+  val cfi_idx       = Valid(UInt(log2Ceil(fetchWidth).W))
+
   val ftq_idx       = UInt(log2Ceil(ftqSz).W)
   val mask          = Vec(fetchWidth, Bool()) // mark which words are valid instructions
   val xcpt_pf_if    = Bool() // I-TLB miss (instruction fetch fault).
@@ -268,6 +271,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3_clear = WireInit(false.B)
   val f3 = withReset(reset.toBool || f3_clear) {
     Module(new Queue(new FrontendResp, 1, pipe=true, flow=false)) }
+
+
+
   val f4_ready = Wire(Bool())
   dontTouch(f3.io)
   f3_ready := f3.io.enq.ready
@@ -281,7 +287,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3_imemresp     = f3.io.deq.bits
   val f3_data         = f3_imemresp.data
   val f3_aligned_pc   = alignToFetchBoundary(f3_imemresp.pc)
-  val f3_targs        = Wire(Vec(fetchWidth, UInt()))
+
+  val f3_redirects    = Wire(Vec(fetchWidth, Bool()))
+  val f3_targs        = Wire(Vec(fetchWidth, UInt(vaddrBitsExtended.W)))
 
   val f3_fetch_bundle = Wire(new FetchBundle)
   f3_fetch_bundle.pc := f3_imemresp.pc
@@ -295,6 +303,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3_prev_is_half = RegInit(false.B)
 
   assert(fetchWidth >= 4) // Logic gets kind of annoying with fetchWidth = 2
+  var redirect_found = false.B
   for (i <- 0 until fetchWidth) {
     val bpd_decoder = Module(new BranchDecode)
     val is_valid = Wire(Bool())
@@ -345,8 +354,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
     f3_fetch_bundle.exp_insts(i) := exp_inst
 
-    f3_fetch_bundle.mask(i) := f3.io.deq.valid && f3_imemresp.mask(i) && is_valid
+    f3_fetch_bundle.mask(i) := f3.io.deq.valid && f3_imemresp.mask(i) && is_valid && !redirect_found
     f3_targs(i)        := bpd_decoder.io.target
+
+    f3_redirects(i)    := bpd_decoder.io.is_jal && f3_fetch_bundle.mask(i)
+
+    redirect_found = redirect_found || f3_redirects(i)
 
     f3_fetch_bundle.bp_debug_if_oh(i) := bpu.io.debug_if
     f3_fetch_bundle.bp_xcpt_if_oh (i) := bpu.io.xcpt_if
@@ -364,6 +377,23 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f3_prev_is_half := false.B
   }
 
+  f3_fetch_bundle.cfi_idx.valid := false.B
+  f3_fetch_bundle.cfi_idx.bits  := DontCare
+
+  // Redirect earlier stages only if the later stage
+  // can consume this packet
+  when (f3_redirects.reduce(_||_) && f4_ready) {
+    f3_fetch_bundle.cfi_idx.valid := true.B
+    f3_fetch_bundle.cfi_idx.bits  := PriorityEncoder(f3_redirects)
+    f3_prev_is_half := false.B
+
+    f2_clear := true.B
+    f1_clear := true.B
+
+    s0_valid     := true.B
+    s0_vpc       := f3_targs(PriorityEncoder(f3_redirects))
+    s0_is_replay := false.B
+  }
 
   // -------------------------------------------------------
   // **** F4 ****
@@ -429,7 +459,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     ftq.io.redirect.bits  := io.cpu.redirect_ftq_idx
   }
 
-  fb.io.clear := io.cpu.redirect_val
 
 
   override def toString: String =
