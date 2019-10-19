@@ -405,19 +405,15 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   // TODO: This should be handled in frontend. We shouldn't see JALs here
   val is_jal         = io.req.valid && !killed && uop.is_br_or_jmp &&  uop.is_jal
 
-  when (is_jal) {
-    mispredict := true.B
-  }
-
   when (is_br_or_jalr) {
     when (pc_sel === PC_JALR) {
       mispredict := true.B
     }
     when (pc_sel === PC_PLUS4) {
-      mispredict := true.B
+      mispredict := uop.taken
     }
     when (pc_sel === PC_BRJMP) {
-      mispredict := true.B
+      mispredict := !uop.taken
     }
   }
 
@@ -431,7 +427,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
 
   // note: jal doesn't allocate a branch-mask, so don't clear a br-mask bit
   // TODO: Handle JAL in frontend
-  brinfo.valid          := io.req.valid && uop.is_br_or_jmp && !killed
+  brinfo.valid          := is_br_or_jalr
   brinfo.mispredict     := mispredict
   brinfo.tag            := uop.br_tag
   brinfo.ftq_idx        := uop.ftq_idx
@@ -440,9 +436,8 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   brinfo.ldq_idx        := uop.ldq_idx
   brinfo.stq_idx        := uop.stq_idx
   brinfo.rxq_idx        := uop.rxq_idx
-  brinfo.cfi_type       := Mux(uop.is_jal, CFI_JAL,
-                           Mux(pc_sel === PC_JALR, CFI_JALR,
-                           Mux(uop.is_br_or_jmp, CFI_BR, CFI_X)))
+  brinfo.cfi_type       := Mux(pc_sel === PC_JALR, CFI_JALR,
+                           Mux(uop.is_br_or_jmp, CFI_BR, CFI_X))
   brinfo.taken          := is_taken
   brinfo.pc_sel         := pc_sel
   brinfo.is_rvc         := uop.is_rvc
