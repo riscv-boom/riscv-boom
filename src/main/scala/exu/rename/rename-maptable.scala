@@ -102,7 +102,7 @@ class RenameMapTable(
 
   when (io.brupdate.b2.mispredict) {
     // Restore the map table to a branch snapshot.
-    map_table := br_snapshots(io.brupdate.b2.tag)
+    map_table := br_snapshots(io.brupdate.b2.uop.br_tag)
   } .otherwise {
     // Update mappings.
     map_table := remap_table(plWidth)

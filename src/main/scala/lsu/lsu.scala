@@ -1389,8 +1389,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   //-------------------------------------------------------------
   when (io.core.brupdate.b2.mispredict && !io.core.exception)
   {
-    stq_tail := io.core.brupdate.b2.stq_idx
-    ldq_tail := io.core.brupdate.b2.ldq_idx
+    stq_tail := io.core.brupdate.b2.uop.stq_idx
+    ldq_tail := io.core.brupdate.b2.uop.ldq_idx
   }
 
   //-------------------------------------------------------------

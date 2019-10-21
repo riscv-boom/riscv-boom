@@ -62,13 +62,15 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
   // Index into FTQ to figure out our fetch PC.
   val ftq_idx          = UInt(log2Ceil(ftqSz).W)
-  // Index in fetch bundle.
-  val cfi_idx          = UInt(log2Ceil(fetchWidth).W)
   // This inst straddles two fetch packets
   val edge_inst        = Bool()
   // Low-order bits of our own PC. Combine with ftq[ftq_idx] to get PC.
   // Aligned to a cache-line size, as that is the greater fetch granularity.
+  // TODO: Shouldn't this be aligned to fetch-width size?
   val pc_lob           = UInt(log2Ceil(icBlockBytes).W)
+
+  // Was this a branch that was predicted taken?
+  val taken            = Bool()
 
   val imm_packed       = UInt(LONGEST_IMM_SZ.W) // densely pack the imm in decode...
                                               // then translate and sign-extend in execute

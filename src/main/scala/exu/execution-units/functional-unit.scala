@@ -131,24 +131,14 @@ class BypassData(val numBypassPorts: Int, val dataWidth: Int)(implicit p: Parame
  */
 class BrResolutionInfo(implicit p: Parameters) extends BoomBundle
 {
+  val uop        = new MicroOp
   val valid      = Bool()
   val mispredict = Bool()
-//  val mask       = UInt(maxBrCount.W) // the resolve mask
-  val tag        = UInt(brTagSz.W)    // the branch tag that was resolved
-  val cfi_idx    = UInt(log2Ceil(fetchWidth).W)
-  val ftq_idx    = UInt(ftqSz.W)
-  val rob_idx    = UInt(robAddrSz.W)
-  val ldq_idx    = UInt(ldqAddrSz.W)  // track the "tail" of loads and stores, so we can
-  val stq_idx    = UInt(stqAddrSz.W)  // quickly reset the LSU on a mispredict
-  val rxq_idx    = UInt(log2Ceil(numRxqEntries).W) // ditto for RoCC queue
   val taken      = Bool()                     // which direction did the branch go?
   val cfi_type   = UInt(CFI_SZ.W)
 
   // Info for recalculating the pc for this branch
   val pc_sel     = UInt(2.W)
-  val is_rvc     = Bool()
-  val edge_inst  = Bool()
-  val pc_lob     = UInt(log2Ceil(icBlockBytes).W)
 
   val jalr_target = UInt(vaddrBitsExtended.W)
   val target_offset = SInt()
@@ -159,8 +149,8 @@ class BrUpdateInfo(implicit p: Parameters) extends BoomBundle
   // On the first cycle we get masks to kill registers
   val b1 = new BrUpdateMasks
   // On the second cycle we get indices to reset pointers
-  val b2 = new BrUpdateIndices
-  val b3 = new BrUpdateIndices
+  val b2 = new BrResolutionInfo
+  val b3 = new BrResolutionInfo
 }
 
 class BrUpdateMasks(implicit p: Parameters) extends BoomBundle
@@ -169,26 +159,6 @@ class BrUpdateMasks(implicit p: Parameters) extends BoomBundle
   val mispredict_mask = UInt(maxBrCount.W)
 }
 
-class BrUpdateIndices(implicit p: Parameters) extends BoomBundle
-{
-  val mispredict = Bool()
-  val tag        = UInt(brTagSz.W)
-  val pc_sel     = UInt(2.W)
-  val is_rvc     = Bool()
-  val edge_inst  = Bool()
-  val pc_lob     = UInt(log2Ceil(icBlockBytes).W)
-  val cfi_type   = UInt(CFI_SZ.W)
-  val jalr_target = UInt(vaddrBitsExtended.W)
-  val target_offset = SInt()
-
-  val cfi_idx    = UInt(log2Ceil(fetchWidth).W)
-  val ftq_idx    = UInt(ftqSz.W)
-  val rob_idx    = UInt(robAddrSz.W)
-  val ldq_idx    = UInt(ldqAddrSz.W)  // track the "tail" of loads and stores, so we can
-  val stq_idx    = UInt(stqAddrSz.W)  // quickly reset the LSU on a mispredict
-  val rxq_idx    = UInt(log2Ceil(numRxqEntries).W) // ditto for RoCC queue
-
-}
 
 /**
  * Abstract top level functional unit class that wraps a lower level hand made functional unit
@@ -429,29 +399,16 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   // TODO: Handle JAL in frontend
   brinfo.valid          := is_br_or_jalr
   brinfo.mispredict     := mispredict
-  brinfo.tag            := uop.br_tag
-  brinfo.ftq_idx        := uop.ftq_idx
-  brinfo.cfi_idx        := uop.cfi_idx
-  brinfo.rob_idx        := uop.rob_idx
-  brinfo.ldq_idx        := uop.ldq_idx
-  brinfo.stq_idx        := uop.stq_idx
-  brinfo.rxq_idx        := uop.rxq_idx
+  brinfo.uop            := uop
   brinfo.cfi_type       := Mux(pc_sel === PC_JALR, CFI_JALR,
                            Mux(uop.is_br_or_jmp, CFI_BR, CFI_X))
   brinfo.taken          := is_taken
   brinfo.pc_sel         := pc_sel
-  brinfo.is_rvc         := uop.is_rvc
-  brinfo.edge_inst      := uop.edge_inst
-  brinfo.pc_lob         := uop.pc_lob
 
   brinfo.jalr_target    := DontCare
 
-
-    // // updates the BTB same cycle as PC redirect
-    // val lsb = log2Ceil(fetchWidth*coreInstBytes)
-
-    // // Branch/Jump Target Calculation
-    // // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
+  // Branch/Jump Target Calculation
+  // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
 
   val target_offset = imm_xprlen(20,0).asSInt
   brinfo.jalr_target := DontCare
@@ -477,11 +434,6 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
 
   brinfo.target_offset := target_offset
 
-    // val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
-    // jal_br_target := (uop_maybe_pc.asSInt + target_offset +
-    //                  (Fill(vaddrBitsExtended-1, uop.edge_inst) << 1).asSInt).asUInt
-
-    // bj_addr := Mux(uop.uopc === uopJALR, jalr_target, jal_br_target)
 
 
   io.brinfo := brinfo

@@ -94,8 +94,8 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
     in_mask(i)                := io.enq.valid && io.enq.bits.mask(i)
     in_uops(i).edge_inst      := false.B
     in_uops(i).debug_pc       := pc
-    in_uops(i).pc_lob         := pc // LHS width will cut off high-order bits.
-    in_uops(i).cfi_idx        := i.U
+    in_uops(i).pc_lob         := pc // TODO: This should be (i << 1).U
+
     if (i == 0) {
       when (io.enq.bits.edge_inst) {
         in_uops(i).debug_pc := alignToFetchBoundary(io.enq.bits.pc) - 2.U
