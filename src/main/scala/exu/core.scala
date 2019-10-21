@@ -179,7 +179,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //           brindices is delayed a cycle
   val brupdate  = Wire(new BrUpdateInfo)
   val b1    = Wire(new BrUpdateMasks)
-  val b2    = Reg(new BrUpdateIndices)
+  val b2    = Reg(new BrResolutionInfo)
 
   brupdate.b1 := b1
   brupdate.b2 := b2
@@ -191,33 +191,25 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     b := a.io.brinfo
     b.valid := a.io.brinfo.valid && !rob.io.flush.valid
   }
-  b1.resolve_mask := brinfos.map(x => x.valid << x.tag).reduce(_|_)
-  b1.mispredict_mask := brinfos.map(x => (x.valid && x.mispredict) << x.tag).reduce(_|_)
+  b1.resolve_mask := brinfos.map(x => x.valid << x.uop.br_tag).reduce(_|_)
+  b1.mispredict_mask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.br_tag).reduce(_|_)
 
   // Find the oldest mispredict and use it to update indices
   var mispredict_val = false.B
   var oldest_mispredict = brinfos(0)
   for (b <- brinfos) {
     val use_this_mispredict = !mispredict_val ||
-    b.valid && b.mispredict && IsOlder(b.rob_idx, oldest_mispredict.rob_idx, rob.io.rob_head_idx)
+    b.valid && b.mispredict && IsOlder(b.uop.rob_idx, oldest_mispredict.uop.rob_idx, rob.io.rob_head_idx)
 
     mispredict_val = mispredict_val || (b.valid && b.mispredict)
     oldest_mispredict = Mux(use_this_mispredict, b, oldest_mispredict)
   }
 
   b2.mispredict  := mispredict_val
-  b2.tag         := oldest_mispredict.tag
-  b2.pc_sel      := oldest_mispredict.pc_sel
-  b2.is_rvc      := oldest_mispredict.is_rvc
-  b2.edge_inst   := oldest_mispredict.edge_inst
-  b2.pc_lob      := oldest_mispredict.pc_lob
   b2.cfi_type    := oldest_mispredict.cfi_type
-  b2.cfi_idx     := oldest_mispredict.cfi_idx
-  b2.ftq_idx     := oldest_mispredict.ftq_idx
-  b2.rob_idx     := oldest_mispredict.rob_idx
-  b2.ldq_idx     := oldest_mispredict.ldq_idx
-  b2.stq_idx     := oldest_mispredict.stq_idx
-  b2.rxq_idx     := oldest_mispredict.rxq_idx
+  b2.taken       := oldest_mispredict.taken
+  b2.pc_sel      := oldest_mispredict.pc_sel
+  b2.uop         := oldest_mispredict.uop
   b2.jalr_target := RegNext(exe_units(jmpunit_idx).io.brinfo.jalr_target)
   b2.target_offset := oldest_mispredict.target_offset
 
@@ -225,6 +217,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   assert (!((brupdate.b1.mispredict_mask =/= 0.U || brupdate.b2.mispredict)
     && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
+
+  io.ifu.brupdate := brupdate
 
   for (eu <- exe_units) {
     eu.io.brupdate := brupdate
@@ -382,16 +376,16 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     io.ifu.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
   } .elsewhen (brupdate.b3.mispredict && !RegNext(RegNext(rob.io.flush.valid))) {
     val block_pc = AlignPCToBoundary(io.ifu.get_pc.fetch_pc, icBlockBytes)
-    val uop_maybe_pc = block_pc | brupdate.b3.pc_lob
-    val npc = uop_maybe_pc + Mux(brupdate.b3.is_rvc || brupdate.b3.edge_inst, 2.U, 4.U)
+    val uop_maybe_pc = block_pc | brupdate.b3.uop.pc_lob
+    val npc = uop_maybe_pc + Mux(brupdate.b3.uop.is_rvc || brupdate.b3.uop.edge_inst, 2.U, 4.U)
     val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
     jal_br_target := (uop_maybe_pc.asSInt + brupdate.b3.target_offset +
-      (Fill(vaddrBitsExtended-1, brupdate.b3.edge_inst) << 1).asSInt).asUInt
+      (Fill(vaddrBitsExtended-1, brupdate.b3.uop.edge_inst) << 1).asSInt).asUInt
     val bj_addr = Mux(brupdate.b3.cfi_type === CFI_JALR, brupdate.b3.jalr_target, jal_br_target)
     val mispredict_target = Mux(brupdate.b3.pc_sel === PC_PLUS4, npc, bj_addr)
     io.ifu.redirect_val     := true.B
     io.ifu.redirect_pc      := mispredict_target
-    io.ifu.redirect_ftq_idx := brupdate.b3.ftq_idx
+    io.ifu.redirect_ftq_idx := brupdate.b3.uop.ftq_idx
   }
 
   // Tell the FTQ it can deallocate entries by passing youngest ftq_idx.
@@ -483,7 +477,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Mispredict requests (to get the correct target)
   mispredict_pc_req.valid := brupdate.b2.mispredict
-  mispredict_pc_req.bits  := brupdate.b2.ftq_idx
+  mispredict_pc_req.bits  := brupdate.b2.uop.ftq_idx
 
   // Frontend Exception Requests
   val xcpt_idx = PriorityEncoder(dec_xcpts)

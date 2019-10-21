@@ -730,7 +730,7 @@ class Rob(
     // Rollback an entry
     rob_tail_lsb := rob_head_lsb
   } .elsewhen (io.brupdate.b2.mispredict) {
-    rob_tail     := WrapInc(GetRowIdx(io.brupdate.b2.rob_idx), numRobRows)
+    rob_tail     := WrapInc(GetRowIdx(io.brupdate.b2.uop.rob_idx), numRobRows)
     rob_tail_lsb := 0.U
   } .elsewhen (io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall) {
     rob_tail     := WrapInc(rob_tail, numRobRows)

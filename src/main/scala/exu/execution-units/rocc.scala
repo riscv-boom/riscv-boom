@@ -169,7 +169,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
     }
   }
   when (io.brupdate.b2.mispredict && !io.exception) {
-    rxq_tail := io.brupdate.b2.rxq_idx
+    rxq_tail := io.brupdate.b2.uop.rxq_idx
   }
 
 

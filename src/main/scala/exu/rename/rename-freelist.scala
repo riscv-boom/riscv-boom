@@ -60,7 +60,7 @@ class RenameFreeList(
 
   // Masks that modify the freelist array.
   val sel_mask = (sels zip sel_fire) map { case (s,f) => s & Fill(n,f) } reduce(_|_)
-  val br_deallocs = br_alloc_lists(io.brupdate.b2.tag) & Fill(n, io.brupdate.b2.mispredict)
+  val br_deallocs = br_alloc_lists(io.brupdate.b2.uop.br_tag) & Fill(n, io.brupdate.b2.mispredict)
   val dealloc_mask = io.dealloc_pregs.map(d => UIntToOH(d.bits)(numPregs-1,0) & Fill(n,d.valid)).reduce(_|_) | br_deallocs
 
   val br_slots = VecInit(io.ren_br_tags.map(tag => tag.valid)).asUInt
