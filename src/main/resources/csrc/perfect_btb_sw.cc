@@ -16,7 +16,8 @@ extern "C" void initialize_btb()
   entry_point = 0;
 }
 
-extern "C" void predict_target(uint64_t ip, uint8_t *valid, uint64_t *target, uint8_t *is_br, uint8_t *is_jal)
+extern "C" void predict_target(unsigned long long ip, unsigned char *valid, unsigned long long *target,
+                               unsigned char *is_br, unsigned char *is_jal)
 {
   for (int i = 0; i < BTB_SIZE; i++) {
     if (btb_addrs[i] == ip) {
@@ -30,7 +31,8 @@ extern "C" void predict_target(uint64_t ip, uint8_t *valid, uint64_t *target, ui
   *valid = 0;
 }
 
-extern "C" void update_btb(uint64_t ip, uint64_t target, uint8_t is_br, uint8_t is_jal)
+extern "C" void update_btb(unsigned long long ip, unsigned long long target,
+                           unsigned char is_br, unsigned char is_jal)
 {
   for (int i = 0; i < BTB_SIZE; i++) {
     if (btb_addrs[i] == ip) {

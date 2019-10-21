@@ -13,13 +13,13 @@ extern "C" void initialize_branch_predictor()
     bimodal_table[i] = 0;
 }
 
-extern "C" void predict_branch(uint64_t ip, uint8_t *pred)
+extern "C" void predict_branch(unsigned long long ip, unsigned char *pred)
 {
     uint32_t hash = ip % BIMODAL_PRIME;
     *pred = (bimodal_table[hash] >= ((MAX_COUNTER + 1)/2)) ? 1 : 0;
 }
 
-extern "C" void update_branch(uint64_t ip, uint8_t taken)
+extern "C" void update_branch(unsigned long long ip, unsigned char taken)
 {
   uint32_t hash = ip % BIMODAL_PRIME;
 
