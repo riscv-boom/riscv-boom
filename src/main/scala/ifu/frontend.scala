@@ -28,7 +28,7 @@ import freechips.rocketchip.util.property._
 import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{ICacheLogicalTreeNode}
 
 import boom.common._
-import boom.exu.{CommitExceptionSignals, BranchDecode}
+import boom.exu.{CommitExceptionSignals, BranchDecode, BrUpdateInfo}
 import boom.util.{BoomCoreStringPrefix}
 
 
@@ -102,6 +102,10 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
 
   val ftq_idx       = UInt(log2Ceil(ftqSz).W)
   val mask          = Vec(fetchWidth, Bool()) // mark which words are valid instructions
+
+  val br_mask       = Vec(fetchWidth, Bool())
+  val jal_mask      = Vec(fetchWidth, Bool())
+
   val xcpt_pf_if    = Bool() // I-TLB miss (instruction fetch fault).
   val xcpt_ae_if    = Bool() // Access exception.
 
@@ -125,6 +129,8 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   val bp                = Output(Vec(nBreakpoints, new BP))
 
   val sfence = Valid(new SFenceReq)
+
+  val brupdate          = Output(new BrUpdateInfo)
 
   // Redirects change the PC
   val redirect_val     = Output(Bool())
@@ -174,14 +180,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   with HasL1ICacheBankedParameters
 {
   val io = IO(new BoomFrontendBundle(outer))
-  dontTouch(io)
   implicit val edge = outer.masterNode.edges.out(0)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
-  // val bpd = Module(new SwBranchPredictor)
+  val bpd = Module(new SwBranchPredictor)
 
   val icache = outer.icache.module
-  dontTouch(icache.io)
   icache.io.hartid     := io.hartid
   icache.io.invalidate := io.cpu.flush_icache
   val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBEntries)))
@@ -207,8 +211,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   icache.io.req.valid     := s0_valid
   icache.io.req.bits.addr := s0_vpc
 
-  // bpd.io.f0_req.valid     := s0_valid
-  // bpd.io.f0_req.bits      := s0_vpc
+  bpd.io.f0_req.valid     := s0_valid
+  bpd.io.f0_req.bits      := s0_vpc
 
   // --------------------------------------------------------
   // **** ICache Access (F1) ****
@@ -232,12 +236,28 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s1_tlb_resp = Mux(s1_is_replay, RegNext(s0_replay_resp), tlb.io.resp)
   val s1_ppc  = Mux(s1_is_replay, RegNext(s0_replay_ppc), tlb.io.resp.paddr)
 
+  val s1_bpd_resp = bpd.io.f1_resp
+
   icache.io.s1_paddr := s1_ppc
   icache.io.s1_kill  := tlb.io.resp.miss || f1_clear
 
+  val f1_mask = fetchMask(s1_vpc)
+  val f1_redirects = (0 until fetchWidth) map { i =>
+    f1_mask(i) && s1_bpd_resp.preds(i).predicted_pc.valid &&
+    (s1_bpd_resp.preds(i).is_jal ||
+      (s1_bpd_resp.preds(i).is_br && s1_bpd_resp.preds(i).taken))
+  }
+  val f1_targs = s1_bpd_resp.preds.map(_.predicted_pc.bits)
+  val f1_predicted_target = Mux(f1_redirects.reduce(_||_),
+      f1_targs(PriorityEncoder(f1_redirects)),
+      nextFetchStart(alignToFetchBoundary(s1_vpc)))
+
   when (s1_valid && !s1_tlb_miss) {
     s0_valid := true.B
-    s0_vpc   := nextFetchStart(alignToFetchBoundary(s1_vpc))
+
+    s0_vpc := f1_predicted_target
+    s0_is_replay := false.B
+
   }
 
   // --------------------------------------------------------
@@ -255,6 +275,18 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   icache.io.s2_kill := s2_xcpt
 
+  val f2_bpd_resp = bpd.io.f2_resp
+  val f2_mask = fetchMask(s2_vpc)
+  val f2_redirects = (0 until fetchWidth) map { i =>
+    f2_mask(i) && f2_bpd_resp.preds(i).predicted_pc.valid &&
+    (f2_bpd_resp.preds(i).is_jal ||
+      (f2_bpd_resp.preds(i).is_br && f2_bpd_resp.preds(i).taken))
+  }
+  val f2_targs = f2_bpd_resp.preds.map(_.predicted_pc.bits)
+  val f2_predicted_target = Mux(f2_redirects.reduce(_||_),
+      f2_targs(PriorityEncoder(f2_redirects)),
+      nextFetchStart(alignToFetchBoundary(s2_vpc)))
+
   when ((s2_valid && !icache.io.resp.valid) ||
         (s2_valid && icache.io.resp.valid && !f3_ready)) {
     s0_valid := true.B
@@ -262,6 +294,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s0_is_replay := s2_valid && icache.io.resp.valid
 
     f1_clear := true.B
+  } .elsewhen (s2_valid && f3_ready) {
+    when (s1_vpc =/= f2_predicted_target || !s1_valid) {
+      f1_clear := true.B
+
+      s0_valid := true.B
+      s0_vpc := f2_predicted_target
+      s0_is_replay := false.B
+    }
   }
   s0_replay_resp := s2_tlb_resp
   s0_replay_ppc  := s2_ppc
@@ -273,10 +313,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3 = withReset(reset.toBool || f3_clear) {
     Module(new Queue(new FrontendResp, 1, pipe=true, flow=false)) }
 
+  // Queue up the bpd resp as well, incase f4 backpressures f3
+  // This is "flow" because the response (enq) arrives in f3, not f2
+  val f3_bpd_resp = withReset(reset.toBool || f3_clear) {
+    Module(new Queue(new BranchPredictionBundle, 1, pipe=true, flow=true)) }
+
 
 
   val f4_ready = Wire(Bool())
-  dontTouch(f3.io)
   f3_ready := f3.io.enq.ready
   f3.io.enq.valid   := s2_valid && icache.io.resp.valid && !f2_clear
   f3.io.enq.bits.pc := s2_vpc
@@ -284,7 +328,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   f3.io.enq.bits.mask := fetchMask(s2_vpc)
   f3.io.enq.bits.xcpt := s2_tlb_resp
 
+  // The BPD resp comes in f3
+  f3_bpd_resp.io.enq.valid := f3.io.deq.valid && RegNext(f3.io.enq.ready)
+  f3_bpd_resp.io.enq.bits := bpd.io.f3_resp
+
   f3.io.deq.ready := f4_ready
+  f3_bpd_resp.io.deq.ready := f4_ready
+
+
   val f3_imemresp     = f3.io.deq.bits
   val f3_data         = f3_imemresp.data
   val f3_aligned_pc   = alignToFetchBoundary(f3_imemresp.pc)
@@ -303,7 +354,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // Tracks if last fetchpacket contained a half-inst
   val f3_prev_is_half = RegInit(false.B)
 
-  assert(fetchWidth >= 4) // Logic gets kind of annoying with fetchWidth = 2
+  require(fetchWidth >= 4) // Logic gets kind of annoying with fetchWidth = 2
   var redirect_found = false.B
   for (i <- 0 until fetchWidth) {
     val bpd_decoder = Module(new BranchDecode)
@@ -358,7 +409,13 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f3_fetch_bundle.mask(i) := f3.io.deq.valid && f3_imemresp.mask(i) && is_valid && !redirect_found
     f3_targs(i)        := bpd_decoder.io.target
 
-    f3_redirects(i)    := bpd_decoder.io.is_jal && f3_fetch_bundle.mask(i)
+    f3_redirects(i)    := f3_fetch_bundle.mask(i) && (
+      bpd_decoder.io.is_jal ||
+        (bpd_decoder.io.is_br && f3_bpd_resp.io.deq.bits.preds(i).taken))
+
+
+    f3_fetch_bundle.br_mask(i)  := f3_fetch_bundle.mask(i) && bpd_decoder.io.is_br
+    f3_fetch_bundle.jal_mask(i) := f3_fetch_bundle.mask(i) && (bpd_decoder.io.is_jal || bpd_decoder.io.is_jalr)
 
     redirect_found = redirect_found || f3_redirects(i)
 
@@ -372,6 +429,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f3_prev_is_half := (!(f3_fetch_bundle.mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
                      && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
     f3_prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
+    assert(f3_bpd_resp.io.deq.bits.pc === f3_fetch_bundle.pc)
   }
 
   when (f3_clear) {
@@ -383,17 +441,26 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   // Redirect earlier stages only if the later stage
   // can consume this packet
-  when (f3_redirects.reduce(_||_) && f4_ready) {
-    f3_fetch_bundle.cfi_idx.valid := true.B
+  val f3_predicted_target = Mux(f3_redirects.reduce(_||_), f3_targs(PriorityEncoder(f3_redirects)),
+      nextFetchStart(alignToFetchBoundary(f3_fetch_bundle.pc)))
+  when (f3.io.deq.valid && f4_ready) {
+    f3_fetch_bundle.cfi_idx.valid := f3_redirects.reduce(_||_)
     f3_fetch_bundle.cfi_idx.bits  := PriorityEncoder(f3_redirects)
-    f3_prev_is_half := false.B
 
-    f2_clear := true.B
-    f1_clear := true.B
+    when (f3_redirects.reduce(_||_)) {
+      f3_prev_is_half := false.B
+    }
 
-    s0_valid     := true.B
-    s0_vpc       := f3_targs(PriorityEncoder(f3_redirects))
-    s0_is_replay := false.B
+    when (s2_vpc =/= f3_predicted_target ||
+      (!s2_valid && s1_vpc =/= f3_predicted_target) ||
+      (!s2_valid && !s1_valid && s1_vpc =/= f3_predicted_target)) {
+      f2_clear := true.B
+      f1_clear := true.B
+
+      s0_valid     := true.B
+      s0_vpc       := f3_predicted_target
+      s0_is_replay := false.B
+    }
   }
 
   // -------------------------------------------------------
@@ -402,11 +469,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f4_clear = WireInit(false.B)
   val f4 = withReset(reset.toBool || f4_clear) {
     Module(new Queue(new FetchBundle, 1, pipe=true, flow=false))}
-  dontTouch(f4.io)
+
   val fb  = Module(new FetchBuffer(numEntries=numFetchBufferEntries))
   val ftq = Module(new FetchTargetQueue(num_entries=ftqSz))
-  dontTouch(fb.io)
-  dontTouch(ftq.io)
 
   f4_ready := f4.io.enq.ready
   f4.io.enq.valid := f3.io.deq.valid && !f3_clear
@@ -417,8 +482,11 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   fb.io.enq.bits  := f4.io.deq.bits
   fb.io.enq.bits.ftq_idx := ftq.io.enq_idx
 
-  ftq.io.enq.valid         := f4.io.deq.valid && fb.io.enq.ready
-  ftq.io.enq.bits.fetch_pc := f4.io.deq.bits.pc
+  ftq.io.enq.valid          := f4.io.deq.valid && fb.io.enq.ready
+  ftq.io.enq.bits           := f4.io.deq.bits
+
+  bpd.io.update := ftq.io.bpdupdate
+
 
   // -------------------------------------------------------
   // **** To Core (F5) ****
@@ -427,10 +495,10 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   io.cpu.fetchpacket <> fb.io.deq
   io.cpu.get_pc <> ftq.io.get_ftq_pc
   ftq.io.deq := io.cpu.commit
+  ftq.io.brupdate := io.cpu.brupdate
 
-
-  ftq.io.redirect.valid := io.cpu.redirect_val
-  ftq.io.redirect.bits  := io.cpu.redirect_ftq_idx
+  ftq.io.redirect.valid   := io.cpu.redirect_val
+  ftq.io.redirect.bits    := io.cpu.redirect_ftq_idx
   fb.io.clear := false.B
 
   when (io.cpu.sfence.valid) {
