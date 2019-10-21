@@ -3,11 +3,11 @@ import "DPI-C" function void initialize_branch_predictor();
 
 
 
-import "DPI-C" function void predict_branch(input longint ip,
-                                            output bit    pred
+import "DPI-C" function void predict_branch(input longint unsigned ip,
+                                            output bit pred
                                             );
 
-import "DPI-C" function void update_branch(input longint ip,
+import "DPI-C" function void update_branch(input longint unsigned ip,
                                            input bit taken
                                            );
 

@@ -3,17 +3,17 @@ import "DPI-C" function void initialize_btb();
 
 
 
-import "DPI-C" function void predict_target(input longint ip,
-                                            output bit     valid,
-                                            output longint target,
-                                            output bit     is_br,
-                                            output bit     is_jal
+import "DPI-C" function void predict_target(input longint unsigned ip,
+                                            output bit              valid,
+                                            output longint unsigned target,
+                                            output bit              is_br,
+                                            output bit              is_jal
                                             );
 
-import "DPI-C" function void update_btb(input longint ip,
-                                        input longint target,
-                                        input bit     is_br,
-                                        input bit     is_jal
+import "DPI-C" function void update_btb(input longint unsigned ip,
+                                        input longint unsigned target,
+                                        input bit              is_br,
+                                        input bit              is_jal
                                         );
 
 module BTBHarness (input clock,
