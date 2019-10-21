@@ -141,9 +141,9 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     // TODO: We should try to commit branch prediction updates earlier
     io.bpdupdate.valid              := true.B
     io.bpdupdate.bits.pc            := ram(bpd_ptr).fetch_pc
-    io.bpdupdate.bits.br_mask       := (0 until fetchWidth) map { i =>
-      ram(bpd_ptr).br_mask(i) && ((i.U <= cfi_idx) || !ram(bpd_ptr).cfi_idx.valid)
-    }
+    io.bpdupdate.bits.br_mask       := Mux(ram(bpd_ptr).cfi_idx.valid,
+      MaskLower(UIntToOH(cfi_idx)) & ram(bpd_ptr).br_mask.asUInt,
+      ram(bpd_ptr).br_mask.asUInt)
     io.bpdupdate.bits.cfi_idx.valid := ram(bpd_ptr).cfi_idx.valid
     io.bpdupdate.bits.cfi_idx.bits  := ram(bpd_ptr).cfi_idx.bits
 
