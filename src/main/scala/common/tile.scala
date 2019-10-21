@@ -81,7 +81,6 @@ class BoomTile(
   def this(params: BoomTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: LogicalTreeNode)
     (implicit p: Parameters) = this(params, crossing.crossingType, lookup, p, logicalTreeNode)
 
-
   val intOutwardNode = IntIdentityNode()
   val slaveNode = TLIdentityNode()
   val masterNode = visibilityNode
@@ -111,7 +110,6 @@ class BoomTile(
   tlOtherMastersNode := tile_master_blocker.map { _.node := tlMasterXbar.node } getOrElse { tlMasterXbar.node }
   masterNode :=* tlOtherMastersNode
   DisableMonitors { implicit p => tlSlaveXbar.node :*= slaveNode }
-
 
   val dtimProperty = dtim_adapter.map(d => Map(
     "sifive,dtim" -> d.device.asProperty)).getOrElse(Nil)
@@ -176,7 +174,6 @@ class BoomTile(
   )
   val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen))
 
-
   override lazy val module = new BoomTileModuleImp(this)
 
   // DCache
@@ -192,12 +189,10 @@ class BoomTile(
   private val deviceOpt = None
   val iCacheLogicalTreeNode = new ICacheLogicalTreeNode(deviceOpt, tileParams.icache.get)
 
-
   // ROCC
   val roccs = p(BuildRoCC).map(_(p))
   roccs.map(_.atlNode).foreach { atl => tlMasterXbar.node :=* atl }
   roccs.map(_.tlNode).foreach { tl => tlOtherMastersNode :=* tl }
-
 }
 
 /**
@@ -212,11 +207,8 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   val core = Module(new BoomCore()(outer.p))
   val lsu  = Module(new LSU()(outer.p, outer.dcache.module.edge))
 
-
-  var nPTWPorts        = 3
   val ptwPorts         = ListBuffer(lsu.io.ptw, outer.frontend.module.io.ptw, core.io.ptw_tlb)
 
-  var nHellaCachePorts = 0
   val hellaCachePorts  = ListBuffer[HellaCacheIO]()
 
   outer.reportWFI(None) // TODO: actually report this?
@@ -245,18 +237,15 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   core.io.rocc := DontCare
   core.io.reset_vector := DontCare
 
-
   if (outer.roccs.size > 0) {
     val (respArb, cmdRouter) = {
       val respArb = Module(new RRArbiter(new RoCCResponse()(outer.p), outer.roccs.size))
       val cmdRouter = Module(new RoccCommandRouter(outer.roccs.map(_.opcodes))(outer.p))
       outer.roccs.zipWithIndex.foreach { case (rocc, i) =>
-        nPTWPorts += 1
         ptwPorts ++= rocc.module.io.ptw
         rocc.module.io.cmd <> cmdRouter.io.out(i)
         val dcIF = Module(new SimpleHellaCacheIF()(outer.p))
         dcIF.io.requestor <> rocc.module.io.mem
-        nHellaCachePorts += 1
         hellaCachePorts += dcIF.io.cache
         respArb.io.in(i) <> Queue(rocc.module.io.resp)
       }
@@ -294,21 +283,17 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
     core.io.rocc.interrupt := outer.roccs.map(_.module.io.interrupt).reduce(_||_)
   }
 
-
-
   // PTW
-  val ptw  = Module(new PTW(nPTWPorts)(outer.dcache.node.edges.out(0), outer.p))
+  val ptw  = Module(new PTW(ptwPorts.length)(outer.dcache.node.edges.out(0), outer.p))
   core.io.ptw <> ptw.io.dpath
   ptw.io.requestor <> ptwPorts
-  nHellaCachePorts += 1
   hellaCachePorts += ptw.io.mem
 
    // LSU IO
-  val hellaCacheArb = Module(new HellaCacheArbiter(nHellaCachePorts)(outer.p))
+  val hellaCacheArb = Module(new HellaCacheArbiter(hellaCachePorts.length)(outer.p))
   hellaCacheArb.io.requestor <> hellaCachePorts
   lsu.io.hellacache <> hellaCacheArb.io.mem
   outer.dcache.module.io.lsu <> lsu.io.dmem
-
 
   // Generate a descriptive string
   val frontendStr = outer.frontend.module.toString
