@@ -233,7 +233,6 @@ class RenameStage(
   // pipeline registers
 
   for (w <- 0 until plWidth) {
-    require (renameLatency == 2)
     val r_valid  = RegInit(false.B)
     val r_uop    = Reg(new MicroOp)
     val next_uop = Wire(new MicroOp)

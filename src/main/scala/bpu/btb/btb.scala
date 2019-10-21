@@ -126,7 +126,7 @@ class BoomBTBResp(implicit p: Parameters) extends BoomBTBBundle
   //   shifting off the lowest log(inst_bytes) bits off).
   val cfi_idx   = UInt(log2Ceil(fetchWidth).W) // where is cfi we are predicting?
   val bpd_type  = BpredType() // which predictor should we use?
-  val cfi_type  = CfiType()  // what type of instruction is this?
+  val cfi_type  = UInt(CFI_SZ.W)  // what type of instruction is this?
   val fetch_pc  = UInt(vaddrBits.W) // the PC we're predicting on (start of the fetch packet).
 
   val bim_resp  = Valid(new BimResp) // Output from the bimodal table. Valid if prediction provided.
@@ -151,7 +151,7 @@ class BoomBTBUpdate(implicit p: Parameters) extends BoomBTBBundle
 
   // other branch information
   val bpd_type = BpredType()
-  val cfi_type = CfiType()
+  val cfi_type = UInt(CFI_SZ.W)
 
   val is_rvc   = Bool()
   val is_edge  = Bool()

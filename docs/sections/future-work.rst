@@ -5,9 +5,8 @@ This chapter lays out some of the potential future directions that BOOM
 can be taken. To help facilitate such work, the preliminary design
 sketches are described below.
 
-
 The BOOM Custom Co-processor Interface (BOCC)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---------------------------------------------
 
 Some accelerators may wish to take advantage of speculative instructions
 (or even out-of-order issue) to begin executing instructions earlier to

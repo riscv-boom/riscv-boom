@@ -43,7 +43,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     // +1 for recoding.
     val ll_wports        = Flipped(Vec(memWidth, Decoupled(new ExeUnitResp(fLen+1))))// from memory unit
     val from_int         = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from integer RF
-    val to_sdq           = Decoupled(new MicroOpWithData(fLen))           // to Load/Store Unit
+    val to_sdq           = Decoupled(new ExeUnitResp(fLen))           // to Load/Store Unit
     val to_int           = Decoupled(new ExeUnitResp(xLen))           // to integer RF
 
     val wakeups          = Vec(numWakeupPorts, Valid(new ExeUnitResp(fLen+1)))
@@ -178,7 +178,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   fregfile.io.write_ports(0) := RegNext(WritePort(ll_wbarb.io.out, fpregSz, fLen+1, RT_FLT))
 
   assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
-  when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.ctrl.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
+  when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
 
   var w_cnt = 1
   for (i <- 1 until memWidth) {
@@ -189,13 +189,13 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   }
   for (eu <- exe_units) {
     if (eu.writesFrf) {
-      fregfile.io.write_ports(w_cnt).valid     := eu.io.fresp.valid && eu.io.fresp.bits.uop.ctrl.rf_wen
+      fregfile.io.write_ports(w_cnt).valid     := eu.io.fresp.valid && eu.io.fresp.bits.uop.rf_wen
       fregfile.io.write_ports(w_cnt).bits.addr := eu.io.fresp.bits.uop.pdst
       fregfile.io.write_ports(w_cnt).bits.data := eu.io.fresp.bits.data
       eu.io.fresp.ready                        := true.B
       when (eu.io.fresp.valid) {
         assert(eu.io.fresp.ready, "No backpressuring the FPU")
-        assert(eu.io.fresp.bits.uop.ctrl.rf_wen, "rf_wen must be high here")
+        assert(eu.io.fresp.bits.uop.rf_wen, "rf_wen must be high here")
         assert(eu.io.fresp.bits.uop.dst_rtype === RT_FLT, "wb type must be FLT for fpu")
       }
       w_cnt += 1

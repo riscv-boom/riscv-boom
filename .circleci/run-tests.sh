@@ -40,8 +40,14 @@ case $1 in
     boomandrocket)
         run_both ${mapping[$1]}
         ;;
-    rv32unifiedboom)
+    rv32boom)
         run_asm ${mapping[$1]}
+        ;;
+    hwachaboom)
+        export RISCV=$LOCAL_ESP_DIR
+        export LD_LIBRARY_PATH=$LOCAL_ESP_DIR/lib
+        export PATH=$RISCV/bin:$PATH
+        make run-rv64uv-p-asm-tests -j$NPROC -C $LOCAL_SIM_DIR VERILATOR_INSTALL_DIR=$LOCAL_VERILATOR_DIR ${mapping[$1]}
         ;;
     *)
         echo "No set of tests for $1. Did you spell it right?"

@@ -68,6 +68,7 @@ trait IQType
   val IQT_MFP = 6.U(IQT_SZ.W)
 }
 
+
 /**
  * Mixin for scalar operation constants
  */
@@ -82,6 +83,13 @@ trait ScalarOpConstants
 
   //************************************
   // Control Signals
+
+  // CFI types
+  val CFI_SZ   = 3
+  val CFI_X    = 0.U(CFI_SZ.W) // Not a CFI instruction
+  val CFI_BR   = 1.U(CFI_SZ.W) // Branch
+  val CFI_JAL  = 2.U(CFI_SZ.W) // JAL
+  val CFI_JALR = 3.U(CFI_SZ.W) // JALR
 
   // PC Select Signal
   val PC_PLUS4 = 0.U(2.W)  // PC + 4
@@ -301,7 +309,6 @@ trait ScalarOpConstants
     val cs = Wire(new boom.common.CtrlSignals())
     cs             := DontCare // Overridden in the following lines
     cs.br_type     := BR_N
-    cs.rf_wen      := false.B
     cs.csr_cmd     := freechips.rocketchip.rocket.CSR.N
     cs.is_load     := false.B
     cs.is_sta      := false.B

@@ -11,23 +11,24 @@ can find the documentation and website at https://fires.im/.
 
 Chicken Bits
 ------------
+
 BOOM supports a chicken-bit to delay all instructions from issue until the
 pipeline clears. This effectively turns BOOM into a unpipelined in-order
-core. The chicken bit is controlled by the third bit of the CSR at 0x7c1.
+core. The chicken bit is controlled by the third bit of the CSR at ``0x7c1``.
 Writing this CSR with `csrwi 0x7c1, 0x8` will turn off all out-of-orderiness
 in the core. High-performance can be re-enabled with `csrwi 0x7c1, 0x0`.
 
 Pipeline Visualization
 ----------------------
 
-“Pipeview" is a useful diagnostic and visualization tool for seeing how
+"Pipeview" is a useful diagnostic and visualization tool for seeing how
 instructions are scheduled on an out-of-order pipeline.
 
 Pipeview displays every fetched instruction and shows when it is
 fetched, decoded, renamed, dispatched, issued, completed, and committed
-(“retired"). It shows both committed and misspeculated instructions. It
+("retired"). It shows both committed and misspeculated instructions. It
 also shows when stores were successfully acknowledged by the memory
-system (“store-completion"). It is useful for programmers who wish to
+system ("store-completion"). It is useful for programmers who wish to
 see how their code is performing and for architects to see which
 bottlenecks are constricting machine performance.
 
@@ -64,15 +65,15 @@ To display the text-based pipeline visualizations, BOOM generates traces
 compatible with the O3 Pipeline Viewer included in the gem5 simulator
 suite.
 
-To enable pipeline visualization, first set :code:`O3PIPEVIEW_PRINTF` in
-:code:`boom/src/main/scala/consts.scala` to :code:`true`:
+To enable pipeline visualization, first set ``O3PIPEVIEW_PRINTF`` in
+``src/main/scala/common/consts.scala`` to ``true``:
 
 .. code-block:: bash
 
     val O3PIPEVIEW_PRINTF = true // dump trace for O3PipeView from gem5
 
-Rebuild and rerun BOOM. You should find the traces (:code:`*.out`) in
-the :code:`verilator/output/` or :code:`vcs/output/` directories if you are using :code:`chipyard` to
+Rebuild and rerun BOOM. You should find the traces (``*.out``) in
+the ``verilator/output/`` or ``vcs/output/`` directories if you are using ``chipyard`` to
 run the core. To generate the visualization, first download and install gem5, and then run:
 
 .. code-block:: bash
@@ -86,5 +87,5 @@ You can view the visualization by running:
 
     less -r pipeview.out
 
-To learn more about :code:`o3-pipeview.py` and to download gem5 visit
+To learn more about ``o3-pipeview.py`` and to download gem5 visit
 http://www.m5sim.org/Visualization.

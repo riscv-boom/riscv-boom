@@ -22,6 +22,7 @@ import boom.lsu._
  * Default BOOM core parameters
  */
 case class BoomCoreParams(
+// DOC include start: BOOM Parameters
   fetchWidth: Int = 1,
   decodeWidth: Int = 1,
   numRobEntries: Int = 64,
@@ -33,17 +34,13 @@ case class BoomCoreParams(
   numStqEntries: Int = 16,
   numIntPhysRegisters: Int = 96,
   numFpPhysRegisters: Int = 64,
-  enableCustomRf: Boolean = false,
-  enableCustomRfModel: Boolean = true,
   maxBrCount: Int = 4,
   numFetchBufferEntries: Int = 16,
   enableAgePriorityIssue: Boolean = true,
   enablePrefetching: Boolean = false,
   enableFastLoadUse: Boolean = true,
-  enableBrResolutionRegister: Boolean = true,
   enableCommitMapTable: Boolean = false,
   enableFastPNR: Boolean = false,
-  enableFastWakeupsToRename: Boolean = true,
   enableBTBContainsBranches: Boolean = true,
   enableBranchPredictor: Boolean = true,
   enableBTB: Boolean = true,
@@ -59,8 +56,6 @@ case class BoomCoreParams(
   bpdRandom: Option[RandomBpdParameters] = None,
   intToFpLatency: Int = 2,
   imulLatency: Int = 3,
-  fetchLatency: Int = 4,
-  renameLatency: Int = 2,
   nPerfCounters: Int = 0,
   numRXQEntries: Int = 4,
   numRCQEntries: Int = 8,
@@ -89,6 +84,7 @@ case class BoomCoreParams(
   useRVE: Boolean = false,
   useBPWatch: Boolean = false,
   clockGate: Boolean = false
+// DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams
 {
   val haveFSDirty = false
@@ -152,8 +148,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val numRcqEntries = boomParams.numRCQEntries       // number of RoCC commit queue entries. This can be large since it just keeps a pdst
   val numLdqEntries = boomParams.numLdqEntries       // number of LAQ entries
   val numStqEntries = boomParams.numStqEntries       // number of SAQ/SDQ entries
-  val NUM_LDQ_ENTRIES = numLdqEntries // TODO Remove these after
-  val NUM_STQ_ENTRIES = numStqEntries // completion of lsu refactor.
   val maxBrCount    = boomParams.maxBrCount          // number of branches we can speculate simultaneously
   val ftqSz         = boomParams.ftq.nEntries        // number of FTQ entries
   val numFetchBufferEntries = boomParams.numFetchBufferEntries // number of instructions that stored between fetch&decode
@@ -180,26 +174,22 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   val intToFpLatency = boomParams.intToFpLatency
 
-  val fetchLatency = boomParams.fetchLatency // how many cycles does fetch occupy?
-  require (fetchLatency == 4) // Only 4-cycle fetch is supported
-  val renameLatency = boomParams.renameLatency // how many cycles does rename occupy?
-
-  val enableBrResolutionRegister = boomParams.enableBrResolutionRegister
-
   //************************************
   // Issue Units
 
   val issueParams: Seq[IssueParams] = boomParams.issueParams
   val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
-  val usingUnifiedMemIntIQs = issueParams.count(_.iqType == IQT_MEM.litValue) == 0
 
   // currently, only support one of each.
   require (issueParams.count(_.iqType == IQT_FP.litValue) == 1 || !usingFPU)
-  require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1 || usingUnifiedMemIntIQs)
+  require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1)
   require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
 
-  val intWidth = issueParams.find(_.iqType == IQT_INT.litValue).get.issueWidth
-  val memWidth = if (usingUnifiedMemIntIQs) 1 else issueParams.find(_.iqType == IQT_MEM.litValue).get.issueWidth
+  val intIssueParam = issueParams.find(_.iqType == IQT_INT.litValue).get
+  val memIssueParam = issueParams.find(_.iqType == IQT_MEM.litValue).get
+
+  val intWidth = intIssueParam.issueWidth
+  val memWidth = memIssueParam.issueWidth
 
   issueParams.map(x => require(x.dispatchWidth <= coreWidth && x.dispatchWidth > 0))
 
@@ -259,7 +249,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableCommitMapTable = boomParams.enableCommitMapTable
   require(!enableCommitMapTable) // TODO Fix the commit map table.
   val enableFastPNR = boomParams.enableFastPNR
-  val enableFastWakeupsToRename = boomParams.enableFastWakeupsToRename
 
   //************************************
   // Implicitly calculated constants
@@ -283,10 +272,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   require ((numLdqEntries-1) > coreWidth)
   require ((numStqEntries-1) > coreWidth)
 
-  //************************************
-  // Custom Logic
-  val enableCustomRf      = boomParams.enableCustomRf
-  val enableCustomRfModel = boomParams.enableCustomRfModel
 
   //************************************
   // Other Non/Should-not-be sythesizable modules

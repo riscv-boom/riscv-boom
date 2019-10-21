@@ -32,7 +32,6 @@ import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue, BoomCoreStringP
 
 /**
  * Response from Execution Unit. Bundles a MicroOp with data
- * TODO rename to something like MicroOpWithData
  *
  * @param dataWidth width of the data coming from the execution unit
  */
@@ -383,7 +382,7 @@ class ALUExeUnit(
 
   // Mem Unit --------------------------
   if (hasMem) {
-    require(!hasAlu || usingUnifiedMemIntIQs)
+    require(!hasAlu)
     val maddrcalc = Module(new MemAddrCalcUnit)
     maddrcalc.io.req        <> io.req
     maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
