@@ -35,7 +35,7 @@ class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
 {
   val pc            = UInt(vaddrBitsExtended.W)
   // Mask of instructions which are branches.
-  val br_mask       = Vec(fetchWidth, Bool())
+  val br_mask       = UInt(fetchWidth.W)
   val cfi_idx       = Valid(UInt(log2Ceil(fetchWidth).W))    // Which CFI was taken (if any)
 
   val cfi_is_br     = Bool()
@@ -104,3 +104,4 @@ class NullBranchPredictor(implicit p: Parameters) extends BranchPredictor()(p)
     }
   }
 }
+
