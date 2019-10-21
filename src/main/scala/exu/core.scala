@@ -470,10 +470,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Branch Unit Requests (for JALs) (Should delay issue of JALs if this not ready)
   jmp_pc_req.valid := RegNext(iss_valids(jmpunit_idx) && iss_uops(jmpunit_idx).fu_code === FU_JMP)
   jmp_pc_req.bits  := RegNext(iss_uops(jmpunit_idx).ftq_idx)
-  exe_units(jmpunit_idx).io.get_ftq_pc.fetch_pc := io.ifu.get_pc.fetch_pc
-  exe_units(jmpunit_idx).io.get_ftq_pc.com_pc   := DontCare // This shouldn't be used by jmpunit
-  exe_units(jmpunit_idx).io.get_ftq_pc.next_val := io.ifu.get_pc.next_val
-  exe_units(jmpunit_idx).io.get_ftq_pc.next_pc  := io.ifu.get_pc.next_pc
+  exe_units(jmpunit_idx).io.get_ftq_pc.fetch_cfi := io.ifu.get_pc.fetch_cfi
+  exe_units(jmpunit_idx).io.get_ftq_pc.fetch_pc  := io.ifu.get_pc.fetch_pc
+  exe_units(jmpunit_idx).io.get_ftq_pc.com_pc    := DontCare // This shouldn't be used by jmpunit
+  exe_units(jmpunit_idx).io.get_ftq_pc.next_val  := io.ifu.get_pc.next_val
+  exe_units(jmpunit_idx).io.get_ftq_pc.next_pc   := io.ifu.get_pc.next_pc
 
   // Mispredict requests (to get the correct target)
   mispredict_pc_req.valid := brupdate.b2.mispredict

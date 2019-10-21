@@ -55,12 +55,14 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
  */
 class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle
 {
-  val ftq_idx  = Input(UInt(log2Ceil(ftqSz).W))
-  val fetch_pc = Output(UInt(vaddrBitsExtended.W))
-  val com_pc   = Output(UInt(vaddrBitsExtended.W))
+  val ftq_idx   = Input(UInt(log2Ceil(ftqSz).W))
+
+  val fetch_pc  = Output(UInt(vaddrBitsExtended.W))
+  val fetch_cfi = Output(Valid(UInt(log2Ceil(fetchWidth).W)))
+  val com_pc    = Output(UInt(vaddrBitsExtended.W))
   // the next_pc may not be valid (stalled or still being fetched)
-  val next_val = Output(Bool())
-  val next_pc  = Output(UInt(vaddrBitsExtended.W))
+  val next_val  = Output(Bool())
+  val next_pc   = Output(UInt(vaddrBitsExtended.W))
 }
 
 /**
@@ -167,8 +169,9 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
   // **** Core Read PCs ****
   //-------------------------------------------------------------
 
-  io.get_ftq_pc.fetch_pc := RegNext(ram(io.get_ftq_pc.ftq_idx).fetch_pc)
-  io.get_ftq_pc.next_pc  := RegNext(ram(WrapInc(io.get_ftq_pc.ftq_idx, num_entries)).fetch_pc)
-  io.get_ftq_pc.next_val := WrapInc(io.get_ftq_pc.ftq_idx, num_entries) =/= enq_ptr
-  io.get_ftq_pc.com_pc   := RegNext(ram(Mux(io.deq.valid, io.deq.bits, deq_ptr)).fetch_pc)
+  io.get_ftq_pc.fetch_pc  := RegNext(ram(io.get_ftq_pc.ftq_idx).fetch_pc)
+  io.get_ftq_pc.fetch_cfi := RegNext(ram(io.get_ftq_pc.ftq_idx).cfi_idx)
+  io.get_ftq_pc.next_pc   := RegNext(ram(WrapInc(io.get_ftq_pc.ftq_idx, num_entries)).fetch_pc)
+  io.get_ftq_pc.next_val  := RegNext(WrapInc(io.get_ftq_pc.ftq_idx, num_entries) =/= enq_ptr)
+  io.get_ftq_pc.com_pc    := RegNext(ram(Mux(io.deq.valid, io.deq.bits, deq_ptr)).fetch_pc)
 }

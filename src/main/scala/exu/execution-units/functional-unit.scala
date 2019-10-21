@@ -376,8 +376,8 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   val is_jal         = io.req.valid && !killed && uop.is_br_or_jmp &&  uop.is_jal
 
   when (is_br_or_jalr) {
-    when (pc_sel === PC_JALR) {
-      mispredict := true.B
+    if (!isJmpUnit) {
+      assert (pc_sel =/= PC_JALR)
     }
     when (pc_sel === PC_PLUS4) {
       mispredict := uop.taken
@@ -430,6 +430,13 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
     val jalr_target = (encodeVirtualAddress(jalr_target_xlen, jalr_target_xlen).asSInt & -2.S).asUInt
 
     brinfo.jalr_target := jalr_target
+
+    when (pc_sel === PC_JALR) {
+      mispredict := !io.get_ftq_pc.next_val ||
+                    (io.get_ftq_pc.next_pc =/= jalr_target) ||
+                    !io.get_ftq_pc.fetch_cfi.valid ||
+                    (io.get_ftq_pc.fetch_cfi.bits =/= uop.pc_lob(log2Ceil(fetchWidth), 1))
+    }
   }
 
   brinfo.target_offset := target_offset
