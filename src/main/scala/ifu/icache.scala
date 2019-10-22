@@ -41,7 +41,7 @@ class ICache(
   val hartId: Int)(implicit p: Parameters)
   extends LazyModule
 {
-  lazy val module: ICacheBaseModule = new ICacheModule(this)
+  lazy val module = new ICacheModule(this)
   val masterNode = TLClientNode(Seq(TLClientPortParameters(Seq(TLClientParameters(
     sourceId = IdRange(0, 1 + icacheParams.prefetch.toInt), // 0=refill, 1=hint
     name = s"Core ${hartId} ICache")))))
@@ -67,11 +67,14 @@ class ICacheResp(val outer: ICache) extends Bundle
  *
  * @param outer top level ICache class
  */
-class ICacheBundle(val outer: ICache) extends CoreBundle()(outer.p)
+class ICacheBundle(val outer: ICache) extends BoomBundle()(outer.p)
+  with HasBoomFrontendParameters
 {
   val hartid = Input(UInt(hartIdLen.W))
+
   val req = Flipped(Decoupled(new ICacheReq))
   val s1_paddr = Input(UInt(paddrBits.W)) // delayed one cycle w.r.t. req
+
   val s1_kill = Input(Bool()) // delayed one cycle w.r.t. req
   val s2_kill = Input(Bool()) // delayed two cycles; prevents I$ miss emission
   val s2_prefetch = Input(Bool()) // should I$ prefetch next line on a miss?
@@ -90,17 +93,6 @@ object GetPropertyByHartId
   }
 }
 
-/**
- * Base ICache module
- *
- * @param outer top level ICache class
- */
-abstract class ICacheBaseModule(outer: ICache) extends LazyModuleImp(outer)
-  with HasL1ICacheBankedParameters
-{
-  override val cacheParams = outer.icacheParams // Use the local parameters
-  val io = IO(new ICacheBundle(outer))
-}
 
 /**
  * Main ICache module
@@ -108,8 +100,11 @@ abstract class ICacheBaseModule(outer: ICache) extends LazyModuleImp(outer)
  * @param outer top level ICache class
  */
 @chiselName
-class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
+class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
+  with HasBoomFrontendParameters
 {
+  val io = IO(new ICacheBundle(outer))
+
   val (tl_out, edge_out) = outer.masterNode.out(0)
 
   require(isPow2(nSets) && isPow2(nWays))
@@ -118,14 +113,13 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
 
   // How many bits do we intend to fetch at most every cycle?
   val wordBits = outer.icacheParams.fetchBytes*8
-  // How many banks does the ICache use?
-  val nBanks = if (cacheParams.fetchBytes <= 8) 1 else 2
   // Each of these cases require some special-case handling.
   require (tl_out.d.bits.data.getWidth == wordBits || (2*tl_out.d.bits.data.getWidth == wordBits && nBanks == 2))
   // If TL refill is half the wordBits size and we have two banks, then the
   // refill writes to only one bank per cycle (instead of across two banks every
   // cycle).
   val refillsToOneBank = (2*tl_out.d.bits.data.getWidth == wordBits)
+
 
 
   val s0_valid = io.req.fire()

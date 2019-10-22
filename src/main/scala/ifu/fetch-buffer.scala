@@ -39,7 +39,7 @@ class FetchBufferResp(implicit p: Parameters) extends BoomBundle
  */
 class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
-  with HasL1ICacheBankedParameters
+  with HasBoomFrontendParameters
 {
   val io = IO(new BoomBundle {
     val enq = Flipped(Decoupled(new FetchBundle()))

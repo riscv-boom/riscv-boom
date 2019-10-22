@@ -46,7 +46,7 @@ class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 abstract class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
- with HasL1ICacheBankedParameters
+ with HasBoomFrontendParameters
 {
   val io = IO(new Bundle {
 
