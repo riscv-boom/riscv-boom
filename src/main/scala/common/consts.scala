@@ -293,8 +293,6 @@ trait ScalarOpConstants
     uop.uses_ldq   := false.B
     uop.pdst       := 0.U
     uop.dst_rtype  := RT_X
-    // TODO these unnecessary? used in regread stage?
-    uop.is_br_or_jmp := false.B
 
     val cs = Wire(new boom.common.CtrlSignals())
     cs             := DontCare // Overridden in the following lines

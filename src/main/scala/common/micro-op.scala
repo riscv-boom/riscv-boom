@@ -51,12 +51,11 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val iw_p1_poisoned   = Bool()
   val iw_p2_poisoned   = Bool()
 
-  val allocate_brtag   = Bool()                      // does this allocate a branch tag? (is branch or JR but not JAL)
-  val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs a regular PC+4 inst?
-  val is_jump          = Bool()                      // is this a jump? (jal or jalr)
+  def allocate_brtag   = is_br || is_jalr
+  val is_br            = Bool()                      // is this micro-op a (branch) vs a regular PC+4 inst?
+  val is_jalr          = Bool()                      // is this a jump? (jal or jalr)
   val is_jal           = Bool()                      // is this a JAL (doesn't include JR)? used for branch unit
-  val is_ret           = Bool()                      // is jalr with rd=x0, rs1=x1? (i.e., a return)
-  val is_call          = Bool()                      //
+
   val br_mask          = UInt(maxBrCount.W)  // which branches are we being speculated under?
   val br_tag           = UInt(brTagSz.W)
 
@@ -133,7 +132,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def rf_wen           = dst_rtype =/= RT_X
 
   // Is it possible for this uop to misspeculate, preventing the commit of subsequent uops?
-  def unsafe           = uses_ldq || (uses_stq && !is_fence) || (is_br_or_jmp && !is_jal)
+  def unsafe           = uses_ldq || (uses_stq && !is_fence) || is_br || is_jalr
 
   def fu_code_is(_fu: UInt) = (fu_code & _fu) =/= 0.U
 }
