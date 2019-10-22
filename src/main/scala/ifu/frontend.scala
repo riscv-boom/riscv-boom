@@ -42,41 +42,43 @@ class FrontendResp(implicit p: Parameters) extends BoomBundle()(p) {
 /**
  * Parameters to manage a L1 Banked ICache
  */
-trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
+trait HasBoomFrontendParameters extends HasL1ICacheParameters
 {
-  // Use a bank interleaved I$ if our fetch width is wide enough.
-  val icIsBanked = fetchBytes > 8
+  // How many banks does the ICache use?
+  val nBanks = if (cacheParams.fetchBytes <= 8) 1 else 2
   // How many bytes wide is a bank?
-  val bankBytes = if (icIsBanked) fetchBytes/2 else fetchBytes
+  val bankBytes = fetchBytes/nBanks
+
+  val icIsDualBanked = nBanks == 2
+
+  require(nBanks == 1 || nBanks == 2)
+
+
   // How many "chunks"/interleavings make up a cache line?
-  def numChunks = cacheParams.blockBytes / bankBytes
+  val numChunks = cacheParams.blockBytes / bankBytes
 
   // Which bank is the address pointing to?
   def bank(addr: UInt) = addr(log2Ceil(bankBytes))
-  def inLastChunk(addr: UInt) = addr(blockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
+  def inLastChunk(addr: UInt) = Mux(icIsDualBanked.B,
+    addr(blockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U,
+    false.B)
 
   // Round address down to the nearest fetch boundary.
   def alignToFetchBoundary(addr: UInt) = {
-    if (icIsBanked) ~(~addr | (bankBytes.U-1.U))
+    if (icIsDualBanked) ~(~addr | (bankBytes.U-1.U))
     else ~(~addr | (fetchBytes.U-1.U))
   }
 
   // Input: an ALIGNED pc.
   // For the fall-through next PC, where does the next fetch pc start?
   // This is complicated by cache-line wraparound.
-  def nextFetchStart(addr: UInt) = {
-    if (icIsBanked) {
-      addr + Mux(inLastChunk(addr), bankBytes.U, fetchBytes.U)
-    } else {
-      addr + fetchBytes.U
-    }
-  }
+  def nextFetchStart(addr: UInt) = addr + Mux(inLastChunk(addr), bankBytes.U, fetchBytes.U)
 
   // For a given fetch address, what is the mask of validly fetched instructions.
   def fetchMask(addr: UInt) = {
     // where is the first instruction, aligned to a log(fetchWidth) boundary?
     val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
-    if (icIsBanked) {
+    if (icIsDualBanked) {
       // shave off the msb of idx since we are aligned to half-fetchWidth boundaries.
       val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
       val end_mask = Mux(inLastChunk(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
@@ -86,6 +88,7 @@ trait HasL1ICacheBankedParameters extends HasL1ICacheParameters
     }
   }
 }
+
 
 /**
  * Bundle passed into the FetchBuffer and used to combine multiple
@@ -176,8 +179,7 @@ class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
  */
 class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   with HasBoomCoreParameters
-  with HasL1ICacheParameters
-  with HasL1ICacheBankedParameters
+  with HasBoomFrontendParameters
 {
   val io = IO(new BoomFrontendBundle(outer))
   implicit val edge = outer.masterNode.edges.out(0)
@@ -373,7 +375,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       // Need special case since 0th instruction may carry over the wrap around
       inst     := f3_data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
       is_valid := f3_prev_is_half || !(f3_fetch_bundle.mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
-    } else if (icIsBanked && i == (fetchWidth / 2) - 1) {
+    } else if (icIsDualBanked && i == (fetchWidth / 2) - 1) {
       // If we are using a banked I$ we could get cut-off halfway through the fetch bundle
       inst     := f3_data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
       is_valid := !(f3_fetch_bundle.mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) &&
@@ -424,7 +426,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   }
 
   when (f3.io.deq.fire()) {
-    val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsBanked.B,
+    val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsDualBanked.B,
                       (fetchWidth/2-1).U, (fetchWidth-1).U)
     f3_prev_is_half := (!(f3_fetch_bundle.mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
                      && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
