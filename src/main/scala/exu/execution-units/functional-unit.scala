@@ -360,22 +360,19 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
                         BR_JR  -> PC_JALR
                         ))
 
-  //val bj_addr = Wire(UInt(vaddrBitsExtended.W))
-
   val is_taken = io.req.valid &&
                    !killed &&
-                   uop.is_br_or_jmp &&
+                   (uop.is_br || uop.is_jalr || uop.is_jal) &&
                    (pc_sel =/= PC_PLUS4)
 
   // "mispredict" means that a branch has been resolved and it must be killed
   val mispredict = WireInit(false.B)
 
-  val is_br          = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jump
-  val is_br_or_jalr  = io.req.valid && !killed && uop.is_br_or_jmp && !uop.is_jal
-  // TODO: This should be handled in frontend. We shouldn't see JALs here
-  val is_jal         = io.req.valid && !killed && uop.is_br_or_jmp &&  uop.is_jal
+  val is_br          = io.req.valid && !killed && uop.is_br
+  val is_jal         = io.req.valid && !killed && uop.is_jal
+  val is_jalr        = io.req.valid && !killed && uop.is_jalr
 
-  when (is_br_or_jalr) {
+  when (is_br || is_jalr) {
     if (!isJmpUnit) {
       assert (pc_sel =/= PC_JALR)
     }
@@ -387,29 +384,23 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
     }
   }
 
-  // val target = Mux(pc_sel === PC_PLUS4, npc, bj_addr)
-  // br_unit.target := target
-
-  // Delay branch resolution a cycle for critical path reasons.
-  // If the rest of "br_unit" is being registered too, then we don't need to
-  // register "brinfo" here, since in that case we would be double counting.
   val brinfo = Wire(new BrResolutionInfo)
 
   // note: jal doesn't allocate a branch-mask, so don't clear a br-mask bit
-  // TODO: Handle JAL in frontend
-  brinfo.valid          := is_br_or_jalr
+  brinfo.valid          := is_br || is_jalr
   brinfo.mispredict     := mispredict
   brinfo.uop            := uop
-  brinfo.cfi_type       := Mux(pc_sel === PC_JALR, CFI_JALR,
-                           Mux(uop.is_br_or_jmp, CFI_BR, CFI_X))
+  brinfo.cfi_type       := Mux(is_jalr, CFI_JALR,
+                           Mux(is_br  , CFI_BR, CFI_X))
   brinfo.taken          := is_taken
   brinfo.pc_sel         := pc_sel
 
   brinfo.jalr_target    := DontCare
 
-  // Branch/Jump Target Calculation
-  // we can't push this through the ALU though, b/c jalr needs both PC+4 and rs1+offset
 
+  // Branch/Jump Target Calculation
+  // For jumps we read the FTQ, and can calculate the target
+  // For branches we emit the offset for the core to redirect if necessary
   val target_offset = imm_xprlen(20,0).asSInt
   brinfo.jalr_target := DontCare
   if (isJmpUnit) {
