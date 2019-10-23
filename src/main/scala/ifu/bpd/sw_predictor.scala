@@ -12,9 +12,9 @@ import boom.exu.{CommitExceptionSignals}
 import boom.util.{BoomCoreStringPrefix}
 
 
-class SwBranchPredictor(implicit p: Parameters) extends BranchPredictor()(p)
+class SwBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
-  for (w <- 0 until fetchWidth) {
+  for (w <- 0 until bankWidth) {
     val btb_harness = Module(new BTBHarness)
     val pred_harness = Module(new BranchPredictorHarness)
 
@@ -33,27 +33,28 @@ class SwBranchPredictor(implicit p: Parameters) extends BranchPredictor()(p)
 
 
     btb_harness.io.update_valid  := io.update.valid && io.update.bits.cfi_idx.valid && (w == 0).B
-    btb_harness.io.update_pc     := alignToFetchBoundary(io.update.bits.pc) + (io.update.bits.cfi_idx.bits << 1)
+    btb_harness.io.update_pc     := io.update.bits.pc + (io.update.bits.cfi_idx.bits << 1)
     btb_harness.io.update_target := io.update.bits.target
     btb_harness.io.update_is_br  := io.update.bits.cfi_is_br
     btb_harness.io.update_is_jal := io.update.bits.cfi_is_jal
 
     pred_harness.io.update_valid := io.update.valid && io.update.bits.br_mask(w)
-    pred_harness.io.update_pc    := alignToFetchBoundary(io.update.bits.pc) + (w << 1).U
+    pred_harness.io.update_pc    := io.update.bits.pc + (w << 1).U
     pred_harness.io.update_taken := w.U === io.update.bits.cfi_idx.bits &&
-                                    io.update.bits.cfi_idx.valid
+                                      io.update.bits.cfi_idx.valid
 
 
-    io.f1_resp.preds(w).taken := pred_harness.io.req_taken
-    io.f1_resp.preds(w).predicted_pc.valid := btb_harness.io.req_target_valid
-    io.f1_resp.preds(w).predicted_pc.bits  := btb_harness.io.req_target_pc
-    io.f1_resp.preds(w).is_br              := btb_harness.io.req_is_br  && btb_harness.io.req_target_valid
-    io.f1_resp.preds(w).is_jal             := btb_harness.io.req_is_jal && btb_harness.io.req_target_valid
+    io.f1_resp(w).taken := pred_harness.io.req_taken
+    io.f1_resp(w).predicted_pc.valid := btb_harness.io.req_target_valid
+    io.f1_resp(w).predicted_pc.bits  := btb_harness.io.req_target_pc
+    io.f1_resp(w).is_br              := btb_harness.io.req_is_br  && btb_harness.io.req_target_valid
+    io.f1_resp(w).is_jal             := btb_harness.io.req_is_jal && btb_harness.io.req_target_valid
 
     // The Harness to software assumes output comes out in f1
-    io.f3_resp.preds(w).is_br := RegNext(RegNext(pred_harness.io.req_taken))
-    io.f3_resp.preds(w).taken := RegNext(RegNext(pred_harness.io.req_taken))
+    io.f3_resp(w).is_br := RegNext(RegNext(pred_harness.io.req_taken))
+    io.f3_resp(w).taken := RegNext(RegNext(pred_harness.io.req_taken))
   }
+
 }
 
 class BranchPredictorHarness(implicit p: Parameters)

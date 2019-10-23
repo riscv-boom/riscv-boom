@@ -11,6 +11,7 @@ import freechips.rocketchip.tilelink._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
+// A branch prediction for a single instruction
 class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 {
   // If this is a branch, do we take it?
@@ -25,12 +26,17 @@ class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 
 }
 
+// A branch prediction for a entire fetch-width worth of instructions
+// This is typically merged from individual predictions from the banked
+// predictor
 class BranchPredictionBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
   val pc = UInt(vaddrBitsExtended.W)
   val preds = Vec(fetchWidth, new BranchPrediction)
 }
 
+
+// A branch update for a fetch-width worth of instructions
 class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
 {
   val pc            = UInt(vaddrBitsExtended.W)
@@ -45,63 +51,42 @@ class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
   val target        = UInt(vaddrBitsExtended.W) // What did this CFI jump to?
 }
 
-abstract class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
- with HasBoomFrontendParameters
+// A branch update to a single bank
+class BranchPredictionBankUpdate(implicit p: Parameters) extends BoomBundle()(p)
+  with HasBoomFrontendParameters
 {
-  val io = IO(new Bundle {
+  val pc            = UInt(vaddrBitsExtended.W)
 
-    // Requests and responses
-    val f0_req  = Input(Valid(UInt(vaddrBitsExtended.W)))
+  val br_mask       = UInt(bankWidth.W)
+  val cfi_idx       = Valid(UInt(log2Ceil(bankWidth).W))
 
-    val f1_resp = Output(new BranchPredictionBundle)
-    val f2_resp = Output(new BranchPredictionBundle)
-    val f3_resp = Output(new BranchPredictionBundle)
+  val cfi_is_br     = Bool()
+  val cfi_is_jal    = Bool()
 
-    // Update
-    val update = Input(Valid(new BranchPredictionUpdate))
-  })
-
-  io.f1_resp := DontCare
-  io.f2_resp := DontCare
-  io.f3_resp := DontCare
-
-  io.f1_resp.preds.map(_.is_br := false.B)
-  io.f2_resp.preds.map(_.is_br := false.B)
-  io.f3_resp.preds.map(_.is_br := false.B)
-
-  io.f1_resp.preds.map(_.is_jal := false.B)
-  io.f2_resp.preds.map(_.is_jal := false.B)
-  io.f3_resp.preds.map(_.is_jal := false.B)
-
-  io.f1_resp.preds.map(_.predicted_pc.valid := false.B)
-  io.f2_resp.preds.map(_.predicted_pc.valid := false.B)
-  io.f3_resp.preds.map(_.predicted_pc.valid := false.B)
-
-  io.f1_resp.pc := RegNext(io.f0_req.bits)
-  io.f2_resp.pc := RegNext(io.f1_resp.pc)
-  io.f3_resp.pc := RegNext(io.f2_resp.pc)
-
-  dontTouch(io.f1_resp)
-  dontTouch(io.f2_resp)
-  dontTouch(io.f3_resp)
-
-  when (io.update.valid) {
-    when (io.update.bits.cfi_is_br && io.update.bits.cfi_idx.valid) {
-      assert(io.update.bits.br_mask(io.update.bits.cfi_idx.bits))
-    }
-  }
+  val target        = UInt(vaddrBitsExtended.W)
 }
 
-class NullBranchPredictor(implicit p: Parameters) extends BranchPredictor()(p)
+class BranchPredictionRequest(implicit p: Parameters) extends BoomBundle()(p)
 {
-  when (io.update.valid) {
-    for (i <- 0 until fetchWidth) {
-      val pc = io.update.bits.pc + (i << 1).U
-      // when (io.update.bits.br_mask(i)) {
-      //   printf("Branch update %x %x\n", pc,
-      //     i.U === io.update.bits.cfi_idx.bits && io.update.bits.cfi_idx.valid)
-      // }
-    }
-  }
+  val pc    = UInt(vaddrBitsExtended.W)
+//  val ghist = UInt(globalHistoryLength.W)
+}
+
+abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(p)
+  with HasBoomFrontendParameters
+{
+  val io = IO(new Bundle {
+    val f0_req = Input(Valid(UInt(vaddrBitsExtended.W)))
+
+    val f1_resp = Output(Vec(bankWidth, new BranchPrediction))
+    val f2_resp = Output(Vec(bankWidth, new BranchPrediction))
+    val f3_resp = Output(Vec(bankWidth, new BranchPrediction))
+
+    val update = Input(Valid(new BranchPredictionBankUpdate))
+  })
+  io.f1_resp := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
+  io.f2_resp := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
+  io.f3_resp := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
+
 }
 
