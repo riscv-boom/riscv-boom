@@ -48,7 +48,7 @@ trait HasBoomFrontendParameters extends HasL1ICacheParameters
   // How many bytes wide is a bank?
   val bankBytes = fetchBytes/nBanks
 
-  val icIsDualBanked = nBanks == 2
+  val bankWidth = fetchWidth/nBanks
 
   require(nBanks == 1 || nBanks == 2)
 
@@ -57,33 +57,33 @@ trait HasBoomFrontendParameters extends HasL1ICacheParameters
   val numChunks = cacheParams.blockBytes / bankBytes
 
   // Which bank is the address pointing to?
-  def bank(addr: UInt) = addr(log2Ceil(bankBytes))
-  def inLastChunk(addr: UInt) = Mux(icIsDualBanked.B,
-    addr(blockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U,
-    false.B)
-
-  // Round address down to the nearest fetch boundary.
-  def alignToFetchBoundary(addr: UInt) = {
-    if (icIsDualBanked) ~(~addr | (bankBytes.U-1.U))
-    else ~(~addr | (fetchBytes.U-1.U))
+  def bank(addr: UInt) = if (nBanks == 2) addr(log2Ceil(bankBytes)) else 0.U
+  def mayNotBeDualBanked(addr: UInt) = {
+    require(nBanks == 2)
+    addr(blockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
   }
 
-  // Input: an ALIGNED pc.
-  // For the fall-through next PC, where does the next fetch pc start?
-  // This is complicated by cache-line wraparound.
-  def nextFetchStart(addr: UInt) = addr + Mux(inLastChunk(addr), bankBytes.U, fetchBytes.U)
+  def blockAlign(addr: UInt) = ~(~addr | (cacheParams.blockBytes-1).U)
+  def bankAlign(addr: UInt) = ~(~addr | (bankBytes-1).U)
 
-  // For a given fetch address, what is the mask of validly fetched instructions.
-  def fetchMask(addr: UInt) = {
-    // where is the first instruction, aligned to a log(fetchWidth) boundary?
-    val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
-    if (icIsDualBanked) {
-      // shave off the msb of idx since we are aligned to half-fetchWidth boundaries.
-      val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
-      val end_mask = Mux(inLastChunk(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
-      ((1 << fetchWidth)-1).U << shamt & end_mask
+  def nextBank(addr: UInt) = bankAlign(addr) + bankBytes.U
+  def nextFetch(addr: UInt) = {
+    if (nBanks == 1) {
+      bankAlign(addr) + bankBytes.U
     } else {
+      require(nBanks == 2)
+      bankAlign(addr) + Mux(mayNotBeDualBanked(addr), bankBytes.U, fetchBytes.U)
+    }
+  }
+
+  def fetchMask(addr: UInt) = {
+    val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
+    if (nBanks == 1) {
       ((1 << fetchWidth)-1).U << idx
+    } else {
+      val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
+      val end_mask = Mux(mayNotBeDualBanked(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
+      ((1 << fetchWidth)-1).U << shamt & end_mask
     }
   }
 }
@@ -184,7 +184,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   implicit val edge = outer.masterNode.edges.out(0)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
-  val bpd = Module(new SwBranchPredictor)
+  val bpd = Module(new BranchPredictor)
 
   val icache = outer.icache.module
   icache.io.hartid     := io.hartid
@@ -204,6 +204,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s0_replay_resp = Wire(new TLBResp)
   val s0_replay_ppc  = Wire(UInt())
 
+
+
+
   when (RegNext(reset.asBool) && !reset.asBool) {
     s0_valid := true.B
     s0_vpc   := io.reset_vector
@@ -212,8 +215,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   icache.io.req.valid     := s0_valid
   icache.io.req.bits.addr := s0_vpc
 
-  bpd.io.f0_req.valid     := s0_valid
-  bpd.io.f0_req.bits      := s0_vpc
+  bpd.io.f0_req.valid := s0_valid
+  bpd.io.f0_req.bits  := s0_vpc
 
   // --------------------------------------------------------
   // **** ICache Access (F1) ****
@@ -251,7 +254,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f1_targs = s1_bpd_resp.preds.map(_.predicted_pc.bits)
   val f1_predicted_target = Mux(f1_redirects.reduce(_||_),
       f1_targs(PriorityEncoder(f1_redirects)),
-      nextFetchStart(alignToFetchBoundary(s1_vpc)))
+      nextFetch(s1_vpc))
 
   when (s1_valid && !s1_tlb_miss) {
     s0_valid := true.B
@@ -286,7 +289,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f2_targs = f2_bpd_resp.preds.map(_.predicted_pc.bits)
   val f2_predicted_target = Mux(f2_redirects.reduce(_||_),
       f2_targs(PriorityEncoder(f2_redirects)),
-      nextFetchStart(alignToFetchBoundary(s2_vpc)))
+      nextFetch(s2_vpc))
 
   when ((s2_valid && !icache.io.resp.valid) ||
         (s2_valid && icache.io.resp.valid && !f3_ready)) {
@@ -339,7 +342,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val f3_imemresp     = f3.io.deq.bits
   val f3_data         = f3_imemresp.data
-  val f3_aligned_pc   = alignToFetchBoundary(f3_imemresp.pc)
+  val f3_aligned_pc   = bankAlign(f3_imemresp.pc)
 
   val f3_redirects    = Wire(Vec(fetchWidth, Bool()))
   val f3_targs        = Wire(Vec(fetchWidth, UInt(vaddrBitsExtended.W)))
@@ -374,7 +377,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       // Need special case since 0th instruction may carry over the wrap around
       inst     := f3_data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
       is_valid := f3_prev_is_half || !(f3_fetch_bundle.mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
-    } else if (icIsDualBanked && i == (fetchWidth / 2) - 1) {
+    } else if ((nBanks == 2) && i == (fetchWidth / 2) - 1) {
       // If we are using a banked I$ we could get cut-off halfway through the fetch bundle
       inst     := f3_data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
       is_valid := !(f3_fetch_bundle.mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) &&
@@ -425,8 +428,11 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   }
 
   when (f3.io.deq.fire()) {
-    val last_idx  = Mux(inLastChunk(f3_fetch_bundle.pc) && icIsDualBanked.B,
-                      (fetchWidth/2-1).U, (fetchWidth-1).U)
+    val last_idx = if (nBanks == 2) {
+      Mux(mayNotBeDualBanked(f3_fetch_bundle.pc), (fetchWidth/2-1).U, (fetchWidth-1).U)
+    } else {
+      (fetchWidth-1).U
+    }
     f3_prev_is_half := (!(f3_fetch_bundle.mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
                      && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
     f3_prev_half    := f3_fetch_bundle.insts(last_idx)(15,0)
@@ -443,7 +449,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // Redirect earlier stages only if the later stage
   // can consume this packet
   val f3_predicted_target = Mux(f3_redirects.reduce(_||_), f3_targs(PriorityEncoder(f3_redirects)),
-      nextFetchStart(alignToFetchBoundary(f3_fetch_bundle.pc)))
+      nextFetch(f3_fetch_bundle.pc))
+
   when (f3.io.deq.valid && f4_ready) {
     f3_fetch_bundle.cfi_idx.valid := f3_redirects.reduce(_||_)
     f3_fetch_bundle.cfi_idx.bits  := PriorityEncoder(f3_redirects)

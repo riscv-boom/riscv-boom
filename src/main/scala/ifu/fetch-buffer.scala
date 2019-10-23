@@ -88,7 +88,7 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
 
   // Step 1: Convert FetchPacket into a vector of MicroOps.
   for (i <- 0 until fetchWidth) {
-    val pc = (alignToFetchBoundary(io.enq.bits.pc) + (i << log2Ceil(coreInstBytes)).U)
+    val pc = (bankAlign(io.enq.bits.pc) + (i << log2Ceil(coreInstBytes)).U)
 
     in_uops(i)                := DontCare
     in_mask(i)                := io.enq.valid && io.enq.bits.mask(i)
@@ -98,8 +98,8 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
 
     if (i == 0) {
       when (io.enq.bits.edge_inst) {
-        in_uops(i).debug_pc := alignToFetchBoundary(io.enq.bits.pc) - 2.U
-        in_uops(i).pc_lob   := alignToFetchBoundary(io.enq.bits.pc)
+        in_uops(i).debug_pc := bankAlign(io.enq.bits.pc) - 2.U
+        in_uops(i).pc_lob   := bankAlign(io.enq.bits.pc)
         in_uops(i).edge_inst:= true.B
       }
     }
