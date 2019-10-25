@@ -36,6 +36,8 @@ class FrontendResp(implicit p: Parameters) extends BoomBundle()(p) {
   val data = UInt((fetchWidth * coreInstBits).W)
   val mask = UInt(fetchWidth.W)
   val xcpt = new FrontendExceptions
+
+  val debug_bsrc = UInt(BSRC_SZ.W)
 }
 
 /**
@@ -65,6 +67,8 @@ trait HasBoomFrontendParameters extends HasL1ICacheParameters
 
   def blockAlign(addr: UInt) = ~(~addr | (cacheParams.blockBytes-1).U)
   def bankAlign(addr: UInt) = ~(~addr | (bankBytes-1).U)
+
+  def fetchIdx(addr: UInt) = addr >> log2Ceil(fetchBytes)
 
   def nextBank(addr: UInt) = bankAlign(addr) + bankBytes.U
   def nextFetch(addr: UInt) = {
@@ -113,6 +117,10 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
 
   val bp_debug_if_oh= Vec(fetchWidth, Bool())
   val bp_xcpt_if_oh = Vec(fetchWidth, Bool())
+
+
+  // Source of the prediction for this bundle
+  val debug_bsrc    = UInt(BSRC_SZ.W)
 }
 
 
@@ -259,9 +267,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   when (s1_valid && !s1_tlb_miss) {
     s0_valid := true.B
 
-    s0_vpc := f1_predicted_target
+    s0_vpc       := f1_predicted_target
     s0_is_replay := false.B
-
   }
 
   // --------------------------------------------------------
@@ -269,8 +276,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // --------------------------------------------------------
 
   val s2_valid = RegNext(s1_valid && !f1_clear, false.B)
-  val s2_vpc = RegNext(s1_vpc)
-  val s2_ppc = RegNext(s1_ppc)
+  val s2_vpc  = RegNext(s1_vpc)
+  val s2_ppc  = RegNext(s1_ppc)
+  val s2_bsrc = WireInit(BSRC_1)
   val f2_clear = WireInit(false.B)
   val s2_tlb_resp = RegNext(s1_tlb_resp)
   val s2_is_replay = RegNext(s1_is_replay) && s2_valid
@@ -299,12 +307,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
     f1_clear := true.B
   } .elsewhen (s2_valid && f3_ready) {
-    when (s1_vpc =/= f2_predicted_target || !s1_valid) {
+    when ((s1_valid && s1_vpc =/= f2_predicted_target) || !s1_valid) {
       f1_clear := true.B
 
       s0_valid := true.B
       s0_vpc := f2_predicted_target
       s0_is_replay := false.B
+
+      s2_bsrc  := BSRC_2
     }
   }
   s0_replay_resp := s2_tlb_resp
@@ -331,6 +341,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   f3.io.enq.bits.data := Mux(s2_xcpt, 0.U, icache.io.resp.bits.data)
   f3.io.enq.bits.mask := fetchMask(s2_vpc)
   f3.io.enq.bits.xcpt := s2_tlb_resp
+  f3.io.enq.bits.debug_bsrc := s2_bsrc
 
   // The BPD resp comes in f3
   f3_bpd_resp.io.enq.valid := f3.io.deq.valid && RegNext(f3.io.enq.ready)
@@ -352,6 +363,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   f3_fetch_bundle.ftq_idx := 0.U // This gets assigned later
   f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf.inst
   f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae.inst
+  f3_fetch_bundle.debug_bsrc := f3_imemresp.debug_bsrc
 
   // Tracks trailing 16b of previous fetch packet
   val f3_prev_half    = Reg(UInt(coreInstBits.W))
@@ -411,7 +423,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f3_fetch_bundle.exp_insts(i) := exp_inst
 
     f3_fetch_bundle.mask(i) := f3.io.deq.valid && f3_imemresp.mask(i) && is_valid && !redirect_found
-    f3_targs(i)        := bpd_decoder.io.target
+    f3_targs(i)             := Mux(bpd_decoder.io.is_jalr, f3_bpd_resp.io.deq.bits.preds(i).predicted_pc.bits, bpd_decoder.io.target)
 
     f3_redirects(i)    := f3_fetch_bundle.mask(i) && (
       bpd_decoder.io.is_jal ||
@@ -459,15 +471,17 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       f3_prev_is_half := false.B
     }
 
-    when (s2_vpc =/= f3_predicted_target ||
-      (!s2_valid && s1_vpc =/= f3_predicted_target) ||
-      (!s2_valid && !s1_valid && s1_vpc =/= f3_predicted_target)) {
+    when (( s2_valid &&  s2_vpc =/= f3_predicted_target)             ||
+          (!s2_valid &&  s1_valid && s1_vpc =/= f3_predicted_target) ||
+          (!s2_valid && !s1_valid)) {
       f2_clear := true.B
       f1_clear := true.B
 
       s0_valid     := true.B
       s0_vpc       := f3_predicted_target
       s0_is_replay := false.B
+
+      f3_fetch_bundle.debug_bsrc := BSRC_3
     }
   }
 
