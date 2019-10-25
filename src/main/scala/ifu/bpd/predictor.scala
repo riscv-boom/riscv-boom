@@ -27,7 +27,10 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     val update = Input(Valid(new BranchPredictionUpdate))
   })
 
-  val banked_predictors = Seq.fill(nBanks) { Module(new SwBranchPredictorBank) }
+  val banked_predictors = Seq.fill(nBanks) { Module(new OffsetBTBBranchPredictorBank) }
+  for (b <- 0 until nBanks) {
+    dontTouch(banked_predictors(b).io)
+  }
 
   if (nBanks == 1) {
     banked_predictors(0).io.f0_req.bits  := bankAlign(io.f0_req.bits)
@@ -103,6 +106,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
 
   if (nBanks == 1) {
     banked_predictors(0).io.update := io.update
+    banked_predictors(0).io.update.bits.pc := bankAlign(io.update.bits.pc)
   } else {
     require(nBanks == 2)
     // Split the single update bundle for the fetchpacket into two updates
@@ -137,6 +141,12 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
 
     banked_predictors(0).io.update.bits.cfi_idx.bits  := io.update.bits.cfi_idx.bits
     banked_predictors(1).io.update.bits.cfi_idx.bits  := io.update.bits.cfi_idx.bits
+
+    banked_predictors(0).io.update.bits.cfi_taken  := io.update.bits.cfi_taken
+    banked_predictors(1).io.update.bits.cfi_taken  := io.update.bits.cfi_taken
+
+    banked_predictors(0).io.update.bits.cfi_mispredicted  := io.update.bits.cfi_mispredicted
+    banked_predictors(1).io.update.bits.cfi_mispredicted  := io.update.bits.cfi_mispredicted
 
     banked_predictors(0).io.update.bits.cfi_is_br := io.update.bits.cfi_is_br
     banked_predictors(1).io.update.bits.cfi_is_br := io.update.bits.cfi_is_br

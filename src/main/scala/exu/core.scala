@@ -278,6 +278,34 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
   val debug_tsc_reg = RegInit(0.U(xLen.W))
   val debug_irt_reg = RegInit(0.U(xLen.W))
+  val debug_cfis = RegInit(0.U(xLen.W))
+  val debug_f3_mispredicts = RegInit(0.U(xLen.W)) // How many cfis were missed by the l3 predictor
+  val debug_f2_mispredicts = RegInit(0.U(xLen.W)) // How many cfis were missed by the l2 predictor
+  val debug_f1_mispredicts = RegInit(0.U(xLen.W)) // How many cfis were missed by the l1 predictor
+  dontTouch(debug_f3_mispredicts)
+  dontTouch(debug_f2_mispredicts)
+  dontTouch(debug_f1_mispredicts)
+  dontTouch(debug_cfis)
+  debug_cfis := debug_cfis + PopCount(VecInit((0 until coreWidth) map {i =>
+    rob.io.commit.valids(i) &&
+    (rob.io.commit.uops(i).is_br || rob.io.commit.uops(i).is_jal || rob.io.commit.uops(i).is_jalr)
+  }))
+  debug_f3_mispredicts := debug_f3_mispredicts + PopCount(VecInit((0 until coreWidth) map { i =>
+    rob.io.commit.valids(i) &&
+    (rob.io.commit.uops(i).is_br || rob.io.commit.uops(i).is_jal || rob.io.commit.uops(i).is_jalr) &&
+    rob.io.commit.uops(i).debug_bsrc > BSRC_3
+  }))
+  debug_f2_mispredicts := debug_f2_mispredicts + PopCount(VecInit((0 until coreWidth) map { i =>
+    rob.io.commit.valids(i) &&
+    (rob.io.commit.uops(i).is_br || rob.io.commit.uops(i).is_jal || rob.io.commit.uops(i).is_jalr) &&
+    rob.io.commit.uops(i).debug_bsrc > BSRC_2
+  }))
+  debug_f1_mispredicts := debug_f1_mispredicts + PopCount(VecInit((0 until coreWidth) map { i =>
+    rob.io.commit.valids(i) &&
+    (rob.io.commit.uops(i).is_br || rob.io.commit.uops(i).is_jal || rob.io.commit.uops(i).is_jalr) &&
+    rob.io.commit.uops(i).debug_bsrc > BSRC_1
+  }))
+
   debug_tsc_reg := debug_tsc_reg + 1.U
   debug_irt_reg := debug_irt_reg + PopCount(rob.io.commit.valids.asUInt)
   dontTouch(debug_tsc_reg)

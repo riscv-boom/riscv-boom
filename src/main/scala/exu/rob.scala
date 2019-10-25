@@ -431,6 +431,15 @@ class Rob(
       }
     }
 
+
+    // Debug signal to figure out which prediction structure
+    // or core resolved a branch correctly
+    when (io.brupdate.b2.mispredict &&
+      MatchBank(GetBankIdx(io.brupdate.b2.uop.rob_idx))) {
+      rob_uop(GetRowIdx(io.brupdate.b2.uop.rob_idx)).debug_bsrc := BSRC_C
+      rob_uop(GetRowIdx(io.brupdate.b2.uop.rob_idx)).taken      := io.brupdate.b2.taken
+    }
+
     // -----------------------------------------------
     // Commit
     when (will_commit(w)) {
