@@ -195,7 +195,19 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   //************************************
   // Branch Prediction
+  val globalHistoryLength = 40
 
+  val nBIMSets  = 1024
+  val nBTBSets  = 512
+  val nEBTBSets = 256
+
+  val offsetBTBSz = 13
+
+  require(isPow2(nBIMSets))
+  require(isPow2(nBTBSets))
+  require(isPow2(nEBTBSets))
+  require(nEBTBSets <= nBTBSets)
+  require(nBTBSets <= nBIMSets)
 
   //************************************
   // Extra Knobs and Features
