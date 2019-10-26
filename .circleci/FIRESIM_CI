@@ -1,0 +1,24 @@
+Use FireSimBoomConfig
+
+Steps
+-----
+
+a. initialize manager with checked out ci version of chipyard
+c. firesim initialization steps
+d. script firesim init step (setting up proper region, code, etc)
+
+e. update boom here, build afi of boom
+
+f1. FEDORA: build and install in firesim
+f2. FEDORA: copy config_runtime.ini test (firemarshall should have this)
+f3. FEDORA: firesim launchrf,infra,runworkload,terminate (should figure out a proper timeout for this)
+f4. FEDORA: copy out runworkload_dir
+
+g1. BR: build and install in firesim
+g2. BR: copy config_runtime.ini test (firemarshall should have this)
+g3. BR: firesim launchrf,infra,runworkload,terminate (should figure out a proper timeout for this)
+g4. BR: copy out runworkload_dir
+
+a, c, d   -> e  -> -> -> f2, f3, f4
+          -> f1 -^    -> g2, g3, g4
+          -> g1 -^
