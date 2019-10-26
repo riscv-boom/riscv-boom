@@ -26,10 +26,10 @@ class SwBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank(
 
 
     btb_harness.io.req_valid := io.f0_req.valid
-    btb_harness.io.req_pc    := io.f0_req.bits + (w << 1).U
+    btb_harness.io.req_pc    := io.f0_req.bits.pc + (w << 1).U
 
     pred_harness.io.req_valid := io.f0_req.valid
-    pred_harness.io.req_pc    := io.f0_req.bits + (w << 1).U
+    pred_harness.io.req_pc    := io.f0_req.bits.pc + (w << 1).U
 
 
     btb_harness.io.update_valid  := io.update.valid && io.update.bits.cfi_idx.valid && (w == 0).B

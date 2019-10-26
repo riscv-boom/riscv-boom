@@ -105,6 +105,9 @@ class RobIo(
   val empty = Output(Bool())
   val ready = Output(Bool()) // ROB is busy unrolling rename state...
 
+  // Stall the frontend if we know we will redirect the PC
+  val flush_frontend = Output(Bool())
+
   // pass out debug information to high-level printf
   val debug = Output(new DebugRobSignals())
 
@@ -250,6 +253,7 @@ class Rob(
   val r_xcpt_val       = RegInit(false.B)
   val r_xcpt_uop       = Reg(new MicroOp())
   val r_xcpt_badvaddr  = Reg(UInt(xLen.W))
+  io.flush_frontend := r_xcpt_val
 
   //--------------------------------------------------
   // Utility

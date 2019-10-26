@@ -17,12 +17,13 @@ class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
   // If this is a branch, do we take it?
   val taken           = Bool()
 
-  // Is this a branch? (typically returned by BTB)
+  // Is this a branch?
   val is_br           = Bool()
-  // Is this a JAL? (typically returned by BTB)
+  // Is this a JAL?
   val is_jal          = Bool()
-  // What is the target of his branch/jump? (typically returned by BTB)
+  // What is the target of his branch/jump? Do we know the target?
   val predicted_pc    = Valid(UInt(vaddrBitsExtended.W))
+
 
 }
 
@@ -41,16 +42,25 @@ class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
 {
   val pc            = UInt(vaddrBitsExtended.W)
   // Mask of instructions which are branches.
+  // If these are not cfi_idx, then they were predicted not taken
   val br_mask       = UInt(fetchWidth.W)
-  val cfi_idx       = Valid(UInt(log2Ceil(fetchWidth).W))    // Which CFI was taken (if any)
+  // Which CFI was taken/mispredicted (if any)
+  val cfi_idx       = Valid(UInt(log2Ceil(fetchWidth).W))
+  // Was the cfi taken?
   val cfi_taken     = Bool()
+  // Was the cfi mispredicted from the original prediction?
   val cfi_mispredicted = Bool()
-
+  // Was the cfi a br?
   val cfi_is_br     = Bool()
+  // Was the cfi a jal/jalr?
   val cfi_is_jal  = Bool()
   //val cfi_is_ret  = Bool()
 
-  val target        = UInt(vaddrBitsExtended.W) // What did this CFI jump to?
+  val ghist = new GlobalHistory
+
+
+  // What did this CFI jump to?
+  val target        = UInt(vaddrBitsExtended.W) 
 }
 
 // A branch update to a single bank
@@ -67,20 +77,28 @@ class BranchPredictionBankUpdate(implicit p: Parameters) extends BoomBundle()(p)
   val cfi_is_br        = Bool()
   val cfi_is_jal       = Bool()
 
+  val hist             = UInt(globalHistoryLength.W)
+
   val target           = UInt(vaddrBitsExtended.W)
 }
 
 class BranchPredictionRequest(implicit p: Parameters) extends BoomBundle()(p)
 {
   val pc    = UInt(vaddrBitsExtended.W)
-//  val ghist = UInt(globalHistoryLength.W)
+  val ghist = new GlobalHistory
+}
+
+class BranchPredictionBankRequest(implicit p: Parameters) extends BoomBundle()(p)
+{
+  val pc    = UInt(vaddrBitsExtended.W)
+  val hist  = UInt(globalHistoryLength.W)
 }
 
 abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(p)
   with HasBoomFrontendParameters
 {
   val io = IO(new Bundle {
-    val f0_req = Input(Valid(UInt(vaddrBitsExtended.W)))
+    val f0_req = Input(Valid(new BranchPredictionBankRequest))
 
     val f1_resp = Output(Vec(bankWidth, new BranchPrediction))
     val f2_resp = Output(Vec(bankWidth, new BranchPrediction))
@@ -92,21 +110,21 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
   io.f2_resp := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
   io.f3_resp := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
 
-  val s0_req_pc   = io.f0_req.bits
-  val s0_req_idx  = fetchIdx(io.f0_req.bits)
+  val s0_req       = io.f0_req
+  val s0_req_idx   = fetchIdx(io.f0_req.bits.pc)
 
   val s0_update     = io.update
   val s0_update_idx = fetchIdx(io.update.bits.pc)
 
 
-  val s1_req_pc   = RegNext(s0_req_pc)
+  val s1_req      = RegNext(s0_req)
   val s1_req_idx  = RegNext(s0_req_idx)
 
   val s1_update     = RegNext(s0_update)
   val s1_update_idx = RegNext(s0_update_idx)
 
 
-  val s2_req_pc  = RegNext(s1_req_pc)
+  val s2_req     = RegNext(s1_req)
   val s2_req_idx = RegNext(s1_req_idx)
 
   val s2_update     = RegNext(s1_update)
