@@ -638,9 +638,127 @@ jobs:
                 name: Run HwachaBoomConfig riscv tests
                 command: .circleci/run-tests.sh hwachaboom
 
+    ###########################################################################################
+
+    initialize-manager:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - run:
+                name: Initialize the manager instance
+                command: |
+                    .circleci/firesim-init-manager.sh
+
+    build-largefireboom-afi:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - checkout
+            - run:
+                name: Create hash of BOOM + Chipyard
+                command: |
+                    .circleci/create-chipyard-boom-hash.sh
+            - restore_cache:
+                keys:
+                    - largefireboom-afi-v0-{{ checksum "../chipyard-boom.hash" }}
+            - run:
+                name: Build a LargeFireBoom AFI
+                command: |
+                    .circleci/firesim-build-largefireboom-afi.sh
+            - save_cache:
+                key: largefireboom-afi-v0-{{ checksum "../chipyard-boom.hash" }}
+                paths:
+                    - "/home/riscvuser/largefireboom_hwdb.ini"
+
+    build-buildroot:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - run:
+                name: Build a Buildroot test workload and install to FireSim
+                command: |
+                    .circleci/firesim-build-buildroot.sh
+
+    build-fedora:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - run:
+                name: Build a Fedora test workload and install to FireSim
+                command: |
+                    .circleci/firesim-build-fedora.sh
+
+    run-buildroot:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - run:
+                name: Run a Buildroot test
+                command: |
+                    .circleci/firesim-run-buildroot.sh
+
+    run-fedora:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - run:
+                name: Run a Fedora test workload
+                command: |
+                    .circleci/firesim-run-fedora.sh
+
 # Order and dependencies of jobs to run
 workflows:
     version: 2
+    run-firesim-ci:
+        jobs:
+            - wait-for-approval:
+                type: approval
+                
+            - initialize-manager:
+                requires:
+                    - wait-for-approval
+
+            - build-largefireboom-afi:
+                requires:
+                    - initialize-manager
+
+            - build-buildroot:
+                requires:
+                    - initialize-manager
+
+            - build-fedora:
+                requires:
+                    - initialize-manager
+
+            - run-buildroot:
+                requires:
+                    - build-largefireboom-afi
+                    - build-buildroot
+
+            - run-fedora:
+                requires:
+                    - build-largefireboom-afi
+                    - build-buildroot
+
     build-and-test-boom-configs:
         jobs:
             # Make the toolchains
@@ -732,3 +850,4 @@ workflows:
             - hwachaboomconfig-run-riscv-tests:
                 requires:
                     - prepare-hwachaboomconfig
+
