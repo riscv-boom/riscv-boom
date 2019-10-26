@@ -198,11 +198,15 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   //************************************
   // Branch Prediction
-  val globalHistoryLength = 40
+  val globalHistoryLength = 16
 
   val nBIMSets  = 1024
   val nBTBSets  = 512
   val nEBTBSets = 256
+
+  val TAGEnSets = Seq(1024, 512, 512, 512)
+  val TAGEhistoryLength = Seq(4, 8, 12, 16)
+  val TAGEtagSz = Seq(9, 9, 9, 9)
 
   val offsetBTBSz = 13
 
