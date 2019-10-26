@@ -17,7 +17,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   val io = IO(new Bundle {
 
     // Requests and responses
-    val f0_req  = Input(Valid(UInt(vaddrBitsExtended.W)))
+    val f0_req  = Input(Valid(new BranchPredictionRequest))
 
     val f1_resp = Output(new BranchPredictionBundle)
     val f2_resp = Output(new BranchPredictionBundle)
@@ -27,28 +27,33 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     val update = Input(Valid(new BranchPredictionUpdate))
   })
 
-  val banked_predictors = Seq.fill(nBanks) { Module(new OffsetBTBBranchPredictorBank) }
+  val banked_predictors = Seq.fill(nBanks) { Module(new TageBranchPredictorBank) }
   for (b <- 0 until nBanks) {
     dontTouch(banked_predictors(b).io)
   }
 
   if (nBanks == 1) {
-    banked_predictors(0).io.f0_req.bits  := bankAlign(io.f0_req.bits)
-    banked_predictors(0).io.f0_req.valid := io.f0_req.valid
+    banked_predictors(0).io.f0_req.bits.hist  := io.f0_req.bits.ghist.histories(0)
+    banked_predictors(0).io.f0_req.bits.pc    := bankAlign(io.f0_req.bits.pc)
+    banked_predictors(0).io.f0_req.valid      := io.f0_req.valid
   } else {
     require(nBanks == 2)
-    when (bank(io.f0_req.bits) === 0.U) {
-      banked_predictors(0).io.f0_req.bits  := bankAlign(io.f0_req.bits)
-      banked_predictors(0).io.f0_req.valid := io.f0_req.valid
+    when (bank(io.f0_req.bits.pc) === 0.U) {
+      banked_predictors(0).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(0)
+      banked_predictors(0).io.f0_req.bits.pc   := bankAlign(io.f0_req.bits.pc)
+      banked_predictors(0).io.f0_req.valid     := io.f0_req.valid
 
-      banked_predictors(1).io.f0_req.bits  := nextBank(io.f0_req.bits)
-      banked_predictors(1).io.f0_req.valid := io.f0_req.valid
+      banked_predictors(1).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(1)
+      banked_predictors(1).io.f0_req.bits.pc   := nextBank(io.f0_req.bits.pc)
+      banked_predictors(1).io.f0_req.valid     := io.f0_req.valid
     } .otherwise {
-      banked_predictors(0).io.f0_req.bits  := nextBank(io.f0_req.bits)
-      banked_predictors(0).io.f0_req.valid := io.f0_req.valid
+      banked_predictors(0).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(1)
+      banked_predictors(0).io.f0_req.bits.pc   := nextBank(io.f0_req.bits.pc)
+      banked_predictors(0).io.f0_req.valid     := io.f0_req.valid && !mayNotBeDualBanked(io.f0_req.bits.pc)
 
-      banked_predictors(1).io.f0_req.bits  := bankAlign(io.f0_req.bits)
-      banked_predictors(1).io.f0_req.valid := io.f0_req.valid
+      banked_predictors(1).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(0)
+      banked_predictors(1).io.f0_req.bits.pc   := bankAlign(io.f0_req.bits.pc)
+      banked_predictors(1).io.f0_req.valid     := io.f0_req.valid
     }
   }
 
@@ -96,17 +101,27 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     }
   }
 
-  io.f1_resp.pc := RegNext(io.f0_req.bits)
+  io.f1_resp.pc := RegNext(io.f0_req.bits.pc)
   io.f2_resp.pc := RegNext(io.f1_resp.pc)
   io.f3_resp.pc := RegNext(io.f2_resp.pc)
 
+  dontTouch(io.f0_req)
   dontTouch(io.f1_resp)
   dontTouch(io.f2_resp)
   dontTouch(io.f3_resp)
+  dontTouch(io.update)
 
   if (nBanks == 1) {
-    banked_predictors(0).io.update := io.update
-    banked_predictors(0).io.update.bits.pc := bankAlign(io.update.bits.pc)
+    banked_predictors(0).io.update.valid          := io.update.valid
+    banked_predictors(0).io.update.bits.pc        := bankAlign(io.update.bits.pc)
+    banked_predictors(0).io.update.bits.br_mask   := io.update.bits.br_mask
+    banked_predictors(0).io.update.bits.cfi_idx   := io.update.bits.cfi_idx
+    banked_predictors(0).io.update.bits.cfi_taken := io.update.bits.cfi_taken
+    banked_predictors(0).io.update.bits.cfi_mispredicted := io.update.bits.cfi_mispredicted
+    banked_predictors(0).io.update.bits.cfi_is_br        := io.update.bits.cfi_is_br
+    banked_predictors(0).io.update.bits.cfi_is_jal       := io.update.bits.cfi_is_jal
+    banked_predictors(0).io.update.bits.hist             := io.update.bits.ghist.histories(0)
+    banked_predictors(0).io.update.bits.target           := io.update.bits.target
   } else {
     require(nBanks == 2)
     // Split the single update bundle for the fetchpacket into two updates
@@ -124,6 +139,9 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
 
       banked_predictors(0).io.update.bits.cfi_idx.valid := io.update.bits.cfi_idx.valid && io.update.bits.cfi_idx.bits < bankWidth.U
       banked_predictors(1).io.update.bits.cfi_idx.valid := io.update.bits.cfi_idx.valid && io.update.bits.cfi_idx.bits >= bankWidth.U
+
+      banked_predictors(0).io.update.bits.hist := io.update.bits.ghist.histories(0)
+      banked_predictors(1).io.update.bits.hist := io.update.bits.ghist.histories(1)
     } .otherwise {
       banked_predictors(1).io.update.valid := io.update.valid
       banked_predictors(0).io.update.valid := io.update.valid && !mayNotBeDualBanked(io.update.bits.pc) &&
@@ -137,6 +155,9 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
 
       banked_predictors(1).io.update.bits.cfi_idx.valid := io.update.bits.cfi_idx.valid && io.update.bits.cfi_idx.bits < bankWidth.U
       banked_predictors(0).io.update.bits.cfi_idx.valid := io.update.bits.cfi_idx.valid && io.update.bits.cfi_idx.bits >= bankWidth.U
+
+      banked_predictors(1).io.update.bits.hist := io.update.bits.ghist.histories(0)
+      banked_predictors(0).io.update.bits.hist := io.update.bits.ghist.histories(1)
     }
 
     banked_predictors(0).io.update.bits.cfi_idx.bits  := io.update.bits.cfi_idx.bits

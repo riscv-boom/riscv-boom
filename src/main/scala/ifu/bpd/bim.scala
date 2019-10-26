@@ -11,6 +11,10 @@ import freechips.rocketchip.tilelink._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
+// class BIMMeta extends BoomBundle()(p)
+// {
+//   val bim   = UInt(2.W)
+// }
 
 class BIMEntry(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -50,22 +54,20 @@ class BIMBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank
 
   for (w <- 0 until bankWidth) {
 
-    io.f2_resp(w).taken        := s2_req_rdata(w).valid && (s2_req_rdata(w).bim(1) || !s2_req_rdata(w).is_br) && !doing_reset
-    io.f2_resp(w).is_br        := s2_req_rdata(w).valid &&  s2_req_rdata(w).is_br
-    io.f2_resp(w).is_jal       := s2_req_rdata(w).valid && !s2_req_rdata(w).is_br
+    io.f2_resp(w).taken        := s2_req.valid && s2_req_rdata(w).valid && (s2_req_rdata(w).bim(1) || !s2_req_rdata(w).is_br) && !doing_reset
+    io.f2_resp(w).is_br        := s2_req.valid && s2_req_rdata(w).valid &&  s2_req_rdata(w).is_br
+    io.f2_resp(w).is_jal       := s2_req.valid && s2_req_rdata(w).valid && !s2_req_rdata(w).is_br
 
     val update_pc = s2_update.bits.pc + (w << 1).U
     when (s2_update.bits.br_mask(w) || (s2_update.bits.cfi_idx.valid && s2_update.bits.cfi_idx.bits === w.U)) {
       val was_taken = s2_update.bits.cfi_idx.valid && (s2_update.bits.cfi_idx.bits === w.U) &&
         ((s2_update.bits.cfi_is_br && s2_update.bits.br_mask(w) && s2_update.bits.cfi_taken) || s2_update.bits.cfi_is_jal)
-      val old_bim_value    = s2_update_rdata(w).bim
+      val old_bim_value    = Mux(s2_update_rdata(w).valid, s2_update_rdata(w).bim, 2.U)
 
       s2_update_wdata(w).valid   := true.B
       s2_update_wdata(w).is_br   := s2_update.bits.br_mask(w)
 
-      s2_update_wdata(w).bim     := Mux(s2_update_rdata(w).valid,
-                                        bimWrite(old_bim_value, was_taken),
-                                        Mux(was_taken, 2.U, 1.U))
+      s2_update_wdata(w).bim     := bimWrite(old_bim_value, was_taken)
     }
   }
 

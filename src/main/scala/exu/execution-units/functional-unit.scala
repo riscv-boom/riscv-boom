@@ -308,7 +308,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   var op1_data: UInt = null
   if (isJmpUnit) {
     // Get the uop PC for jumps
-    val block_pc = AlignPCToBoundary(io.get_ftq_pc.fetch_pc, icBlockBytes)
+    val block_pc = AlignPCToBoundary(io.get_ftq_pc.entry.fetch_pc, icBlockBytes)
     val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
 
     op1_data = Mux(uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
@@ -425,8 +425,8 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
     when (pc_sel === PC_JALR) {
       mispredict := !io.get_ftq_pc.next_val ||
                     (io.get_ftq_pc.next_pc =/= jalr_target) ||
-                    !io.get_ftq_pc.fetch_cfi.valid ||
-                    (io.get_ftq_pc.fetch_cfi.bits =/= uop.pc_lob(log2Ceil(fetchWidth), 1))
+                    !io.get_ftq_pc.entry.cfi_idx.valid ||
+                    (io.get_ftq_pc.entry.cfi_idx.bits =/= uop.pc_lob(log2Ceil(fetchWidth), 1))
     }
   }
 

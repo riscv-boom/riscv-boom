@@ -11,13 +11,13 @@ import freechips.rocketchip.tilelink._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
-class OffsetBTBEntry(implicit p: Parameters) extends BoomBundle()(p)
+class DenseBTBEntry(implicit p: Parameters) extends BoomBundle()(p)
 {
   val extended = Bool()
   val offset   = SInt(offsetBTBSz.W)
 }
 
-class OffsetBTBBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
+class DenseBTBBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   val bim = Module(new BIMBranchPredictorBank)
   bim.io.f0_req := io.f0_req
@@ -45,11 +45,11 @@ class OffsetBTBBranchPredictorBank(implicit p: Parameters) extends BranchPredict
   val s2_req_rebtb = RegNext(s1_req_rebtb)
 
   for (w <- 0 until bankWidth) {
-    io.f2_resp(w).predicted_pc.valid := !doing_reset
+    io.f2_resp(w).predicted_pc.valid := !doing_reset && s2_req.valid
     io.f2_resp(w).predicted_pc.bits  := Mux(
       s2_req_rext(w),
       s2_req_rebtb,
-      (s2_req_pc.asSInt + (w << 1).S + s2_req_rbtb(w)).asUInt)
+      (s2_req.bits.pc.asSInt + (w << 1).S + s2_req_rbtb(w)).asUInt)
 
   }
 
@@ -61,7 +61,7 @@ class OffsetBTBBranchPredictorBank(implicit p: Parameters) extends BranchPredict
     (s2_update.bits.pc + (s2_update.bits.cfi_idx.bits << 1)).asSInt)
   val offset_is_extended = (new_offset_value > max_offset_value ||
                             new_offset_value < min_offset_value)
-  val s2_update_wbtb = Wire(new OffsetBTBEntry)
+  val s2_update_wbtb = Wire(new DenseBTBEntry)
   s2_update_wbtb.extended := offset_is_extended
   s2_update_wbtb.offset   := new_offset_value
 
