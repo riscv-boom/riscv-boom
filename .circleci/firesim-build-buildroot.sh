@@ -10,6 +10,8 @@ source $SCRIPT_DIR/defaults.sh
 cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-br-build.sh
 #!/bin/bash
 
+set -ex
+
 cd $REMOTE_AWS_MARSHAL_DIR
 ./marshal build test/smoke1.json
 ./marshal install test/smoke1.json

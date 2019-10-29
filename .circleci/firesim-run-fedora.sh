@@ -13,9 +13,11 @@ copy $HOME/largefireboom_hwdb.ini $SERVER_AWS:$REMOTE_AWS_FSIM_DEPLOY_DIR/firesi
 cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-run-fedora.sh
 #!/bin/bash
 
+set -ex
+
 # setup firesim
 cd $REMOTE_AWS_FSIM_DIR
-source sourceme_f1_manager.sh
+source sourceme-f1-manager.sh
 
 # run test
 firesim launchrunfarm -c $REMOTE_AWS_FSIM_DEPLOY_DIR/firesim-configs/config_runtime_fedora.ini -a $REMOTE_AWS_FSIM_DEPLOY_DIR/firesim-configs/largefireboom_hwdb.ini
