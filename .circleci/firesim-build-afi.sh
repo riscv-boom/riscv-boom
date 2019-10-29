@@ -13,7 +13,7 @@ SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
 if [ ! -d "$HOME/$1" ]; then
-    copy $LOCAL_CHECKOUT_DIR/.circleci/firesim-configs/$1 $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR
+    copy $LOCAL_CHECKOUT_DIR/.circleci/firesim-configs/$1 $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/
 
     # create a script to run
     cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-build-$1-afi.sh
@@ -34,5 +34,5 @@ EOF
     run_script_aws $LOCAL_CHECKOUT_DIR/firesim-build-$1-afi.sh
 
     # copy over hwdb entries to cache them
-    copy $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/built-hwdb-entries/$1 $HOME/
+    copy $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/built-hwdb-entries/$1 $HOME/$1
 fi
