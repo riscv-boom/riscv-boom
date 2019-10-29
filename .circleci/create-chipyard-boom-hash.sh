@@ -9,4 +9,5 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
-cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash $CIRCLE_SHA1 &> $HOME/chipyard-boom.hash
+cp $LOCAL_CHECKOUT_DIR/CHIPYARD.hash $HOME/chipyard-boom.hash
+echo $CIRCLE_SHA1 >> $HOME/chipyard-boom.hash
