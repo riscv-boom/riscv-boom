@@ -58,11 +58,16 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   }
 
   if (nBanks == 1) {
-    io.f1_resp.preds := banked_predictors(0).io.f1_resp
-    io.f2_resp.preds := banked_predictors(0).io.f2_resp
-    io.f3_resp.preds := banked_predictors(0).io.f3_resp
+    io.f1_resp.preds   := banked_predictors(0).io.f1_resp
+    io.f2_resp.preds   := banked_predictors(0).io.f2_resp
+    io.f3_resp.preds   := banked_predictors(0).io.f3_resp
+    io.f3_resp.meta(0) := banked_predictors(0).io.f3_meta
   } else {
     require(nBanks == 2)
+
+    // The branch prediction metadata is stored un-shuffled
+    io.f3_resp.meta(0)    := banked_predictors(0).io.f3_meta
+    io.f3_resp.meta(1)    := banked_predictors(1).io.f3_meta
 
     when (bank(io.f1_resp.pc) === 0.U) {
       for (i <- 0 until bankWidth) {
@@ -105,6 +110,11 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   io.f2_resp.pc := RegNext(io.f1_resp.pc)
   io.f3_resp.pc := RegNext(io.f2_resp.pc)
 
+  // We don't care about meta from the f1 and f2 resps
+  // Use the meta from the latest resp
+  io.f1_resp.meta := DontCare
+  io.f2_resp.meta := DontCare
+
   dontTouch(io.f0_req)
   dontTouch(io.f1_resp)
   dontTouch(io.f2_resp)
@@ -112,20 +122,26 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   dontTouch(io.update)
 
   if (nBanks == 1) {
-    banked_predictors(0).io.update.valid          := io.update.valid
-    banked_predictors(0).io.update.bits.pc        := bankAlign(io.update.bits.pc)
-    banked_predictors(0).io.update.bits.br_mask   := io.update.bits.br_mask
-    banked_predictors(0).io.update.bits.cfi_idx   := io.update.bits.cfi_idx
-    banked_predictors(0).io.update.bits.cfi_taken := io.update.bits.cfi_taken
+    banked_predictors(0).io.update.valid                 := io.update.valid
+    banked_predictors(0).io.update.bits.pc               := bankAlign(io.update.bits.pc)
+    banked_predictors(0).io.update.bits.br_mask          := io.update.bits.br_mask
+    banked_predictors(0).io.update.bits.cfi_idx          := io.update.bits.cfi_idx
+    banked_predictors(0).io.update.bits.cfi_taken        := io.update.bits.cfi_taken
     banked_predictors(0).io.update.bits.cfi_mispredicted := io.update.bits.cfi_mispredicted
     banked_predictors(0).io.update.bits.cfi_is_br        := io.update.bits.cfi_is_br
     banked_predictors(0).io.update.bits.cfi_is_jal       := io.update.bits.cfi_is_jal
     banked_predictors(0).io.update.bits.hist             := io.update.bits.ghist.histories(0)
     banked_predictors(0).io.update.bits.target           := io.update.bits.target
+    banked_predictors(0).io.update.bits.meta             := io.update.bits.meta(0)
   } else {
     require(nBanks == 2)
     // Split the single update bundle for the fetchpacket into two updates
     // 1 for each bank.
+
+    // The meta was not interleaved
+    banked_predictors(0).io.update.bits.meta := io.update.bits.meta(0)
+    banked_predictors(1).io.update.bits.meta := io.update.bits.meta(1)
+
     when (bank(io.update.bits.pc) === 0.U) {
       banked_predictors(0).io.update.valid := io.update.valid
       banked_predictors(1).io.update.valid := io.update.valid &&
@@ -187,7 +203,5 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
 }
 
 class NullBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
-{
 
-}
 

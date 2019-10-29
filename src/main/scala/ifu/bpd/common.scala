@@ -31,14 +31,17 @@ class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 // This is typically merged from individual predictions from the banked
 // predictor
 class BranchPredictionBundle(implicit p: Parameters) extends BoomBundle()(p)
+  with HasBoomFrontendParameters
 {
   val pc = UInt(vaddrBitsExtended.W)
   val preds = Vec(fetchWidth, new BranchPrediction)
+  val meta  = Vec(nBanks, UInt(bpdMaxMetaLength.W))
 }
 
 
 // A branch update for a fetch-width worth of instructions
 class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
+  with HasBoomFrontendParameters
 {
   val pc            = UInt(vaddrBitsExtended.W)
   // Mask of instructions which are branches.
@@ -60,7 +63,9 @@ class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
 
 
   // What did this CFI jump to?
-  val target        = UInt(vaddrBitsExtended.W) 
+  val target        = UInt(vaddrBitsExtended.W)
+
+  val meta          = Vec(nBanks, UInt(bpdMaxMetaLength.W))
 }
 
 // A branch update to a single bank
@@ -80,6 +85,8 @@ class BranchPredictionBankUpdate(implicit p: Parameters) extends BoomBundle()(p)
   val hist             = UInt(globalHistoryLength.W)
 
   val target           = UInt(vaddrBitsExtended.W)
+
+  val meta             = UInt(bpdMaxMetaLength.W)
 }
 
 class BranchPredictionRequest(implicit p: Parameters) extends BoomBundle()(p)
@@ -104,11 +111,16 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
     val f2_resp = Output(Vec(bankWidth, new BranchPrediction))
     val f3_resp = Output(Vec(bankWidth, new BranchPrediction))
 
+    // Store the meta as a UInt, use width inference to figure out the shape
+    val f3_meta = Output(UInt(bpdMaxMetaLength.W))
+
     val update = Input(Valid(new BranchPredictionBankUpdate))
   })
   io.f1_resp := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
   io.f2_resp := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
   io.f3_resp := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
+
+  io.f3_meta := 0.U
 
   val s0_req       = io.f0_req
   val s0_req_idx   = fetchIdx(io.f0_req.bits.pc)
@@ -127,7 +139,5 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
   val s2_req     = RegNext(s1_req)
   val s2_req_idx = RegNext(s1_req_idx)
 
-  val s2_update     = RegNext(s1_update)
-  val s2_update_idx = RegNext(s1_update_idx)
 }
 

@@ -11,10 +11,10 @@ import freechips.rocketchip.tilelink._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
-// class BIMMeta extends BoomBundle()(p)
-// {
-//   val bim   = UInt(2.W)
-// }
+class BIMMeta extends Bundle
+{
+  val bim   = UInt(2.W)
+}
 
 class BIMEntry(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -41,43 +41,52 @@ class BIMBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank
   when (reset_idx === (nBIMSets-1).U) { doing_reset := false.B }
 
 
-  val data  = SyncReadMem(nBIMSets, Vec(bankWidth, new BIMEntry))
+  val data  = Seq.fill(bankWidth) { SyncReadMem(nBIMSets, new BIMEntry) }
 
-  val s1_req_rdata    = data.read(s0_req_idx   , io.f0_req.valid)
-  val s1_update_rdata = data.read(s0_update_idx, io.update.valid)
+  val s1_req_rdata    = VecInit(data.map(_.read(s0_req_idx   , io.f0_req.valid)))
 
   val s2_req_rdata      = RegNext(s1_req_rdata)
 
-  val s2_update_rdata   = RegNext(s1_update_rdata)
-  val s2_update_wdata   = WireInit(s2_update_rdata)
-
+  val s1_update_wdata   = Wire(Vec(bankWidth, new BIMEntry))
+  val s1_update_wmask   = Wire(Vec(bankWidth, Bool()))
+  val s1_update_meta    = s1_update.bits.meta.asTypeOf(Vec(bankWidth, new BIMMeta))
+  val s2_meta           = Wire(Vec(bankWidth, new BIMMeta))
 
   for (w <- 0 until bankWidth) {
 
     io.f2_resp(w).taken        := s2_req.valid && s2_req_rdata(w).valid && (s2_req_rdata(w).bim(1) || !s2_req_rdata(w).is_br) && !doing_reset
     io.f2_resp(w).is_br        := s2_req.valid && s2_req_rdata(w).valid &&  s2_req_rdata(w).is_br
     io.f2_resp(w).is_jal       := s2_req.valid && s2_req_rdata(w).valid && !s2_req_rdata(w).is_br
+    s2_meta(w).bim             := Mux(s2_req.valid && s2_req_rdata(w).valid, s2_req_rdata(w).bim, 2.U)
 
-    val update_pc = s2_update.bits.pc + (w << 1).U
-    when (s2_update.bits.br_mask(w) || (s2_update.bits.cfi_idx.valid && s2_update.bits.cfi_idx.bits === w.U)) {
-      val was_taken = s2_update.bits.cfi_idx.valid && (s2_update.bits.cfi_idx.bits === w.U) &&
-        ((s2_update.bits.cfi_is_br && s2_update.bits.br_mask(w) && s2_update.bits.cfi_taken) || s2_update.bits.cfi_is_jal)
-      val old_bim_value    = Mux(s2_update_rdata(w).valid, s2_update_rdata(w).bim, 2.U)
+    s1_update_wmask(w)         := false.B
+    s1_update_wdata(w)         := DontCare
 
-      s2_update_wdata(w).valid   := true.B
-      s2_update_wdata(w).is_br   := s2_update.bits.br_mask(w)
+    val update_pc = s1_update.bits.pc + (w << 1).U
 
-      s2_update_wdata(w).bim     := bimWrite(old_bim_value, was_taken)
+    when (s1_update.bits.br_mask(w) || (s1_update.bits.cfi_idx.valid && s1_update.bits.cfi_idx.bits === w.U)) {
+      val was_taken = s1_update.bits.cfi_idx.valid && (s1_update.bits.cfi_idx.bits === w.U) &&
+        ((s1_update.bits.cfi_is_br && s1_update.bits.br_mask(w) && s1_update.bits.cfi_taken) || s1_update.bits.cfi_is_jal)
+      val old_bim_value    = s1_update_meta(w).bim
+
+      s1_update_wmask(w)         := true.B
+      s1_update_wdata(w).valid   := true.B
+      s1_update_wdata(w).is_br   := s1_update.bits.br_mask(w)
+
+      s1_update_wdata(w).bim     := bimWrite(old_bim_value, was_taken)
+    }
+
+  }
+  for (w <- 0 until bankWidth) {
+    when (doing_reset || s1_update_wmask(w)) {
+      data(w).write(
+        Mux(doing_reset, reset_idx, s1_update_idx),
+        Mux(doing_reset, (0.U).asTypeOf(new BIMEntry), s1_update_wdata(w))
+      )
     }
   }
 
-  when (doing_reset ||
-    (s2_update.valid && (s2_update.bits.br_mask =/= 0.U || s2_update.bits.cfi_idx.valid))) {
-    data.write(
-      Mux(doing_reset, reset_idx, s2_update_idx),
-      Mux(doing_reset, VecInit(Seq.fill(bankWidth) { (0.U).asTypeOf(new BIMEntry) }), s2_update_wdata)
-    )
-  }
-
   io.f3_resp := RegNext(io.f2_resp)
+  io.f3_meta := RegNext(s2_meta.asUInt)
+  require(s2_meta.asUInt.getWidth <= bpdMaxMetaLength)
 }

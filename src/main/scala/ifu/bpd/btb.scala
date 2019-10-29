@@ -25,6 +25,7 @@ class DenseBTBBranchPredictorBank(implicit p: Parameters) extends BranchPredicto
   io.f1_resp := bim.io.f1_resp
   io.f2_resp := bim.io.f2_resp
   io.f3_resp := RegNext(io.f2_resp)
+  io.f3_meta := bim.io.f3_meta
 
 
   val doing_reset = RegInit(true.B)
@@ -53,34 +54,34 @@ class DenseBTBBranchPredictorBank(implicit p: Parameters) extends BranchPredicto
 
   }
 
-  val s2_update_cfi_idx = s2_update.bits.cfi_idx.bits
+  val s1_update_cfi_idx = s1_update.bits.cfi_idx.bits
 
   val max_offset_value = (~(0.U)((offsetBTBSz-1).W)).asSInt
   val min_offset_value = Cat(1.B, (0.U)((offsetBTBSz-1).W)).asSInt
-  val new_offset_value = (s2_update.bits.target.asSInt -
-    (s2_update.bits.pc + (s2_update.bits.cfi_idx.bits << 1)).asSInt)
+  val new_offset_value = (s1_update.bits.target.asSInt -
+    (s1_update.bits.pc + (s1_update.bits.cfi_idx.bits << 1)).asSInt)
   val offset_is_extended = (new_offset_value > max_offset_value ||
                             new_offset_value < min_offset_value)
-  val s2_update_wbtb = Wire(new DenseBTBEntry)
-  s2_update_wbtb.extended := offset_is_extended
-  s2_update_wbtb.offset   := new_offset_value
+  val s1_update_wbtb = Wire(new DenseBTBEntry)
+  s1_update_wbtb.extended := offset_is_extended
+  s1_update_wbtb.offset   := new_offset_value
 
-  val s2_update_wmask = (UIntToOH(s2_update_cfi_idx) &
-    Fill(bankWidth, s2_update.bits.cfi_idx.valid && s2_update.valid))
+  val s1_update_wmask = (UIntToOH(s1_update_cfi_idx) &
+    Fill(bankWidth, s1_update.bits.cfi_idx.valid && s1_update.valid))
 
 
 
   btb.write(
-    Mux(doing_reset, reset_idx, s2_update_idx),
+    Mux(doing_reset, reset_idx, s1_update_idx),
     VecInit(Seq.fill(bankWidth) {
-      Mux(doing_reset, (0.S), s2_update_wbtb.offset)
+      Mux(doing_reset, (0.S), s1_update_wbtb.offset)
     }),
-    VecInit(Mux(doing_reset, ~(0.U(bankWidth.W)), s2_update_wmask).asBools)
+    VecInit(Mux(doing_reset, ~(0.U(bankWidth.W)), s1_update_wmask).asBools)
   )
   when (doing_reset) { extended(reset_idx) := (0.U(bankWidth.W)).asBools }
 
-  when (s2_update.valid && s2_update.bits.cfi_idx.valid && offset_is_extended) {
-    ebtb.write(s2_update_idx, s2_update.bits.target)
+  when (s1_update.valid && s1_update.bits.cfi_idx.valid && offset_is_extended) {
+    ebtb.write(s1_update_idx, s1_update.bits.target)
   }
 }
 

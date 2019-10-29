@@ -105,6 +105,7 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
   io.f1_resp := base.io.f1_resp
   io.f2_resp := base.io.f2_resp
   io.f3_resp := base.io.f3_resp
+  io.f3_meta := base.io.f3_meta
 
 
 
