@@ -41,6 +41,7 @@ case class FtqParameters(
  * Bundle to add to the FTQ RAM and to be used as the pass in IO
  */
 class FTQBundle(implicit p: Parameters) extends BoomBundle
+  with HasBoomFrontendParameters
 {
   // TODO compress out high-order bits
   val fetch_pc  = UInt(vaddrBitsExtended.W)
@@ -57,6 +58,9 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
 
   // What global history should be used to query this fetch bundle
   val ghist = new GlobalHistory
+
+  // Metadata for the branch predictor
+  val bpd_meta = Vec(nBanks, UInt(bpdMaxMetaLength.W))
 }
 
 /**
@@ -143,6 +147,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
         prev_entry.cfi_idx.valid,
         prev_entry.fetch_pc)
     )
+    ram(enq_ptr).bpd_meta := io.enq.bits.bpd_meta
 
     enq_ptr := WrapInc(enq_ptr, num_entries)
   }
@@ -181,6 +186,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     io.bpdupdate.bits.cfi_is_br        := entry.br_mask(cfi_idx)
     io.bpdupdate.bits.cfi_is_jal       := entry.jal_mask(cfi_idx)
     io.bpdupdate.bits.ghist            := entry.ghist
+    io.bpdupdate.bits.meta             := entry.bpd_meta
     bpd_ptr := WrapInc(bpd_ptr, num_entries)
 
     first_empty := false.B

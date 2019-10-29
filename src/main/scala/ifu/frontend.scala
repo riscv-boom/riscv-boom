@@ -152,6 +152,7 @@ trait HasBoomFrontendParameters extends HasL1ICacheParameters
  * relevant signals together.
  */
 class FetchBundle(implicit p: Parameters) extends BoomBundle
+  with HasBoomFrontendParameters
 {
   val pc            = UInt(vaddrBitsExtended.W)
   val edge_inst     = Bool() // True if 1st instruction in this bundle is pc - 2
@@ -174,6 +175,8 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
   val bp_debug_if_oh= Vec(fetchWidth, Bool())
   val bp_xcpt_if_oh = Vec(fetchWidth, Bool())
 
+
+  val bpd_meta      = Vec(nBanks, UInt())
 
   // Source of the prediction for this bundle
   val debug_bsrc    = UInt(BSRC_SZ.W)
@@ -273,6 +276,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s0_replay_resp = Wire(new TLBResp)
   val s0_replay_bpd_resp = Wire(new BranchPredictionBundle)
   val s0_replay_ppc  = Wire(UInt())
+  val s0_s1_use_f3_bpd_resp = WireInit(false.B)
 
 
 
@@ -312,7 +316,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s1_tlb_miss = !s1_is_replay && tlb.io.resp.miss
   val s1_tlb_resp = Mux(s1_is_replay, RegNext(s0_replay_resp), tlb.io.resp)
   val s1_ppc  = Mux(s1_is_replay, RegNext(s0_replay_ppc), tlb.io.resp.paddr)
-  val s1_bpd_resp = Mux(s1_is_replay, RegNext(s0_replay_bpd_resp), bpd.io.f1_resp)
+  val s1_bpd_resp = Mux(s1_is_replay,
+    Mux(RegNext(s0_s1_use_f3_bpd_resp), bpd.io.f3_resp, RegNext(s0_replay_bpd_resp)), bpd.io.f1_resp)
 
   icache.io.s1_paddr := s1_ppc
   icache.io.s1_kill  := tlb.io.resp.miss || f1_clear
@@ -389,7 +394,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s0_valid := !((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay)
     s0_vpc   := s2_vpc
     s0_is_replay := s2_valid && icache.io.resp.valid
-
+    // When this is not a replay (it queried the BPDs, we should use f3 resp in the replaying s1)
+    s0_s1_use_f3_bpd_resp := !s2_is_replay
     s0_ghist := s2_ghist
 
     f1_clear := true.B
@@ -507,7 +513,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     bpu.io.bp     := io.cpu.bp
     bpu.io.pc     := pc
     bpu.io.ea     := DontCare
-
     val exp_inst = ExpandRVC(inst)
 
     bpd_decoder.io.inst := exp_inst
@@ -518,9 +523,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f3_fetch_bundle.mask(i) := f3.io.deq.valid && f3_imemresp.mask(i) && is_valid && !redirect_found
     f3_targs(i)             := Mux(bpd_decoder.io.is_jalr, f3_bpd_resp.io.deq.bits.preds(i).predicted_pc.bits, bpd_decoder.io.target)
 
+    // Redirect if
+    //  1) its a JAL/JALR (unconditional)
+    //  2) the BPD believes this is a branch and says we should take it
+    //  3) the BPD does not believe this is a branch, (predict taken when no info)
     f3_redirects(i)    := f3_fetch_bundle.mask(i) && (
       bpd_decoder.io.is_jal ||
-        (bpd_decoder.io.is_br && f3_bpd_resp.io.deq.bits.preds(i).taken))
+        (bpd_decoder.io.is_br && (f3_bpd_resp.io.deq.bits.preds(i).taken || !f3_bpd_resp.io.deq.bits.preds(i).is_br ))
+    )
 
 
     f3_fetch_bundle.br_mask(i)  := f3_fetch_bundle.mask(i) && bpd_decoder.io.is_br
@@ -532,7 +542,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f3_fetch_bundle.bp_xcpt_if_oh (i) := bpu.io.xcpt_if
   }
 
-  f3_fetch_bundle.ghist := f3.io.deq.bits.ghist
+  f3_fetch_bundle.ghist    := f3.io.deq.bits.ghist
+  f3_fetch_bundle.bpd_meta := f3_bpd_resp.io.deq.bits.meta
 
   when (f3.io.deq.fire()) {
     val last_idx = if (nBanks == 2) {
