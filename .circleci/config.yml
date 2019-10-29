@@ -647,6 +647,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
             - checkout
             - run:
                 name: Initialize the manager instance
@@ -660,6 +663,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
             - checkout
             - run:
                 name: Create hash of BOOM + Chipyard
@@ -684,6 +690,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
             - run:
                 name: Build a Buildroot test workload and install to FireSim
                 command: |
@@ -696,6 +705,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
             - run:
                 name: Build a Fedora test workload and install to FireSim
                 command: |
@@ -708,6 +720,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
             - run:
                 name: Run a Buildroot test
                 command: |
@@ -720,6 +735,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
             - run:
                 name: Run a Fedora test workload
                 command: |
@@ -738,14 +756,17 @@ workflows:
                     - wait-for-approval
 
             - build-largefireboom-afi:
+                type: approval
                 requires:
                     - initialize-manager
 
             - build-buildroot:
+                type: approval
                 requires:
                     - initialize-manager
 
             - build-fedora:
+                type: approval
                 requires:
                     - initialize-manager
 
@@ -757,19 +778,31 @@ workflows:
             - run-fedora:
                 requires:
                     - build-largefireboom-afi
-                    - build-buildroot
+                    - build-fedora
 
     build-and-test-boom-configs:
         jobs:
+            - wait-for-approval:
+                type: approval
+
             # Make the toolchains
-            - install-riscv-toolchain
-            - install-esp-toolchain
+            - install-riscv-toolchain:
+                requires:
+                    - wait-for-approval
+
+            - install-esp-toolchain:
+                requires:
+                    - wait-for-approval
 
             # Build verilator
-            - prepare-build-environment
+            - prepare-build-environment:
+                requires:
+                    - wait-for-approval
 
             # Run generic syntax checking
-            - run-scala-checkstyle
+            - run-scala-checkstyle:
+                requires:
+                    - wait-for-approval
 
             # Prepare the verilator builds
             - prepare-smallboomconfig:
