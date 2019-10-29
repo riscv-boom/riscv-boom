@@ -3,9 +3,19 @@
 # turn echo on and error on earliest command
 set -ex
 
-run_manager
-    cd $REMOTE_AWS_MARSHAL_DIR
-    git checkout MY_HASH_WITH_THE_CAT_PROC_STUFF
+# get shared variables
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+source $SCRIPT_DIR/defaults.sh
 
-    ./marshal build workloads/br-base-test.json
-    ./marshal install workloads/br-base-test.json
+cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-br-build.sh
+#!/bin/bash
+
+cd $REMOTE_AWS_MARSHAL_DIR
+./marshal build test/smoke1.json
+./marshal install test/smoke1.json
+EOF
+
+# execute the script
+chmod +x $LOCAL_CHECKOUT_DIR/firesim-br-build.sh
+run_script_aws $LOCAL_CHECKOUT_DIR/firesim-br-build.sh
+

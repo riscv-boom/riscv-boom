@@ -3,8 +3,19 @@
 # turn echo on and error on earliest command
 set -ex
 
-run_manager
-    cd $REMOTE_AWS_MARSHAL_DIR
+# get shared variables
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
+source $SCRIPT_DIR/defaults.sh
 
-    ./marshal build workloads/fedora-test.json
-    ./marshal install workloads/fedora-test.json
+cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-fed-build.sh
+#!/bin/bash
+
+cd $REMOTE_AWS_MARSHAL_DIR
+./marshal build test/fed-test.json
+./marshal install test/fed-test.json
+EOF
+
+# execute the script
+chmod +x $LOCAL_CHECKOUT_DIR/firesim-fed-build.sh
+run_script_aws $LOCAL_CHECKOUT_DIR/firesim-fed-build.sh
+
