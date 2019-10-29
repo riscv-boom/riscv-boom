@@ -71,7 +71,7 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
  * Top level core object that connects the Frontend to the rest of the pipeline.
  */
 class BoomCore(implicit p: Parameters) extends BoomModule
-  with HasBoomFrontendParameters
+  with HasBoomFrontendParameters // TODO: Don't add this trait
   with HasBoomCoreIO
 {
   //**********************************
@@ -428,8 +428,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                           !brupdate.b3.taken &&
                           bankAlign(block_pc) === bankAlign(npc))
 
-    val next_ghist = history_update(
-      io.ifu.get_pc.entry.ghist,
+    val next_ghist = io.ifu.get_pc.entry.ghist.update(
       io.ifu.get_pc.entry.br_mask.asUInt,
       brupdate.b3.taken && brupdate.b3.cfi_type === CFI_BR,
       brupdate.b3.uop.pc_lob >> 1,

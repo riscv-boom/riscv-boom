@@ -136,8 +136,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     val prev_entry = ram(WrapDec(enq_ptr, num_entries))
     ram(enq_ptr).ghist := Mux(start_from_empty_ghist,
       (0.U).asTypeOf(new GlobalHistory),
-      history_update(
-        prev_entry.ghist,
+      prev_entry.ghist.update(
         prev_entry.br_mask.asUInt,
         prev_entry.cfi_idx.valid && prev_entry.cfi_taken && prev_entry.br_mask(prev_entry.cfi_idx.bits),
         prev_entry.cfi_idx.bits,
