@@ -693,6 +693,7 @@ jobs:
             - add_ssh_keys:
                 fingerprints:
                     - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
+            - checkout
             - run:
                 name: Build a Buildroot test workload and install to FireSim
                 command: |
@@ -708,6 +709,7 @@ jobs:
             - add_ssh_keys:
                 fingerprints:
                     - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
+            - checkout
             - run:
                 name: Build a Fedora test workload and install to FireSim
                 command: |
@@ -723,6 +725,14 @@ jobs:
             - add_ssh_keys:
                 fingerprints:
                     - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
+            - checkout
+            - run:
+                name: Create hash of BOOM + Chipyard
+                command: |
+                    .circleci/create-chipyard-boom-hash.sh
+            - restore_cache:
+                keys:
+                    - largefireboom-afi-v0-{{ checksum "../chipyard-boom.hash" }}
             - run:
                 name: Run a Buildroot test
                 command: |
@@ -738,6 +748,14 @@ jobs:
             - add_ssh_keys:
                 fingerprints:
                     - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
+            - checkout
+            - run:
+                name: Create hash of BOOM + Chipyard
+                command: |
+                    .circleci/create-chipyard-boom-hash.sh
+            - restore_cache:
+                keys:
+                    - largefireboom-afi-v0-{{ checksum "../chipyard-boom.hash" }}
             - run:
                 name: Run a Fedora test workload
                 command: |
