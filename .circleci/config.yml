@@ -748,12 +748,7 @@ workflows:
     version: 2
     run-firesim-ci:
         jobs:
-            - wait-for-approval:
-                type: approval
-                
-            - initialize-manager:
-                requires:
-                    - wait-for-approval
+            - initialize-manager
 
             - build-largefireboom-afi:
                 type: approval
