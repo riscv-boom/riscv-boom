@@ -750,19 +750,28 @@ workflows:
         jobs:
             - initialize-manager
 
-            - build-largefireboom-afi:
+            - wait-for-approval-1:
                 type: approval
+
+            - wait-for-approval-2:
+                type: approval
+
+            - wait-for-approval-3:
+                type: approval
+
+            - build-largefireboom-afi:
                 requires:
+                    - wait-for-approval-1
                     - initialize-manager
 
             - build-buildroot:
-                type: approval
                 requires:
+                    - wait-for-approval-2
                     - initialize-manager
 
             - build-fedora:
-                type: approval
                 requires:
+                    - wait-for-approval-3
                     - initialize-manager
 
             - run-buildroot:

@@ -33,4 +33,5 @@ run_script_aws $LOCAL_CHECKOUT_DIR/firesim-run-br.sh
 copy $SERVER_AWS:$REMOTE_AWS_RESULTS_DIR/ $HOME/
 
 # print the results
+cd $HOME
 cat results_workload/*command*/*/uartlog
