@@ -655,7 +655,6 @@ jobs:
                 name: Initialize the manager instance
                 command: |
                     .circleci/firesim-init-manager.sh
-
     build-largefireboom-afi:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -682,7 +681,6 @@ jobs:
                 key: fireboom-singlecore-no-nic-l2-llc4mb-ddr3-afi-v0-{{ checksum "../chipyard-boom.hash" }}
                 paths:
                     - "/home/riscvuser/fireboom-singlecore-no-nic-l2-llc4mb-ddr3"
-
     build-buildroot:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -697,8 +695,7 @@ jobs:
             - run:
                 name: Build a Buildroot test workload and install to FireSim
                 command: |
-                    .circleci/firesim-build-workload.sh test command
-
+                    .circleci/firesim-build-workload.sh buildroot
     build-fedora:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -713,8 +710,7 @@ jobs:
             - run:
                 name: Build a Fedora test workload and install to FireSim
                 command: |
-                    .circleci/firesim-build-workload.sh test fed-run
-
+                    .circleci/firesim-build-workload.sh fedora
     run-buildroot:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -737,7 +733,6 @@ jobs:
                 name: Run a Buildroot test
                 command: |
                     .circleci/firesim-run-workload.sh fireboom-singlecore-no-nic-l2-llc4mb-ddr3 buildroot
-
     run-fedora:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
