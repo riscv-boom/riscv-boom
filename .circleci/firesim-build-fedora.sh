@@ -13,8 +13,8 @@ cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-fed-build.sh
 set -ex
 
 cd $REMOTE_AWS_MARSHAL_DIR
-./marshal build test/fed-test.json
-./marshal install test/fed-test.json
+./marshal build test/fed-run.json
+./marshal install test/fed-run.json
 EOF
 
 # execute the script
