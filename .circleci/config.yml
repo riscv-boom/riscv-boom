@@ -673,15 +673,15 @@ jobs:
                     .circleci/create-chipyard-boom-hash.sh
             - restore_cache:
                 keys:
-                    - largefireboom-afi-v0-{{ checksum "../chipyard-boom.hash" }}
+                    - fireboom-singlecore-no-nic-l2-llc4mb-ddr3-afi-v0-{{ checksum "../chipyard-boom.hash" }}
             - run:
                 name: Build a LargeFireBoom AFI
                 command: |
-                    .circleci/firesim-build-largefireboom-afi.sh
+                    .circleci/firesim-build-afi.sh fireboom-singlecore-no-nic-l2-llc4mb-ddr3
             - save_cache:
-                key: largefireboom-afi-v0-{{ checksum "../chipyard-boom.hash" }}
+                key: fireboom-singlecore-no-nic-l2-llc4mb-ddr3-afi-v0-{{ checksum "../chipyard-boom.hash" }}
                 paths:
-                    - "/home/riscvuser/largefireboom_hwdb.ini"
+                    - "/home/riscvuser/fireboom-singlecore-no-nic-l2-llc4mb-ddr3"
 
     build-buildroot:
         docker:
@@ -697,7 +697,7 @@ jobs:
             - run:
                 name: Build a Buildroot test workload and install to FireSim
                 command: |
-                    .circleci/firesim-build-buildroot.sh
+                    .circleci/firesim-build-workload.sh test command
 
     build-fedora:
         docker:
@@ -713,7 +713,7 @@ jobs:
             - run:
                 name: Build a Fedora test workload and install to FireSim
                 command: |
-                    .circleci/firesim-build-fedora.sh
+                    .circleci/firesim-build-workload.sh test fed-run
 
     run-buildroot:
         docker:
@@ -732,11 +732,11 @@ jobs:
                     .circleci/create-chipyard-boom-hash.sh
             - restore_cache:
                 keys:
-                    - largefireboom-afi-v0-{{ checksum "../chipyard-boom.hash" }}
+                    - fireboom-singlecore-no-nic-l2-llc4mb-ddr3-afi-v0-{{ checksum "../chipyard-boom.hash" }}
             - run:
                 name: Run a Buildroot test
                 command: |
-                    .circleci/firesim-run-buildroot.sh
+                    .circleci/firesim-run-workload.sh fireboom-singlecore-no-nic-l2-llc4mb-ddr3 buildroot
 
     run-fedora:
         docker:
@@ -755,11 +755,11 @@ jobs:
                     .circleci/create-chipyard-boom-hash.sh
             - restore_cache:
                 keys:
-                    - largefireboom-afi-v0-{{ checksum "../chipyard-boom.hash" }}
+                    - fireboom-singlecore-no-nic-l2-llc4mb-ddr3-afi-v0-{{ checksum "../chipyard-boom.hash" }}
             - run:
                 name: Run a Fedora test workload
                 command: |
-                    .circleci/firesim-run-fedora.sh
+                    .circleci/firesim-run-workload.sh fireboom-singlecore-no-nic-l2-llc4mb-ddr3 fedora
 
 # Order and dependencies of jobs to run
 workflows:
@@ -768,28 +768,20 @@ workflows:
         jobs:
             - initialize-manager
 
-            - wait-for-approval-1:
-                type: approval
-
-            - wait-for-approval-2:
-                type: approval
-
-            - wait-for-approval-3:
+            - aws-approval:
                 type: approval
 
             - build-largefireboom-afi:
                 requires:
-                    - wait-for-approval-1
+                    - aws-approval
                     - initialize-manager
 
             - build-buildroot:
                 requires:
-                    - wait-for-approval-2
                     - initialize-manager
 
             - build-fedora:
                 requires:
-                    - wait-for-approval-3
                     - initialize-manager
 
             - run-buildroot:
