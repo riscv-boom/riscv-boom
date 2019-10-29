@@ -9,8 +9,8 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
-# TODO: CLEAR OLD FIRESIM DIR
-#run_script $LOCAL_CHECKOUT_DIR/.circleci/clean-old-files.sh $CI_DIR
+# clear folders older than 30 days
+run_script_aws $LOCAL_CHECKOUT_DIR/.circleci/clean-old-files.sh $CI_AWS_DIR
 
 # create a script to run
 cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-manager-setup.sh

@@ -7,8 +7,8 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
-copy $LOCAL_CHECKOUT_DIR/.circleci/firesim-configs $SERVER_AWS:$REMOTE_AWS_FSIM_DEPLOY_DIR
-copy $HOME/largefireboom_hwdb.ini $SERVER_AWS:$REMOTE_AWS_FSIM_DEPLOY_DIR/firesim-configs
+copy $LOCAL_CHECKOUT_DIR/.circleci/firesim-configs $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR
+copy $HOME/largefireboom_hwdb.ini $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/firesim-configs
 
 cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-run-br.sh
 #!/bin/bash
@@ -30,7 +30,7 @@ chmod +x $LOCAL_CHECKOUT_DIR/firesim-run-br.sh
 run_script_aws $LOCAL_CHECKOUT_DIR/firesim-run-br.sh
 
 # copy over results
-copy $SERVER_AWS:$REMOTE_AWS_RESULTS_DIR/ $HOME/
+copy $AWS_SERVER:$REMOTE_AWS_RESULTS_DIR/ $HOME/
 
 # print the results
 cd $HOME
