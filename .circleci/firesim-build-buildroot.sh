@@ -13,8 +13,8 @@ cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-br-build.sh
 set -ex
 
 cd $REMOTE_AWS_MARSHAL_DIR
-./marshal build test/smoke1.json
-./marshal install test/smoke1.json
+./marshal build test/command.json
+./marshal install test/command.json
 EOF
 
 # execute the script

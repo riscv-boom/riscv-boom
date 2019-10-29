@@ -19,6 +19,7 @@ cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-manager-setup.sh
 set -ex
 
 # get chipyard
+mkdir -p $REMOTE_AWS_WORK_DIR
 cd $REMOTE_AWS_WORK_DIR
 git clone --progress --verbose https://github.com/ucb-bar/chipyard.git $REMOTE_AWS_CHIPYARD_DIR
 cd $REMOTE_AWS_CHIPYARD_DIR

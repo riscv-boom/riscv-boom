@@ -33,5 +33,5 @@ run_script_aws $LOCAL_CHECKOUT_DIR/firesim-run-fedora.sh
 copy $SERVER_AWS:$REMOTE_AWS_RESULTS_DIR/ $HOME/
 
 # print the results
-cat results_workload/*fed*/*/uartlog
+cat results_workload/*fed-run*/*/uartlog
 
