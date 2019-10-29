@@ -19,9 +19,11 @@ if [ ! -d "$HOME/largefireboom_hwdb.ini" ]; then
     cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-build-afi.sh
 #!/bin/bash
 
+set -ex
+
 # setup firesim
 cd $REMOTE_AWS_FSIM_DIR
-source sourceme_f1_manager.sh
+source sourceme-f1-manager.sh
 
 # build afi
 firesim buildafi -b $REMOTE_AWS_FSIM_DEPLOY_DIR/firesim-configs/config_build.ini -r $REMOTE_AWS_FSIM_DEPLOY_DIR/firesim-configs/config_build_recipes.ini

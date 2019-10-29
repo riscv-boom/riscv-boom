@@ -16,6 +16,8 @@ source $SCRIPT_DIR/defaults.sh
 cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-manager-setup.sh
 #!/bin/bash
 
+set -ex
+
 # get chipyard
 cd $REMOTE_AWS_WORK_DIR
 git clone --progress --verbose https://github.com/ucb-bar/chipyard.git $REMOTE_AWS_CHIPYARD_DIR
@@ -30,10 +32,10 @@ git checkout $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)
 
 # setup firesim
 cd $REMOTE_AWS_FSIM_DIR
-source sourceme_f1_manager.sh
+source sourceme-f1-manager.sh
 
 # use expect to send newlines to managerinit (for some reason heredoc errors on email input)
-/bin/expect << EOF
+/bin/expect << EXP
 set timeout -1
 spawn firesim managerinit
 send -- "\r"
@@ -42,7 +44,7 @@ send -- "\r"
 send -- "\r"
 send -- "\r"
 expect eof
-EOD
+EXP
 
 # remove boom so it can get added properly
 rm -rf $REMOTE_AWS_CHIPYARD_DIR/generators/boom
