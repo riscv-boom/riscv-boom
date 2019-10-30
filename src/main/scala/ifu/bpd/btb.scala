@@ -13,8 +13,9 @@ import boom.util.{BoomCoreStringPrefix}
 
 class DenseBTBEntry(implicit p: Parameters) extends BoomBundle()(p)
 {
+  val tag      = UInt(btbTagSz.W)
   val extended = Bool()
-  val offset   = SInt(offsetBTBSz.W)
+  val offset   = SInt(btbOffsetSz.W)
 }
 
 class DenseBTBBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
@@ -29,35 +30,34 @@ class DenseBTBBranchPredictorBank(implicit p: Parameters) extends BranchPredicto
 
 
   val doing_reset = RegInit(true.B)
-  val reset_idx   = RegInit(0.U(log2Ceil(nBTBSets).W))
+  val reset_idx   = RegInit(0.U(log2Ceil(btbNSets).W))
   reset_idx := reset_idx + doing_reset
-  when (reset_idx === (nBTBSets-1).U) { doing_reset := false.B }
+  when (reset_idx === (btbNSets-1).U) { doing_reset := false.B }
 
-  val extended = Reg(Vec(nBTBSets, Vec(bankWidth, Bool())))
-  val btb      = SyncReadMem(nBTBSets, Vec(bankWidth, SInt(offsetBTBSz.W)))
-  val ebtb     = SyncReadMem(nEBTBSets, UInt(vaddrBitsExtended.W))
+  val btb      = Seq.fill(bankWidth) { SyncReadMem(btbNSets, new DenseBTBEntry) }
+  val ebtb     = SyncReadMem(ebtbNSets, UInt(vaddrBitsExtended.W))
 
-  val s1_req_rext  = extended(s1_req_idx)
-  val s1_req_rbtb  = btb.read (s0_req_idx,  io.f0_req.valid)
+  val s1_req_rbtb  = VecInit(btb.map(_.read(s0_req_idx,  io.f0_req.valid)))
   val s1_req_rebtb = ebtb.read(s0_req_idx,  io.f0_req.valid)
+  val s1_req_tag   = s1_req_idx >> log2Ceil(btbNSets)
 
-  val s2_req_rext  = RegNext(s1_req_rext)
   val s2_req_rbtb  = RegNext(s1_req_rbtb)
   val s2_req_rebtb = RegNext(s1_req_rebtb)
+  val s2_req_tag   = RegNext(s1_req_tag)
 
   for (w <- 0 until bankWidth) {
-    io.f2_resp(w).predicted_pc.valid := !doing_reset && s2_req.valid
+    io.f2_resp(w).predicted_pc.valid := !doing_reset && s2_req.valid && s2_req_tag(btbTagSz-1,0) === s2_req_rbtb(w).tag
     io.f2_resp(w).predicted_pc.bits  := Mux(
-      s2_req_rext(w),
+      s2_req_rbtb(w).extended,
       s2_req_rebtb,
-      (s2_req.bits.pc.asSInt + (w << 1).S + s2_req_rbtb(w)).asUInt)
+      (s2_req.bits.pc.asSInt + (w << 1).S + s2_req_rbtb(w).offset).asUInt)
 
   }
 
   val s1_update_cfi_idx = s1_update.bits.cfi_idx.bits
 
-  val max_offset_value = (~(0.U)((offsetBTBSz-1).W)).asSInt
-  val min_offset_value = Cat(1.B, (0.U)((offsetBTBSz-1).W)).asSInt
+  val max_offset_value = (~(0.U)((btbOffsetSz-1).W)).asSInt
+  val min_offset_value = Cat(1.B, (0.U)((btbOffsetSz-1).W)).asSInt
   val new_offset_value = (s1_update.bits.target.asSInt -
     (s1_update.bits.pc + (s1_update.bits.cfi_idx.bits << 1)).asSInt)
   val offset_is_extended = (new_offset_value > max_offset_value ||
@@ -65,22 +65,22 @@ class DenseBTBBranchPredictorBank(implicit p: Parameters) extends BranchPredicto
   val s1_update_wbtb = Wire(new DenseBTBEntry)
   s1_update_wbtb.extended := offset_is_extended
   s1_update_wbtb.offset   := new_offset_value
+  s1_update_wbtb.tag      := s1_update_idx >> log2Ceil(btbNSets)
 
   val s1_update_wmask = (UIntToOH(s1_update_cfi_idx) &
-    Fill(bankWidth, s1_update.bits.cfi_idx.valid && s1_update.valid))
+    Fill(bankWidth, s1_update.bits.cfi_idx.valid && s1_update.valid && s1_update.bits.cfi_taken))
 
 
+  for (w <- 0 until bankWidth) {
+    when (doing_reset || s1_update_wmask(w)) {
+      btb(w).write(
+        Mux(doing_reset, reset_idx, s1_update_idx),
+        Mux(doing_reset, (0.U).asTypeOf(new DenseBTBEntry), s1_update_wbtb)
+      )
+    }
+  }
 
-  btb.write(
-    Mux(doing_reset, reset_idx, s1_update_idx),
-    VecInit(Seq.fill(bankWidth) {
-      Mux(doing_reset, (0.S), s1_update_wbtb.offset)
-    }),
-    VecInit(Mux(doing_reset, ~(0.U(bankWidth.W)), s1_update_wmask).asBools)
-  )
-  when (doing_reset) { extended(reset_idx) := (0.U(bankWidth.W)).asBools }
-
-  when (s1_update.valid && s1_update.bits.cfi_idx.valid && offset_is_extended) {
+  when (s1_update_wmask =/= 0.U && offset_is_extended) {
     ebtb.write(s1_update_idx, s1_update.bits.target)
   }
 }
