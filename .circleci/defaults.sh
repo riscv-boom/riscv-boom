@@ -23,7 +23,7 @@ run_impl () {
 }
 
 run_script_impl () {
-    ssh -o "StrictHostKeyChecking no" -t $1 'bash -s' < $2 "$3"
+    ssh -o "StrictHostKeyChecking no" -t $1 'bash -s -l' < $2 "$3"
 }
 
 # build server calls
