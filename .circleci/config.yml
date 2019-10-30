@@ -677,6 +677,7 @@ jobs:
                 name: Build a LargeFireBoom AFI
                 command: |
                     .circleci/firesim-build-afi.sh fireboom-singlecore-no-nic-l2-llc4mb-ddr3
+                no_output_timeout: 240m
             - save_cache:
                 key: fireboom-singlecore-no-nic-l2-llc4mb-ddr3-afi-v0-{{ checksum "../chipyard-boom.hash" }}
                 paths:
