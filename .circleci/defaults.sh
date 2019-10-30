@@ -51,6 +51,11 @@ run_script_aws () {
     run_script_impl $AWS_SERVER $1 $2
 }
 
+clean_aws () {
+    # remove remote work dir
+    run_aws "rm -rf $REMOTE_AWS_WORK_DIR"
+}
+
 #############
 # SHARED VARS
 #############
