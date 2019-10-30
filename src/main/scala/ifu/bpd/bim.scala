@@ -36,12 +36,12 @@ class BIMBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank
 
 
   val doing_reset = RegInit(true.B)
-  val reset_idx = RegInit(0.U(log2Ceil(nBIMSets).W))
+  val reset_idx = RegInit(0.U(log2Ceil(bimNSets).W))
   reset_idx := reset_idx + doing_reset
-  when (reset_idx === (nBIMSets-1).U) { doing_reset := false.B }
+  when (reset_idx === (bimNSets-1).U) { doing_reset := false.B }
 
 
-  val data  = Seq.fill(bankWidth) { SyncReadMem(nBIMSets, new BIMEntry) }
+  val data  = Seq.fill(bankWidth) { SyncReadMem(bimNSets, new BIMEntry) }
 
   val s1_req_rdata    = VecInit(data.map(_.read(s0_req_idx   , io.f0_req.valid)))
 
