@@ -20,6 +20,10 @@ cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-$WORKLOAD_NAME-build.sh
 
 set -ex
 
+# setup firesim to get toolchain
+cd $REMOTE_AWS_FSIM_DIR
+source sourceme-f1-manager.sh
+
 cd $REMOTE_AWS_MARSHAL_DIR
 ./marshal build $WORKLOAD_DIR/$WORKLOAD_NAME.json
 ./marshal install $WORKLOAD_DIR/$WORKLOAD_NAME.json
