@@ -60,4 +60,4 @@ chmod +x $LOCAL_CHECKOUT_DIR/firesim-manager-setup.sh
 run_script_aws $LOCAL_CHECKOUT_DIR/firesim-manager-setup.sh
 
 # add checkout boom to repo
-copy $LOCAL_CHECKOUT_DIR $AWS_SERVER:$REMOTE_AWS_CHIPYARD_DIR/generators/boom/
+copy $LOCAL_CHECKOUT_DIR/ $AWS_SERVER:$REMOTE_AWS_CHIPYARD_DIR/generators/boom/
