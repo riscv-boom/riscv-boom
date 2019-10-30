@@ -11,6 +11,9 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
+# set stricthostkeychecking to no (must happen before rsync)
+run_aws "echo \"Ping $AWS_SERVER\""
+
 copy $LOCAL_CHECKOUT_DIR/.circleci/firesim-configs/$1/ $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/
 copy $LOCAL_CHECKOUT_DIR/.circleci/firesim-configs/$2/ $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/
 copy $HOME/$1 $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/$1
