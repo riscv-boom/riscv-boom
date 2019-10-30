@@ -29,7 +29,7 @@ cd $REMOTE_AWS_FSIM_DIR
 source sourceme-f1-manager.sh
 
 # build afi
-firesim buildafi -b $REMOTE_AWS_FSIM_DEPLOY_DIR/firesim-configs/$1/config_build.ini -r $REMOTE_AWS_FSIM_DEPLOY_DIR/firesim-configs/$1/config_build_recipes.ini
+firesim buildafi -b $REMOTE_AWS_FSIM_DEPLOY_DIR/$1/config_build.ini -r $REMOTE_AWS_FSIM_DEPLOY_DIR/$1/config_build_recipes.ini
 EOF
 
     # execute the script

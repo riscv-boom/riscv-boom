@@ -25,8 +25,8 @@ cd $REMOTE_AWS_FSIM_DIR
 source sourceme-f1-manager.sh
 
 cd $REMOTE_AWS_MARSHAL_DIR
-./marshal build $WORKLOAD_DIR/$WORKLOAD_NAME.json
-./marshal install $WORKLOAD_DIR/$WORKLOAD_NAME.json
+./marshal -v build $WORKLOAD_DIR/$WORKLOAD_NAME.json
+./marshal -v install $WORKLOAD_DIR/$WORKLOAD_NAME.json
 EOF
 
 # execute the script
