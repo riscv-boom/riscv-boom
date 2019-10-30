@@ -199,22 +199,22 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   val bpdMaxMetaLength = 32
 
-  val nBIMSets  = 1024
-  val nBTBSets  = 512
-  val nEBTBSets = 256
+  val bimNSets  = 1024
+  val btbNSets  = 512
+  val ebtbNSets = 256
+  val btbTagSz  = 4
+  val btbOffsetSz = 13
 
   val tageNTables = 4
   val tageNSets = Seq(1024, 512, 512, 512)
   val tageHistoryLength = Seq(4, 8, 12, 16)
   val tageTagSz = Seq(9, 9, 9, 9)
 
-  val offsetBTBSz = 13
-
-  require(isPow2(nBIMSets))
-  require(isPow2(nBTBSets))
-  require(isPow2(nEBTBSets))
-  require(nEBTBSets <= nBTBSets)
-  require(nBTBSets <= nBIMSets)
+  require(isPow2(bimNSets))
+  require(isPow2(btbNSets))
+  require(isPow2(ebtbNSets))
+  require(ebtbNSets <= btbNSets)
+  require(btbNSets <= bimNSets)
 
   //************************************
   // Extra Knobs and Features
