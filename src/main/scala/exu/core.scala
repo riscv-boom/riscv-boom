@@ -428,7 +428,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
     val next_ghist = io.ifu.get_pc.entry.ghist.update(
       io.ifu.get_pc.entry.br_mask.asUInt,
-      brupdate.b3.taken && brupdate.b3.cfi_type === CFI_BR,
+      brupdate.b3.taken,
+      brupdate.b3.cfi_type === CFI_BR,
       brupdate.b3.uop.pc_lob >> 1,
       true.B,
       io.ifu.get_pc.entry.fetch_pc)

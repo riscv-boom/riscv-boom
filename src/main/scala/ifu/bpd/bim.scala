@@ -11,9 +11,10 @@ import freechips.rocketchip.tilelink._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
-class BIMMeta extends Bundle
+class BIMMeta(implicit p: Parameters) extends BoomBundle()(p)
+  with HasBoomFrontendParameters
 {
-  val bim   = UInt(2.W)
+  val bims  = Vec(bankWidth, UInt(2.W))
 }
 
 class BIMEntry(implicit p: Parameters) extends BoomBundle()(p)
@@ -49,15 +50,15 @@ class BIMBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank
 
   val s1_update_wdata   = Wire(Vec(bankWidth, new BIMEntry))
   val s1_update_wmask   = Wire(Vec(bankWidth, Bool()))
-  val s1_update_meta    = s1_update.bits.meta.asTypeOf(Vec(bankWidth, new BIMMeta))
-  val s2_meta           = Wire(Vec(bankWidth, new BIMMeta))
+  val s1_update_meta    = s1_update.bits.meta.asTypeOf(new BIMMeta)
+  val s2_meta           = Wire(new BIMMeta)
 
   for (w <- 0 until bankWidth) {
 
     io.f2_resp(w).taken        := s2_req.valid && s2_req_rdata(w).valid && (s2_req_rdata(w).bim(1) || !s2_req_rdata(w).is_br) && !doing_reset
     io.f2_resp(w).is_br        := s2_req.valid && s2_req_rdata(w).valid &&  s2_req_rdata(w).is_br
     io.f2_resp(w).is_jal       := s2_req.valid && s2_req_rdata(w).valid && !s2_req_rdata(w).is_br
-    s2_meta(w).bim             := Mux(s2_req.valid && s2_req_rdata(w).valid, s2_req_rdata(w).bim, 2.U)
+    s2_meta.bims(w)            := Mux(s2_req.valid && s2_req_rdata(w).valid, s2_req_rdata(w).bim, 2.U)
 
     s1_update_wmask(w)         := false.B
     s1_update_wdata(w)         := DontCare
@@ -67,7 +68,7 @@ class BIMBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank
     when (s1_update.bits.br_mask(w) || (s1_update.bits.cfi_idx.valid && s1_update.bits.cfi_idx.bits === w.U)) {
       val was_taken = s1_update.bits.cfi_idx.valid && (s1_update.bits.cfi_idx.bits === w.U) &&
         ((s1_update.bits.cfi_is_br && s1_update.bits.br_mask(w) && s1_update.bits.cfi_taken) || s1_update.bits.cfi_is_jal)
-      val old_bim_value    = s1_update_meta(w).bim
+      val old_bim_value    = s1_update_meta.bims(w)
 
       s1_update_wmask(w)         := true.B
       s1_update_wdata(w).valid   := true.B
