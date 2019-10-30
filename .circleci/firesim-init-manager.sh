@@ -12,11 +12,6 @@ source $SCRIPT_DIR/defaults.sh
 # clear folders older than 30 days
 run_script_aws $LOCAL_CHECKOUT_DIR/.circleci/clean-old-files.sh $CI_AWS_DIR
 
-# call clean on exit
-trap clean_aws EXIT
-
-clean_aws
-
 # create a script to run
 cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-manager-setup.sh
 #!/bin/bash
@@ -26,6 +21,7 @@ set -ex
 # get chipyard
 mkdir -p $REMOTE_AWS_WORK_DIR
 cd $REMOTE_AWS_WORK_DIR
+rm -rf $REMOTE_AWS_CHIPYARD_DIR
 git clone --progress --verbose https://github.com/ucb-bar/chipyard.git $REMOTE_AWS_CHIPYARD_DIR
 cd $REMOTE_AWS_CHIPYARD_DIR
 echo "Checking out Chipyard version: $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)"
