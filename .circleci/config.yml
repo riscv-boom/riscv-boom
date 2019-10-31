@@ -649,7 +649,7 @@ jobs:
         steps:
             - add_ssh_keys:
                 fingerprints:
-                    - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
                 name: Initialize the manager instance
@@ -664,7 +664,7 @@ jobs:
         steps:
             - add_ssh_keys:
                 fingerprints:
-                    - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
                 name: Create hash of BOOM + Chipyard
@@ -691,7 +691,7 @@ jobs:
         steps:
             - add_ssh_keys:
                 fingerprints:
-                    - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
                 name: Build a Buildroot test workload and install to FireSim
@@ -706,7 +706,7 @@ jobs:
         steps:
             - add_ssh_keys:
                 fingerprints:
-                    - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
                 name: Build a Fedora test workload and install to FireSim
@@ -721,7 +721,7 @@ jobs:
         steps:
             - add_ssh_keys:
                 fingerprints:
-                    - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
                 name: Create hash of BOOM + Chipyard
@@ -743,7 +743,7 @@ jobs:
         steps:
             - add_ssh_keys:
                 fingerprints:
-                    - "3e:8c:da:c1:9e:02:ec:1c:cc:83:26:57:5c:f2:ea:fb"
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
                 name: Create hash of BOOM + Chipyard
