@@ -100,7 +100,7 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
   }
 
   if (params.micro)
-    io.f1_resp := RegNext(s1_resp)
+    io.f1_resp := s1_resp
   io.f2_resp := RegNext(s1_resp)
   io.f3_resp := RegNext(io.f2_resp)
   io.f3_meta := RegNext(RegNext(s1_meta.asUInt))
