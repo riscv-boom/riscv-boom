@@ -70,9 +70,11 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
   }
 
   def update(branches: UInt, cfi_taken: Bool, cfi_is_br: Bool, cfi_idx: UInt, cfi_valid: Bool, addr: UInt): GlobalHistory = {
+    val cfi_idx_fixed = cfi_idx(log2Ceil(fetchWidth)-1,0)
+    val cfi_idx_oh = UIntToOH(cfi_idx_fixed)
     val new_history = Wire(new GlobalHistory)
     val not_taken_branches = branches & Mux(cfi_valid,
-                                            MaskLower(UIntToOH(cfi_idx)) & ~Mux(cfi_is_br && cfi_taken, UIntToOH(cfi_idx), 0.U(fetchWidth.W)),
+                                            MaskLower(cfi_idx_oh) & ~Mux(cfi_is_br && cfi_taken, cfi_idx_oh, 0.U(fetchWidth.W)),
                                             ~(0.U(fetchWidth.W)))
     if (nBanks == 1) {
       // In the single bank case every bank sees the history including the previous bank
@@ -350,7 +352,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
                                 nextFetch(s1_vpc))
 
   val f1_predicted_ghist = s1_ghist.update(
-    s1_bpd_resp.preds.map(_.is_br).asUInt,
+    s1_bpd_resp.preds.map(_.is_br).asUInt & f1_mask,
     s1_bpd_resp.preds(f1_redirect_idx).taken,
     s1_bpd_resp.preds(f1_redirect_idx).is_br,
     f1_redirect_idx,
@@ -398,7 +400,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
                                 f2_targs(f2_redirect_idx),
                                 nextFetch(s2_vpc))
   val f2_predicted_ghist = s2_ghist.update(
-    f2_bpd_resp.preds.map(_.is_br).asUInt,
+    f2_bpd_resp.preds.map(_.is_br).asUInt & f2_mask,
     f2_bpd_resp.preds(f2_redirect_idx).taken,
     f2_bpd_resp.preds(f2_redirect_idx).is_br,
     f2_redirect_idx,
