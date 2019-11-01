@@ -140,16 +140,25 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
 class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   val base = Module(new BTBBranchPredictorBank(BoomBTBParams()))
+  val micro = Module(new BTBBranchPredictorBank(
+    BoomBTBParams(nSets = 32, tagSz = 4, offsetSz = 13, extendedNSets = 0, micro = true))
+  )
+
   base.io.f0_req := io.f0_req
   base.io.update := io.update
   base.io.update.bits.meta := io.update.bits.meta(base.metaSz-1,0)
-  io.f1_resp := base.io.f1_resp
+  micro.io.f0_req := io.f0_req
+  micro.io.update := io.update
+  micro.io.update.bits.meta := io.update.bits.meta(base.metaSz+micro.metaSz-1,base.metaSz)
+
+  io.f1_resp := micro.io.f1_resp
   io.f2_resp := base.io.f2_resp
   io.f3_resp := base.io.f3_resp
 
   val f3_meta = Wire(new TageMeta)
 
-  override val metaSz = base.metaSz + f3_meta.asUInt.getWidth
+  override val metaSz = base.metaSz + micro.metaSz + f3_meta.asUInt.getWidth
+  require(metaSz <= bpdMaxMetaLength)
 
   def inc_u(u: UInt, alt_differs: Bool, mispredict: Bool): UInt = {
     Mux(!alt_differs, u,
@@ -171,7 +180,7 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
   tables.map(_.io.f0_req := io.f0_req)
   val f3_resps = VecInit(tables.map(_.io.f3_resp))
 
-  val s1_update_meta = (s1_update.bits.meta >> base.metaSz).asTypeOf(new TageMeta)
+  val s1_update_meta = (s1_update.bits.meta >> (base.metaSz + micro.metaSz)).asTypeOf(new TageMeta)
   val s1_update_mispredict_mask = UIntToOH(s1_update.bits.cfi_idx.bits) &
     Fill(bankWidth, s1_update.bits.cfi_mispredicted)
 
@@ -278,5 +287,5 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
   }
 
 
-  io.f3_meta := Cat(f3_meta.asUInt, base.io.f3_meta(base.metaSz-1, 0))
+  io.f3_meta := Cat(f3_meta.asUInt, micro.io.f3_meta(micro.metaSz-1,0), base.io.f3_meta(base.metaSz-1, 0))
 }
