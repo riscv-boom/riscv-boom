@@ -352,8 +352,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
                                 nextFetch(s1_vpc))
 
   val f1_predicted_ghist = s1_ghist.update(
-    s1_bpd_resp.preds.map(_.is_br).asUInt & f1_mask,
-    s1_bpd_resp.preds(f1_redirect_idx).taken,
+    s1_bpd_resp.preds.map(p => p.is_br && p.predicted_pc.valid).asUInt & f1_mask,
+    s1_bpd_resp.preds(f1_redirect_idx).taken && f1_do_redirect,
     s1_bpd_resp.preds(f1_redirect_idx).is_br,
     f1_redirect_idx,
     f1_do_redirect,
@@ -400,8 +400,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
                                 f2_targs(f2_redirect_idx),
                                 nextFetch(s2_vpc))
   val f2_predicted_ghist = s2_ghist.update(
-    f2_bpd_resp.preds.map(_.is_br).asUInt & f2_mask,
-    f2_bpd_resp.preds(f2_redirect_idx).taken,
+    f2_bpd_resp.preds.map(p => p.is_br && p.predicted_pc.valid).asUInt & f2_mask,
+    f2_bpd_resp.preds(f2_redirect_idx).taken && f2_do_redirect,
     f2_bpd_resp.preds(f2_redirect_idx).is_br,
     f2_redirect_idx,
     f2_do_redirect,
