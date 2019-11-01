@@ -52,9 +52,9 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
   // Was this CFI mispredicted by the branch prediction pipeline?
   val cfi_mispredicted = Bool()
   // mask of branches which were visible in this fetch bundle
-  val br_mask   = Vec(fetchWidth, Bool())
+  val br_mask   = UInt(fetchWidth.W)
   // mask of jumps which were visible in this fetch bundle
-  val jal_mask  = Vec(fetchWidth, Bool())
+  val jal_mask  = UInt(fetchWidth.W)
 
   // What global history should be used to query this fetch bundle
   val ghist = new GlobalHistory
@@ -135,13 +135,13 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     // Branch resolutions may change this
     ram(enq_ptr).cfi_taken := io.enq.bits.cfi_idx.valid
     ram(enq_ptr).cfi_mispredicted := false.B
-    ram(enq_ptr).br_mask   := io.enq.bits.br_mask
-    ram(enq_ptr).jal_mask  := io.enq.bits.jal_mask
+    ram(enq_ptr).br_mask   := io.enq.bits.br_mask.asUInt & fetchMask(io.enq.bits.pc)
+    ram(enq_ptr).jal_mask  := io.enq.bits.jal_mask.asUInt & fetchMask(io.enq.bits.pc)
     val prev_entry = ram(WrapDec(enq_ptr, num_entries))
     ram(enq_ptr).ghist := Mux(start_from_empty_ghist,
       (0.U).asTypeOf(new GlobalHistory),
       prev_entry.ghist.update(
-        prev_entry.br_mask.asUInt,
+        prev_entry.br_mask,
         prev_entry.cfi_taken,
         prev_entry.br_mask(prev_entry.cfi_idx.bits),
         prev_entry.cfi_idx.bits,
@@ -174,11 +174,10 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     val entry = ram(bpd_ptr)
     val cfi_idx = entry.cfi_idx.bits
     // TODO: We should try to commit branch prediction updates earlier
-    io.bpdupdate.valid              := !first_empty && (entry.cfi_idx.valid || entry.br_mask.reduce(_||_))
+    io.bpdupdate.valid              := !first_empty && (entry.cfi_idx.valid || entry.br_mask =/= 0.U)
     io.bpdupdate.bits.pc            := entry.fetch_pc
     io.bpdupdate.bits.br_mask       := Mux(entry.cfi_idx.valid,
-      MaskLower(UIntToOH(cfi_idx)) & entry.br_mask.asUInt,
-      entry.br_mask.asUInt)
+      MaskLower(UIntToOH(cfi_idx)) & entry.br_mask, entry.br_mask)
     io.bpdupdate.bits.cfi_idx.valid    := entry.cfi_idx.valid
     io.bpdupdate.bits.cfi_idx.bits     := entry.cfi_idx.bits
     io.bpdupdate.bits.cfi_mispredicted := entry.cfi_mispredicted

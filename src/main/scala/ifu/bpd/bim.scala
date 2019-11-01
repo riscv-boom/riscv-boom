@@ -79,7 +79,7 @@ class BIMBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank
 
   }
   for (w <- 0 until bankWidth) {
-    when (doing_reset || s1_update_wmask(w)) {
+    when (doing_reset || (s1_update_wmask(w) && s1_update.valid)) {
       data(w).write(
         Mux(doing_reset, reset_idx, s1_update_idx),
         Mux(doing_reset, (0.U).asTypeOf(new BIMEntry), s1_update_wdata(w))
