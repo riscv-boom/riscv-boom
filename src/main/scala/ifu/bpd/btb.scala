@@ -20,11 +20,9 @@ case class BoomBTBParams(
   bimParams: BoomBIMParams = BoomBIMParams(nSets = 1024)
 )
 
-class BTBEntry(val tagSz: Int, val offsetSz: Int)(implicit p: Parameters) extends BoomBundle()(p)
-{
-  val tag      = UInt(tagSz.W)
+class BTBEntry(val offsetSz: Int) extends Bundle {
+  val offset = SInt(offsetSz.W)
   val extended = Bool()
-  val offset   = SInt(offsetSz.W)
 }
 
 class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) extends BranchPredictorBank()(p)
@@ -60,10 +58,12 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
   reset_idx := reset_idx + doing_reset
   when (reset_idx === (nSets-1).U) { doing_reset := false.B }
 
-  val btb      = Seq.fill(bankWidth) { SyncReadMem(nSets, new BTBEntry(tagSz, offsetSz)) }
+  val tags     = Seq.fill(bankWidth) { SyncReadMem(nSets, UInt(tagSz.W)) }
+  val btb      = Seq.fill(bankWidth) { SyncReadMem(nSets, new BTBEntry(offsetSz)) }
   val ebtb     = SyncReadMem(extendedNSets max 1, UInt(vaddrBitsExtended.W))
 
-  val s1_req_rbtb  = VecInit(btb.map(_.read(s0_req_idx,  io.f0_req.valid)))
+  val s1_req_rbtb  = VecInit(btb.map (_.read(s0_req_idx,  io.f0_req.valid)))
+  val s1_req_rtag  = VecInit(tags.map(_.read(s0_req_idx,  io.f0_req.valid)))
   val s1_req_rebtb = ebtb.read(s0_req_idx,  io.f0_req.valid)
   val s1_req_tag   = s1_req_idx >> log2Ceil(nSets)
 
@@ -71,7 +71,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
   val s1_resp = Wire(Vec(bankWidth, Valid(UInt(vaddrBitsExtended.W))))
 
   for (w <- 0 until bankWidth) {
-    s1_resp(w).valid := !doing_reset && s1_req.valid && s1_req_tag(tagSz-1,0) === s1_req_rbtb(w).tag
+    s1_resp(w).valid := !doing_reset && s1_req.valid && s1_req_tag(tagSz-1,0) === s1_req_rtag(w)
     s1_resp(w).bits  := Mux(
       s1_req_rbtb(w).extended && useEBTB.B,
       s1_req_rebtb,
@@ -95,27 +95,37 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
     (s1_update.bits.pc + (s1_update.bits.cfi_idx.bits << 1)).asSInt)
   val offset_is_extended = (new_offset_value > max_offset_value ||
                             new_offset_value < min_offset_value)
-  val s1_update_wbtb = Wire(new BTBEntry(tagSz, offsetSz))
-  s1_update_wbtb.extended := offset_is_extended
-  s1_update_wbtb.offset   := new_offset_value
-  s1_update_wbtb.tag      := s1_update_idx >> log2Ceil(nSets)
 
-  val s1_update_wmask = (UIntToOH(s1_update_cfi_idx) &
+
+  val s1_update_wbtb_data = Wire(new BTBEntry(offsetSz))
+  val s1_update_wtag_data = Wire(UInt(tagSz.W))
+  s1_update_wbtb_data.extended := offset_is_extended
+  s1_update_wbtb_data.offset   := new_offset_value
+  s1_update_wtag_data          := s1_update_idx >> log2Ceil(nSets)
+
+  val s1_update_wbtb_mask = (UIntToOH(s1_update_cfi_idx) &
     Fill(bankWidth, s1_update.bits.cfi_idx.valid && s1_update.valid && s1_update.bits.cfi_taken))
-
+  val s1_update_wtag_mask = s1_update_wbtb_mask | s1_update.bits.br_mask
 
   for (w <- 0 until bankWidth) {
-    when (doing_reset || (s1_update_wmask(w) && s1_update.valid)) {
+    when (doing_reset || (s1_update_wbtb_mask(w) && s1_update.valid)) {
       btb(w).write(
         Mux(doing_reset, reset_idx, s1_update_idx),
-        Mux(doing_reset, (0.U).asTypeOf(new BTBEntry(tagSz, offsetSz)), s1_update_wbtb)
+        Mux(doing_reset, (0.U).asTypeOf(new BTBEntry(offsetSz)), s1_update_wbtb_data)
+      )
+    }
+    when (doing_reset || (s1_update_wtag_mask(w) && s1_update.valid)) {
+      tags(w).write(
+        Mux(doing_reset, reset_idx, s1_update_idx),
+        Mux(doing_reset, 0.U, s1_update_wtag_data)
       )
     }
   }
 
   if (useEBTB) {
-    when (s1_update_wmask =/= 0.U && offset_is_extended) {
+    when (s1_update_wbtb_mask =/= 0.U && offset_is_extended) {
       ebtb.write(s1_update_idx, s1_update.bits.target)
     }
   }
 }
+
