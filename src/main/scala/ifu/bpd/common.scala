@@ -104,6 +104,8 @@ class BranchPredictionBankRequest(implicit p: Parameters) extends BoomBundle()(p
 abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(p)
   with HasBoomFrontendParameters
 {
+  val metaSz = 0
+
   val io = IO(new Bundle {
     val f0_req = Input(Valid(new BranchPredictionBankRequest))
 
