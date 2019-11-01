@@ -72,7 +72,7 @@ class DenseBTBBranchPredictorBank(implicit p: Parameters) extends BranchPredicto
 
 
   for (w <- 0 until bankWidth) {
-    when (doing_reset || s1_update_wmask(w)) {
+    when (doing_reset || (s1_update_wmask(w) && s1_update.valid)) {
       btb(w).write(
         Mux(doing_reset, reset_idx, s1_update_idx),
         Mux(doing_reset, (0.U).asTypeOf(new DenseBTBEntry), s1_update_wbtb)
@@ -84,4 +84,3 @@ class DenseBTBBranchPredictorBank(implicit p: Parameters) extends BranchPredicto
     ebtb.write(s1_update_idx, s1_update.bits.target)
   }
 }
-
