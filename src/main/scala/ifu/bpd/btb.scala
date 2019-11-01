@@ -37,7 +37,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
   val bimParams = if (params.micro) BoomBIMParams(nSets = nSets, micro = true) else params.bimParams
 
   require(isPow2(nSets))
-  require(isPow2(extendedNSets))
+  require(isPow2(extendedNSets) || extendedNSets == 0)
   require(extendedNSets <= nSets)
   require(nSets <= bimParams.nSets)
 
