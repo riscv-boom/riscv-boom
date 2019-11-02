@@ -16,7 +16,8 @@ run_aws "echo \"Ping $AWS_SERVER\""
 
 copy $LOCAL_CHECKOUT_DIR/.circleci/firesim-configs/$1/ $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/
 copy $LOCAL_CHECKOUT_DIR/.circleci/firesim-configs/$2/ $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/
-copy $HOME/$1 $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/$1
+
+BUILD_ARGS=-c $REMOTE_AWS_FSIM_DEPLOY_DIR/config_runtime.ini -a $REMOTE_AWS_FSIM_DEPLOY_DIR/built-hwdb-entries/$1 -r $REMOTE_AWS_FSIM_DEPLOY_DIR/config_build_recipes.ini
 
 cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-run-$1-$2.sh
 #!/bin/bash
@@ -27,19 +28,63 @@ set -ex
 cd $REMOTE_AWS_FSIM_DIR
 source sourceme-f1-manager.sh
 
-# run test                               runtime                                           hwdb                              buildrecipe
-firesim launchrunfarm                 -c $REMOTE_AWS_FSIM_DEPLOY_DIR/config_runtime.ini -a $REMOTE_AWS_FSIM_DEPLOY_DIR/$1 -r $REMOTE_AWS_FSIM_DEPLOY_DIR/config_build_recipes.ini
-firesim infrasetup                    -c $REMOTE_AWS_FSIM_DEPLOY_DIR/config_runtime.ini -a $REMOTE_AWS_FSIM_DEPLOY_DIR/$1 -r $REMOTE_AWS_FSIM_DEPLOY_DIR/config_build_recipes.ini
-timeout -k 3m 30m firesim runworkload -c $REMOTE_AWS_FSIM_DEPLOY_DIR/config_runtime.ini -a $REMOTE_AWS_FSIM_DEPLOY_DIR/$1 -r $REMOTE_AWS_FSIM_DEPLOY_DIR/config_build_recipes.ini
+set +e
+
+if firesim launchrunfarm $BUILD_ARGS; then
+    echo "launchrunfarm passed"
+else
+    echo "launchrunfarm failed"
+    firesim terminaterunfarm -q $BUILD_ARGS
+    curl -u $API_TOKEN: \
+        -d build_parameters[CIRCLE_JOB]=$1-run-finished \
+        -d build_parameters[LAUNCHRUNFARM_PASSED]=false \
+        -d revision=$CIRCLE_SHA1 \
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT/tree/$CIRCLE_BRANCH
+    exit 1
+fi
+
+if firesim infrasetup $BUILD_ARGS; then
+    echo "infrasetup passed"
+else
+    echo "infrasetup failed"
+    firesim terminaterunfarm -q $BUILD_ARGS
+    curl -u $API_TOKEN: \
+        -d build_parameters[CIRCLE_JOB]=$1-run-finished \
+        -d build_parameters[LAUNCHRUNFARM_PASSED]=true \
+        -d build_parameters[INFRASETUP_PASSED]=false \
+        -d revision=$CIRCLE_SHA1 \
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT/tree/$CIRCLE_BRANCH
+    exit 1
+fi
+
+if timeout -k 3m 30m firesim runworkload $BUILD_ARGS; then
+    echo "runworkload passed"
+    firesim terminaterunfarm -q $BUILD_ARGS
+    curl -u $API_TOKEN: \
+        -d build_parameters[CIRCLE_JOB]=$1-run-finished \
+        -d build_parameters[LAUNCHRUNFARM_PASSED]=true \
+        -d build_parameters[INFRASETUP_PASSED]=true \
+        -d build_parameters[RUNWORKLOAD_PASSED]=true \
+        -d revision=$CIRCLE_SHA1 \
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT/tree/$CIRCLE_BRANCH
+    exit 0
+else
+    echo "runworkload failed"
+    firesim terminaterunfarm -q $BUILD_ARGS
+    curl -u $API_TOKEN: \
+        -d build_parameters[CIRCLE_JOB]=$1-run-finished \
+        -d build_parameters[LAUNCHRUNFARM_PASSED]=true \
+        -d build_parameters[INFRASETUP_PASSED]=true \
+        -d build_parameters[RUNWORKLOAD_PASSED]=false \
+        -d revision=$CIRCLE_SHA1 \
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT/tree/$CIRCLE_BRANCH
+    exit 1
+fi
 EOF
 
-# execute the script
+echo "script created"
+cat $LOCAL_CHECKOUT_DIR/firesim-run-$1-$2.sh
+
+# execute the script and detach
 chmod +x $LOCAL_CHECKOUT_DIR/firesim-run-$1-$2.sh
-run_script_aws $LOCAL_CHECKOUT_DIR/firesim-run-$1-$2.sh
-
-# copy over results
-copy $AWS_SERVER:$REMOTE_AWS_RESULTS_DIR $HOME/$1-$2/
-
-# print the results
-cd $HOME
-cat $1-$2/results_workload/*/*/uartlog
+run_detach_script_aws $1 $LOCAL_CHECKOUT_DIR/firesim-run-$1-$2.sh
