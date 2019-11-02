@@ -655,33 +655,6 @@ jobs:
                 name: Initialize the manager instance
                 command: |
                     .circleci/firesim-init-manager.sh
-    build-largefireboom-afi:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - run:
-                name: Create hash of BOOM + Chipyard
-                command: |
-                    .circleci/create-chipyard-boom-hash.sh
-            - restore_cache:
-                keys:
-                    - fireboom-singlecore-no-nic-l2-llc4mb-ddr3-afi-v0-{{ checksum "../chipyard-boom.hash" }}
-            - run:
-                name: Build a LargeFireBoom AFI
-                command: |
-                    .circleci/firesim-build-afi.sh fireboom-singlecore-no-nic-l2-llc4mb-ddr3
-                no_output_timeout: 240m
-            - save_cache:
-                key: fireboom-singlecore-no-nic-l2-llc4mb-ddr3-afi-v0-{{ checksum "../chipyard-boom.hash" }}
-                paths:
-                    - "/home/riscvuser/fireboom-singlecore-no-nic-l2-llc4mb-ddr3"
     build-buildroot:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -712,7 +685,7 @@ jobs:
                 name: Build a Fedora test workload and install to FireSim
                 command: |
                     .circleci/firesim-build-workload.sh fedora
-    run-buildroot:
+    launch-largefireboom-afi-build:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
         environment:
@@ -727,14 +700,60 @@ jobs:
                 name: Create hash of BOOM + Chipyard
                 command: |
                     .circleci/create-chipyard-boom-hash.sh
-            - restore_cache:
-                keys:
-                    - fireboom-singlecore-no-nic-l2-llc4mb-ddr3-afi-v0-{{ checksum "../chipyard-boom.hash" }}
+            - run:
+                name: Build a LargeFireBoom AFI
+                command: |
+                    .circleci/firesim-build-largeboom-afi.sh fireboom-singlecore-no-nic-l2-llc4mb-ddr3
+                no_output_timeout: 240m
+    afi-failed:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+            - run:
+                name: AFI Build Failed
+                command: |
+                    .circleci/firesim-afi-failed.sh
+    launch-buildroot-run:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+            - run:
+                name: Create hash of BOOM + Chipyard
+                command: |
+                    .circleci/create-chipyard-boom-hash.sh
             - run:
                 name: Run a Buildroot test
                 command: |
                     .circleci/firesim-run-workload.sh fireboom-singlecore-no-nic-l2-llc4mb-ddr3 buildroot
-    run-fedora:
+    buildroot-run-finished:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - run:
+                name: Buildroot finished
+                command: |
+                    .circleci/firesim-run-finished.sh buildroot
+    launch-fedora-run:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
         environment:
@@ -749,25 +768,36 @@ jobs:
                 name: Create hash of BOOM + Chipyard
                 command: |
                     .circleci/create-chipyard-boom-hash.sh
-            - restore_cache:
-                keys:
-                    - fireboom-singlecore-no-nic-l2-llc4mb-ddr3-afi-v0-{{ checksum "../chipyard-boom.hash" }}
             - run:
                 name: Run a Fedora test workload
                 command: |
                     .circleci/firesim-run-workload.sh fireboom-singlecore-no-nic-l2-llc4mb-ddr3 fedora
+    fedora-run-finished:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - run:
+                name: Fedora finished
+                command: |
+                    .circleci/firesim-run-finished.sh fedora
 
 # Order and dependencies of jobs to run
 workflows:
     version: 2
-    run-firesim-ci:
+    init-firesim:
         jobs:
             - initialize-manager
 
             - aws-approval:
                 type: approval
 
-            - build-largefireboom-afi:
+            - launch-largefireboom-afi-build:
                 requires:
                     - aws-approval
                     - initialize-manager
@@ -780,16 +810,6 @@ workflows:
                 requires:
                     - initialize-manager
                     - build-buildroot
-
-            - run-buildroot:
-                requires:
-                    - build-largefireboom-afi
-                    - build-buildroot
-
-            - run-fedora:
-                requires:
-                    - build-largefireboom-afi
-                    - build-fedora
 
     build-and-test-boom-configs:
         jobs:

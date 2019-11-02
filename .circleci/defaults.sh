@@ -14,45 +14,77 @@
 
 # shared across build server and aws
 
+# copy files from server to server
+# $1 - src
+# $2 - dest
 copy () {
     rsync -avzp -e 'ssh' $1 $2
 }
 
+# run command over ssh
+# $1 - server login (user@IP)
+# $2 - command
 run_impl () {
     ssh -o "StrictHostKeyChecking no" -t $1 $2
 }
 
+# run script over ssh
+# $1 - server login (user@IP)
+# $2 - local script
+# $2 - arguments to the script
 run_script_impl () {
     ssh -o "StrictHostKeyChecking no" -t $1 'bash -s -l' < $2 "$3"
 }
 
 # build server calls
 
+# run command on build server
+# $1 - command
 run () {
     run_impl $SERVER $@
 }
 
+# run script on build server
+# $1 - script
+# $1 - arguments to the script
 run_script () {
     run_script_impl $SERVER $1 $2
 }
 
+# remove the work dir on the build server
 clean () {
-    # remove remote work dir
     run "rm -rf $REMOTE_WORK_DIR"
 }
 
 # aws calls
 
+# run command on aws server
+# $1 - command
 run_aws () {
     run_impl $AWS_SERVER $@
 }
 
+# run script on aws server
+# $1 - script
+# $1 - arguments to the script
 run_script_aws () {
     run_script_impl $AWS_SERVER $1 $2
 }
 
+# run script on aws server but detach after running
+# $1 - session name
+# $2 - script
+run_detach_script_aws () {
+    # remove old script if it exists
+    run_impl $AWS_SERVER "rm -rf $2"
+    # copy new script to run
+    copy $2 $AWS_SERVER:$REMOTE_AWS_WORK_DIR/
+    # run script and detach
+    run_impl $AWS_SERVER "screen -S CI-$1-SESSION -dm $2"
+}
+
+# remove the work dir on the aws server
 clean_aws () {
-    # remove remote work dir
     run_aws "rm -rf $REMOTE_AWS_WORK_DIR"
 }
 
