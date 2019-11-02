@@ -20,7 +20,7 @@ jobs:
             - run:
                 name: Create hash of toolchains
                 command: |
-                    echo "Hello world!"
+                    exit 1
 
     hello:
         docker:
