@@ -703,7 +703,7 @@ jobs:
             - run:
                 name: Build a LargeFireBoom AFI
                 command: |
-                    .circleci/firesim-build-largeboom-afi.sh fireboom-singlecore-no-nic-l2-llc4mb-ddr3
+                    .circleci/firesim-build-largeboom-afi.sh firesim-singlecore-no-nic-l2-lbp
                 no_output_timeout: 240m
     afi-failed:
         docker:
@@ -738,7 +738,7 @@ jobs:
             - run:
                 name: Run a Buildroot test
                 command: |
-                    .circleci/firesim-run-workload.sh fireboom-singlecore-no-nic-l2-llc4mb-ddr3 buildroot
+                    .circleci/firesim-run-workload.sh firesim-singlecore-no-nic-l2-lbp buildroot
     buildroot-run-finished:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -771,7 +771,7 @@ jobs:
             - run:
                 name: Run a Fedora test workload
                 command: |
-                    .circleci/firesim-run-workload.sh fireboom-singlecore-no-nic-l2-llc4mb-ddr3 fedora
+                    .circleci/firesim-run-workload.sh firesim-singlecore-no-nic-l2-lbp fedora
     fedora-run-finished:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
