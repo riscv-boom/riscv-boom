@@ -722,7 +722,10 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
   when (io.flush_pipeline) {
     branch_mask := 0.U
   } .otherwise {
-    branch_mask := GetNewBrMask(io.brupdate, curr_mask)
+    val mask = Mux(io.brupdate.b2.mispredict,
+      io.brupdate.b2.uop.br_mask,
+      ~(0.U(maxBrCount.W)))
+    branch_mask := GetNewBrMask(io.brupdate, curr_mask) & mask
   }
 
   io.debug.branch_mask := branch_mask
