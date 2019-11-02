@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# run the workload and detach
 # usage
 #  $1 - the name of the afi used
 #  $2 - the name of the workload dir in firesim-configs
