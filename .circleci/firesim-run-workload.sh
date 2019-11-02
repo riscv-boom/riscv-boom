@@ -89,5 +89,3 @@ cat $LOCAL_CHECKOUT_DIR/firesim-run-$1-$2.sh
 # execute the script and detach
 chmod +x $LOCAL_CHECKOUT_DIR/firesim-run-$1-$2.sh
 run_detach_script_aws $1 $LOCAL_CHECKOUT_DIR firesim-run-$1-$2.sh
-
-run_aws "screen -list"
