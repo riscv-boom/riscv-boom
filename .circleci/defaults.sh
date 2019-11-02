@@ -41,7 +41,7 @@ run_script_impl () {
 # run command on build server
 # $1 - command
 run () {
-    run_impl $SERVER $@
+    run_impl $SERVER "$@"
 }
 
 # run script on build server
@@ -61,7 +61,7 @@ clean () {
 # run command on aws server
 # $1 - command
 run_aws () {
-    run_impl $AWS_SERVER $@
+    run_impl $AWS_SERVER "$@"
 }
 
 # run script on aws server
@@ -81,7 +81,9 @@ run_detach_script_aws () {
     # copy new script to run to work dir
     copy $2/$3 $AWS_SERVER:$REMOTE_AWS_WORK_DIR/
     # run script and detach
-    run_impl $AWS_SERVER "screen -S CI-$1-SESSION -dm $REMOTE_AWS_WORK_DIR/$3"
+    # NOTE: for some reason without re-invoking screen after this command it breaks
+    # NOTE: AND, screen -list returns false by default (even if there is a session running)
+    run_impl $AWS_SERVER "screen -S CI-$1-SESSION -dm $REMOTE_AWS_WORK_DIR/$3; screen -list || true"
 }
 
 # remove the work dir on the aws server
