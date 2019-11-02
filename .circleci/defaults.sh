@@ -119,6 +119,9 @@ LOCAL_CHIPYARD_DIR=$HOME/chipyard
 LOCAL_VERILATOR_DIR=$HOME/verilator
 LOCAL_SIM_DIR=$LOCAL_CHIPYARD_DIR/sims/verilator
 
+# api url to do curls
+API_URL=https://circleci.com/api/v1.1
+
 # key value store to get the build strings
 declare -A mapping
 mapping["smallboom"]="CONFIG=SmallBoomConfig"
