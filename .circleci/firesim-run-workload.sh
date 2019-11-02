@@ -39,7 +39,7 @@ else
         -d build_parameters[CIRCLE_JOB]=$1-run-finished \
         -d build_parameters[LAUNCHRUNFARM_PASSED]=false \
         -d revision=$CIRCLE_SHA1 \
-        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT/tree/$CIRCLE_BRANCH
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
     exit 1
 fi
 
@@ -53,7 +53,7 @@ else
         -d build_parameters[LAUNCHRUNFARM_PASSED]=true \
         -d build_parameters[INFRASETUP_PASSED]=false \
         -d revision=$CIRCLE_SHA1 \
-        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT/tree/$CIRCLE_BRANCH
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
     exit 1
 fi
 
@@ -66,7 +66,7 @@ if timeout -k 3m 30m firesim runworkload $BUILD_ARGS; then
         -d build_parameters[INFRASETUP_PASSED]=true \
         -d build_parameters[RUNWORKLOAD_PASSED]=true \
         -d revision=$CIRCLE_SHA1 \
-        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT/tree/$CIRCLE_BRANCH
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
     exit 0
 else
     echo "runworkload failed"
@@ -77,7 +77,7 @@ else
         -d build_parameters[INFRASETUP_PASSED]=true \
         -d build_parameters[RUNWORKLOAD_PASSED]=false \
         -d revision=$CIRCLE_SHA1 \
-        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT/tree/$CIRCLE_BRANCH
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
     exit 1
 fi
 EOF
@@ -88,3 +88,5 @@ cat $LOCAL_CHECKOUT_DIR/firesim-run-$1-$2.sh
 # execute the script and detach
 chmod +x $LOCAL_CHECKOUT_DIR/firesim-run-$1-$2.sh
 run_detach_script_aws $1 $LOCAL_CHECKOUT_DIR/firesim-run-$1-$2.sh
+
+run_aws "screen -list"
