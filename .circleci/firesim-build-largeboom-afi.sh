@@ -1,9 +1,10 @@
 #!/bin/bash
 
-# take the hash located in chipyard-boom.hash
-# and see if the /home/riscvuser/largefireboom_hwdb.ini entry exists
-
-# if so then it no need to regen afi
+# make an afi and detach from server
+# spawn all jobs related to it
+# requires workloads to be done before this afi is built
+# usage
+#   $1 - the name of the afi to build
 
 # turn echo on and error on earliest command
 set -ex
