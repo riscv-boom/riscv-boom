@@ -73,14 +73,15 @@ run_script_aws () {
 
 # run script on aws server but detach after running
 # $1 - session name
-# $2 - script
+# $2 - local script path
+# $3 - script name
 run_detach_script_aws () {
     # remove old script if it exists
-    run_impl $AWS_SERVER "rm -rf $2"
-    # copy new script to run
-    copy $2 $AWS_SERVER:$REMOTE_AWS_WORK_DIR/
+    run_impl $AWS_SERVER "rm -rf $REMOTE_AWS_WORK_DIR/$3"
+    # copy new script to run to work dir
+    copy $2/$3 $AWS_SERVER:$REMOTE_AWS_WORK_DIR/
     # run script and detach
-    run_impl $AWS_SERVER "screen -S CI-$1-SESSION -dm $2"
+    run_impl $AWS_SERVER "screen -S CI-$1-SESSION -dm $REMOTE_AWS_WORK_DIR/$3"
 }
 
 # remove the work dir on the aws server

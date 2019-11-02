@@ -75,6 +75,6 @@ cat $LOCAL_CHECKOUT_DIR/firesim-build-$1-afi.sh
 
 # execute the script and detach
 chmod +x $LOCAL_CHECKOUT_DIR/firesim-build-$1-afi.sh
-run_detach_script_aws $1 $LOCAL_CHECKOUT_DIR/firesim-build-$1-afi.sh
+run_detach_script_aws $1 $LOCAL_CHECKOUT_DIR firesim-build-$1-afi.sh
 
 run_aws "screen -list"
