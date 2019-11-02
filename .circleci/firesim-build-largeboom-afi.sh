@@ -42,7 +42,7 @@ else
     curl -u $API_TOKEN: \
         -d build_parameters[CIRCLE_JOB]=afi-failed \
         -d revision=$CIRCLE_SHA1 \
-        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT/tree/$CIRCLE_BRANCH
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
     exit 1
 fi
 
@@ -53,7 +53,7 @@ if [ -f $REMOTE_AWS_WORK_DIR/\$WORKLOAD_DIR_NAME-\$WORKLOAD_NAME-FINISHED ]; the
     curl -u $API_TOKEN: \
         -d build_parameters[CIRCLE_JOB]=launch-buildroot-run \
         -d revision=$CIRCLE_SHA1 \
-        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT/tree/$CIRCLE_BRANCH
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
     exit 0
 fi
 
@@ -64,7 +64,7 @@ if [ -f $REMOTE_AWS_WORK_DIR/\$WORKLOAD_DIR_NAME-\$WORKLOAD_NAME-FINISHED ]; the
     curl -u $API_TOKEN: \
         -d build_parameters[CIRCLE_JOB]=launch-fedora-run \
         -d revision=$CIRCLE_SHA1 \
-        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT/tree/$CIRCLE_BRANCH
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
     exit 0
 fi
 
@@ -76,3 +76,5 @@ cat $LOCAL_CHECKOUT_DIR/firesim-build-$1-afi.sh
 # execute the script and detach
 chmod +x $LOCAL_CHECKOUT_DIR/firesim-build-$1-afi.sh
 run_detach_script_aws $1 $LOCAL_CHECKOUT_DIR/firesim-build-$1-afi.sh
+
+run_aws "screen -list"
