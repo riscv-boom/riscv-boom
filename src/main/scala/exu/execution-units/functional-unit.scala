@@ -150,7 +150,6 @@ class BrUpdateInfo(implicit p: Parameters) extends BoomBundle
   val b1 = new BrUpdateMasks
   // On the second cycle we get indices to reset pointers
   val b2 = new BrResolutionInfo
-  val b3 = new BrResolutionInfo
 }
 
 class BrUpdateMasks(implicit p: Parameters) extends BoomBundle
@@ -308,7 +307,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   var op1_data: UInt = null
   if (isJmpUnit) {
     // Get the uop PC for jumps
-    val block_pc = AlignPCToBoundary(io.get_ftq_pc.entry.fetch_pc, icBlockBytes)
+    val block_pc = AlignPCToBoundary(io.get_ftq_pc.pc, icBlockBytes)
     val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
 
     op1_data = Mux(uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,

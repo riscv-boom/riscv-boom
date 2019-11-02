@@ -45,13 +45,14 @@ import boom.exu.FUConstants._
 import boom.common.BoomTilesKey
 import boom.util._
 
+
+
 /**
- * IO bundle for the BOOM Core. Connects the external components such as
- * the Frontend to the core.
+ * Top level core object that connects the Frontend to the rest of the pipeline.
  */
-trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
+class BoomCore(implicit p: Parameters) extends BoomModule
+  with HasBoomFrontendParameters // TODO: Don't add this trait
 {
-  implicit val p: Parameters
   val io = new freechips.rocketchip.tile.CoreBundle
     with freechips.rocketchip.tile.HasExternallyDrivenTileConstants
   {
@@ -65,15 +66,6 @@ trait HasBoomCoreIO extends freechips.rocketchip.tile.HasTileParameters
       new freechips.rocketchip.rocket.TracedInstruction))
     val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
   }
-}
-
-/**
- * Top level core object that connects the Frontend to the rest of the pipeline.
- */
-class BoomCore(implicit p: Parameters) extends BoomModule
-  with HasBoomFrontendParameters // TODO: Don't add this trait
-  with HasBoomCoreIO
-{
   //**********************************
   // construct all of the modules
 
@@ -187,7 +179,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   brupdate.b1 := b1
   brupdate.b2 := b2
-  brupdate.b3 := RegNext(b2)
 
   val jmpunit_idx = exe_units.jmp_unit_idx
 
@@ -213,10 +204,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   b2.cfi_type    := oldest_mispredict.cfi_type
   b2.taken       := oldest_mispredict.taken
   b2.pc_sel      := oldest_mispredict.pc_sel
-  b2.uop         := oldest_mispredict.uop
+  b2.uop         := UpdateBrMask(brupdate, oldest_mispredict.uop)
   b2.jalr_target := RegNext(exe_units(jmpunit_idx).io.brinfo.jalr_target)
   b2.target_offset := oldest_mispredict.target_offset
 
+  val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftq_idx
 
 
   assert (!((brupdate.b1.mispredict_mask =/= 0.U || brupdate.b2.mispredict)
@@ -402,43 +394,43 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       io.ifu.redirect_ghist := (0.U).asTypeOf(new GlobalHistory)
       io.ifu.redirect_flush_ghist := true.B
     } .otherwise {
-      val flush_pc = (AlignPCToBoundary(io.ifu.get_pc.entry.fetch_pc, icBlockBytes)
+      val flush_pc = (AlignPCToBoundary(io.ifu.get_pc(0).pc, icBlockBytes)
                       + RegNext(rob.io.flush.bits.pc_lob)
                       - Mux(RegNext(rob.io.flush.bits.edge_inst), 2.U, 0.U))
       val flush_pc_next = flush_pc + Mux(RegNext(rob.io.flush.bits.is_rvc), 2.U, 4.U)
       io.ifu.redirect_pc := Mux(FlushTypes.useSamePC(flush_typ),
                                 flush_pc, flush_pc_next)
-      io.ifu.redirect_ghist := io.ifu.get_pc.entry.ghist
+      io.ifu.redirect_ghist := io.ifu.get_pc(0).entry.ghist
     }
     io.ifu.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
-  } .elsewhen (brupdate.b3.mispredict && !RegNext(RegNext(rob.io.flush.valid))) {
-    val block_pc = AlignPCToBoundary(io.ifu.get_pc.entry.fetch_pc, icBlockBytes)
-    val uop_maybe_pc = block_pc | brupdate.b3.uop.pc_lob
-    val npc = uop_maybe_pc + Mux(brupdate.b3.uop.is_rvc || brupdate.b3.uop.edge_inst, 2.U, 4.U)
+  } .elsewhen (brupdate.b2.mispredict && !RegNext(rob.io.flush.valid)) {
+    val block_pc = AlignPCToBoundary(io.ifu.get_pc(1).pc, icBlockBytes)
+    val uop_maybe_pc = block_pc | brupdate.b2.uop.pc_lob
+    val npc = uop_maybe_pc + Mux(brupdate.b2.uop.is_rvc || brupdate.b2.uop.edge_inst, 2.U, 4.U)
     val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
-    jal_br_target := (uop_maybe_pc.asSInt + brupdate.b3.target_offset +
-      (Fill(vaddrBitsExtended-1, brupdate.b3.uop.edge_inst) << 1).asSInt).asUInt
-    val bj_addr = Mux(brupdate.b3.cfi_type === CFI_JALR, brupdate.b3.jalr_target, jal_br_target)
-    val mispredict_target = Mux(brupdate.b3.pc_sel === PC_PLUS4, npc, bj_addr)
+    jal_br_target := (uop_maybe_pc.asSInt + brupdate.b2.target_offset +
+      (Fill(vaddrBitsExtended-1, brupdate.b2.uop.edge_inst) << 1).asSInt).asUInt
+    val bj_addr = Mux(brupdate.b2.cfi_type === CFI_JALR, brupdate.b2.jalr_target, jal_br_target)
+    val mispredict_target = Mux(brupdate.b2.pc_sel === PC_PLUS4, npc, bj_addr)
     io.ifu.redirect_val     := true.B
     io.ifu.redirect_pc      := mispredict_target
     io.ifu.redirect_flush   := true.B
-    io.ifu.redirect_ftq_idx := brupdate.b3.uop.ftq_idx
-    val use_same_ghist = (brupdate.b3.cfi_type === CFI_BR &&
-                          !brupdate.b3.taken &&
+    io.ifu.redirect_ftq_idx := brupdate.b2.uop.ftq_idx
+    val use_same_ghist = (brupdate.b2.cfi_type === CFI_BR &&
+                          !brupdate.b2.taken &&
                           bankAlign(block_pc) === bankAlign(npc))
 
-    val next_ghist = io.ifu.get_pc.entry.ghist.update(
-      io.ifu.get_pc.entry.br_mask.asUInt,
-      brupdate.b3.taken,
-      brupdate.b3.cfi_type === CFI_BR,
-      brupdate.b3.uop.pc_lob >> 1,
+    val next_ghist = io.ifu.get_pc(1).entry.ghist.update(
+      io.ifu.get_pc(1).entry.br_mask.asUInt,
+      brupdate.b2.taken,
+      brupdate.b2.cfi_type === CFI_BR,
+      brupdate.b2.uop.pc_lob >> 1,
       true.B,
-      io.ifu.get_pc.entry.fetch_pc)
+      io.ifu.get_pc(1).pc)
 
     io.ifu.redirect_ghist   := Mux(
       use_same_ghist,
-      io.ifu.get_pc.entry.ghist,
+      io.ifu.get_pc(1).entry.ghist,
       next_ghist)
   } .elsewhen (rob.io.flush_frontend || brupdate.b1.mispredict_mask =/= 0.U) {
     io.ifu.redirect_flush   := true.B
@@ -506,44 +498,44 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // FTQ GetPC Port Arbitration
 
   val jmp_pc_req  = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
-  val mispredict_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
   val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
   val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
 
-  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 4))
+  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 3))
 
   // Order by the oldest. Flushes come from the oldest instructions in pipe
   // Decoding exceptions come from youngest
   ftq_arb.io.in(0) <> flush_pc_req
-  ftq_arb.io.in(1) <> mispredict_pc_req
-  ftq_arb.io.in(2) <> jmp_pc_req
-  ftq_arb.io.in(3) <> xcpt_pc_req
+  ftq_arb.io.in(1) <> jmp_pc_req
+  ftq_arb.io.in(2) <> xcpt_pc_req
 
   // Hookup FTQ
-  io.ifu.get_pc.ftq_idx := ftq_arb.io.out.bits
+  io.ifu.get_pc(0).ftq_idx := ftq_arb.io.out.bits
   ftq_arb.io.out.ready  := true.B
 
   // Branch Unit Requests (for JALs) (Should delay issue of JALs if this not ready)
   jmp_pc_req.valid := RegNext(iss_valids(jmpunit_idx) && iss_uops(jmpunit_idx).fu_code === FU_JMP)
   jmp_pc_req.bits  := RegNext(iss_uops(jmpunit_idx).ftq_idx)
-  exe_units(jmpunit_idx).io.get_ftq_pc.entry        := io.ifu.get_pc.entry
+  exe_units(jmpunit_idx).io.get_ftq_pc.pc               := io.ifu.get_pc(0).pc
+  exe_units(jmpunit_idx).io.get_ftq_pc.entry            := io.ifu.get_pc(0).entry
   exe_units(jmpunit_idx).io.get_ftq_pc.com_pc           := DontCare // This shouldn't be used by jmpunit
-  exe_units(jmpunit_idx).io.get_ftq_pc.next_val         := io.ifu.get_pc.next_val
-  exe_units(jmpunit_idx).io.get_ftq_pc.next_pc          := io.ifu.get_pc.next_pc
+  exe_units(jmpunit_idx).io.get_ftq_pc.next_val         := io.ifu.get_pc(0).next_val
+  exe_units(jmpunit_idx).io.get_ftq_pc.next_pc          := io.ifu.get_pc(0).next_pc
 
-  // Mispredict requests (to get the correct target)
-  mispredict_pc_req.valid := brupdate.b2.mispredict
-  mispredict_pc_req.bits  := brupdate.b2.uop.ftq_idx
 
   // Frontend Exception Requests
   val xcpt_idx = PriorityEncoder(dec_xcpts)
   xcpt_pc_req.valid    := dec_xcpts.reduce(_||_)
   xcpt_pc_req.bits     := dec_uops(xcpt_idx).ftq_idx
   //rob.io.xcpt_fetch_pc := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
-  rob.io.xcpt_fetch_pc := io.ifu.get_pc.entry.fetch_pc
+  rob.io.xcpt_fetch_pc := io.ifu.get_pc(0).pc
 
   flush_pc_req.valid   := rob.io.flush.valid
   flush_pc_req.bits    := rob.io.flush.bits.ftq_idx
+
+  // Mispredict requests (to get the correct target)
+  io.ifu.get_pc(1).ftq_idx := oldest_mispredict_ftq_idx
+
 
   //-------------------------------------------------------------
   // Decode/Rename1 pipeline logic
@@ -850,7 +842,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         // Supress just-issued divides from issuing back-to-back, since it's an iterative divider.
         // But it takes a cycle to get to the Exe stage, so it can't tell us it is busy yet.
         val idiv_issued = iss_valids(iss_idx) && iss_uops(iss_idx).fu_code_is(FU_DIV)
-        fu_types = fu_types & RegNext(~Mux(idiv_issued, FU_DIV, 0.U)) & ~Mux(!jmp_pc_req.ready, FU_JMP, 0.U)
+        fu_types = fu_types & RegNext(~Mux(idiv_issued, FU_DIV, 0.U))
       }
 
       if (exe_unit.hasMem) {
@@ -934,7 +926,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   csr.io.exception := RegNext(rob.io.com_xcpt.valid)
   // csr.io.pc used for setting EPC during exception or CSR.io.trace.
 
-  csr.io.pc        := (boom.util.AlignPCToBoundary(io.ifu.get_pc.com_pc, icBlockBytes)
+  csr.io.pc        := (boom.util.AlignPCToBoundary(io.ifu.get_pc(0).com_pc, icBlockBytes)
                      + RegNext(rob.io.com_xcpt.bits.pc_lob)
                      - Mux(RegNext(rob.io.com_xcpt.bits.edge_inst), 2.U, 0.U))
   // Cause not valid for for CALL or BREAKPOINTs (CSRFile will override it).

@@ -207,7 +207,8 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   // Give the backend a packet of instructions.
   val fetchpacket       = Flipped(new DecoupledIO(new FetchBufferResp))
 
-  val get_pc            = Flipped(new GetPCFromFtqIO())
+  // 1 for xcpt/jalr/auipc/flush
+  val get_pc            = Flipped(Vec(2, new GetPCFromFtqIO()))
 
   // Breakpoint info
   val status            = Output(new MStatus)
@@ -453,7 +454,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val f4_ready = Wire(Bool())
   f3_ready := f3.io.enq.ready
-  f3.io.enq.valid   := s2_valid && icache.io.resp.valid && !f2_clear
+  f3.io.enq.valid   := s2_valid && (icache.io.resp.valid || s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !f2_clear
   f3.io.enq.bits.pc := s2_vpc
   f3.io.enq.bits.data  := Mux(s2_xcpt, 0.U, icache.io.resp.bits.data)
   f3.io.enq.bits.ghist := s2_ghist
