@@ -26,7 +26,9 @@ run_aws "echo \"Ping $AWS_SERVER\""
 copy $LOCAL_FSIM_CFGS_DIR/$AFI_NAME $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/
 
 REMOTE_CFG_DIR=$REMOTE_AWS_FSIM_DEPLOY_DIR/$AFI_NAME
-BUILD_ARGS="-c $REMOTE_CFG_DIR/$WORKLOAD_NAME/config_runtime.ini -a $REMOTE_AWS_FSIM_DEPLOY_DIR/built-hwdb-entries/$AFI_NAME -r $REMOTE_CFG_DIR/config_build_recipes.ini"
+# TODO TODO TODO TODO TODO TODO Renable
+#BUILD_ARGS="-c $REMOTE_CFG_DIR/$WORKLOAD_NAME/config_runtime.ini -a $REMOTE_AWS_FSIM_DEPLOY_DIR/built-hwdb-entries/$AFI_NAME -r $REMOTE_CFG_DIR/config_build_recipes.ini"
+BUILD_ARGS="-c $REMOTE_CFG_DIR/$WORKLOAD_NAME/config_runtime.ini -a /home/centos/riscv-boom-firesim-ci-2e15ba72f8bc7c70ed976af4c5efa32d701ff273/chipyard/sims/firesim/deploy/built-hwdb-entries/$AFI_NAME -r $REMOTE_CFG_DIR/config_build_recipes.ini"
 SCRIPT_NAME=firesim-run-$AFI_NAME-$WORKLOAD_NAME.sh
 
 cat <<EOF >> $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
