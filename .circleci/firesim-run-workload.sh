@@ -18,7 +18,7 @@ run_aws "echo \"Ping $AWS_SERVER\""
 copy $LOCAL_CHECKOUT_DIR/.circleci/firesim-configs/$1/ $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/
 copy $LOCAL_CHECKOUT_DIR/.circleci/firesim-configs/$2/ $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/
 
-BUILD_ARGS=-c $REMOTE_AWS_FSIM_DEPLOY_DIR/config_runtime.ini -a $REMOTE_AWS_FSIM_DEPLOY_DIR/built-hwdb-entries/$1 -r $REMOTE_AWS_FSIM_DEPLOY_DIR/config_build_recipes.ini
+BUILD_ARGS="-c $REMOTE_AWS_FSIM_DEPLOY_DIR/config_runtime.ini -a $REMOTE_AWS_FSIM_DEPLOY_DIR/built-hwdb-entries/$1 -r $REMOTE_AWS_FSIM_DEPLOY_DIR/config_build_recipes.ini"
 
 cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-run-$1-$2.sh
 #!/bin/bash

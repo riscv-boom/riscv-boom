@@ -55,7 +55,6 @@ if [ -f $REMOTE_AWS_WORK_DIR/\$WORKLOAD_DIR_NAME-\$WORKLOAD_NAME-FINISHED ]; the
         -d build_parameters[CIRCLE_JOB]=launch-buildroot-run \
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
-    exit 0
 fi
 
 # run workload 2 - fedora
@@ -66,7 +65,6 @@ if [ -f $REMOTE_AWS_WORK_DIR/\$WORKLOAD_DIR_NAME-\$WORKLOAD_NAME-FINISHED ]; the
         -d build_parameters[CIRCLE_JOB]=launch-fedora-run \
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
-    exit 0
 fi
 
 EOF
