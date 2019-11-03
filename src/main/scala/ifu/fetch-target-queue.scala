@@ -59,6 +59,9 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
   // What global history should be used to query this fetch bundle
   val ghist = new GlobalHistory
 
+  // Which bank did this start from?
+  val start_bank = UInt(1.W)
+
   // // Metadata for the branch predictor
   // val bpd_meta = Vec(nBanks, UInt(bpdMaxMetaLength.W))
 }
@@ -137,10 +140,11 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     ram(enq_ptr).cfi_idx   := io.enq.bits.cfi_idx
     // Initially, if we see a CFI, it is assumed to be taken.
     // Branch resolutions may change this
-    ram(enq_ptr).cfi_taken := io.enq.bits.cfi_idx.valid
+    ram(enq_ptr).cfi_taken  := io.enq.bits.cfi_idx.valid
     ram(enq_ptr).cfi_mispredicted := false.B
-    ram(enq_ptr).br_mask   := io.enq.bits.br_mask.asUInt & fetchMask(io.enq.bits.pc)
-    ram(enq_ptr).jal_mask  := io.enq.bits.jal_mask.asUInt & fetchMask(io.enq.bits.pc)
+    ram(enq_ptr).br_mask    := io.enq.bits.br_mask.asUInt & fetchMask(io.enq.bits.pc)
+    ram(enq_ptr).jal_mask   := io.enq.bits.jal_mask.asUInt & fetchMask(io.enq.bits.pc)
+    ram(enq_ptr).start_bank := bank(io.enq.bits.pc)
     val prev_idx = WrapDec(enq_ptr, num_entries)
     val prev_entry = ram(prev_idx)
     ram(enq_ptr).ghist := Mux(start_from_empty_ghist,
@@ -211,8 +215,10 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
   when (io.brupdate.b2.mispredict) {
     val ftq_idx = io.brupdate.b2.uop.ftq_idx
+    val entry = ram(ftq_idx)
     ram(ftq_idx).cfi_idx.valid    := true.B
-    ram(ftq_idx).cfi_idx.bits     := io.brupdate.b2.uop.pc_lob >> 1
+    ram(ftq_idx).cfi_idx.bits     := (io.brupdate.b2.uop.pc_lob ^
+                                      Mux(entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)) >> 1
     ram(ftq_idx).cfi_mispredicted := true.B
     ram(ftq_idx).cfi_taken        := io.brupdate.b2.taken
   }

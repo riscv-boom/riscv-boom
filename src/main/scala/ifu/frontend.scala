@@ -82,26 +82,26 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
                                  Mux(cfi_is_br && cfi_taken && cfi_valid                              , histories(0) << 1 | 1.U,
                                  Mux(not_taken_branches =/= 0.U                                       , histories(0) << 1,
                                                                                                         histories(0))))
-      // new_history.new_history := DontCare
-      // new_history.old_history := Mux(cfi_taken_br    , histories(0) << 1 | 1.U,
-      //                            Mux(branches =/= 0.U, histories(0) << 1,
-      //                                                  histories(0)))
+
     } else {
       // In the two bank case every bank ignore the history added by the previous bank
-      // val base = histories(1)
-      // val ignore_second_bank = (cfi_valid && cfi_idx < bankWidth.U) || mayNotBeDualBanked(addr)
-      // when (ignore_second_bank) {
-      //   new_history.old_history := histories(1)
-      //   new_history.new_history.valid := (cfi_taken_br && cfi_idx < bankWidth.U) ||
-      //                                    (branches(bankWidth-1,0) =/= 0.U)
-      //   new_history.new_history.bits  := cfi_taken_br && cfi_idx < bankWidth.U
-      // } .otherwise {
-      //   new_history.old_history := Mux(cfi_taken_br && cfi_idx < bankWidth.U, histories(1) << 1 | 1.U,
-      //                              Mux(branches(bankWidth-1,0) =/= 0.U      , histories(1) << 1,
-      //                                                                         histories(1)))
-      //   new_history.new_history.valid := branches(2*bankWidth-1, bankWidth-1) =/= 0.U
-      //   new_history.new_history.bits  := cfi_taken_br
-      // }
+      val base = histories(1)
+      val cfi_in_bank_0 = cfi_valid && cfi_taken && cfi_idx_fixed < bankWidth.U
+      val ignore_second_bank = cfi_in_bank_0 || mayNotBeDualBanked(addr)
+
+      when (ignore_second_bank) {
+        new_history.old_history := histories(1)
+        new_history.new_saw_branch_not_taken := not_taken_branches(bankWidth-1,0) =/= 0.U
+        new_history.new_saw_branch_taken     := cfi_is_br && cfi_in_bank_0
+      } .otherwise {
+        new_history.old_history := Mux(cfi_is_br && cfi_in_bank_0 && not_taken_branches(bankWidth-1,0) =/= 0.U, histories(1) << 2 | 1.U,
+                                   Mux(cfi_is_br && cfi_in_bank_0                                             , histories(1) << 1 | 1.U,
+                                   Mux(not_taken_branches(bankWidth-1,0) =/= 0.U                              , histories(1) << 1,
+                                                                                                                histories(1))))
+        new_history.new_saw_branch_not_taken := not_taken_branches(fetchWidth-1,bankWidth) =/= 0.U
+        new_history.new_saw_branch_taken     := cfi_valid && cfi_taken && cfi_is_br && !cfi_in_bank_0
+
+      }
     }
     new_history
   }
