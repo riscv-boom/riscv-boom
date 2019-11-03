@@ -655,7 +655,7 @@ jobs:
                 name: Initialize the manager instance
                 command: |
                     .circleci/firesim-init-manager.sh
-    build-buildroot:
+    build-largefireboom-buildroot:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
         environment:
@@ -669,8 +669,8 @@ jobs:
             - run:
                 name: Build a Buildroot test workload and install to FireSim
                 command: |
-                    .circleci/firesim-build-workload.sh buildroot
-    build-fedora:
+                    .circleci/firesim-build-workload.sh firesim-singlecore-no-nic-l2-lbp buildroot
+    build-largefireboom-fedora:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
         environment:
@@ -684,7 +684,7 @@ jobs:
             - run:
                 name: Build a Fedora test workload and install to FireSim
                 command: |
-                    .circleci/firesim-build-workload.sh fedora
+                    .circleci/firesim-build-workload.sh firesim-singlecore-no-nic-l2-lbp fedora
     launch-largefireboom-afi-build:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -752,7 +752,7 @@ jobs:
             - run:
                 name: Buildroot finished
                 command: |
-                    .circleci/firesim-run-finished.sh buildroot
+                    .circleci/firesim-run-finished.sh firesim-singlecore-no-nic-l2-lbp buildroot
     launch-fedora-run:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -785,7 +785,7 @@ jobs:
             - run:
                 name: Fedora finished
                 command: |
-                    .circleci/firesim-run-finished.sh fedora
+                    .circleci/firesim-run-finished.sh firesim-singlecore-no-nic-l2-lbp fedora
 
 # Order and dependencies of jobs to run
 workflows:
@@ -802,11 +802,11 @@ workflows:
                     - aws-approval
                     - initialize-manager
 
-            - build-buildroot:
+            - build-largefireboom-buildroot:
                 requires:
                     - initialize-manager
 
-            - build-fedora:
+            - build-largefireboom-fedora:
                 requires:
                     - initialize-manager
                     - build-buildroot

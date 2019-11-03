@@ -1,7 +1,12 @@
 #!/bin/bash
 
+# -------------------------------------------------------------
+# build a specific afi's workload
+#
 # usage:
-#  $1 - folder that holds configuration information in firesim-configs
+#   $1 - firesim afi longname (folder inside firesim-configs/*)
+#   $2 - workload name (folder inside firesim-configs/afi-longname/*)
+#-------------------------------------------------------------
 
 # turn echo on and error on earliest command
 set -ex
@@ -10,13 +15,18 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
-FMRSHL_CFG=$LOCAL_CHECKOUT_DIR/.circleci/firesim-configs/$1/firemarshal_config
+# setup arguments
+AFI_NAME=$1
+WORKLOAD_NAME=$2
 
-WORKLOAD_NAME=$(sed -n '2p' $FMRSHL_CFG)
-WORKLOAD_DIR_NAME=$(sed -n '1p' $FMRSHL_CFG)
-WORKLOAD_DIR=$REMOTE_AWS_MARSHAL_DIR/$WORKLOAD_DIR_NAME
+FMRSHL_CFG=$LOCAL_FSIM_CFGS_DIR/$AFI_NAME/$WORKLOAD_NAME/firemarshal_config
+FMRSHL_NAME=$(sed -n '2p' $FMRSHL_CFG)
+FMRSHL_DIR_NAME=$(sed -n '1p' $FMRSHL_CFG)
+FMRSHL_DIR=$REMOTE_AWS_MARSHAL_DIR/$FMRSHL_DIR_NAME
 
-cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-$WORKLOAD_NAME-build.sh
+SCRIPT_NAME=firesim-$FMRSHL_NAME-build.sh
+
+cat <<EOF >> $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
 #!/bin/bash
 
 set -ex
@@ -26,15 +36,15 @@ cd $REMOTE_AWS_FSIM_DIR
 source sourceme-f1-manager.sh
 
 cd $REMOTE_AWS_MARSHAL_DIR
-./marshal -v build $WORKLOAD_DIR/$WORKLOAD_NAME.json
-./marshal -v install $WORKLOAD_DIR/$WORKLOAD_NAME.json
+./marshal -v build $FMRSHL_DIR/$FMRSHL_NAME.json
+./marshal -v install $FMRSHL_DIR/$FMRSHL_NAME.json
 
 # add file to indicate that the workload is done
 cd $REMOTE_AWS_WORK_DIR
-touch $WORKLOAD_DIR_NAME-$WORKLOAD_NAME-FINISHED
+touch $FMRSHL_DIR_NAME-$FMRSHL_NAME-FINISHED
 EOF
 
 # execute the script
-chmod +x $LOCAL_CHECKOUT_DIR/firesim-$WORKLOAD_NAME-build.sh
-run_script_aws $LOCAL_CHECKOUT_DIR/firesim-$WORKLOAD_NAME-build.sh
+chmod +x $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
+run_script_aws $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
 

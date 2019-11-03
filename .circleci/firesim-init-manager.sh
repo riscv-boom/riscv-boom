@@ -1,6 +1,10 @@
 #!/bin/bash
 
-# init manager with chipyard, setup firesim
+# -------------------------------------------------------------
+# init manager with chipyard and firesim as a library
+# do firesim managerinit (don't need to do it in future setups)
+# add version of boom (override older version)
+# -------------------------------------------------------------
 
 # turn echo on and error on earliest command
 set -ex
@@ -10,10 +14,12 @@ SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
 # clear folders older than 30 days
-run_script_aws $LOCAL_CHECKOUT_DIR/.circleci/clean-old-files.sh $CI_AWS_DIR
+run_script_aws $SCRIPT_DIR/clean-old-files.sh $CI_AWS_DIR
+
+SCRIPT_NAME=firesim-manager-setup.sh
 
 # create a script to run
-cat <<EOF >> $LOCAL_CHECKOUT_DIR/firesim-manager-setup.sh
+cat <<EOF >> $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
 #!/bin/bash
 
 set -ex
@@ -52,12 +58,12 @@ EXP
 rm -rf $REMOTE_AWS_CHIPYARD_DIR/generators/boom
 EOF
 
-# TODO: MAKE SURE YOU GET RIGHT FIREMARSHAL HASH
-# git checkout -C $REMOTE_AWS_MARSHAL_DIR MY_HASH_WITH_THE_CAT_PROC_STUFF"
+# TODO: get the right firemarshal hash
+# git checkout -C $REMOTE_AWS_MARSHAL_DIR $HASH_WITH_SPEC_COREMARK"
 
 # execute the script
-chmod +x $LOCAL_CHECKOUT_DIR/firesim-manager-setup.sh
-run_script_aws $LOCAL_CHECKOUT_DIR/firesim-manager-setup.sh
+chmod +x $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
+run_script_aws $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
 
 # add checkout boom to repo
 copy $LOCAL_CHECKOUT_DIR/ $AWS_SERVER:$REMOTE_AWS_CHIPYARD_DIR/generators/boom/
