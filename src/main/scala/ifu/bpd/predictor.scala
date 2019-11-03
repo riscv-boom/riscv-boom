@@ -145,7 +145,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     when (bank(io.update.bits.pc) === 0.U) {
       banked_predictors(0).io.update.valid := io.update.valid
       banked_predictors(1).io.update.valid := io.update.valid &&
-        (!io.update.bits.cfi_idx.valid || io.update.bits.cfi_idx.bits < bankWidth.U)
+        (!io.update.bits.cfi_idx.valid || io.update.bits.cfi_idx.bits >= bankWidth.U)
 
       banked_predictors(0).io.update.bits.pc := bankAlign(io.update.bits.pc)
       banked_predictors(1).io.update.bits.pc := nextBank(io.update.bits.pc)
@@ -161,7 +161,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     } .otherwise {
       banked_predictors(1).io.update.valid := io.update.valid
       banked_predictors(0).io.update.valid := io.update.valid && !mayNotBeDualBanked(io.update.bits.pc) &&
-        (!io.update.bits.cfi_idx.valid || io.update.bits.cfi_idx.bits < bankWidth.U)
+        (!io.update.bits.cfi_idx.valid || io.update.bits.cfi_idx.bits >= bankWidth.U)
 
       banked_predictors(1).io.update.bits.pc := bankAlign(io.update.bits.pc)
       banked_predictors(0).io.update.bits.pc := nextBank(io.update.bits.pc)
