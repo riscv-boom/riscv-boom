@@ -417,18 +417,18 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     val use_same_ghist = (brupdate.b2.cfi_type === CFI_BR &&
                           !brupdate.b2.taken &&
                           bankAlign(block_pc) === bankAlign(npc))
-
-    val next_ghist = io.ifu.get_pc(1).entry.ghist.update(
-      io.ifu.get_pc(1).entry.br_mask.asUInt,
+    val ftq_entry = io.ifu.get_pc(1).entry
+    val next_ghist = ftq_entry.ghist.update(
+      ftq_entry.br_mask.asUInt,
       brupdate.b2.taken,
       brupdate.b2.cfi_type === CFI_BR,
-      brupdate.b2.uop.pc_lob >> 1,
+      (brupdate.b2.uop.pc_lob ^ Mux(ftq_entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)) >> 1,
       true.B,
       io.ifu.get_pc(1).pc)
 
     io.ifu.redirect_ghist   := Mux(
       use_same_ghist,
-      io.ifu.get_pc(1).entry.ghist,
+      ftq_entry.ghist,
       next_ghist)
   } .elsewhen (rob.io.flush_frontend || brupdate.b1.mispredict_mask =/= 0.U) {
     io.ifu.redirect_flush   := true.B

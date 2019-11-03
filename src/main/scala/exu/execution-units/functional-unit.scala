@@ -297,6 +297,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
     earliestBypassStage = 0,
     dataWidth = dataWidth,
     isJmpUnit = isJmpUnit)
+  with boom.ifu.HasBoomFrontendParameters
 {
   val uop = io.req.bits.uop
 
@@ -420,12 +421,13 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
     val jalr_target = (encodeVirtualAddress(jalr_target_xlen, jalr_target_xlen).asSInt & -2.S).asUInt
 
     brinfo.jalr_target := jalr_target
+    val cfi_idx = ((uop.pc_lob ^ Mux(io.get_ftq_pc.entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth),1)
 
     when (pc_sel === PC_JALR) {
       mispredict := !io.get_ftq_pc.next_val ||
                     (io.get_ftq_pc.next_pc =/= jalr_target) ||
                     !io.get_ftq_pc.entry.cfi_idx.valid ||
-                    (io.get_ftq_pc.entry.cfi_idx.bits =/= uop.pc_lob(log2Ceil(fetchWidth), 1))
+                    (io.get_ftq_pc.entry.cfi_idx.bits =/= cfi_idx)
     }
   }
 
