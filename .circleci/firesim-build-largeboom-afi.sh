@@ -44,18 +44,19 @@ source sourceme-f1-manager.sh
 
 set +e
 
-# build afi
-if firesim buildafi -b $REMOTE_AWS_FSIM_DEPLOY_DIR/$AFI_NAME/config_build.ini -r $REMOTE_AWS_FSIM_DEPLOY_DIR/$AFI_NAME/config_build_recipes.ini; then
-    echo "AFI successfully built"
-else
-    # spawn fail job
-    echo "AFI failed... spawning failure job"
-    curl -u $API_TOKEN: \
-        -d build_parameters[CIRCLE_JOB]=afi-failed \
-        -d revision=$CIRCLE_SHA1 \
-        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
-    exit 1
-fi
+# TODO TODO TODO: Renable
+## build afi
+#if firesim buildafi -b $REMOTE_AWS_FSIM_DEPLOY_DIR/$AFI_NAME/config_build.ini -r $REMOTE_AWS_FSIM_DEPLOY_DIR/$AFI_NAME/config_build_recipes.ini; then
+#    echo "AFI successfully built"
+#else
+#    # spawn fail job
+#    echo "AFI failed... spawning failure job"
+#    curl -u $API_TOKEN: \
+#        -d build_parameters[CIRCLE_JOB]=afi-failed \
+#        -d revision=$CIRCLE_SHA1 \
+#        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
+#    exit 1
+#fi
 
 # run workload 1 - buildroot
 WORKLOAD_NAME=$(sed -n '2p' $BUILDROOT_CFG)
