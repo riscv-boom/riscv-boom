@@ -128,8 +128,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val bp_xcpt_if       = Bool()             // Breakpoint
 
 
-  // What prediction structure predicted this micro-op?
-  val debug_bsrc       = UInt(BSRC_SZ.W)
+  // What prediction structure provides the prediction FROM this op
+  val debug_fsrc       = UInt(BSRC_SZ.W)
+  // What prediction structure provides the prediction TO this op
+  val debug_tsrc       = UInt(BSRC_SZ.W)
 
   // Does this register write-back
   def rf_wen           = dst_rtype =/= RT_X

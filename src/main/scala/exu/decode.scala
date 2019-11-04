@@ -591,9 +591,6 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
   val io = IO(new Bundle {
     val inst    = Input(UInt(32.W))
     val pc      = Input(UInt(vaddrBitsExtended.W))
-    val is_br   = Output(Bool())
-    val is_jal  = Output(Bool())
-    val is_jalr = Output(Bool())
     val is_ret  = Output(Bool())
     val is_call = Output(Bool())
     val target = Output(UInt(vaddrBitsExtended.W))
@@ -621,9 +618,6 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
 
   val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: imm_sel_ :: Nil = bpd_csignals
 
-  io.is_br   := cs_is_br
-  io.is_jal  := cs_is_jal
-  io.is_jalr := cs_is_jalr
   io.is_call := (cs_is_jal || cs_is_jalr) && GetRd(io.inst) === RA
   io.is_ret  := cs_is_jalr && GetRs1(io.inst) === BitPat("b00?01")
 

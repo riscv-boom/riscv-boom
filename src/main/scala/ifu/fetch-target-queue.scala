@@ -51,10 +51,10 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
   val cfi_taken = Bool()
   // Was this CFI mispredicted by the branch prediction pipeline?
   val cfi_mispredicted = Bool()
+  // What type of CFI was taken out of this bundle
+  val cfi_type = Bool()
   // mask of branches which were visible in this fetch bundle
   val br_mask   = UInt(fetchWidth.W)
-  // mask of jumps which were visible in this fetch bundle
-  val jal_mask  = UInt(fetchWidth.W)
 
   // What global history should be used to query this fetch bundle
   val ghist = new GlobalHistory
@@ -142,8 +142,8 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     // Branch resolutions may change this
     ram(enq_ptr).cfi_taken  := io.enq.bits.cfi_idx.valid
     ram(enq_ptr).cfi_mispredicted := false.B
-    ram(enq_ptr).br_mask    := io.enq.bits.br_mask.asUInt & fetchMask(io.enq.bits.pc)
-    ram(enq_ptr).jal_mask   := io.enq.bits.jal_mask.asUInt & fetchMask(io.enq.bits.pc)
+    ram(enq_ptr).cfi_type   := io.enq.bits.cfi_type
+    ram(enq_ptr).br_mask    := io.enq.bits.br_mask & fetchMask(io.enq.bits.pc)
     ram(enq_ptr).start_bank := bank(io.enq.bits.pc)
     val prev_idx = WrapDec(enq_ptr, num_entries)
     val prev_entry = ram(prev_idx)
@@ -197,7 +197,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     bpdupdate.bits.cfi_taken        := entry.cfi_taken
     bpdupdate.bits.target           := pcs(WrapInc(bpd_ptr, num_entries))
     bpdupdate.bits.cfi_is_br        := entry.br_mask(cfi_idx)
-    bpdupdate.bits.cfi_is_jal       := entry.jal_mask(cfi_idx)
+    bpdupdate.bits.cfi_is_jal       := entry.cfi_type === CFI_JAL || entry.cfi_type === CFI_JALR
     bpdupdate.bits.ghist            := entry.ghist
 
     bpd_ptr := WrapInc(bpd_ptr, num_entries)
