@@ -697,15 +697,11 @@ jobs:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
-                name: Create hash of BOOM + Chipyard
-                command: |
-                    .circleci/create-chipyard-boom-hash.sh
-            - run:
                 name: Build a LargeFireBoom AFI
                 command: |
                     .circleci/firesim-build-largeboom-afi.sh largefireboom
                 no_output_timeout: 240m
-    afi-failed:
+    largefireboom-afi-failed:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
         environment:
@@ -719,7 +715,7 @@ jobs:
             - run:
                 name: AFI Build Failed
                 command: |
-                    .circleci/firesim-afi-failed.sh
+                    .circleci/firesim-afi-failed.sh largefireboom
     launch-largefireboom-buildroot-run:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -731,10 +727,6 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
-            - run:
-                name: Create hash of BOOM + Chipyard
-                command: |
-                    .circleci/create-chipyard-boom-hash.sh
             - run:
                 name: Run a Buildroot test
                 command: |
@@ -765,10 +757,6 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
-            - run:
-                name: Create hash of BOOM + Chipyard
-                command: |
-                    .circleci/create-chipyard-boom-hash.sh
             - run:
                 name: Run a Fedora test workload
                 command: |
