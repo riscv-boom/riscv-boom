@@ -53,7 +53,7 @@ set +e
 #    # spawn fail job
 #    echo "AFI failed... spawning failure job"
 #    curl -u $API_TOKEN: \
-#        -d build_parameters[CIRCLE_JOB]=afi-failed \
+#        -d build_parameters[CIRCLE_JOB]=$CONFIG_KEY-afi-failed \
 #        -d revision=$CIRCLE_SHA1 \
 #        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
 #    exit 1

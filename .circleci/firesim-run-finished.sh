@@ -18,28 +18,36 @@ SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
 # setup arguments
+CONFIG_KEY=$1
 AFI_NAME=${afis[$1]}
 WORKLOAD_NAME=$2
 
 # set stricthostkeychecking to no (must happen before rsync)
 run_aws "echo \"Ping $AWS_SERVER\""
 
-copy $AWS_SERVER:$REMOTE_AWS_RESULTS_DIR/ $HOME/$WORKLOAD_NAME-resultsdir
-copy $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/logs/ $HOME/$WORKLOAD_NAME-logdir
+RESULT_DIR=$CONFIG_KEY-$WORKLOAD_NAME-resultdir
+LOG_DIR=$CONFIG_KEY-$WORKLOAD_NAME-logdir
 
+copy $AWS_SERVER:$REMOTE_AWS_RESULTS_DIR/ $HOME/$RESULT_DIR
+copy $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/logs/ $HOME/$LOG_DIR
+
+WORKLOAD_LOG=$(grep -irl "$FMRSHL_NAME" $HOME/$LOG_DIR/*launchrunfarm*)
+UNIQUE_LOG=$(grep -irl "$AFI_NAME" $WORKLOAD_LOG)
 if $LAUNCHRUNFARM_PASSED; then
-    echo "launchrunfarm passed"
+    echo "[LAUNCHRUNFARM] passed"
 else
-    echo "launchrunfarm failed printing logs"
-    cat $HOME/$WORKLOAD_NAME-logdir/*launchrunfarm*
+    echo "[LAUNCHRUNFARM] failed... printing log"
+    cat $UNIQUE_LOG
     exit 1
 fi
 
+WORKLOAD_LOG=$(grep -irl "$FMRSHL_NAME" $HOME/$LOG_DIR/*infrasetup*)
+UNIQUE_LOG=$(grep -irl "$AFI_NAME" $WORKLOAD_LOG)
 if $INFRASETUP_PASSED; then
-    echo "infrasetup passed"
+    echo "[INFRASETUP] passed"
 else
-    echo "infrasetup failed printing logs"
-    cat $HOME/$WORKLOAD_NAME-logdir/*infrasetup*
+    echo "[INFRASETUP] failed... printing log"
+    cat $UNIQUE_LOG
     exit 1
 fi
 
@@ -48,19 +56,24 @@ fi
 FMRSHL_CFG=$LOCAL_FSIM_CFGS_DIR/$AFI_NAME/$WORKLOAD_NAME/firemarshal_config
 FMRSHL_NAME=$(sed -n '2p' $FMRSHL_CFG)
 
+WORKLOAD_LOG=$(grep -irl "$FMRSHL_NAME" $HOME/$LOG_DIR/*runworkload*)
+UNIQUE_LOG=$(grep -irl "$AFI_NAME" $WORKLOAD_LOG)
 if $RUNWORKLOAD_PASSED; then
-    echo "runworkload passed"
+    echo "[RUNWORKLOAD] passed"
 
-    #print uartlog
-    cat $HOME/$WORKLOAD_NAME-resultsdir/*$FMRSHL_NAME*/*/uartlog
+    echo "[RUNWORKLOAD] printing uart log"
+    cat $HOME/$RESULT_DIR/*$FMRSHL_NAME*/*/uartlog
     exit 0
 else
-    echo "runworkload failed"
+    echo "[RUNWORKLOAD] failed"
 
-    #print runworkload log
-    cat $HOME/$WORKLOAD_NAME-logdir/*runworkload*
-    #print uartlog
-    cat $HOME/$WORKLOAD_NAME-resultsdir/*$FMRSHL_NAME*/*/uartlog
+    echo "[RUNWORKLOAD] printing log"
+    cat $UNIQUE_LOG
+
+    echo "[RUNWORKLOAD] printing uart log"
+    echo "[RUNWORKLOAD]   note: cannot distinguish between multiple same workload names with different afis"
+    echo "[RUNWORKLOAD]         printing all uart logs"
+    cat $HOME/$RESULT_DIR/*$FMRSHL_NAME*/*/uartlog
     exit 1
 fi
 
