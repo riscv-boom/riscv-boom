@@ -7,7 +7,7 @@
 #   - otherwise it just skips that workload
 #
 # usage:
-#   $1 - firesim afi longname (folder inside firesim-configs/*)
+#   $1 - config string (translates to afi folder inside firesim-configs/*)
 #-------------------------------------------------------------
 
 # turn echo on and error on earliest command
@@ -18,7 +18,8 @@ SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
 # setup arguments
-AFI_NAME=$1
+CONFIG_KEY=$1
+AFI_NAME=${afis[$1]}
 
 # set stricthostkeychecking to no (must happen before rsync)
 run_aws "echo \"Ping $AWS_SERVER\""
@@ -59,21 +60,21 @@ set +e
 #fi
 
 # run workload 1 - buildroot
-WORKLOAD_NAME=$(sed -n '2p' $BUILDROOT_CFG)
-WORKLOAD_DIR_NAME=$(sed -n '1p' $BUILDROOT_CFG)
-if [ -f $REMOTE_AWS_WORK_DIR/\$WORKLOAD_DIR_NAME-\$WORKLOAD_NAME-FINISHED ]; then
+FMRSHL_NAME=$(sed -n '2p' $BUILDROOT_CFG)
+FMRSHL_DIR_NAME=$(sed -n '1p' $BUILDROOT_CFG)
+if [ -f $REMOTE_AWS_WORK_DIR/\$FMRSHL_DIR_NAME-\$FMRSHL_NAME-FINISHED ]; then
     curl -u $API_TOKEN: \
-        -d build_parameters[CIRCLE_JOB]=launch-buildroot-run \
+        -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-buildroot-run \
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
 fi
 
 # run workload 2 - fedora
-WORKLOAD_NAME=$(sed -n '2p' $FEDORA_CFG)
-WORKLOAD_DIR_NAME=$(sed -n '1p' $FEDORA_CFG)
-if [ -f $REMOTE_AWS_WORK_DIR/\$WORKLOAD_DIR_NAME-\$WORKLOAD_NAME-FINISHED ]; then
+FMRSHL_NAME=$(sed -n '2p' $FEDORA_CFG)
+FMRSHL_DIR_NAME=$(sed -n '1p' $FEDORA_CFG)
+if [ -f $REMOTE_AWS_WORK_DIR/\$FMRSHL_DIR_NAME-\$FMRSHL_NAME-FINISHED ]; then
     curl -u $API_TOKEN: \
-        -d build_parameters[CIRCLE_JOB]=launch-fedora-run \
+        -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-fedora-run \
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
 fi

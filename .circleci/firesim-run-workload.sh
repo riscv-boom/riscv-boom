@@ -4,7 +4,7 @@
 # run the afi's workload (run, detach)
 #
 # usage:
-#   $1 - firesim afi longname (folder inside firesim-configs/*)
+#   $1 - config string (translates to afi folder inside firesim-configs/*)
 #   $2 - workload name (folder inside firesim-configs/afi-longname/*)
 #-------------------------------------------------------------
 
@@ -16,7 +16,8 @@ SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
 # setup arguments
-AFI_NAME=$1
+CONFIG_KEY=$1
+AFI_NAME=${afis[$1]}
 WORKLOAD_NAME=$2
 
 # set stricthostkeychecking to no (must happen before rsync)
@@ -48,7 +49,7 @@ else
     echo "launchrunfarm failed"
     firesim terminaterunfarm -q $BUILD_ARGS
     curl -u $API_TOKEN: \
-        -d build_parameters[CIRCLE_JOB]=$WORKLOAD_NAME-run-finished \
+        -d build_parameters[CIRCLE_JOB]=$CONFIG_KEY-$WORKLOAD_NAME-run-finished \
         -d build_parameters[LAUNCHRUNFARM_PASSED]=false \
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
@@ -61,7 +62,7 @@ else
     echo "infrasetup failed"
     firesim terminaterunfarm -q $BUILD_ARGS
     curl -u $API_TOKEN: \
-        -d build_parameters[CIRCLE_JOB]=$WORKLOAD_NAME-run-finished \
+        -d build_parameters[CIRCLE_JOB]=$CONFIG_KEY-$WORKLOAD_NAME-run-finished \
         -d build_parameters[LAUNCHRUNFARM_PASSED]=true \
         -d build_parameters[INFRASETUP_PASSED]=false \
         -d revision=$CIRCLE_SHA1 \
@@ -73,7 +74,7 @@ if timeout -k 3m 30m firesim runworkload $BUILD_ARGS; then
     echo "runworkload passed"
     firesim terminaterunfarm -q $BUILD_ARGS
     curl -u $API_TOKEN: \
-        -d build_parameters[CIRCLE_JOB]=$WORKLOAD_NAME-run-finished \
+        -d build_parameters[CIRCLE_JOB]=$CONFIG_KEY-$WORKLOAD_NAME-run-finished \
         -d build_parameters[LAUNCHRUNFARM_PASSED]=true \
         -d build_parameters[INFRASETUP_PASSED]=true \
         -d build_parameters[RUNWORKLOAD_PASSED]=true \
@@ -84,7 +85,7 @@ else
     echo "runworkload failed"
     firesim terminaterunfarm -q $BUILD_ARGS
     curl -u $API_TOKEN: \
-        -d build_parameters[CIRCLE_JOB]=$WORKLOAD_NAME-run-finished \
+        -d build_parameters[CIRCLE_JOB]=$CONFIG_KEY-$WORKLOAD_NAME-run-finished \
         -d build_parameters[LAUNCHRUNFARM_PASSED]=true \
         -d build_parameters[INFRASETUP_PASSED]=true \
         -d build_parameters[RUNWORKLOAD_PASSED]=false \
