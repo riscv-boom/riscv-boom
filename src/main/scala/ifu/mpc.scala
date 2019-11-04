@@ -114,6 +114,14 @@ class MispredictCache(implicit p: Parameters) extends BoomModule()(p)
   mpc_redirect.valid := false.B
   mpc_redirect.bits  := DontCare
 
+  io.mpc_redirect_val   := RegNext(mpc_redirect.valid)
+  io.mpc_redirect_pc    := RegNext(mpc_redirect.bits)
+  io.mpc_redirect_ghist := RegNext(io.redirect_ghist)
+  io.set_prev_half      := RegNext(set_prev_half)
+
+  io.resp.valid := false.B
+  io.resp.bits  := DontCare
+
   when (io.redirect_val && req_hit) {
     do_deq     := true.B
     do_deq_idx := req_hit_idx
@@ -123,16 +131,8 @@ class MispredictCache(implicit p: Parameters) extends BoomModule()(p)
     set_prev_half.valid  := end_half(req_hit_idx).valid
     set_prev_half.bits   := end_half(req_hit_idx).bits
     plru.access(req_hit_idx)
-  }
-  io.mpc_redirect_val   := RegNext(mpc_redirect.valid)
-  io.mpc_redirect_pc    := RegNext(mpc_redirect.bits)
-  io.mpc_redirect_ghist := RegNext(io.redirect_ghist)
-  io.set_prev_half      := RegNext(set_prev_half)
-
-  io.resp.valid := false.B
-  io.resp.bits  := DontCare
-  when (do_deq && !io.flush) {
-    when (do_deq_count < counts(do_deq_idx)) {
+  } .elsewhen (do_deq && !io.flush) {
+    when (do_deq_count < counts(do_deq_idx) && !io.redirect_val) {
       io.resp.valid := true.B
       io.resp.bits  := bundles(do_deq_idx)(do_deq_count)
       when (io.resp.fire()) {

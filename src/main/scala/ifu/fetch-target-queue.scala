@@ -143,7 +143,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     ram(enq_ptr).cfi_taken  := io.enq.bits.cfi_idx.valid
     ram(enq_ptr).cfi_mispredicted := false.B
     ram(enq_ptr).cfi_type   := io.enq.bits.cfi_type
-    ram(enq_ptr).br_mask    := io.enq.bits.br_mask & fetchMask(io.enq.bits.pc)
+    ram(enq_ptr).br_mask    := io.enq.bits.br_mask & io.enq.bits.mask
     ram(enq_ptr).start_bank := bank(io.enq.bits.pc)
     val prev_idx = WrapDec(enq_ptr, num_entries)
     val prev_entry = ram(prev_idx)
