@@ -287,17 +287,17 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   debug_f3_mispredicts := debug_f3_mispredicts + PopCount(VecInit((0 until coreWidth) map { i =>
     rob.io.commit.valids(i) &&
     (rob.io.commit.uops(i).is_br || rob.io.commit.uops(i).is_jal || rob.io.commit.uops(i).is_jalr) &&
-    rob.io.commit.uops(i).debug_bsrc > BSRC_3
+    rob.io.commit.uops(i).debug_fsrc > BSRC_3
   }))
   debug_f2_mispredicts := debug_f2_mispredicts + PopCount(VecInit((0 until coreWidth) map { i =>
     rob.io.commit.valids(i) &&
     (rob.io.commit.uops(i).is_br || rob.io.commit.uops(i).is_jal || rob.io.commit.uops(i).is_jalr) &&
-    rob.io.commit.uops(i).debug_bsrc > BSRC_2
+    rob.io.commit.uops(i).debug_fsrc > BSRC_2
   }))
   debug_f1_mispredicts := debug_f1_mispredicts + PopCount(VecInit((0 until coreWidth) map { i =>
     rob.io.commit.valids(i) &&
     (rob.io.commit.uops(i).is_br || rob.io.commit.uops(i).is_jal || rob.io.commit.uops(i).is_jalr) &&
-    rob.io.commit.uops(i).debug_bsrc > BSRC_1
+    rob.io.commit.uops(i).debug_fsrc > BSRC_1
   }))
 
   debug_tsc_reg := debug_tsc_reg + 1.U
