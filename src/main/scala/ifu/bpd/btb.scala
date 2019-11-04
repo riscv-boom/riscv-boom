@@ -13,7 +13,7 @@ import boom.util.{BoomCoreStringPrefix}
 
 case class BoomBTBParams(
   nSets: Int = 512,
-  tagSz: Int = 4,
+  tagSz: Int = 5,
   offsetSz: Int = 13,
   extendedNSets: Int = 256,
   micro: Boolean = false,
