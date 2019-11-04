@@ -669,7 +669,7 @@ jobs:
             - run:
                 name: Build a Buildroot test workload and install to FireSim
                 command: |
-                    .circleci/firesim-build-workload.sh firesim-singlecore-no-nic-l2-lbp buildroot
+                    .circleci/firesim-build-workload.sh largefireboom buildroot
     build-largefireboom-fedora:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -684,7 +684,7 @@ jobs:
             - run:
                 name: Build a Fedora test workload and install to FireSim
                 command: |
-                    .circleci/firesim-build-workload.sh firesim-singlecore-no-nic-l2-lbp fedora
+                    .circleci/firesim-build-workload.sh largefireboom fedora
     launch-largefireboom-afi-build:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -703,7 +703,7 @@ jobs:
             - run:
                 name: Build a LargeFireBoom AFI
                 command: |
-                    .circleci/firesim-build-largeboom-afi.sh firesim-singlecore-no-nic-l2-lbp
+                    .circleci/firesim-build-largeboom-afi.sh largefireboom
                 no_output_timeout: 240m
     afi-failed:
         docker:
@@ -720,7 +720,7 @@ jobs:
                 name: AFI Build Failed
                 command: |
                     .circleci/firesim-afi-failed.sh
-    launch-buildroot-run:
+    launch-largefireboom-buildroot-run:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
         environment:
@@ -738,8 +738,8 @@ jobs:
             - run:
                 name: Run a Buildroot test
                 command: |
-                    .circleci/firesim-run-workload.sh firesim-singlecore-no-nic-l2-lbp buildroot
-    buildroot-run-finished:
+                    .circleci/firesim-run-workload.sh largefireboom buildroot
+    largefireboom-buildroot-run-finished:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
         environment:
@@ -749,11 +749,12 @@ jobs:
             - add_ssh_keys:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
             - run:
                 name: Buildroot finished
                 command: |
-                    .circleci/firesim-run-finished.sh firesim-singlecore-no-nic-l2-lbp buildroot
-    launch-fedora-run:
+                    .circleci/firesim-run-finished.sh largefireboom buildroot
+    launch-largefireboom-fedora-run:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
         environment:
@@ -771,8 +772,8 @@ jobs:
             - run:
                 name: Run a Fedora test workload
                 command: |
-                    .circleci/firesim-run-workload.sh firesim-singlecore-no-nic-l2-lbp fedora
-    fedora-run-finished:
+                    .circleci/firesim-run-workload.sh largefireboom fedora
+    largefireboom-fedora-run-finished:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
         environment:
@@ -782,10 +783,11 @@ jobs:
             - add_ssh_keys:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
             - run:
                 name: Fedora finished
                 command: |
-                    .circleci/firesim-run-finished.sh firesim-singlecore-no-nic-l2-lbp fedora
+                    .circleci/firesim-run-finished.sh largefireboom fedora
 
 # Order and dependencies of jobs to run
 workflows:

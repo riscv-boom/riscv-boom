@@ -6,7 +6,7 @@
 #   use the variables *_PASSED given by the post that spawned this job to determine status
 #
 # usage:
-#   $1 - firesim afi longname (folder inside firesim-configs/*)
+#   $1 - config string (translates to afi folder inside firesim-configs/*)
 #   $2 - workload name (folder inside firesim-configs/afi-longname/*)
 #-------------------------------------------------------------
 
@@ -18,7 +18,7 @@ SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
 # setup arguments
-AFI_NAME=$1
+AFI_NAME=${afis[$1]}
 WORKLOAD_NAME=$2
 
 # set stricthostkeychecking to no (must happen before rsync)
