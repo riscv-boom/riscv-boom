@@ -109,6 +109,10 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
   val io = IO(new Bundle {
     val f0_req = Input(Valid(new BranchPredictionBankRequest))
 
+    val f1_kill = Input(Bool())
+    val f2_kill = Input(Bool())
+    val f3_kill = Input(Bool())
+
     val f1_resp = Output(Vec(bankWidth, new BranchPrediction))
     val f2_resp = Output(Vec(bankWidth, new BranchPrediction))
     val f3_resp = Output(Vec(bankWidth, new BranchPrediction))
@@ -140,6 +144,10 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
 
   val s2_req     = RegNext(s1_req)
   val s2_req_idx = RegNext(s1_req_idx)
+
+  val f1_kill = io.f1_kill
+  val f2_kill = io.f2_kill || RegNext(f1_kill)
+  val f3_kill = io.f3_kill || RegNext(f2_kill)
 
 }
 

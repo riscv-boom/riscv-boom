@@ -19,6 +19,10 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     // Requests and responses
     val f0_req  = Input(Valid(new BranchPredictionRequest))
 
+    val f1_kill = Input(Bool())
+    val f2_kill = Input(Bool())
+    val f3_kill = Input(Bool())
+
     val f1_resp = Output(new BranchPredictionBundle)
     val f2_resp = Output(new BranchPredictionBundle)
     val f3_resp = Output(new BranchPredictionBundle)
@@ -30,6 +34,9 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   val banked_predictors = Seq.fill(nBanks) { Module(new TageBranchPredictorBank) }
   for (b <- 0 until nBanks) {
     dontTouch(banked_predictors(b).io)
+    banked_predictors(b).io.f1_kill := io.f1_kill
+    banked_predictors(b).io.f2_kill := io.f2_kill
+    banked_predictors(b).io.f3_kill := io.f3_kill
   }
 
   if (nBanks == 1) {
