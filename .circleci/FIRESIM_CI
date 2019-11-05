@@ -1,7 +1,0 @@
-FireSim CI Notes
-----------------
-
-Requirements:
-- Need to create a manager instance and in the CircleCI UI add AWS_SERVER with "centos@IP_ADDR"
-- Need to install `expect` on the manager instance
-- Add SSH key ("firesim.pem") to the CircleCI UI and use the key in the `config.yml`
