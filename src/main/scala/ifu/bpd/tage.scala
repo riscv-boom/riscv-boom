@@ -39,10 +39,12 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
   (implicit p: Parameters) extends BoomModule()(p)
   with HasBoomFrontendParameters
 {
+  val nIUMEntries = 2
   val io = IO( new Bundle {
     val f0_req = Input(Valid(new BranchPredictionBankRequest))
 
     val f3_resp = Output(Vec(bankWidth, Valid(new TageResp)))
+    val f3_kill = Input(Bool())
 
     val update_mask  = Input(Vec(bankWidth, Bool()))
     val update_ctr   = Input(Vec(bankWidth, UInt(3.W)))
@@ -66,6 +68,12 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
     (idx, tag)
   }
 
+  def inc_ctr(ctr: UInt, taken: Bool): UInt = {
+    Mux(!taken, Mux(ctr === 0.U, 0.U, ctr - 1.U),
+                Mux(ctr === 7.U, 7.U, ctr + 1.U))
+  }
+
+
   val doing_reset = RegInit(true.B)
   val reset_idx = RegInit(0.U(log2Ceil(nRows).W))
   reset_idx := reset_idx + doing_reset
@@ -77,14 +85,26 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
   val lo_us  = Seq.fill(bankWidth) { SyncReadMem(nRows, Bool()) }
   val table  = Seq.fill(bankWidth) { SyncReadMem(nRows, new TageEntry(tagSz)) }
 
+  val ium_tags = Reg(Vec(nIUMEntries, UInt(tagSz.W)))
+  val ium_idxs = Reg(Vec(nIUMEntries, UInt(log2Ceil(nRows).W)))
+  val ium      = Reg(Vec(nIUMEntries, Vec(bankWidth, UInt(3.W))))
+  val ium_enq_idx = RegInit(0.U(log2Ceil(nIUMEntries).W))
+
   val s1_hashed_idx = RegNext(s0_hashed_idx)
   val s1_tag        = RegNext(s0_tag)
 
+  val s1_req       = RegNext(io.f0_req)
   val s1_req_rtage = VecInit(table.map(_.read(s0_hashed_idx, io.f0_req.valid)))
   val s1_req_rhius = VecInit(hi_us.map(_.read(s0_hashed_idx, io.f0_req.valid)))
   val s1_req_rlous = VecInit(lo_us.map(_.read(s0_hashed_idx, io.f0_req.valid)))
   val s1_req_rhits = VecInit(s1_req_rtage.map(e => e.valid && e.tag === s1_tag && !doing_reset))
+  val s1_req_iumhits = VecInit((ium_tags zip ium_idxs) map { case (t, i) =>
+    t === s1_tag && i === RegNext(s0_hashed_idx) && !doing_reset
+  })
 
+  val s2_req          = RegNext(s1_req)
+  val s2_req_ium_hit  = RegNext(s1_req_iumhits.reduce(_||_))
+  val s2_req_ium_data = ium(PriorityEncoder(RegNext(s1_req_iumhits)))
   val s2_req_rtage = RegNext(s1_req_rtage)
   val s2_req_rhius = RegNext(s1_req_rhius)
   val s2_req_rlous = RegNext(s1_req_rlous)
@@ -95,7 +115,16 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
     // This bit indicates the TAGE table matched here
     io.f3_resp(w).valid    := RegNext(s2_req_rhits(w))
     io.f3_resp(w).bits.u   := RegNext(Cat(s2_req_rhius(w), s2_req_rlous(w)))
-    io.f3_resp(w).bits.ctr := RegNext(s2_req_rtage(w).ctr)
+    io.f3_resp(w).bits.ctr := RegNext(Mux(s2_req_ium_hit,  s2_req_ium_data(w), s2_req_rtage(w).ctr))
+  }
+  when (RegNext(s2_req.valid && s2_req_rhits.reduce(_||_) && !s2_req_ium_hit) && !io.f3_kill) {
+
+    for (w <- 0 until bankWidth) {
+      ium(ium_enq_idx)(w) := RegNext(inc_ctr(s2_req_rtage(w).ctr, s2_req_rtage(w).ctr(2)))
+    }
+    ium_idxs(ium_enq_idx) := RegNext(RegNext(s1_hashed_idx))
+    ium_tags(ium_enq_idx) := RegNext(RegNext(s1_tag))
+    ium_enq_idx := ium_enq_idx + 1.U
   }
 
   val clear_u_ctr = RegInit(0.U((log2Ceil(tageUBitPeriod) + log2Ceil(nRows) + 1).W))
@@ -141,8 +170,14 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
 {
   val base = Module(new BTBBranchPredictorBank(BoomBTBParams()))
   val micro = Module(new BTBBranchPredictorBank(
-    BoomBTBParams(nSets = 32, tagSz = 4, offsetSz = 13, extendedNSets = 0, micro = true))
+    BoomBTBParams(nSets = 64, tagSz = 4, offsetSz = 13, extendedNSets = 0, micro = true))
   )
+  base.io.f1_kill := io.f1_kill
+  base.io.f2_kill := io.f2_kill
+  base.io.f3_kill := io.f3_kill
+  micro.io.f1_kill := io.f1_kill
+  micro.io.f2_kill := io.f2_kill
+  micro.io.f3_kill := io.f3_kill
 
   base.io.f0_req := io.f0_req
   base.io.update := io.update
@@ -177,7 +212,8 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
 
 
 
-  tables.map(_.io.f0_req := io.f0_req)
+  tables.map(_.io.f0_req  := io.f0_req)
+  tables.map(_.io.f3_kill := f3_kill)
   val f3_resps = VecInit(tables.map(_.io.f3_resp))
 
   val s1_update_meta = (s1_update.bits.meta >> (base.metaSz + micro.metaSz)).asTypeOf(new TageMeta)

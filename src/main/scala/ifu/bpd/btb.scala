@@ -44,6 +44,10 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
 
 
   val bim = Module(new BIMBranchPredictorBank(bimParams))
+  bim.io.f1_kill := io.f1_kill
+  bim.io.f2_kill := io.f2_kill
+  bim.io.f3_kill := io.f3_kill
+
   bim.io.f0_req := io.f0_req
   bim.io.update := io.update
   io.f1_resp := bim.io.f1_resp
