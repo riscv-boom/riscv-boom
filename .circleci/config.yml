@@ -780,50 +780,18 @@ jobs:
 # Order and dependencies of jobs to run
 workflows:
     version: 2
-    init-firesim:
-        jobs:
-            - initialize-manager
-
-            - aws-approval:
-                type: approval
-
-            - launch-largefireboom-afi-build:
-                requires:
-                    - aws-approval
-                    - initialize-manager
-
-            - build-largefireboom-buildroot:
-                requires:
-                    - initialize-manager
-
-            - build-largefireboom-fedora:
-                requires:
-                    - initialize-manager
-                    - build-largefireboom-buildroot
-
     build-and-test-boom-configs:
         jobs:
-            - wait-for-approval:
-                type: approval
-
             # Make the toolchains
-            - install-riscv-toolchain:
-                requires:
-                    - wait-for-approval
+            - install-riscv-toolchain
 
-            - install-esp-toolchain:
-                requires:
-                    - wait-for-approval
+            - install-esp-toolchain
 
             # Build verilator
-            - prepare-build-environment:
-                requires:
-                    - wait-for-approval
+            - prepare-build-environment
 
             # Run generic syntax checking
-            - run-scala-checkstyle:
-                requires:
-                    - wait-for-approval
+            - run-scala-checkstyle
 
             # Prepare the verilator builds
             - prepare-smallboomconfig:
@@ -904,4 +872,34 @@ workflows:
             - hwachaboomconfig-run-riscv-tests:
                 requires:
                     - prepare-hwachaboomconfig
+
+    init-firesim:
+        # run firesim workflow every thursday
+        triggers:
+            - schedule:
+                cron: "0 0 * * 4"
+                filters:
+                    branches:
+                        only:
+                            - master
+        jobs:
+            - initialize-manager
+
+            - aws-approval:
+                type: approval
+
+            - launch-largefireboom-afi-build:
+                requires:
+                    - aws-approval
+                    - initialize-manager
+
+            - build-largefireboom-buildroot:
+                requires:
+                    - initialize-manager
+
+            - build-largefireboom-fedora:
+                requires:
+                    - initialize-manager
+                    - build-largefireboom-buildroot
+
 
