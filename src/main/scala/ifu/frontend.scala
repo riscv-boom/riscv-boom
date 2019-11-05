@@ -652,7 +652,18 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f3_fetch_bundle.cfi_is_ret
   )
 
+  val ras_write = Wire(Bool())
+  ras_write := false.B
+  when (RegNext(ras_write)) {
+    ras.write(RegNext(WrapInc(f3_fetch_bundle.ghist.ras_idx, nRasEntries)),
+      RegNext(f3_aligned_pc + (f3_fetch_bundle.cfi_idx.bits << 1) + Mux(
+        f3_fetch_bundle.cfi_npc_plus4, 4.U, 2.U)))
+  }
+
   when (f3.io.deq.valid && f4_ready) {
+    when (f3_fetch_bundle.cfi_is_call && f3_fetch_bundle.cfi_idx.valid) {
+      ras_write := true.B
+    }
     when (f3_redirects.reduce(_||_)) {
       f3_prev_is_half := false.B
     }

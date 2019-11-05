@@ -62,6 +62,7 @@ class MispredictCache(implicit p: Parameters) extends BoomModule()(p)
                    Mux(seen_cfis =/= 0.U, first_cfi_pc,
                                           bundle.next_pc))
     out.cfi_idx.valid := include_first_cfi
+    out.end_half.valid := bundle.end_half.valid && seen_cfis === 0.U
     out
   }
   val bundle = createContinuousFetchBundle(io.enq.bits)
