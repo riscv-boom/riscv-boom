@@ -44,8 +44,8 @@ source sourceme-f1-manager.sh
 set +e
 
 # acquire lock on the afi name (race condition in the firesim make during infrasetup)
-exec {lock_fd}>/var/lock/$AFI_NAME || exit 1
-flock "$lock_fd" || { echo "ERROR: flock() failed." >&2; exit 1; }
+exec {lock_fd}>$REMOTE_AWS_FSIM_DIR/$AFI_NAME.lock || exit 1
+flock "\$lock_fd" || { echo "ERROR: flock() failed." >&2; exit 1; }
 
 if firesim launchrunfarm $BUILD_ARGS; then
     echo "launchrunfarm passed"
@@ -59,7 +59,7 @@ else
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
 
     # release the lock
-    flock -u "$lock_fd"
+    flock -u "\$lock_fd"
 
     exit 1
 fi
@@ -77,13 +77,13 @@ else
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
 
     # release the lock
-    flock -u "$lock_fd"
+    flock -u "\$lock_fd"
 
     exit 1
 fi
 
 # release the lock
-flock -u "$lock_fd"
+flock -u "\$lock_fd"
 
 if timeout -k 3m 30m firesim runworkload $BUILD_ARGS; then
     echo "runworkload passed"
