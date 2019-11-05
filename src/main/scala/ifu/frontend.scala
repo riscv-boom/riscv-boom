@@ -638,9 +638,15 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   // Redirect earlier stages only if the later stage
   // can consume this packet
+  val ras_write     = Reg(Bool())
+  val ras_write_pc  = Reg(UInt(vaddrBitsExtended.W))
+  val ras_write_idx = Reg(UInt(log2Ceil(nRasEntries).W))
+
   val f3_predicted_target = Mux(f3_redirects.reduce(_||_),
-    Mux(f3_fetch_bundle.cfi_is_ret, ras(f3_fetch_bundle.ghist.ras_idx), f3_targs(PriorityEncoder(f3_redirects))),
+    Mux(f3_fetch_bundle.cfi_is_ret, Mux(ras_write, ras_write_pc, ras(f3_fetch_bundle.ghist.ras_idx)),
+      f3_targs(PriorityEncoder(f3_redirects))),
     nextFetch(f3_fetch_bundle.pc))
+
   f3_fetch_bundle.next_pc       := f3_predicted_target
   val f3_predicted_ghist = f3_fetch_bundle.ghist.update(
     f3_fetch_bundle.br_mask,
@@ -653,12 +659,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f3_fetch_bundle.cfi_is_ret
   )
 
-  val ras_write = Wire(Bool())
-  ras_write := false.B
-  when (RegNext(ras_write)) {
-    ras.write(RegNext(WrapInc(f3_fetch_bundle.ghist.ras_idx, nRasEntries)),
-      RegNext(f3_aligned_pc + (f3_fetch_bundle.cfi_idx.bits << 1) + Mux(
-        f3_fetch_bundle.cfi_npc_plus4, 4.U, 2.U)))
+
+  ras_write    := false.B
+  ras_write_pc := f3_aligned_pc + (f3_fetch_bundle.cfi_idx.bits << 1) + Mux(
+        f3_fetch_bundle.cfi_npc_plus4, 4.U, 2.U)
+  ras_write_idx := WrapInc(f3_fetch_bundle.ghist.ras_idx, nRasEntries)
+
+  when (ras_write) {
+    ras.write(ras_write_idx, ras_write_pc)
   }
 
   when (f3.io.deq.valid && f4_ready) {
