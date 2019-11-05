@@ -87,34 +87,38 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   val in_uops = Wire(Vec(fetchWidth, new MicroOp()))
 
   // Step 1: Convert FetchPacket into a vector of MicroOps.
-  for (i <- 0 until fetchWidth) {
-    val pc = (bankAlign(io.enq.bits.pc) + (i << log2Ceil(coreInstBytes)).U)
+  for (b <- 0 until nBanks) {
+    for (w <- 0 until bankWidth) {
+      val i = (b * bankWidth) + w
 
-    in_uops(i)                := DontCare
-    in_mask(i)                := io.enq.valid && io.enq.bits.mask(i)
-    in_uops(i).edge_inst      := false.B
-    in_uops(i).debug_pc       := pc
-    in_uops(i).pc_lob         := pc // TODO: This should be (i << 1).U
+      val pc = (bankAlign(io.enq.bits.pc) + (i << 1).U)
 
-    if (i == 0) {
-      when (io.enq.bits.edge_inst) {
-        in_uops(i).debug_pc := bankAlign(io.enq.bits.pc) - 2.U
-        in_uops(i).pc_lob   := bankAlign(io.enq.bits.pc)
-        in_uops(i).edge_inst:= true.B
+      in_uops(i)                := DontCare
+      in_mask(i)                := io.enq.valid && io.enq.bits.mask(i)
+      in_uops(i).edge_inst      := false.B
+      in_uops(i).debug_pc       := pc
+      in_uops(i).pc_lob         := pc
+
+      if (w == 0) {
+        when (io.enq.bits.edge_inst(b)) {
+          in_uops(i).debug_pc  := bankAlign(io.enq.bits.pc) + (b * bankBytes).U - 2.U
+          in_uops(i).pc_lob    := bankAlign(io.enq.bits.pc) + (b * bankBytes).U
+          in_uops(i).edge_inst := true.B
+        }
       }
+      in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
+      in_uops(i).inst           := io.enq.bits.exp_insts(i)
+      in_uops(i).debug_inst     := io.enq.bits.insts(i)
+      in_uops(i).is_rvc         := io.enq.bits.insts(i)(1,0) =/= 3.U
+      in_uops(i).taken          := io.enq.bits.cfi_idx.bits === i.U && io.enq.bits.cfi_idx.valid
+
+      in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
+      in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
+      in_uops(i).bp_debug_if    := io.enq.bits.bp_debug_if_oh(i)
+      in_uops(i).bp_xcpt_if     := io.enq.bits.bp_xcpt_if_oh(i)
+
+      in_uops(i).debug_fsrc     := io.enq.bits.fsrc
     }
-    in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
-    in_uops(i).inst           := io.enq.bits.exp_insts(i)
-    in_uops(i).debug_inst     := io.enq.bits.insts(i)
-    in_uops(i).is_rvc         := io.enq.bits.insts(i)(1,0) =/= 3.U
-    in_uops(i).taken          := io.enq.bits.cfi_idx.bits === i.U && io.enq.bits.cfi_idx.valid
-
-    in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
-    in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
-    in_uops(i).bp_debug_if    := io.enq.bits.bp_debug_if_oh(i)
-    in_uops(i).bp_xcpt_if     := io.enq.bits.bp_xcpt_if_oh(i)
-
-    in_uops(i).debug_fsrc     := io.enq.bits.fsrc
   }
 
   // Step 2. Generate one-hot write indices.

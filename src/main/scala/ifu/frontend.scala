@@ -168,7 +168,17 @@ trait HasBoomFrontendParameters extends HasL1ICacheParameters
       ((1 << fetchWidth)-1).U << shamt & end_mask
     }
   }
+
+  def bankMask(addr: UInt) = {
+    val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
+    if (nBanks == 1) {
+      1.U(1.W)
+    } else {
+      Mux(mayNotBeDualBanked(addr), 1.U(2.W), 3.U(2.W))
+    }
+  }
 }
+
 
 
 /**
@@ -180,7 +190,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
 {
   val pc            = UInt(vaddrBitsExtended.W)
   val next_pc       = UInt(vaddrBitsExtended.W)
-  val edge_inst     = Bool() // True if 1st instruction in this bundle is pc - 2
+  val edge_inst     = Vec(nBanks, Bool()) // True if 1st instruction in this bundle is pc - 2
   val insts         = Vec(fetchWidth, Bits(32.W))
   val exp_insts     = Vec(fetchWidth, Bits(32.W))
 
@@ -289,6 +299,10 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
   val bpd = Module(new BranchPredictor)
+  bpd.io.f1_kill := false.B
+  bpd.io.f2_kill := false.B
+  bpd.io.f3_kill := false.B
+
   val ras = Mem(nRasEntries, UInt(vaddrBitsExtended.W))
 
   val icache = outer.icache.module
@@ -357,6 +371,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   icache.io.s1_paddr := s1_ppc
   icache.io.s1_kill  := tlb.io.resp.miss || f1_clear
+  bpd.io.f1_kill     := icache.io.s1_kill
 
   val f1_mask = fetchMask(s1_vpc)
   val f1_redirects = (0 until fetchWidth) map { i =>
@@ -408,6 +423,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3_ready = Wire(Bool())
 
   icache.io.s2_kill := s2_xcpt
+  bpd.io.f2_kill    := s2_xcpt
 
   val f2_bpd_resp = Mux(s2_is_replay, RegNext(s1_bpd_resp), bpd.io.f2_resp)
   val f2_mask = fetchMask(s2_vpc)
@@ -498,6 +514,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
 
   val f3_imemresp     = f3.io.deq.bits
+  val f3_bank_mask    = bankMask(f3_imemresp.pc)
   val f3_data         = f3_imemresp.data
   val f3_aligned_pc   = bankAlign(f3_imemresp.pc)
   val f3_pcs          = Wire(Vec(fetchWidth, UInt(vaddrBitsExtended.W)))
@@ -510,6 +527,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3_br_mask      = Wire(Vec(fetchWidth, Bool()))
   val f3_call_mask    = Wire(Vec(fetchWidth, Bool()))
   val f3_ret_mask     = Wire(Vec(fetchWidth, Bool()))
+  val f3_npc_plus4_mask = Wire(Vec(fetchWidth, Bool()))
   f3_fetch_bundle.mask := f3_mask.asUInt
   f3_fetch_bundle.br_mask := f3_br_mask.asUInt
   f3_fetch_bundle.pc := f3_imemresp.pc
@@ -520,111 +538,124 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   f3_fetch_bundle.tsrc := f3_imemresp.tsrc
 
   // Tracks trailing 16b of previous fetch packet
-  val f3_prev_half    = Reg(UInt(coreInstBits.W))
+  val f3_prev_half    = Reg(UInt(16.W))
   // Tracks if last fetchpacket contained a half-inst
   val f3_prev_is_half = RegInit(false.B)
 
   require(fetchWidth >= 4) // Logic gets kind of annoying with fetchWidth = 2
+  def isRVC(inst: UInt) = (inst(1,0) =/= 3.U)
   var redirect_found = false.B
-  for (i <- 0 until fetchWidth) {
-    val bpd_decoder = Module(new BranchDecode)
-    val is_valid = Wire(Bool())
-    val inst = Wire(UInt((2*coreInstBits).W))
-    if (i == 0) {
-      when (f3_prev_is_half) {
-        inst := Cat(f3_data(15,0), f3_prev_half)
-        f3_fetch_bundle.edge_inst := true.B
-      } .otherwise {
-        inst := f3_data(31,0)
-        f3_fetch_bundle.edge_inst := false.B
+  var bank_prev_is_half = f3_prev_is_half
+  var bank_prev_half    = f3_prev_half
+  for (b <- 0 until nBanks) {
+    val bank_data  = f3_data((b+1)*bankWidth*16-1, b*bankWidth*16)
+    val bank_mask  = Wire(Vec(bankWidth, Bool()))
+    val bank_insts = Wire(Vec(bankWidth, UInt(32.W)))
+
+    for (w <- 0 until bankWidth) {
+      val i = (b * bankWidth) + w
+
+      val valid = Wire(Bool())
+      val inst = Wire(UInt(32.W))
+      if (w == 0) {
+        when (bank_prev_is_half) {
+          inst := Cat(bank_data(15,0), bank_prev_half)
+          f3_fetch_bundle.edge_inst(b) := true.B
+        } .otherwise {
+          inst := bank_data(31,0)
+          f3_fetch_bundle.edge_inst(b) := false.B
+        }
+        valid := true.B
+      } else if (w == 1) {
+        // Need special case since 0th instruction may carry over the wrap around
+        inst  := bank_data(47,16)
+        valid := bank_prev_is_half || !(bank_mask(0) && !isRVC(bank_insts(0)))
+      } else if (w == bankWidth - 1) {
+        inst  := Cat(0.U(16.W), bank_data(bankWidth*16-1,(bankWidth-1)*16))
+        valid := !((bank_mask(w-1) && !isRVC(bank_insts(w-1))) ||
+                   !isRVC(inst))
+      } else {
+        inst  := bank_data(w*16+32-1,w*16)
+        valid := !(bank_mask(w-1) && !isRVC(bank_insts(w-1)))
       }
-      is_valid := true.B
-    } else if (i == 1) {
-      // Need special case since 0th instruction may carry over the wrap around
-      inst     := f3_data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
-      is_valid := f3_prev_is_half || !(f3_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
-    } else if ((nBanks == 2) && i == (fetchWidth / 2) - 1) {
-      // If we are using a banked I$ we could get cut-off halfway through the fetch bundle
-      inst     := f3_data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
-      is_valid := !(f3_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) &&
-                  !(inst(1,0) === 3.U && !f3_imemresp.mask(i+1))
-    } else if (i == fetchWidth - 1) {
-      inst     := Cat(0.U(16.W), f3_data(fetchWidth*coreInstBits-1,i*coreInstBits))
-      is_valid := !((f3_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U) ||
-                    inst(1,0) === 3.U)
-    } else {
-      inst     := f3_data(i*coreInstBits+2*coreInstBits-1,i*coreInstBits)
-      is_valid := !(f3_mask(i-1) && f3_fetch_bundle.insts(i-1)(1,0) === 3.U)
-    }
-    f3_fetch_bundle.insts(i) := inst
 
-    // TODO do not compute a vector of targets
-    val pc = (f3_aligned_pc
-            + (i << log2Ceil(coreInstBytes)).U
-            - Mux(f3_prev_is_half && (i == 0).B, 2.U, 0.U))
-    f3_pcs(i)    := pc
-    f3_is_rvc(i) := inst(1,0) =/= 3.U
+      bank_insts(w) := inst
 
-    val bpu = Module(new BreakpointUnit(nBreakpoints))
-    bpu.io.status := io.cpu.status
-    bpu.io.bp     := io.cpu.bp
-    bpu.io.pc     := pc
-    bpu.io.ea     := DontCare
-    val exp_inst = ExpandRVC(inst)
+      f3_fetch_bundle.insts(i) := inst
 
-    bpd_decoder.io.inst := exp_inst
-    bpd_decoder.io.pc   := pc
+      val pc = ((f3_aligned_pc
+        + (i << log2Ceil(coreInstBytes)).U
+        - Mux(bank_prev_is_half && (w == 0).B, 2.U, 0.U)))
+      f3_pcs   (i) := pc
+      f3_is_rvc(i) := isRVC(inst)
 
-    f3_fetch_bundle.exp_insts(i) := exp_inst
+      val exp_inst = ExpandRVC(inst)
+      f3_fetch_bundle.exp_insts(i) := exp_inst
 
-    f3_mask(i)  := f3.io.deq.valid && f3_imemresp.mask(i) && is_valid && !redirect_found
-    f3_targs(i) := Mux(bpd_decoder.io.cfi_type === CFI_JALR, f3_bpd_resp.io.deq.bits.preds(i).predicted_pc.bits, bpd_decoder.io.target)
+      val bpd_decoder = Module(new BranchDecode)
+      bpd_decoder.io.inst := exp_inst
+      bpd_decoder.io.pc   := pc
 
-    // Redirect if
-    //  1) its a JAL/JALR (unconditional)
-    //  2) the BPD believes this is a branch and says we should take it
-    //  3) the BPD does not believe this is a branch, (predict taken when no info)
-    f3_redirects(i)    := f3_mask(i) && (
-      bpd_decoder.io.cfi_type === CFI_JAL || bpd_decoder.io.cfi_type === CFI_JALR ||
+      val bpu = Module(new BreakpointUnit(nBreakpoints))
+      bpu.io.status := io.cpu.status
+      bpu.io.bp     := io.cpu.bp
+      bpu.io.pc     := pc
+      bpu.io.ea     := DontCare
+
+      bank_mask(w) := f3.io.deq.valid && f3_imemresp.mask(i) && valid && !redirect_found
+      f3_mask  (i) := f3.io.deq.valid && f3_imemresp.mask(i) && valid && !redirect_found
+      f3_targs (i) := Mux(bpd_decoder.io.cfi_type === CFI_JALR,
+        f3_bpd_resp.io.deq.bits.preds(i).predicted_pc.bits,
+        bpd_decoder.io.target)
+      f3_npc_plus4_mask(i) := (if (w == 0) {
+        !f3_is_rvc(i) && !bank_prev_is_half
+      } else {
+        !f3_is_rvc(i)
+      })
+
+      // Redirect if
+      //  1) its a JAL/JALR (unconditional)
+      //  2) the BPD believes this is a branch and says we should take it
+      //  3) the BPD does not believe this is a branch, (predict taken when no info)
+      f3_redirects(i)    := f3_mask(i) && (
+        bpd_decoder.io.cfi_type === CFI_JAL || bpd_decoder.io.cfi_type === CFI_JALR ||
         (bpd_decoder.io.cfi_type === CFI_BR &&
-          (f3_bpd_resp.io.deq.bits.preds(i).taken || !f3_bpd_resp.io.deq.bits.preds(i).is_br ))
-    )
+          (f3_bpd_resp.io.deq.bits.preds(i).taken || !f3_bpd_resp.io.deq.bits.preds(i).is_br))
+      )
 
+      f3_br_mask(i)   := f3_mask(i) && bpd_decoder.io.cfi_type === CFI_BR
+      f3_cfi_types(i) := bpd_decoder.io.cfi_type
+      f3_call_mask(i) := bpd_decoder.io.is_call
+      f3_ret_mask(i)  := bpd_decoder.io.is_ret
 
-    f3_br_mask(i)   := f3_mask(i) && bpd_decoder.io.cfi_type === CFI_BR
-    f3_cfi_types(i) := bpd_decoder.io.cfi_type
-    f3_call_mask(i) := bpd_decoder.io.is_call
-    f3_ret_mask(i)  := bpd_decoder.io.is_ret
+      f3_fetch_bundle.bp_debug_if_oh(i) := bpu.io.debug_if
+      f3_fetch_bundle.bp_xcpt_if_oh (i) := bpu.io.xcpt_if
 
-    redirect_found = redirect_found || f3_redirects(i)
-
-    f3_fetch_bundle.bp_debug_if_oh(i) := bpu.io.debug_if
-    f3_fetch_bundle.bp_xcpt_if_oh (i) := bpu.io.xcpt_if
+      redirect_found = redirect_found || f3_redirects(i)
+    }
+    val last_inst = bank_insts(bankWidth-1)
+    bank_prev_is_half = Mux(f3_bank_mask(b),
+      (!(bank_mask(bankWidth-2) && !isRVC(bank_insts(bankWidth-2))) && !isRVC(last_inst)),
+      bank_prev_is_half)
+    bank_prev_half    = Mux(f3_bank_mask(b),
+      last_inst(15,0),
+      bank_prev_half)
   }
 
-  f3_fetch_bundle.cfi_type := f3_cfi_types(f3_fetch_bundle.cfi_idx.bits)
-  f3_fetch_bundle.cfi_is_call := f3_call_mask(f3_fetch_bundle.cfi_idx.bits)
-  f3_fetch_bundle.cfi_is_ret := f3_ret_mask(f3_fetch_bundle.cfi_idx.bits)
-  f3_fetch_bundle.cfi_npc_plus4 := Mux(f3_fetch_bundle.cfi_idx.bits === 0.U,
-    !f3_is_rvc(f3_fetch_bundle.cfi_idx.bits) && !f3_prev_is_half,
-    !f3_is_rvc(f3_fetch_bundle.cfi_idx.bits))
+  f3_fetch_bundle.cfi_type      := f3_cfi_types(f3_fetch_bundle.cfi_idx.bits)
+  f3_fetch_bundle.cfi_is_call   := f3_call_mask(f3_fetch_bundle.cfi_idx.bits)
+  f3_fetch_bundle.cfi_is_ret    := f3_ret_mask (f3_fetch_bundle.cfi_idx.bits)
+  f3_fetch_bundle.cfi_npc_plus4 := f3_npc_plus4_mask(f3_fetch_bundle.cfi_idx.bits)
 
   f3_fetch_bundle.ghist    := f3.io.deq.bits.ghist
   f3_fetch_bundle.bpd_meta := f3_bpd_resp.io.deq.bits.meta
-  val last_idx = if (nBanks == 2) {
-    Mux(mayNotBeDualBanked(f3_fetch_bundle.pc), (fetchWidth/2-1).U, (fetchWidth-1).U)
-  } else {
-    (fetchWidth-1).U
-  }
-  val prev_is_half = (!(f3_mask(last_idx-1.U) && f3_fetch_bundle.insts(last_idx-1.U)(1,0) === 3.U)
-                        && f3_fetch_bundle.insts(last_idx)(1,0) === 3.U)
-  val prev_half    = f3_fetch_bundle.insts(last_idx)(15,0)
-  f3_fetch_bundle.end_half.valid := prev_is_half
-  f3_fetch_bundle.end_half.bits  := prev_half
+
+  f3_fetch_bundle.end_half.valid := bank_prev_is_half
+  f3_fetch_bundle.end_half.bits  := bank_prev_half
 
   when (f3.io.deq.fire()) {
-    f3_prev_is_half := prev_is_half
-    f3_prev_half    := prev_half
+    f3_prev_is_half := bank_prev_is_half
+    f3_prev_half    := bank_prev_half
     assert(f3_bpd_resp.io.deq.bits.pc === f3_fetch_bundle.pc)
   }
 
