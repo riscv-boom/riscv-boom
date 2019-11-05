@@ -55,6 +55,11 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
   val cfi_type = Bool()
   // mask of branches which were visible in this fetch bundle
   val br_mask   = UInt(fetchWidth.W)
+  // This CFI is likely a CALL
+  val cfi_is_call   = Bool()
+  // This CFI is likely a RET
+  val cfi_is_ret    = Bool()
+  val cfi_npc_plus4 = Bool()
 
   // What global history should be used to query this fetch bundle
   val ghist = new GlobalHistory
@@ -113,6 +118,10 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
     val bpdupdate = Output(Valid(new BranchPredictionUpdate))
 
+    val ras_update = Output(Bool())
+    val ras_update_idx = Output(UInt(log2Ceil(nRasEntries).W))
+    val ras_update_pc  = Output(UInt(vaddrBitsExtended.W))
+
   })
   val bpd_ptr    = RegInit(0.U(idx_sz.W))
   val deq_ptr    = RegInit(0.U(idx_sz.W))
@@ -140,11 +149,14 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     ram(enq_ptr).cfi_idx   := io.enq.bits.cfi_idx
     // Initially, if we see a CFI, it is assumed to be taken.
     // Branch resolutions may change this
-    ram(enq_ptr).cfi_taken  := io.enq.bits.cfi_idx.valid
+    ram(enq_ptr).cfi_taken   := io.enq.bits.cfi_idx.valid
     ram(enq_ptr).cfi_mispredicted := false.B
-    ram(enq_ptr).cfi_type   := io.enq.bits.cfi_type
-    ram(enq_ptr).br_mask    := io.enq.bits.br_mask & io.enq.bits.mask
-    ram(enq_ptr).start_bank := bank(io.enq.bits.pc)
+    ram(enq_ptr).cfi_type    := io.enq.bits.cfi_type
+    ram(enq_ptr).cfi_is_call := io.enq.bits.cfi_is_call
+    ram(enq_ptr).cfi_is_ret  := io.enq.bits.cfi_is_ret
+    ram(enq_ptr).cfi_npc_plus4 := io.enq.bits.cfi_npc_plus4
+    ram(enq_ptr).br_mask     := io.enq.bits.br_mask & io.enq.bits.mask
+    ram(enq_ptr).start_bank  := bank(io.enq.bits.pc)
     val prev_idx = WrapDec(enq_ptr, num_entries)
     val prev_entry = ram(prev_idx)
     ram(enq_ptr).ghist := Mux(start_from_empty_ghist,
@@ -155,7 +167,10 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
         prev_entry.br_mask(prev_entry.cfi_idx.bits),
         prev_entry.cfi_idx.bits,
         prev_entry.cfi_idx.valid,
-        pcs(prev_idx))
+        pcs(prev_idx),
+        prev_entry.cfi_is_call,
+        prev_entry.cfi_is_ret
+      )
     )
     bpd_meta.write(enq_ptr, io.enq.bits.bpd_meta)
 
@@ -181,10 +196,17 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
   val bpdupdate = Wire(Valid(new BranchPredictionUpdate))
   bpdupdate.valid := false.B
   bpdupdate.bits  := DontCare
+  val ras_update = WireInit(false.B)
+  val ras_update_pc = WireInit(0.U(vaddrBitsExtended.W))
+  val ras_update_idx = WireInit(0.U(log2Ceil(nRasEntries).W))
+  io.ras_update     := RegNext(ras_update)
+  io.ras_update_pc  := RegNext(ras_update_pc)
+  io.ras_update_idx := RegNext(ras_update_idx)
   when (bpd_ptr =/= deq_ptr && enq_ptr =/= WrapInc(bpd_ptr, num_entries)) {
 
     val entry = ram(bpd_ptr)
     val cfi_idx = entry.cfi_idx.bits
+
     // TODO: We should try to commit branch prediction updates earlier
     bpdupdate.valid              := !first_empty && (entry.cfi_idx.valid || entry.br_mask =/= 0.U)
     bpdupdate.bits.pc            := pcs(bpd_ptr)
@@ -199,6 +221,10 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     bpdupdate.bits.cfi_is_br        := entry.br_mask(cfi_idx)
     bpdupdate.bits.cfi_is_jal       := entry.cfi_type === CFI_JAL || entry.cfi_type === CFI_JALR
     bpdupdate.bits.ghist            := entry.ghist
+
+    ras_update     := entry.cfi_is_call
+    ras_update_pc  := bankAlign(pcs(bpd_ptr)) + (entry.cfi_idx.bits << 1) + Mux(entry.cfi_npc_plus4, 4.U, 2.U)
+    ras_update_idx := WrapInc(entry.ghist.ras_idx, nRasEntries)
 
     bpd_ptr := WrapInc(bpd_ptr, num_entries)
 

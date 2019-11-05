@@ -424,7 +424,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       brupdate.b2.cfi_type === CFI_BR,
       (brupdate.b2.uop.pc_lob ^ Mux(ftq_entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)) >> 1,
       true.B,
-      io.ifu.get_pc(1).pc)
+      io.ifu.get_pc(1).pc,
+      ftq_entry.cfi_is_call,
+      ftq_entry.cfi_is_ret)
 
     io.ifu.redirect_ghist   := Mux(
       use_same_ghist,

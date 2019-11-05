@@ -29,7 +29,7 @@ import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{ICacheLogicalTree
 
 import boom.common._
 import boom.exu.{CommitExceptionSignals, BranchDecode, BrUpdateInfo}
-import boom.util.{BoomCoreStringPrefix, MaskLower}
+import boom.util._
 
 
 class FrontendResp(implicit p: Parameters) extends BoomBundle()(p) {
@@ -56,6 +56,8 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
   val new_saw_branch_not_taken = Bool()
   val new_saw_branch_taken     = Bool()
 
+  val ras_idx = UInt(log2Ceil(nRasEntries).W)
+
   def histories(bank: Int) = {
     if (nBanks == 1) {
       old_history
@@ -72,7 +74,9 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
     }
   }
 
-  def update(branches: UInt, cfi_taken: Bool, cfi_is_br: Bool, cfi_idx: UInt, cfi_valid: Bool, addr: UInt): GlobalHistory = {
+  def update(branches: UInt, cfi_taken: Bool, cfi_is_br: Bool, cfi_idx: UInt,
+    cfi_valid: Bool, addr: UInt,
+    cfi_is_call: Bool, cfi_is_ret: Bool): GlobalHistory = {
     val cfi_idx_fixed = cfi_idx(log2Ceil(fetchWidth)-1,0)
     val cfi_idx_oh = UIntToOH(cfi_idx_fixed)
     val new_history = Wire(new GlobalHistory)
@@ -85,7 +89,7 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
       new_history.old_history := Mux(cfi_is_br && cfi_taken && cfi_valid && not_taken_branches =/= 0.U, histories(0) << 2 | 1.U,
                                  Mux(cfi_is_br && cfi_taken && cfi_valid                              , histories(0) << 1 | 1.U,
                                  Mux(not_taken_branches =/= 0.U                                       , histories(0) << 1,
-                                                                                                        histories(0))))
+                                   histories(0))))
 
     } else {
       // In the two bank case every bank ignore the history added by the previous bank
@@ -107,6 +111,8 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
 
       }
     }
+    new_history.ras_idx := Mux(cfi_valid && cfi_is_call, WrapInc(ras_idx, nRasEntries),
+                           Mux(cfi_valid && cfi_is_ret , WrapDec(ras_idx, nRasEntries), ras_idx))
     new_history
   }
 
@@ -181,6 +187,9 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
 
   val cfi_idx       = Valid(UInt(log2Ceil(fetchWidth).W))
   val cfi_type      = UInt(CFI_SZ.W)
+  val cfi_is_call   = Bool()
+  val cfi_is_ret    = Bool()
+  val cfi_npc_plus4 = Bool()
 
   val ftq_idx       = UInt(log2Ceil(ftqSz).W)
   val mask          = UInt(fetchWidth.W) // mark which words are valid instructions
@@ -281,6 +290,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
   val bpd = Module(new BranchPredictor)
+  val ras = Mem(nRasEntries, UInt(vaddrBitsExtended.W))
 
   val icache = outer.icache.module
   icache.io.hartid     := io.hartid
@@ -368,7 +378,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s1_bpd_resp.preds(f1_redirect_idx).is_br,
     f1_redirect_idx,
     f1_do_redirect,
-    s1_vpc)
+    s1_vpc,
+    false.B,
+    false.B)
 
   when (s1_valid && !s1_tlb_miss) {
     // Stop fetching on fault
@@ -417,7 +429,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f2_bpd_resp.preds(f2_redirect_idx).is_br,
     f2_redirect_idx,
     f2_do_redirect,
-    s2_vpc)
+    s2_vpc,
+    false.B,
+    false.B)
 
 
 
@@ -487,13 +501,16 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3_imemresp     = f3.io.deq.bits
   val f3_data         = f3_imemresp.data
   val f3_aligned_pc   = bankAlign(f3_imemresp.pc)
-
+  val f3_pcs          = Wire(Vec(fetchWidth, UInt(vaddrBitsExtended.W)))
+  val f3_is_rvc       = Wire(Vec(fetchWidth, Bool()))
   val f3_redirects    = Wire(Vec(fetchWidth, Bool()))
   val f3_targs        = Wire(Vec(fetchWidth, UInt(vaddrBitsExtended.W)))
   val f3_cfi_types    = Wire(Vec(fetchWidth, UInt(CFI_SZ.W)))
   val f3_fetch_bundle = Wire(new FetchBundle)
   val f3_mask         = Wire(Vec(fetchWidth, Bool()))
   val f3_br_mask      = Wire(Vec(fetchWidth, Bool()))
+  val f3_call_mask    = Wire(Vec(fetchWidth, Bool()))
+  val f3_ret_mask     = Wire(Vec(fetchWidth, Bool()))
   f3_fetch_bundle.mask := f3_mask.asUInt
   f3_fetch_bundle.br_mask := f3_br_mask.asUInt
   f3_fetch_bundle.pc := f3_imemresp.pc
@@ -546,6 +563,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     val pc = (f3_aligned_pc
             + (i << log2Ceil(coreInstBytes)).U
             - Mux(f3_prev_is_half && (i == 0).B, 2.U, 0.U))
+    f3_pcs(i)    := pc
+    f3_is_rvc(i) := inst(1,0) =/= 3.U
 
     val bpu = Module(new BreakpointUnit(nBreakpoints))
     bpu.io.status := io.cpu.status
@@ -575,6 +594,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
     f3_br_mask(i)   := f3_mask(i) && bpd_decoder.io.cfi_type === CFI_BR
     f3_cfi_types(i) := bpd_decoder.io.cfi_type
+    f3_call_mask(i) := bpd_decoder.io.is_call
+    f3_ret_mask(i)  := bpd_decoder.io.is_ret
 
     redirect_found = redirect_found || f3_redirects(i)
 
@@ -583,6 +604,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   }
 
   f3_fetch_bundle.cfi_type := f3_cfi_types(f3_fetch_bundle.cfi_idx.bits)
+  f3_fetch_bundle.cfi_is_call := f3_call_mask(f3_fetch_bundle.cfi_idx.bits)
+  f3_fetch_bundle.cfi_is_ret := f3_ret_mask(f3_fetch_bundle.cfi_idx.bits)
+  f3_fetch_bundle.cfi_npc_plus4 := Mux(f3_fetch_bundle.cfi_idx.bits === 0.U,
+    !f3_is_rvc(f3_fetch_bundle.cfi_idx.bits) && !f3_prev_is_half,
+    !f3_is_rvc(f3_fetch_bundle.cfi_idx.bits))
+
   f3_fetch_bundle.ghist    := f3.io.deq.bits.ghist
   f3_fetch_bundle.bpd_meta := f3_bpd_resp.io.deq.bits.meta
   val last_idx = if (nBanks == 2) {
@@ -611,7 +638,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   // Redirect earlier stages only if the later stage
   // can consume this packet
-  val f3_predicted_target = Mux(f3_redirects.reduce(_||_), f3_targs(PriorityEncoder(f3_redirects)),
+  val f3_predicted_target = Mux(f3_redirects.reduce(_||_),
+    Mux(f3_fetch_bundle.cfi_is_ret, ras(f3_fetch_bundle.ghist.ras_idx), f3_targs(PriorityEncoder(f3_redirects))),
     nextFetch(f3_fetch_bundle.pc))
   f3_fetch_bundle.next_pc       := f3_predicted_target
   val f3_predicted_ghist = f3_fetch_bundle.ghist.update(
@@ -620,10 +648,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f3_fetch_bundle.br_mask(f3_fetch_bundle.cfi_idx.bits),
     f3_fetch_bundle.cfi_idx.bits,
     f3_fetch_bundle.cfi_idx.valid,
-    f3_fetch_bundle.pc)
+    f3_fetch_bundle.pc,
+    f3_fetch_bundle.cfi_is_call,
+    f3_fetch_bundle.cfi_is_ret
+  )
 
   when (f3.io.deq.valid && f4_ready) {
-
     when (f3_redirects.reduce(_||_)) {
       f3_prev_is_half := false.B
     }
@@ -698,6 +728,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
 
   bpd.io.update := ftq.io.bpdupdate
+  when (ftq.io.ras_update) {
+    ras.write(ftq.io.ras_update_idx, ftq.io.ras_update_pc)
+  }
 
 
   // -------------------------------------------------------
