@@ -652,7 +652,7 @@ jobs:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
-                name: Initialize the manager instance
+                name: Initialize FireSim manager instance with Chipyard
                 command: |
                     .circleci/firesim-init-manager.sh
     build-largefireboom-buildroot:
@@ -667,7 +667,7 @@ jobs:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
-                name: Build a Buildroot test workload and install to FireSim
+                name: Build a LargeFireBoom Buildroot workload
                 command: |
                     .circleci/firesim-build-workload.sh largefireboom buildroot
     build-largefireboom-fedora:
@@ -682,7 +682,7 @@ jobs:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
-                name: Build a Fedora test workload and install to FireSim
+                name: Build a LargeFireBoom Fedora workload
                 command: |
                     .circleci/firesim-build-workload.sh largefireboom fedora
     launch-largefireboom-afi-build:
@@ -713,7 +713,7 @@ jobs:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
-                name: AFI Build Failed
+                name: LargeFireBoom AFI build failed
                 command: |
                     .circleci/firesim-afi-failed.sh largefireboom
     launch-largefireboom-buildroot-run:
@@ -728,7 +728,7 @@ jobs:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
-                name: Run a Buildroot test
+                name: Run a LargeFireBoom Buildroot workload
                 command: |
                     .circleci/firesim-run-workload.sh largefireboom buildroot
     largefireboom-buildroot-run-finished:
@@ -743,7 +743,7 @@ jobs:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
-                name: Buildroot finished
+                name: Buildroot workload finished
                 command: |
                     .circleci/firesim-run-finished.sh largefireboom buildroot
     launch-largefireboom-fedora-run:
@@ -758,7 +758,7 @@ jobs:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
-                name: Run a Fedora test workload
+                name: Run a LargeFireBoom Fedora workload
                 command: |
                     .circleci/firesim-run-workload.sh largefireboom fedora
     largefireboom-fedora-run-finished:
@@ -773,7 +773,7 @@ jobs:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
             - run:
-                name: Fedora finished
+                name: Fedora workload finished
                 command: |
                     .circleci/firesim-run-finished.sh largefireboom fedora
 
@@ -782,27 +782,15 @@ workflows:
     version: 2
     build-and-test-boom-configs:
         jobs:
-            - approval-needed:
-                type: approval
-
             # Make the toolchains
-            - install-riscv-toolchain:
-                requires:
-                    - approval-needed
-
-            - install-esp-toolchain:
-                requires:
-                    - approval-needed
+            - install-riscv-toolchain
+            - install-esp-toolchain
 
             # Build verilator
-            - prepare-build-environment:
-                requires:
-                    - approval-needed
+            - prepare-build-environment
 
             # Run generic syntax checking
-            - run-scala-checkstyle:
-                requires:
-                    - approval-needed
+            - run-scala-checkstyle
 
             # Prepare the verilator builds
             - prepare-smallboomconfig:
@@ -886,13 +874,13 @@ workflows:
 
     init-firesim:
         # run firesim workflow every thursday
-        #triggers:
-        #    - schedule:
-        #        cron: "0 0 * * 4"
-        #        filters:
-        #            branches:
-        #                only:
-        #                    - master
+        triggers:
+            - schedule:
+                cron: "0 0 * * 4"
+                filters:
+                    branches:
+                        only:
+                            - master
         jobs:
             - initialize-manager
 
