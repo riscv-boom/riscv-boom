@@ -51,7 +51,14 @@ class MispredictCache(implicit p: Parameters) extends BoomModule()(p)
     val seen_cfis = bundle.mask & (bundle.br_mask.asUInt |
       (UIntToOH(bundle.cfi_idx.bits).asUInt & Fill(fetchWidth, bundle.cfi_idx.valid)))
     val first_cfi = PriorityEncoder(seen_cfis)
-    val first_cfi_pc = bankAlign(bundle.pc) + (first_cfi << 1)
+    val first_cfi_sub2 = if (nBanks == 2) {
+      first_cfi === bankWidth.U && bundle.edge_inst(1)
+    } else {
+      false.B
+    }
+    val first_cfi_pc = (bankAlign(bundle.pc)
+      + (first_cfi << 1)
+      - Mux(first_cfi_sub2, 2.U, 0.U))
     val include_first_cfi = (bundle.cfi_idx.valid &&
       bundle.cfi_idx.bits === first_cfi &&
       bundle.cfi_type === CFI_JAL)
