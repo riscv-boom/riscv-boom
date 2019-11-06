@@ -58,25 +58,9 @@ else
     exit 1
 fi
 
-# run workload 1 - buildroot
-FMRSHL_NAME=$(sed -n '2p' $BUILDROOT_CFG)
-FMRSHL_DIR_NAME=$(sed -n '1p' $BUILDROOT_CFG)
-if [ -f $REMOTE_AWS_WORK_DIR/\$FMRSHL_DIR_NAME-\$FMRSHL_NAME-FINISHED ]; then
-    curl -u $API_TOKEN: \
-        -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-buildroot-run \
-        -d revision=$CIRCLE_SHA1 \
-        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
-fi
-
-# run workload 2 - fedora
-FMRSHL_NAME=$(sed -n '2p' $FEDORA_CFG)
-FMRSHL_DIR_NAME=$(sed -n '1p' $FEDORA_CFG)
-if [ -f $REMOTE_AWS_WORK_DIR/\$FMRSHL_DIR_NAME-\$FMRSHL_NAME-FINISHED ]; then
-    curl -u $API_TOKEN: \
-        -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-fedora-run \
-        -d revision=$CIRCLE_SHA1 \
-        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
-fi
+# launch workloads related to this afi
+cd $REMOTE_AWS_FSIM_DEPLOY_DIR
+./$AFI_NAME/launch-workloads.sh $CONFIG_KEY $AFI_NAME $API_TOKEN $CIRCLE_SHA1 $API_URL $CIRCLE_PROJECT_USERNAME $CIRCLE_PROJECT_REPONAME $CIRCLE_BRANCH
 
 EOF
 
