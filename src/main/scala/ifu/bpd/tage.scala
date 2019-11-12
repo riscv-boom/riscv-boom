@@ -210,7 +210,7 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
 {
   val base = Module(new BTBBranchPredictorBank(BoomBTBParams()))
   val micro = Module(new BTBBranchPredictorBank(
-    BoomBTBParams(nSets = 64, tagSz = 4, offsetSz = 13, extendedNSets = 0, micro = true))
+    BoomBTBParams(nSets = 64, offsetSz = 13, extendedNSets = 0, micro = true))
   )
   base.io.f1_kill := io.f1_kill
   base.io.f2_kill := io.f2_kill

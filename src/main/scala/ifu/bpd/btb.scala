@@ -12,8 +12,7 @@ import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
 case class BoomBTBParams(
-  nSets: Int = 512,
-  tagSz: Int = 5,
+  nSets: Int = 256,
   offsetSz: Int = 13,
   extendedNSets: Int = 256,
   micro: Boolean = false,
@@ -28,7 +27,7 @@ class BTBEntry(val offsetSz: Int) extends Bundle {
 class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   override val nSets         = params.nSets
-  val tagSz         = params.tagSz
+  val tagSz         = vaddrBitsExtended - log2Ceil(nSets) - log2Ceil(fetchWidth) - 1
   val offsetSz      = params.offsetSz
   val extendedNSets = params.extendedNSets
   val useEBTB       = extendedNSets != 0
