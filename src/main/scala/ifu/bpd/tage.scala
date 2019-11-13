@@ -22,12 +22,6 @@ class TageMeta(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 
-class TageEntry(val tagSz: Int) extends Bundle {
-  val valid = Bool()
-  val tag = UInt(tagSz.W)
-  val ctr = UInt(3.W)
-}
-
 
 class TageResp extends Bundle {
   val ctr = UInt(3.W)
@@ -79,15 +73,21 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
   reset_idx := reset_idx + doing_reset
   when (reset_idx === (nRows-1).U) { doing_reset := false.B }
 
+
+  class TageEntry extends Bundle {
+    val valid = Bool() // TODO: Remove this valid bit
+    val tag = UInt(tagSz.W)
+    val ctr = UInt(3.W)
+  }
+
+
+  val tageEntrySz = 1 + tagSz + 3
+
   val (s0_hashed_idx, s0_tag) = compute_tag_and_hash(fetchIdx(io.f0_req.bits.pc), io.f0_req.bits.hist)
 
-  val hi_us  = Seq.fill(bankWidth) { SyncReadMem(nRows, Bool()) }
-  val lo_us  = Seq.fill(bankWidth) { SyncReadMem(nRows, Bool()) }
-  val table  = Seq.fill(bankWidth) { SyncReadMem(nRows, new TageEntry(tagSz)) }
-
-  // val hi_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
-  // val lo_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
-  // val table  = SyncReadMem(nRows, Vec(bankWidth, new TageEntry(tagSz)))
+  val hi_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
+  val lo_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
+  val table  = SyncReadMem(nRows, Vec(bankWidth, UInt(tageEntrySz.W)))
 
   val ium_tags = Reg(Vec(nIUMEntries, UInt(tagSz.W)))
   val ium_idxs = Reg(Vec(nIUMEntries, UInt(log2Ceil(nRows).W)))
@@ -98,12 +98,9 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
   val s1_tag        = RegNext(s0_tag)
 
   val s1_req       = RegNext(io.f0_req)
-  val s1_req_rtage = VecInit(table.map(_.read(s0_hashed_idx, io.f0_req.valid)))
-  val s1_req_rhius = VecInit(hi_us.map(_.read(s0_hashed_idx, io.f0_req.valid)))
-  val s1_req_rlous = VecInit(lo_us.map(_.read(s0_hashed_idx, io.f0_req.valid)))
-  // val s1_req_rtage = table.read(s0_hashed_idx, io.f0_req.valid)
-  // val s1_req_rhius = hi_us.read(s0_hashed_idx, io.f0_req.valid)
-  // val s1_req_rlous = lo_us.read(s0_hashed_idx, io.f0_req.valid)
+  val s1_req_rtage = VecInit(table.read(s0_hashed_idx, io.f0_req.valid).map(_.asTypeOf(new TageEntry)))
+  val s1_req_rhius = hi_us.read(s0_hashed_idx, io.f0_req.valid)
+  val s1_req_rlous = lo_us.read(s0_hashed_idx, io.f0_req.valid)
   val s1_req_rhits = VecInit(s1_req_rtage.map(e => e.valid && e.tag === s1_tag && !doing_reset))
   val s1_req_iumhits = VecInit((ium_tags zip ium_idxs) map { case (t, i) =>
     t === s1_tag && i === RegNext(s0_hashed_idx) && !doing_reset
@@ -144,63 +141,36 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
 
   val (update_idx, update_tag) = compute_tag_and_hash(fetchIdx(io.update_pc), io.update_hist)
 
+  val update_wdata = Wire(Vec(bankWidth, new TageEntry))
+
+  table.write(
+    Mux(doing_reset, reset_idx                                          , update_idx),
+    Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 0.U(tageEntrySz.W) }), VecInit(update_wdata.map(_.asUInt))),
+    Mux(doing_reset, ~(0.U(bankWidth.W))                                , io.update_mask.asUInt).asBools
+  )
+
+  val update_hi_wdata = Wire(Vec(bankWidth, Bool()))
+  hi_us.write(
+    Mux(doing_reset, reset_idx, Mux(doing_clear_u_hi, clear_u_idx, update_idx)),
+    Mux(doing_reset || doing_clear_u_hi, VecInit((0.U(bankWidth.W)).asBools), update_hi_wdata),
+    Mux(doing_reset || doing_clear_u_hi, ~(0.U(bankWidth.W)), io.update_u_mask.asUInt).asBools
+  )
+
+  val update_lo_wdata = Wire(Vec(bankWidth, Bool()))
+  lo_us.write(
+    Mux(doing_reset, reset_idx, Mux(doing_clear_u_lo, clear_u_idx, update_idx)),
+    Mux(doing_reset || doing_clear_u_lo, VecInit((0.U(bankWidth.W)).asBools), update_lo_wdata),
+    Mux(doing_reset || doing_clear_u_lo, ~(0.U(bankWidth.W)), io.update_u_mask.asUInt).asBools
+  )
+
   for (w <- 0 until bankWidth) {
-    val update_entry = Wire(new TageEntry(tagSz))
-    update_entry.ctr   := io.update_ctr(w)
-    update_entry.valid := true.B
-    update_entry.tag   := update_tag
+    update_wdata(w).ctr   := io.update_ctr(w)
+    update_wdata(w).valid := true.B
+    update_wdata(w).tag   := update_tag
 
-
-    when (io.update_mask(w) || doing_reset) {
-      val idx = Mux(doing_reset, reset_idx, update_idx)
-      table(w).write(idx, Mux(doing_reset, (0.U).asTypeOf(new TageEntry(tagSz)), update_entry))
-    }
-
-    when (io.update_u_mask(w) || doing_reset || doing_clear_u_hi) {
-      val idx = Mux(doing_reset, reset_idx,
-        Mux(io.update_u_mask(w), update_idx, clear_u_idx))
-      hi_us(w).write(idx, Mux(doing_reset || !io.update_u_mask(w), false.B, io.update_u(w)(1)))
-    }
-
-    when (io.update_u_mask(w) || doing_reset || doing_clear_u_lo) {
-      val idx = Mux(doing_reset, reset_idx,
-        Mux(io.update_u_mask(w), update_idx, clear_u_idx))
-      lo_us(w).write(idx, Mux(doing_reset || !io.update_u_mask(w), false.B, io.update_u(w)(0)))
-    }
-
+    update_hi_wdata(w)    := io.update_u(w)(1)
+    update_lo_wdata(w)    := io.update_u(w)(0)
   }
-
-
-  // val update_wdata = Wire(Vec(bankWidth, new TageEntry(tagSz)))
-
-  // table.write(
-  //   Mux(doing_reset, reset_idx                                           , update_idx),
-  //   Mux(doing_reset, (0.U).asTypeOf(Vec(bankWidth, new TageEntry(tagSz))), update_wdata),
-  //   Mux(doing_reset, ~(0.U(bankWidth.W))                                 , io.update_mask.asUInt).asBools
-  // )
-
-  // val update_hi_wdata = Wire(Vec(bankWidth, Bool()))
-  // hi_us.write(
-  //   Mux(doing_reset, reset_idx, Mux(doing_clear_u_hi, clear_u_idx, update_idx)),
-  //   Mux(doing_reset || doing_clear_u_hi, VecInit((0.U(bankWidth.W)).asBools), update_hi_wdata),
-  //   Mux(doing_reset || doing_clear_u_hi, ~(0.U(bankWidth.W)), io.update_u_mask.asUInt).asBools
-  // )
-
-  // val update_lo_wdata = Wire(Vec(bankWidth, Bool()))
-  // lo_us.write(
-  //   Mux(doing_reset, reset_idx, Mux(doing_clear_u_lo, clear_u_idx, update_idx)),
-  //   Mux(doing_reset || doing_clear_u_lo, VecInit((0.U(bankWidth.W)).asBools), update_lo_wdata),
-  //   Mux(doing_reset || doing_clear_u_lo, ~(0.U(bankWidth.W)), io.update_u_mask.asUInt).asBools
-  // )
-
-  // for (w <- 0 until bankWidth) {
-  //   update_wdata(w).ctr   := io.update_ctr(w)
-  //   update_wdata(w).valid := true.B
-  //   update_wdata(w).tag   := update_tag
-
-  //   update_hi_wdata(w)    := io.update_u(w)(1)
-  //   update_lo_wdata(w)    := io.update_u(w)(0)
-  // }
 
 
 
