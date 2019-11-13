@@ -815,6 +815,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f2_clear    := true.B
     f1_clear    := true.B
 
+    f3_prev_is_half := false.B
+
     s0_valid     := io.cpu.redirect_val
     s0_vpc       := io.cpu.redirect_pc
     s0_ghist     := io.cpu.redirect_ghist
