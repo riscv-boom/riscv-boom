@@ -23,12 +23,6 @@ class BIMMeta(implicit p: Parameters) extends BoomBundle()(p)
   val bims  = Vec(bankWidth, UInt(2.W))
 }
 
-class BIMEntry(implicit p: Parameters) extends BoomBundle()(p)
-{
-  val valid = Bool()
-  val bim   = UInt(2.W)
-  val is_br = Bool()
-}
 
 class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
@@ -51,13 +45,13 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
   when (reset_idx === (nSets-1).U) { doing_reset := false.B }
 
 
-  val data  = Seq.fill(bankWidth) { SyncReadMem(nSets, new BIMEntry) }
+  val data  = Seq.fill(bankWidth) { SyncReadMem(nSets, UInt(2.W)) }
 
   val s1_req_rdata    = VecInit(data.map(_.read(s0_req_idx   , io.f0_req.valid)))
 
 
 
-  val s1_update_wdata   = Wire(Vec(bankWidth, new BIMEntry))
+  val s1_update_wdata   = Wire(Vec(bankWidth, UInt(2.W)))
   val s1_update_wmask   = Wire(Vec(bankWidth, Bool()))
   val s1_update_meta    = s1_update.bits.meta.asTypeOf(new BIMMeta)
 
@@ -65,12 +59,12 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
   val s1_resp           = Wire(Vec(bankWidth, new BranchPrediction))
   for (w <- 0 until bankWidth) {
 
-    s1_resp(w).taken        := s1_req.valid && s1_req_rdata(w).valid && (s1_req_rdata(w).bim(1) || !s1_req_rdata(w).is_br) && !doing_reset
-    s1_resp(w).is_br        := s1_req.valid && s1_req_rdata(w).valid &&  s1_req_rdata(w).is_br
-    s1_resp(w).is_jal       := s1_req.valid && s1_req_rdata(w).valid && !s1_req_rdata(w).is_br
+    s1_resp(w).taken        := s1_req.valid && s1_req_rdata(w)(1) && !doing_reset
+    s1_resp(w).is_br        := false.B
+    s1_resp(w).is_jal       := false.B
     s1_resp(w).predicted_pc.valid := false.B
     s1_resp(w).predicted_pc.bits  := DontCare
-    s1_meta.bims(w)            := Mux(s1_req.valid && s1_req_rdata(w).valid, s1_req_rdata(w).bim, 2.U)
+    s1_meta.bims(w)            := s1_req_rdata(w)
 
     s1_update_wmask(w)         := false.B
     s1_update_wdata(w)         := DontCare
@@ -82,11 +76,9 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
         ((s1_update.bits.cfi_is_br && s1_update.bits.br_mask(w) && s1_update.bits.cfi_taken) || s1_update.bits.cfi_is_jal)
       val old_bim_value    = s1_update_meta.bims(w)
 
-      s1_update_wmask(w)         := true.B
-      s1_update_wdata(w).valid   := true.B
-      s1_update_wdata(w).is_br   := s1_update.bits.br_mask(w)
+      s1_update_wmask(w)     := true.B
 
-      s1_update_wdata(w).bim     := bimWrite(old_bim_value, was_taken)
+      s1_update_wdata(w)     := bimWrite(old_bim_value, was_taken)
     }
 
   }
@@ -94,7 +86,7 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
     when (doing_reset || (s1_update_wmask(w) && s1_update.valid)) {
       data(w).write(
         Mux(doing_reset, reset_idx, s1_update_idx),
-        Mux(doing_reset, (0.U).asTypeOf(new BIMEntry), s1_update_wdata(w))
+        Mux(doing_reset, 2.U, s1_update_wdata(w))
       )
     }
   }
