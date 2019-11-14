@@ -685,6 +685,21 @@ jobs:
                 name: Build a LargeFireBoom Fedora workload
                 command: |
                     .circleci/firesim-build-workload.sh largefireboom fedora
+    build-largefireboom-coremark:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+            - run:
+                name: Build a LargeFireBoom CoreMark workload
+                command: |
+                    .circleci/firesim-build-workload.sh largefireboom coremark
     launch-largefireboom-afi-build:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -776,6 +791,36 @@ jobs:
                 name: Fedora workload finished
                 command: |
                     .circleci/firesim-run-finished.sh largefireboom fedora
+    launch-largefireboom-coremark-run:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+            - run:
+                name: Run a LargeFireBoom CoreMark workload
+                command: |
+                    .circleci/firesim-run-workload.sh largefireboom coremark
+    largefireboom-coremark-run-finished:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+            - run:
+                name: CoreMark workload finished
+                command: |
+                    .circleci/firesim-run-finished.sh largefireboom coremark
 
 # Order and dependencies of jobs to run
 workflows:
@@ -901,4 +946,8 @@ workflows:
                     - initialize-manager
                     - build-largefireboom-buildroot
 
-
+            - build-largefireboom-coremark:
+                requires:
+                    - initialize-manager
+                    - build-largefireboom-buildroot
+                    - build-largefireboom-fedora

@@ -34,7 +34,7 @@ FMRSHL_NAME=$(sed -n '2p' $BUILDROOT_CFG)
 FMRSHL_DIR_NAME=$(sed -n '1p' $BUILDROOT_CFG)
 if [ -f $REMOTE_AWS_WORK_DIR/$AFI_NAME-$WORKLOAD_NAME-FINISHED ]; then
     curl -u $API_TOKEN: \
-        -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-buildroot-run \
+        -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-$WORKLOAD_NAME-run \
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
 fi
@@ -46,7 +46,19 @@ FMRSHL_NAME=$(sed -n '2p' $FEDORA_CFG)
 FMRSHL_DIR_NAME=$(sed -n '1p' $FEDORA_CFG)
 if [ -f $REMOTE_AWS_WORK_DIR/$AFI_NAME-$WORKLOAD_NAME-FINISHED ]; then
     curl -u $API_TOKEN: \
-        -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-fedora-run \
+        -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-$WORKLOAD_NAME-run \
+        -d revision=$CIRCLE_SHA1 \
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
+fi
+
+# run workload 3 - coremark
+WORKLOAD_NAME=coremark
+COREMARK_CFG=$DEPLOY_DIR/$AFI_NAME/$WORKLOAD_NAME/firemarshal_config
+FMRSHL_NAME=$(sed -n '2p' $COREMARK_CFG)
+FMRSHL_DIR_NAME=$(sed -n '1p' $COREMARK_CFG)
+if [ -f $REMOTE_AWS_WORK_DIR/$AFI_NAME-$WORKLOAD_NAME-FINISHED ]; then
+    curl -u $API_TOKEN: \
+        -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-$WORKLOAD_NAME-run \
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
 fi
