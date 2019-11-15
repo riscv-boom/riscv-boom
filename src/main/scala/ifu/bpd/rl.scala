@@ -21,11 +21,10 @@ class NeuralNetwork(implicit p: Parameters) extends BoomModule()(p)
 {
   val io = IO(new Bundle {
     val f0_req = Input(Valid(new BranchPredictionBankRequest)) // pc + history
-    val f3_kill = Input(Bool())
     val f3_resp = Output(Bool()) // taken or not taken
-  }
+  })
 
-  // logic
+  io.f3_resp := true.B
 }
 
 /**
@@ -59,16 +58,15 @@ class RLBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank(
 
   // rl bpu
 
-  val f3_meta = Wire(new RLMeta)
+  //val f3_meta = Wire(new RLMeta)
 
-  override val metaSz = base.metaSz + micro.metaSz + f3_meta.asUInt.getWidth
+  override val metaSz = base.metaSz + micro.metaSz //+ f3_meta.asUInt.getWidth
   require(metaSz <= bpdMaxMetaLength)
 
   // here have bankWidth worth of models
   val networks = Seq.fill(bankWidth) { Module(new NeuralNetwork) }
 
   networks.map(_.io.f0_req  := io.f0_req)
-  networks.map(_.io.f3_kill := f3_kill)
   val f3_resps = VecInit(networks.map(_.io.f3_resp))
 
   for (w <- 0 until bankWidth) {
@@ -80,5 +78,6 @@ class RLBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank(
   // update logic
 
   // send out the metadata that is carried through the pipeline
-  io.f3_meta := Cat(f3_meta.asUInt, micro.io.f3_meta(micro.metaSz-1,0), base.io.f3_meta(base.metaSz-1, 0))
+  //io.f3_meta := Cat(f3_meta.asUInt, micro.io.f3_meta(micro.metaSz-1,0), base.io.f3_meta(base.metaSz-1, 0))
+  io.f3_meta := Cat(micro.io.f3_meta(micro.metaSz-1,0), base.io.f3_meta(base.metaSz-1, 0))
 }
