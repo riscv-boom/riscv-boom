@@ -102,7 +102,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   // s_meta_write_req  : Write the metadata for new cache lne
   // s_meta_write_resp :
 
-  val s_invalid :: s_refill_req :: s_refill_resp :: s_drain_rpq_loads :: s_meta_read :: s_meta_resp_1 :: s_meta_resp_2 :: s_meta_clear :: s_wb_meta_read :: s_wb_req :: s_wb_resp :: s_commit_line :: s_drain_rpq :: s_meta_write_req :: s_mem_finish :: s_mem_finish_to_prefetch :: s_prefetched :: s_prefetch :: Nil = Enum(18)
+  val s_invalid :: s_refill_req :: s_refill_resp :: s_drain_rpq_loads :: s_meta_read :: s_meta_resp_1 :: s_meta_resp_2 :: s_meta_clear :: s_wb_meta_read :: s_wb_req :: s_wb_resp :: s_commit_line :: s_drain_rpq :: s_meta_write_req :: s_mem_finish_1 :: s_mem_finish_2 :: s_prefetched :: s_prefetch :: Nil = Enum(18)
   val state = RegInit(s_invalid)
 
   val req     = Reg(new BoomDCacheReqInternal)
@@ -122,7 +122,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
 
   val (_, _, refill_done, refill_address_inc) = edge.addr_inc(io.mem_grant)
   val sec_rdy = (!cmd_requires_second_acquire && !io.req_is_probe &&
-                 !state.isOneOf(s_invalid, s_meta_write_req, s_mem_finish))// Always accept secondary misses
+                 !state.isOneOf(s_invalid, s_meta_write_req, s_mem_finish_1, s_mem_finish_2))// Always accept secondary misses
 
   val rpq = Module(new BranchKillableQueue(new BoomDCacheReqInternal, cfg.nRPQ, u => u.uses_ldq, false))
   rpq.io.brupdate := io.brupdate
@@ -270,7 +270,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       .elsewhen (rpq.io.empty && !commit_line)
     {
       when (!rpq.io.enq.fire()) {
-        state := s_mem_finish
+        state := s_mem_finish_1
         finish_to_prefetch := enablePrefetching.B
       }
     } .elsewhen (rpq.io.empty || (rpq.io.deq.valid && !drain_load)) {
@@ -355,16 +355,18 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.meta_write.bits.data.tag := req_tag
     io.meta_write.bits.way_en   := req.way_en
     when (io.meta_write.fire()) {
-      state := s_mem_finish
+      state := s_mem_finish_1
       finish_to_prefetch := false.B
     }
-  } .elsewhen (state === s_mem_finish) {
+  } .elsewhen (state === s_mem_finish_1) {
     io.mem_finish.valid := grantack.valid
     io.mem_finish.bits  := grantack.bits
     when (io.mem_finish.fire() || !grantack.valid) {
       grantack.valid := false.B
-      state := Mux(finish_to_prefetch, s_prefetch, s_invalid)
+      state := s_mem_finish_2
     }
+  } .elsewhen (state === s_mem_finish_2) {
+    state := Mux(finish_to_prefetch, s_prefetch, s_invalid)
   } .elsewhen (state === s_prefetch) {
     io.req_pri_rdy := true.B
     when ((io.req_sec_val && !io.req_sec_rdy) || io.clear_prefetch) {

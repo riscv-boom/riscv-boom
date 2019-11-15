@@ -778,7 +778,7 @@ class Rob(
   io.rob_tail_idx := rob_tail_idx
   io.rob_pnr_idx  := rob_pnr_idx
   io.empty        := empty
-  io.ready        := (rob_state === s_normal) && !full
+  io.ready        := (rob_state === s_normal) && !full && !r_xcpt_val
 
   //-----------------------------------------------
   //-----------------------------------------------
