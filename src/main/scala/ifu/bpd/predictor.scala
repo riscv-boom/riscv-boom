@@ -31,7 +31,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     val update = Input(Valid(new BranchPredictionUpdate))
   })
 
-  val banked_predictors = Seq.fill(nBanks) { Module(new TageBranchPredictorBank) }
+  val banked_predictors = Seq.fill(nBanks) { Module(new RLBranchPredictorBank) }
   for (b <- 0 until nBanks) {
     dontTouch(banked_predictors(b).io)
     banked_predictors(b).io.f1_kill := io.f1_kill
