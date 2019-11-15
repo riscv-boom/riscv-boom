@@ -53,6 +53,8 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
   // history in that case
   val old_history = UInt(globalHistoryLength.W)
 
+  val current_saw_branch_not_taken = Bool()
+
   val new_saw_branch_not_taken = Bool()
   val new_saw_branch_taken     = Bool()
 
@@ -80,16 +82,20 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
     val cfi_idx_fixed = cfi_idx(log2Ceil(fetchWidth)-1,0)
     val cfi_idx_oh = UIntToOH(cfi_idx_fixed)
     val new_history = Wire(new GlobalHistory)
+
     val not_taken_branches = branches & Mux(cfi_valid,
                                             MaskLower(cfi_idx_oh) & ~Mux(cfi_is_br && cfi_taken, cfi_idx_oh, 0.U(fetchWidth.W)),
                                             ~(0.U(fetchWidth.W)))
+
     if (nBanks == 1) {
       // In the single bank case every bank sees the history including the previous bank
       new_history := DontCare
-      new_history.old_history := Mux(cfi_is_br && cfi_taken && cfi_valid && not_taken_branches =/= 0.U, histories(0) << 2 | 1.U,
+      new_history.current_saw_branch_not_taken := false.B
+      val saw_not_taken_branch = not_taken_branches =/= 0.U || current_saw_branch_not_taken
+      new_history.old_history := Mux(cfi_is_br && cfi_taken && cfi_valid && saw_not_taken_branch      , histories(0) << 2 | 1.U,
                                  Mux(cfi_is_br && cfi_taken && cfi_valid                              , histories(0) << 1 | 1.U,
-                                 Mux(not_taken_branches =/= 0.U                                       , histories(0) << 1,
-                                   histories(0))))
+                                 Mux(saw_not_taken_branch                                             , histories(0) << 1,
+                                                                                                        histories(0))))
 
     } else {
       // In the two bank case every bank ignore the history added by the previous bank
@@ -97,15 +103,17 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
       val cfi_in_bank_0 = cfi_valid && cfi_taken && cfi_idx_fixed < bankWidth.U
       val ignore_second_bank = cfi_in_bank_0 || mayNotBeDualBanked(addr)
 
+      val first_bank_saw_not_taken = not_taken_branches(bankWidth-1,0) =/= 0.U || current_saw_branch_not_taken
+      new_history.current_saw_branch_not_taken := false.B
       when (ignore_second_bank) {
         new_history.old_history := histories(1)
-        new_history.new_saw_branch_not_taken := not_taken_branches(bankWidth-1,0) =/= 0.U
+        new_history.new_saw_branch_not_taken := first_bank_saw_not_taken
         new_history.new_saw_branch_taken     := cfi_is_br && cfi_in_bank_0
       } .otherwise {
-        new_history.old_history := Mux(cfi_is_br && cfi_in_bank_0 && not_taken_branches(bankWidth-1,0) =/= 0.U, histories(1) << 2 | 1.U,
-                                   Mux(cfi_is_br && cfi_in_bank_0                                             , histories(1) << 1 | 1.U,
-                                   Mux(not_taken_branches(bankWidth-1,0) =/= 0.U                              , histories(1) << 1,
-                                                                                                                histories(1))))
+        new_history.old_history := Mux(cfi_is_br && cfi_in_bank_0 && first_bank_saw_not_taken , histories(1) << 2 | 1.U,
+                                   Mux(cfi_is_br && cfi_in_bank_0                             , histories(1) << 1 | 1.U,
+                                   Mux(first_bank_saw_not_taken                               , histories(1) << 1,
+                                                                                                histories(1))))
         new_history.new_saw_branch_not_taken := not_taken_branches(fetchWidth-1,bankWidth) =/= 0.U
         new_history.new_saw_branch_taken     := cfi_valid && cfi_taken && cfi_is_br && !cfi_in_bank_0
 
