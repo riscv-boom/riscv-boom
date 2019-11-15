@@ -430,10 +430,12 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       ftq_entry.cfi_is_call,
       ftq_entry.cfi_is_ret)
 
+
     io.ifu.redirect_ghist   := Mux(
       use_same_ghist,
       ftq_entry.ghist,
       next_ghist)
+    io.ifu.redirect_ghist.current_saw_branch_not_taken := use_same_ghist
   } .elsewhen (rob.io.flush_frontend || brupdate.b1.mispredict_mask =/= 0.U) {
     io.ifu.redirect_flush   := true.B
   }
