@@ -838,8 +838,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // If we issue loads back-to-back endlessly (probably because we are executing some tight loop)
   // the store buffer will never drain, breaking the memory-model forward-progress guarantee
   // If we see a large number of loads saturate the LSU, pause for a cycle to let a store drain
-  val loads_saturating = (mem_iss_unit.io.iss_valids.reduce(_&&_) &&
-                          mem_iss_unit.io.iss_uops.map(_.uses_ldq).reduce(_&&_))
+  val loads_saturating = (mem_iss_unit.io.iss_valids(0) && mem_iss_unit.io.iss_uops(0).uses_ldq)
   val saturating_loads_counter = RegInit(0.U(5.W))
   when (loads_saturating) { saturating_loads_counter := saturating_loads_counter + 1.U }
   .otherwise { saturating_loads_counter := 0.U }
