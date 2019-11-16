@@ -242,11 +242,15 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
   when (io.brupdate.b2.mispredict) {
     val ftq_idx = io.brupdate.b2.uop.ftq_idx
     val entry = ram(ftq_idx)
+    val new_cfi_idx = (io.brupdate.b2.uop.pc_lob ^
+      Mux(entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
+
     ram(ftq_idx).cfi_idx.valid    := true.B
-    ram(ftq_idx).cfi_idx.bits     := (io.brupdate.b2.uop.pc_lob ^
-                                      Mux(entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)) >> 1
+    ram(ftq_idx).cfi_idx.bits     := new_cfi_idx
     ram(ftq_idx).cfi_mispredicted := true.B
     ram(ftq_idx).cfi_taken        := io.brupdate.b2.taken
+    ram(ftq_idx).cfi_is_call      := entry.cfi_is_call && entry.cfi_idx.bits === new_cfi_idx
+    ram(ftq_idx).cfi_is_ret       := entry.cfi_is_ret  && entry.cfi_idx.bits === new_cfi_idx
   }
 
   //-------------------------------------------------------------
