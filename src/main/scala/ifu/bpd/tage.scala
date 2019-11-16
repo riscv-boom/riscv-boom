@@ -89,6 +89,7 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
   val lo_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
   val table  = SyncReadMem(nRows, Vec(bankWidth, UInt(tageEntrySz.W)))
 
+  val ium_vals = Reg(Vec(nIUMEntries, Bool()))
   val ium_tags = Reg(Vec(nIUMEntries, UInt(tagSz.W)))
   val ium_idxs = Reg(Vec(nIUMEntries, UInt(log2Ceil(nRows).W)))
   val ium      = Reg(Vec(nIUMEntries, Vec(bankWidth, UInt(3.W))))
@@ -102,13 +103,13 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
   val s1_req_rhius = hi_us.read(s0_hashed_idx, io.f0_req.valid)
   val s1_req_rlous = lo_us.read(s0_hashed_idx, io.f0_req.valid)
   val s1_req_rhits = VecInit(s1_req_rtage.map(e => e.valid && e.tag === s1_tag && !doing_reset))
-  val s1_req_iumhits = VecInit((ium_tags zip ium_idxs) map { case (t, i) =>
-    t === s1_tag && i === RegNext(s0_hashed_idx) && !doing_reset
+  val s1_req_iumhits = VecInit((0 until nIUMEntries) map { i =>
+    ium_tags(i) === s1_tag && ium_idxs(i) === RegNext(s0_hashed_idx) && !doing_reset && ium_vals(i)
   })
 
   val s2_req          = RegNext(s1_req)
   val s2_req_ium_hit  = RegNext(s1_req_iumhits.reduce(_||_))
-  val s2_req_ium_data = ium(PriorityEncoder(RegNext(s1_req_iumhits)))
+  val s2_req_ium_data = RegNext(ium(PriorityEncoder(s1_req_iumhits)))
   val s2_req_rtage = RegNext(s1_req_rtage)
   val s2_req_rhius = RegNext(s1_req_rhius)
   val s2_req_rlous = RegNext(s1_req_rlous)
@@ -128,6 +129,7 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
     }
     ium_idxs(ium_enq_idx) := RegNext(RegNext(s1_hashed_idx))
     ium_tags(ium_enq_idx) := RegNext(RegNext(s1_tag))
+    ium_vals(ium_enq_idx) := true.B
     ium_enq_idx := ium_enq_idx + 1.U
   }
 
@@ -140,6 +142,14 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
   val clear_u_idx = clear_u_ctr >> log2Ceil(tageUBitPeriod)
 
   val (update_idx, update_tag) = compute_tag_and_hash(fetchIdx(io.update_pc), io.update_hist)
+
+  when (io.update_mask.reduce(_||_)) {
+    for (w <- 0 until nIUMEntries) {
+      when (update_idx === ium_idxs(w) && update_tag === ium_tags(w)) {
+        ium_vals(w) := false.B
+      }
+    }
+  }
 
   val update_wdata = Wire(Vec(bankWidth, new TageEntry))
 
