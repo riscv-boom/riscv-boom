@@ -34,6 +34,7 @@ import freechips.rocketchip.util.Str
 
 import boom.common._
 import boom.util._
+import midas.targetutils.FpgaDebug
 
 /**
  * IO bundle to interact with the ROB
@@ -283,7 +284,11 @@ class Rob(
   // Contains all information the PNR needs to find the oldest instruction which can't be safely speculated past.
   val rob_unsafe_masked = WireInit(VecInit(Seq.fill(numRobRows << log2Ceil(coreWidth)){false.B}))
 
+  val debug_enq_xcpt = Wire(Vec(coreWidth, Bool()))
+  FpgaDebug(debug_enq_xcpt)
   for (w <- 0 until coreWidth) {
+    FpgaDebug(io.enq_valids(w))
+    FpgaDebug(io.enq_uops(w).debug_pc)
     def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
 
     // one bank
@@ -296,7 +301,7 @@ class Rob(
 
     //-----------------------------------------------
     // Dispatch: Add Entry to ROB
-
+    debug_enq_xcpt(w) := io.enq_valids(w) && io.enq_uops(w).exception
     when (io.enq_valids(w)) {
       rob_val(rob_tail)       := true.B
       rob_bsy(rob_tail)       := !(io.enq_uops(w).is_fence ||
@@ -306,7 +311,7 @@ class Rob(
       rob_exception(rob_tail) := io.enq_uops(w).exception
       rob_fflags(rob_tail)    := 0.U
       rob_uop(rob_tail).stat_brjmp_mispredicted := false.B
-
+      
       assert (rob_val(rob_tail) === false.B, "[rob] overwriting a valid entry.")
       assert ((io.enq_uops(w).rob_idx >> log2Ceil(coreWidth)) === rob_tail)
     } .elsewhen (io.enq_valids.reduce(_|_) && !rob_val(rob_tail)) {

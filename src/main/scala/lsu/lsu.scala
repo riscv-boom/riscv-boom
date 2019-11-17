@@ -56,6 +56,8 @@ import boom.common._
 import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp, CommitSignals, ExeUnitResp}
 import boom.util.{BoolToChar, AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, IsOlder, UpdateBrMask}
 
+import midas.targetutils.{SynthesizePrintf,FpgaDebug}
+
 class LSUExeIO(implicit p: Parameters) extends BoomBundle()(p)
 {
   // The "resp" of the maddrcalc is really a "req" to the LSU
@@ -232,6 +234,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val hella_data            = Reg(new rocket.HellaCacheWriteData)
   val hella_paddr           = Reg(UInt(paddrBits.W))
   val hella_xcpt            = Reg(new rocket.HellaCacheExceptions)
+  FpgaDebug(hella_state)
+  FpgaDebug(hella_req.addr)
+  FpgaDebug(io.hellacache.resp.valid)
+  FpgaDebug(io.hellacache.resp.bits.data)
 
 
   val dtlb = Module(new NBDTLB(
@@ -635,6 +641,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val pf_st = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).pf.st && exe_tlb_uop(w).uses_stq)
   val ae_ld = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).ae.ld && (exe_tlb_uop(w).uses_ldq || exe_tlb_uop(w).is_amo))
   val ae_st = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).ae.st && exe_tlb_uop(w).uses_stq)
+  for (w <- 0 until memWidth) {
+    FpgaDebug(dtlb.io.req(w).valid)
+    FpgaDebug(dtlb.io.req(w).bits.vaddr)
+    FpgaDebug(dtlb.io.resp(w).miss)
+    FpgaDebug(dtlb.io.resp(w).pf.ld)
+    FpgaDebug(dtlb.io.resp(w).ae.ld)
+  }
 
   // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
   val mem_xcpt_valids = RegNext(widthMap(w =>
@@ -1190,6 +1203,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   io.core.lxcpt.valid := r_xcpt_valid && !io.core.exception && !IsKilledByBranch(io.core.brinfo, r_xcpt.uop)
   io.core.lxcpt.bits  := r_xcpt
+  FpgaDebug(mem_xcpt_valid)
+  FpgaDebug(ld_xcpt_valid)
+  FpgaDebug(io.core.lxcpt.valid)  
+  FpgaDebug(io.core.lxcpt.bits.badvaddr)
 
   // Task 4: Speculatively wakeup loads 1 cycle before they come back
   io.core.spec_ld_wakeup.valid := enableFastLoadUse.B          &&
@@ -1425,8 +1442,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         val addr   = Mux(commit_store, stq(idx).bits.addr.bits, ldq(idx).bits.addr.bits)
         val stdata = Mux(commit_store, stq(idx).bits.data.bits, 0.U)
         val wbdata = Mux(commit_store, stq(idx).bits.debug_wb_data, ldq(idx).bits.debug_wb_data)
-        printf("MT %x %x %x %x %x %x %x\n",
-          io.core.tsc_reg, uop.uopc, uop.mem_cmd, uop.mem_size, addr, stdata, wbdata)
+        printf(SynthesizePrintf("MT %x %x %x %x %x %x %x\n",
+          io.core.tsc_reg, uop.uopc, uop.mem_cmd, uop.mem_size, addr, stdata, wbdata))
       }
     }
 

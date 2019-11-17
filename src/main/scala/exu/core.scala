@@ -41,6 +41,7 @@ import boom.common._
 import boom.exu.FUConstants._
 import boom.common.BoomTilesKey
 import boom.util.{RobTypeToChars, BoolToChar, GetNewUopAndBrMask, Sext, WrapInc, BoomCoreStringPrefix}
+import midas.targetutils.FpgaDebug
 
 /**
  * IO bundle for the BOOM Core. Connects the external components such as
@@ -240,7 +241,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   debug_irt_reg := debug_irt_reg + PopCount(rob.io.commit.valids.asUInt)
   dontTouch(debug_tsc_reg)
   dontTouch(debug_irt_reg)
-
+  FpgaDebug(debug_tsc_reg)
+  FpgaDebug(debug_irt_reg)
   //****************************************
   // Print-out information about the machine
 
@@ -344,6 +346,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val youngest_com_idx = (coreWidth-1).U - PriorityEncoder(rob.io.commit.valids.reverse)
   io.ifu.commit.valid := rob.io.commit.valids.reduce(_|_)
   io.ifu.commit.bits  := rob.io.commit.uops(youngest_com_idx).ftq_idx
+  for (i <- 0 until coreWidth) {
+      FpgaDebug(rob.io.commit.valids(i))
+      FpgaDebug(rob.io.commit.uops(i).debug_pc)
+  }
+      FpgaDebug(csr.io.interrupt)
 
   io.ifu.flush_icache :=
     Range(0,coreWidth).map{i => rob.io.commit.valids(i) && rob.io.commit.uops(i).is_fencei}.reduce(_|_) ||

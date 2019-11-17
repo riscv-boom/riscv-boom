@@ -21,6 +21,7 @@ import boom.common._
 import boom.exu.BrResolutionInfo
 import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder, UpdateBrMask, AgePriorityEncoder, WrapInc, Transpose}
 
+import midas.targetutils.FpgaDebug
 
 class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCacheModule()(p) {
   val io = new Bundle {
@@ -384,7 +385,18 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   implicit val edge = outer.node.edges.out(0)
   val (tl_out, _) = outer.node.out(0)
   val io = IO(new BoomDCacheBundle)
-
+  FpgaDebug(tl_out.a.valid)
+  FpgaDebug(tl_out.a.ready)
+  FpgaDebug(tl_out.a.bits.address)	
+  FpgaDebug(tl_out.a.bits.source)	
+  FpgaDebug(tl_out.d.ready)
+  FpgaDebug(tl_out.d.valid)
+  FpgaDebug(tl_out.d.bits.source)
+  FpgaDebug(tl_out.d.bits.data)
+  FpgaDebug(tl_out.c.ready)
+  FpgaDebug(tl_out.c.valid)
+  FpgaDebug(tl_out.c.bits.address)
+  FpgaDebug(tl_out.c.bits.data)
   private val fifoManagers = edge.manager.managers.filter(TLFIFOFixer.allVolatile)
   fifoManagers.foreach { m =>
     require (m.fifoId == fifoManagers.head.fifoId,
@@ -443,7 +455,12 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
   // ------------
   // New requests
-
+  FpgaDebug(io.lsu.req.ready)
+  FpgaDebug(io.lsu.req.valid)
+  FpgaDebug(io.lsu.req.bits(0).bits.addr)
+  FpgaDebug(io.lsu.req.bits(0).bits.data)
+  FpgaDebug(io.lsu.req.bits(0).bits.uop.uses_ldq)
+  FpgaDebug(io.lsu.req.bits(0).bits.uop.uses_stq)
   io.lsu.req.ready := metaReadArb.io.in(4).ready && dataReadArb.io.in(2).ready
   metaReadArb.io.in(4).valid := io.lsu.req.valid
   dataReadArb.io.in(2).valid := io.lsu.req.valid

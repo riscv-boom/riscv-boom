@@ -14,7 +14,7 @@ import freechips.rocketchip.util._
 import boom.common._
 import boom.exu.{BrResolutionInfo, Exception, FuncUnitResp, CommitSignals}
 import boom.util.{BoolToChar, AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, IsOlder, UpdateBrMask}
-
+import midas.targetutils.FpgaDebug
 class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p) {
   require(!instruction)
   val io = IO(new Bundle {
@@ -128,7 +128,9 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
 
   val s_ready :: s_request :: s_wait :: s_wait_invalidate :: Nil = Enum(4)
   val state = RegInit(s_ready)
+  FpgaDebug(state)
   val r_refill_tag = Reg(UInt(vpnBits.W))
+  FpgaDebug(r_refill_tag)
   val r_superpage_repl_addr = Reg(UInt(log2Ceil(superpage_entries.size).W))
   val r_sectored_repl_addr = Reg(UInt(log2Ceil(sectored_entries.size).W))
   val r_sectored_hit_addr = Reg(UInt(log2Ceil(sectored_entries.size).W))
@@ -175,9 +177,11 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   val ppn = widthMap(w => Mux1H(hitsVec(w) :+ !vm_enabled(w), all_entries.map(_.ppn(vpn(w))) :+ vpn(w)(ppnBits-1, 0)))
 
     // permission bit arrays
+  FpgaDebug(do_refill)
   when (do_refill && !invalidate_refill) {
     val pte = io.ptw.resp.bits.pte
     val newEntry = Wire(new EntryData)
+    FpgaDebug(newEntry)
     newEntry.ppn := pte.ppn
     newEntry.c := cacheable(0)
     newEntry.u := pte.u
@@ -249,6 +253,9 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     coreParams.haveCFlush.B && io.req(w).bits.cmd === M_FLUSH_ALL) // not a write, but needs write permissions
 
   val lrscAllowed = widthMap(w => Mux((usingDataScratchpad || usingAtomicsOnlyForIO).B, 0.U, c_array(w)))
+  FpgaDebug(misaligned)
+  FpgaDebug(eff_array)
+  FpgaDebug(pr_array)
   val ae_array = widthMap(w =>
     Mux(misaligned(w), eff_array(w), 0.U) |
     Mux(cmd_lrsc(w)  , ~lrscAllowed(w), 0.U))
