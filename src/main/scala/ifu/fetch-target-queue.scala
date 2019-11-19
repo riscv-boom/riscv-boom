@@ -59,7 +59,10 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
   val cfi_is_call   = Bool()
   // This CFI is likely a RET
   val cfi_is_ret    = Bool()
+  // Is the NPC after the CFI +4 or +2
   val cfi_npc_plus4 = Bool()
+  // What was the top of the RAS that this bundle saw?
+  val ras_top = UInt(vaddrBitsExtended.W)
 
   // What global history should be used to query this fetch bundle
   val ghist = new GlobalHistory
@@ -154,6 +157,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     ram(enq_ptr).cfi_is_call := io.enq.bits.cfi_is_call
     ram(enq_ptr).cfi_is_ret  := io.enq.bits.cfi_is_ret
     ram(enq_ptr).cfi_npc_plus4 := io.enq.bits.cfi_npc_plus4
+    ram(enq_ptr).ras_top     := io.enq.bits.ras_top
     ram(enq_ptr).br_mask     := io.enq.bits.br_mask & io.enq.bits.mask
     ram(enq_ptr).start_bank  := bank(io.enq.bits.pc)
     val prev_idx = WrapDec(enq_ptr, num_entries)
@@ -225,9 +229,9 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     bpdupdate.bits.cfi_is_jal       := entry.cfi_type === CFI_JAL || entry.cfi_type === CFI_JALR
     bpdupdate.bits.ghist            := entry.ghist
 
-    ras_update     := entry.cfi_is_call
-    ras_update_pc  := bankAlign(pcs(bpd_ptr)) + (entry.cfi_idx.bits << 1) + Mux(entry.cfi_npc_plus4, 4.U, 2.U)
-    ras_update_idx := WrapInc(entry.ghist.ras_idx, nRasEntries)
+    // ras_update     := entry.cfi_is_call
+    // ras_update_pc  := bankAlign(pcs(bpd_ptr)) + (entry.cfi_idx.bits << 1) + Mux(entry.cfi_npc_plus4, 4.U, 2.U)
+    // ras_update_idx := WrapInc(entry.ghist.ras_idx, nRasEntries)
 
     bpd_ptr := WrapInc(bpd_ptr, num_entries)
 
@@ -253,6 +257,13 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     ram(ftq_idx).cfi_taken        := io.brupdate.b2.taken
     ram(ftq_idx).cfi_is_call      := entry.cfi_is_call && entry.cfi_idx.bits === new_cfi_idx
     ram(ftq_idx).cfi_is_ret       := entry.cfi_is_ret  && entry.cfi_idx.bits === new_cfi_idx
+
+  }
+  when (io.redirect.valid || io.brupdate.b2.mispredict) {
+    val entry = ram(Mux(io.redirect.valid, io.redirect.bits, io.brupdate.b2.uop.ftq_idx))
+    ras_update     := true.B
+    ras_update_pc  := entry.ras_top
+    ras_update_idx := entry.ghist.ras_idx
   }
 
   //-------------------------------------------------------------
