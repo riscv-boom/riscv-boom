@@ -260,7 +260,6 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   val redirect_pc      = Output(UInt()) // Where do we redirect to?
   val redirect_ftq_idx = Output(UInt()) // Which ftq entry should we reset to?
   val redirect_ghist   = Output(new GlobalHistory) // What are we setting as the global history?
-  val redirect_flush_ghist = Output(Bool()) // Do we reset the ghist in the FTQ?
 
   val commit = Valid(UInt(ftqSz.W))
 
@@ -802,7 +801,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   ftq.io.redirect.valid   := io.cpu.redirect_val
   ftq.io.redirect.bits    := io.cpu.redirect_ftq_idx
-  ftq.io.redirect_flush_ghist := io.cpu.redirect_flush_ghist
   fb.io.clear := false.B
 
   when (io.cpu.sfence.valid) {
@@ -832,7 +830,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s0_tsrc      := BSRC_C
     s0_is_replay := false.B
 
-    ftq.io.redirect.valid := true.B
+    ftq.io.redirect.valid := io.cpu.redirect_val
     ftq.io.redirect.bits  := io.cpu.redirect_ftq_idx
   }
 

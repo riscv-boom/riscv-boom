@@ -112,7 +112,6 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     val get_ftq_pc = Vec(2, new GetPCFromFtqIO())
 
     val redirect = Input(Valid(UInt(idx_sz.W)))
-    val redirect_flush_ghist = Input(Bool())
 
     val brupdate = Input(new BrUpdateInfo)
 
@@ -240,7 +239,6 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
   when (io.redirect.valid) {
     enq_ptr    := WrapInc(io.redirect.bits, num_entries)
-    start_from_empty_ghist := io.redirect_flush_ghist
   }
 
   when (io.brupdate.b2.mispredict) {
