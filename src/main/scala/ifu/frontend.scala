@@ -209,6 +209,8 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
   val cfi_is_ret    = Bool()
   val cfi_npc_plus4 = Bool()
 
+  val ras_top       = UInt(vaddrBitsExtended.W)
+
   val ftq_idx       = UInt(log2Ceil(ftqSz).W)
   val mask          = UInt(fetchWidth.W) // mark which words are valid instructions
 
@@ -311,7 +313,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   bpd.io.f2_kill := false.B
   bpd.io.f3_kill := false.B
 
-  val ras = Mem(nRasEntries, UInt(vaddrBitsExtended.W))
+  val ras = Reg(Vec(nRasEntries, UInt(vaddrBitsExtended.W)))
 
   val icache = outer.icache.module
   icache.io.hartid     := io.hartid
@@ -624,11 +626,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       // Redirect if
       //  1) its a JAL/JALR (unconditional)
       //  2) the BPD believes this is a branch and says we should take it
-      //  3) the BPD does not believe this is a branch, (predict taken when no info)
       f3_redirects(i)    := f3_mask(i) && (
         bpd_decoder.io.cfi_type === CFI_JAL || bpd_decoder.io.cfi_type === CFI_JALR ||
-        (bpd_decoder.io.cfi_type === CFI_BR &&
-          (f3_bpd_resp.io.deq.bits.preds(i).taken || !f3_bpd_resp.io.deq.bits.preds(i).is_br))
+        (bpd_decoder.io.cfi_type === CFI_BR && f3_bpd_resp.io.deq.bits.preds(i).taken)
       )
 
       f3_br_mask(i)   := f3_mask(i) && bpd_decoder.io.cfi_type === CFI_BR
@@ -674,6 +674,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   f3_fetch_bundle.cfi_idx.valid := f3_redirects.reduce(_||_)
   f3_fetch_bundle.cfi_idx.bits  := PriorityEncoder(f3_redirects)
 
+  f3_fetch_bundle.ras_top := ras(f3_fetch_bundle.ghist.ras_idx)
   // Redirect earlier stages only if the later stage
   // can consume this packet
   val ras_write     = Reg(Bool())
@@ -681,9 +682,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val ras_write_idx = Reg(UInt(log2Ceil(nRasEntries).W))
 
   val f3_predicted_target = Mux(f3_redirects.reduce(_||_),
-    Mux(f3_fetch_bundle.cfi_is_ret, Mux(ras_write, ras_write_pc, ras(f3_fetch_bundle.ghist.ras_idx)),
-      f3_targs(PriorityEncoder(f3_redirects))),
-    nextFetch(f3_fetch_bundle.pc))
+    Mux(f3_fetch_bundle.cfi_is_ret,
+      Mux(ras_write,
+        ras_write_pc,
+        f3_fetch_bundle.ras_top),
+      f3_targs(PriorityEncoder(f3_redirects))
+    ),
+    nextFetch(f3_fetch_bundle.pc)
+  )
 
   f3_fetch_bundle.next_pc       := f3_predicted_target
   val f3_predicted_ghist = f3_fetch_bundle.ghist.update(
@@ -704,7 +710,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   ras_write_idx := WrapInc(f3_fetch_bundle.ghist.ras_idx, nRasEntries)
 
   when (ras_write) {
-    ras.write(ras_write_idx, ras_write_pc)
+    ras(ras_write_idx) := ras_write_pc
   }
 
   when (f3.io.deq.valid && f4_ready) {
@@ -743,50 +749,23 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val fb  = Module(new FetchBuffer(numEntries=numFetchBufferEntries))
   val ftq = Module(new FetchTargetQueue(num_entries=ftqSz))
-  val mpc = Module(new MispredictCache)
-
 
   f4_ready := f4.io.enq.ready
   f4.io.enq.valid := f3.io.deq.valid && !f3_clear
   f4.io.enq.bits  := f3_fetch_bundle
-  f4.io.deq.ready := fb.io.enq.ready && ftq.io.enq.ready && !mpc.io.resp.valid
+  f4.io.deq.ready := fb.io.enq.ready && ftq.io.enq.ready
 
-  mpc.io.flush     := io.cpu.flush_icache
-  mpc.io.enq.valid := f4.io.deq.fire()
-  mpc.io.enq.bits  := f4.io.deq.bits
-  mpc.io.redirect_val := io.cpu.redirect_val
-  mpc.io.redirect_pc := io.cpu.redirect_pc
-  mpc.io.redirect_ghist := io.cpu.redirect_ghist
-  mpc.io.resp.ready := fb.io.enq.ready && ftq.io.enq.ready
-
-  fb.io.enq.valid := (f4.io.deq.valid || mpc.io.resp.valid) && ftq.io.enq.ready
-  fb.io.enq.bits  := Mux(mpc.io.resp.valid, mpc.io.resp.bits, f4.io.deq.bits)
+  fb.io.enq.valid := f4.io.deq.valid && ftq.io.enq.ready
+  fb.io.enq.bits  := f4.io.deq.bits
   fb.io.enq.bits.ftq_idx := ftq.io.enq_idx
 
-  ftq.io.enq.valid          := (f4.io.deq.valid || mpc.io.resp.valid) && fb.io.enq.ready
-  ftq.io.enq.bits           := Mux(mpc.io.resp.valid, mpc.io.resp.bits, f4.io.deq.bits)
-
-  when (mpc.io.mpc_redirect_val) {
-    f4_clear    := true.B
-    f3_clear    := true.B
-    f2_clear    := true.B
-    f1_clear    := true.B
-
-    f3_prev_is_half := mpc.io.set_prev_half.valid
-    f3_prev_half    := mpc.io.set_prev_half.bits
-
-    s0_valid     := true.B
-    s0_vpc       := mpc.io.mpc_redirect_pc
-    s0_ghist     := mpc.io.mpc_redirect_ghist
-    s0_tsrc      := BSRC_3
-    s0_is_replay := false.B
-  }
-
+  ftq.io.enq.valid          := f4.io.deq.valid && fb.io.enq.ready
+  ftq.io.enq.bits           := f4.io.deq.bits
 
 
   bpd.io.update := ftq.io.bpdupdate
   when (ftq.io.ras_update) {
-    ras.write(ftq.io.ras_update_idx, ftq.io.ras_update_pc)
+    ras(ftq.io.ras_update_idx) := ftq.io.ras_update_pc
   }
 
 
