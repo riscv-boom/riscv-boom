@@ -827,15 +827,28 @@ workflows:
     version: 2
     build-and-test-boom-configs:
         jobs:
+            # temp
+            - temp-approval:
+                type: approval
+
             # Make the toolchains
-            - install-riscv-toolchain
-            - install-esp-toolchain
+            - install-riscv-toolchain:
+                requires:
+                    - temp-approval
+
+            - install-esp-toolchain:
+                requires:
+                    - temp-approval
 
             # Build verilator
-            - prepare-build-environment
+            - prepare-build-environment:
+                requires:
+                    - temp-approval
 
             # Run generic syntax checking
-            - run-scala-checkstyle
+            - run-scala-checkstyle:
+                requires:
+                    - temp-approval
 
             # Prepare the verilator builds
             - prepare-smallboomconfig:
@@ -919,13 +932,14 @@ workflows:
 
     init-firesim:
         # run firesim workflow every thursday
-        triggers:
-            - schedule:
-                cron: "0 0 * * 4"
-                filters:
-                    branches:
-                        only:
-                            - master
+        #triggers:
+        #    - schedule:
+        #        cron: "0 0 * * 4"
+        #        filters:
+        #            branches:
+        #                only:
+        #                    - master
+
         jobs:
             - initialize-manager
 
