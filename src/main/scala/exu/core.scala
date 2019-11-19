@@ -366,7 +366,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   io.ifu.redirect_val         := false.B
   io.ifu.redirect_flush       := false.B
-  io.ifu.redirect_flush_ghist := false.B
+
   // Breakpoint info
   io.ifu.status  := csr.io.status
   io.ifu.bp      := csr.io.bp
@@ -387,12 +387,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     io.ifu.redirect_val   := true.B
     io.ifu.redirect_flush := true.B
     val flush_typ = RegNext(rob.io.flush.bits.flush_typ)
+    io.ifu.redirect_ghist := io.ifu.get_pc(0).entry.ghist
     when (FlushTypes.useCsrEvec(flush_typ)) {
       io.ifu.redirect_pc  := Mux(flush_typ === FlushTypes.eret,
                                  RegNext(RegNext(csr.io.evec)),
                                  csr.io.evec)
-      io.ifu.redirect_ghist := (0.U).asTypeOf(new GlobalHistory)
-      io.ifu.redirect_flush_ghist := true.B
     } .otherwise {
       val flush_pc = (AlignPCToBoundary(io.ifu.get_pc(0).pc, icBlockBytes)
                       + RegNext(rob.io.flush.bits.pc_lob)
@@ -400,7 +399,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       val flush_pc_next = flush_pc + Mux(RegNext(rob.io.flush.bits.is_rvc), 2.U, 4.U)
       io.ifu.redirect_pc := Mux(FlushTypes.useSamePC(flush_typ),
                                 flush_pc, flush_pc_next)
-      io.ifu.redirect_ghist := io.ifu.get_pc(0).entry.ghist
+
     }
     io.ifu.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
   } .elsewhen (brupdate.b2.mispredict && !RegNext(rob.io.flush.valid)) {
