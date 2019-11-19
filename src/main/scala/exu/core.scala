@@ -419,15 +419,17 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                           !brupdate.b2.taken &&
                           bankAlign(block_pc) === bankAlign(npc))
     val ftq_entry = io.ifu.get_pc(1).entry
+    val cfi_idx = (brupdate.b2.uop.pc_lob ^
+      Mux(ftq_entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
     val next_ghist = ftq_entry.ghist.update(
       ftq_entry.br_mask.asUInt,
       brupdate.b2.taken,
       brupdate.b2.cfi_type === CFI_BR,
-      (brupdate.b2.uop.pc_lob ^ Mux(ftq_entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)) >> 1,
+      cfi_idx,
       true.B,
       io.ifu.get_pc(1).pc,
-      ftq_entry.cfi_is_call,
-      ftq_entry.cfi_is_ret)
+      ftq_entry.cfi_is_call && ftq_entry.cfi_idx.bits === cfi_idx,
+      ftq_entry.cfi_is_ret  && ftq_entry.cfi_idx.bits === cfi_idx)
 
 
     io.ifu.redirect_ghist   := Mux(
