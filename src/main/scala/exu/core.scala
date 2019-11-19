@@ -1,5 +1,5 @@
 //******************************************************************************
-// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 
@@ -28,6 +28,8 @@
 
 package boom.exu
 
+import java.nio.file.{Paths}
+
 import chisel3._
 import chisel3.util._
 import chisel3.experimental.dontTouch
@@ -36,11 +38,12 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.{Causes, PRV}
 import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle}
+import freechips.rocketchip.devices.tilelink.{PLICConsts, CLINTConsts}
 
 import boom.common._
 import boom.exu.FUConstants._
 import boom.common.BoomTilesKey
-import boom.util.{RobTypeToChars, BoolToChar, GetNewUopAndBrMask, Sext, WrapInc, BoomCoreStringPrefix}
+import boom.util.{RobTypeToChars, BoolToChar, GetNewUopAndBrMask, Sext, WrapInc, BoomCoreStringPrefix, DromajoCosimBlackBox}
 
 /**
  * IO bundle for the BOOM Core. Connects the external components such as
@@ -1280,6 +1283,65 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
   }
 
+  // enable Dromajo cosimulation
+  if (DROMAJO_COSIM_ENABLE) {
+    // currently only supports single-core systems
+    require(p(BoomTilesKey).size == 1)
+
+    tileParams.asInstanceOf[BoomTileParams].dromajoParams match {
+      case Some(params) => {
+        val bootromParams = params.bootromParams.get
+        val extMemParams = params.extMemParams.get
+        val plicParams = params.plicParams.get
+        val clintParams = params.clintParams.get
+
+        val resetVectorStr = "0x" + f"${bootromParams.hang}%X"
+        val bootromFile = Paths.get(bootromParams.contentFileName).toAbsolutePath.toString
+        val mmioStart = "0x" + f"${bootromParams.address + bootromParams.size}%X"
+        val mmioEnd = "0x" + f"${extMemParams.master.base}%X"
+        val plicBase = "0x" + f"${plicParams.baseAddress}%X"
+        val plicSize = "0x" + f"${PLICConsts.size}%X"
+        val clintBase = "0x" + f"${clintParams.baseAddress}%X"
+        val clintSize = "0x" + f"${CLINTConsts.size}%X"
+
+        // instantiate dromajo cosim bbox
+        val dromajo = Module(new DromajoCosimBlackBox(
+          coreWidth,
+          xLen,
+          bootromFile,
+          resetVectorStr,
+          mmioStart,
+          mmioEnd,
+          plicBase,
+          plicSize,
+          clintBase,
+          clintSize))
+
+        def getInst(uop: MicroOp): UInt = {
+          Mux(uop.is_rvc, Cat(0.U(16.W), uop.debug_inst(15,0)), uop.debug_inst)
+        }
+
+        def getWdata(uop: MicroOp): UInt = {
+          Mux((uop.dst_rtype === RT_FIX && uop.ldst =/= 0.U) || (uop.dst_rtype === RT_FLT), uop.debug_wdata, 0.U(xLen.W))
+        }
+
+        dromajo.io.clock := clock
+        dromajo.io.reset := reset
+        dromajo.io.valid := rob.io.commit.valids.asUInt
+        dromajo.io.hartid := io.hartid
+        dromajo.io.pc     := Cat(rob.io.commit.uops.map(uop => Sext(uop.debug_pc(vaddrBits-1,0), xLen)))
+        dromajo.io.inst   := Cat(rob.io.commit.uops.map(uop => getInst(uop)))
+        dromajo.io.wdata  := Cat(rob.io.commit.uops.map(uop => getWdata(uop)))
+        dromajo.io.mstatus := 0.U // Currently not used in Dromajo
+        dromajo.io.check   := ((1 << coreWidth) - 1).U
+        dromajo.io.int_xcpt := rob.io.com_xcpt.valid
+        dromajo.io.cause    := rob.io.com_xcpt.bits.cause
+      }
+
+      case None => throw new java.lang.Exception("Error: No BootROMParams found in BoomTile parameters")
+    }
+  }
+
   // TODO: Does anyone want this debugging functionality?
   val coreMonitorBundle = Wire(new CoreMonitorBundle(xLen))
   coreMonitorBundle.clock  := clock
@@ -1364,17 +1426,17 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
   }
 
-  //io.trace := csr.io.trace unused
   if (p(BoomTilesKey)(0).trace) {
     for (w <- 0 until coreWidth) {
       io.trace(w).valid      := rob.io.commit.valids(w)
       io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen)
       io.trace(w).insn       := rob.io.commit.uops(w).debug_inst
-      // I'm uncertain the commit signals from the ROB match these CSR exception signals
+      // These csr signals do not exactly match up with the ROB commit signals.
       io.trace(w).priv       := csr.io.status.prv
-      io.trace(w).exception  := csr.io.exception
-      io.trace(w).interrupt  := csr.io.interrupt
-      io.trace(w).cause      := csr.io.cause
+      // Can determine if it is an interrupt or not based on the MSB of the cause
+      io.trace(w).exception  := rob.io.com_xcpt.valid && !rob.io.com_xcpt.bits.cause(xLen - 1)
+      io.trace(w).interrupt  := rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.cause(xLen - 1)
+      io.trace(w).cause      := rob.io.com_xcpt.bits.cause
       io.trace(w).tval       := csr.io.tval
     }
     dontTouch(io.trace)
