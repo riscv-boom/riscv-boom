@@ -11,7 +11,9 @@ import chisel3.util._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
+import freechips.rocketchip.subsystem.{MemoryPortParams}
 import freechips.rocketchip.config.{Parameters, Field}
+import freechips.rocketchip.devices.tilelink.{BootROMParams, CLINTParams, PLICParams}
 
 import boom.ifu._
 import boom.bpu._
@@ -283,3 +285,13 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val corePAddrBits = paddrBits
   val corePgIdxBits = pgIdxBits
 }
+
+/**
+ * Dromajo simulation parameters
+ */
+case class DromajoParams(
+  bootromParams: Option[BootROMParams] = None,
+  extMemParams: Option[MemoryPortParams] = None,
+  clintParams: Option[CLINTParams] = None,
+  plicParams: Option[PLICParams] = None
+)
