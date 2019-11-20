@@ -50,13 +50,13 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
   })
 
   def compute_tag_and_hash(unhashed_idx: UInt, hist: UInt) = {
-    val folded_history = if (histLength > log2Ceil(nRows)) {
-      require(histLength < 2*log2Ceil(nRows))
-      val base = hist(histLength-1, 0)
-      base(log2Ceil(nRows)-1,0) ^ (base >> log2Ceil(nRows))
-    } else {
-      hist(histLength-1, 0)
+    var base = hist(histLength-1,0)
+    var l = log2Ceil(nRows)
+    while (l < histLength) {
+      base = base ^ (base >> log2Ceil(nRows))
+      l = l + log2Ceil(nRows)
     }
+    val folded_history = base
     val idx = (unhashed_idx ^ folded_history)(log2Ceil(nRows)-1,0)
     val tag = (unhashed_idx >> log2Ceil(nRows))(tagSz-1,0)
     (idx, tag)
