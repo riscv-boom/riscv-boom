@@ -407,6 +407,16 @@ class Rob(
     io.commit.uops(w)   := rob_uop(com_idx)
     io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
 
+    // We unbusy branches in b1, but its easier to mark the taken/provider src in b2,
+    // when the branch might be committing
+    when (io.brupdate.b2.mispredict &&
+      MatchBank(GetBankIdx(io.brupdate.b2.uop.rob_idx)) &&
+      GetRowIdx(io.brupdate.b2.uop.rob_idx) === com_idx) {
+      io.commit.uops(w).debug_fsrc := BSRC_C
+      io.commit.uops(w).taken      := io.brupdate.b2.taken
+    }
+
+
     // Don't attempt to rollback the tail's row when the rob is full.
     val rbk_row = rob_state === s_rollback && !full
 
