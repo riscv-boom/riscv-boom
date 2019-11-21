@@ -68,10 +68,9 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
       if (bank == 0) {
         old_history
       } else {
-        Mux(new_saw_branch_taken && new_saw_branch_not_taken, old_history << 2 | 1.U,
         Mux(new_saw_branch_taken                            , old_history << 1 | 1.U,
         Mux(new_saw_branch_not_taken                        , old_history << 1,
-                                                              old_history)))
+                                                              old_history))
       }
     }
   }
@@ -92,11 +91,9 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
       new_history := DontCare
       new_history.current_saw_branch_not_taken := false.B
       val saw_not_taken_branch = not_taken_branches =/= 0.U || current_saw_branch_not_taken
-      new_history.old_history := Mux(cfi_is_br && cfi_taken && cfi_valid && saw_not_taken_branch      , histories(0) << 2 | 1.U,
-                                 Mux(cfi_is_br && cfi_taken && cfi_valid                              , histories(0) << 1 | 1.U,
-                                 Mux(saw_not_taken_branch                                             , histories(0) << 1,
-                                                                                                        histories(0))))
-
+      new_history.old_history := Mux(cfi_is_br && cfi_taken && cfi_valid   , histories(0) << 1 | 1.U,
+                                 Mux(saw_not_taken_branch                  , histories(0) << 1,
+                                                                             histories(0)))
     } else {
       // In the two bank case every bank ignore the history added by the previous bank
       val base = histories(1)
@@ -110,10 +107,10 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
         new_history.new_saw_branch_not_taken := first_bank_saw_not_taken
         new_history.new_saw_branch_taken     := cfi_is_br && cfi_in_bank_0
       } .otherwise {
-        new_history.old_history := Mux(cfi_is_br && cfi_in_bank_0 && first_bank_saw_not_taken , histories(1) << 2 | 1.U,
-                                   Mux(cfi_is_br && cfi_in_bank_0                             , histories(1) << 1 | 1.U,
+        new_history.old_history := Mux(cfi_is_br && cfi_in_bank_0                             , histories(1) << 1 | 1.U,
                                    Mux(first_bank_saw_not_taken                               , histories(1) << 1,
-                                                                                                histories(1))))
+                                                                                                histories(1)))
+
         new_history.new_saw_branch_not_taken := not_taken_branches(fetchWidth-1,bankWidth) =/= 0.U
         new_history.new_saw_branch_taken     := cfi_valid && cfi_taken && cfi_is_br && !cfi_in_bank_0
 
