@@ -62,3 +62,27 @@ if [ -f $REMOTE_AWS_WORK_DIR/$AFI_NAME-$WORKLOAD_NAME-FINISHED ]; then
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
 fi
+
+# run workload 4 - spec17-intspeed
+WORKLOAD_NAME=spec17-intspeed
+INTSPEED_CFG=$DEPLOY_DIR/$AFI_NAME/$WORKLOAD_NAME/firemarshal_config
+FMRSHL_NAME=$(sed -n '2p' $INTSPEED_CFG)
+FMRSHL_DIR_NAME=$(sed -n '1p' $INTSPEED_CFG)
+if [ -f $REMOTE_AWS_WORK_DIR/$AFI_NAME-$WORKLOAD_NAME-FINISHED ]; then
+    curl -u $API_TOKEN: \
+        -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-$WORKLOAD_NAME-run \
+        -d revision=$CIRCLE_SHA1 \
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
+fi
+
+# run workload 5 - spec17-intrate
+WORKLOAD_NAME=spec17-intrate
+INTRATE_CFG=$DEPLOY_DIR/$AFI_NAME/$WORKLOAD_NAME/firemarshal_config
+FMRSHL_NAME=$(sed -n '2p' $INTRATE_CFG)
+FMRSHL_DIR_NAME=$(sed -n '1p' $INTRATE_CFG)
+if [ -f $REMOTE_AWS_WORK_DIR/$AFI_NAME-$WORKLOAD_NAME-FINISHED ]; then
+    curl -u $API_TOKEN: \
+        -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-$WORKLOAD_NAME-run \
+        -d revision=$CIRCLE_SHA1 \
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
+fi

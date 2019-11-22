@@ -700,6 +700,36 @@ jobs:
                 name: Build a LargeFireBoom CoreMark workload
                 command: |
                     .circleci/firesim-build-workload.sh largefireboom coremark
+    build-largefireboom-spec17-intspeed:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+            - run:
+                name: Build a LargeFireBoom SPEC17 intspeed workload
+                command: |
+                    .circleci/firesim-build-workload.sh largefireboom spec17-intspeed
+    build-largefireboom-spec17-intrate:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+            - run:
+                name: Build a LargeFireBoom SPEC17 intrate workload
+                command: |
+                    .circleci/firesim-build-workload.sh largefireboom spec17-intrate
     launch-largefireboom-afi-build:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -821,6 +851,66 @@ jobs:
                 name: CoreMark workload finished
                 command: |
                     .circleci/firesim-run-finished.sh largefireboom coremark
+    launch-largefireboom-spec17-intspeed-run:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+            - run:
+                name: Run a LargeFireBoom SPEC17 intspeed workload
+                command: |
+                    .circleci/firesim-run-workload.sh largefireboom spec17-intspeed
+    largefireboom-spec17-intspeed-run-finished:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+            - run:
+                name: SPEC17 intspeed workload finished
+                command: |
+                    .circleci/firesim-run-finished.sh largefireboom spec17-intspeed
+    launch-largefireboom-spec17-intrate-run:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+            - run:
+                name: Run a LargeFireBoom SPEC17 intrate workload
+                command: |
+                    .circleci/firesim-run-workload.sh largefireboom spec17-intrate
+    largefireboom-spec17-intrate-run-finished:
+        docker:
+            - image: riscvboom/riscvboom-images:0.0.12
+        environment:
+            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
+            TERM: dumb
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+            - run:
+                name: SPEC17 intrate workload finished
+                command: |
+                    .circleci/firesim-run-finished.sh largefireboom spec17-intrate
 
 # Order and dependencies of jobs to run
 workflows:
@@ -965,3 +1055,18 @@ workflows:
                     - initialize-manager
                     - build-largefireboom-buildroot
                     - build-largefireboom-fedora
+
+            - build-largefireboom-spec17-intspeed:
+                requires:
+                    - initialize-manager
+                    - build-largefireboom-buildroot
+                    - build-largefireboom-fedora
+                    - build-largefireboom-coremark
+
+            - build-largefireboom-spec17-intrate:
+                requires:
+                    - initialize-manager
+                    - build-largefireboom-buildroot
+                    - build-largefireboom-fedora
+                    - build-largefireboom-coremark
+                    - build-largefireboom-spec17-intspeed
