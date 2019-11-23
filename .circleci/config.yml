@@ -775,7 +775,7 @@ jobs:
             - run:
                 name: Run a LargeFireBoom Buildroot workload
                 command: |
-                    .circleci/firesim-run-workload.sh largefireboom buildroot
+                    .circleci/firesim-run-workload.sh largefireboom buildroot 30m
     largefireboom-buildroot-run-finished:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -805,7 +805,7 @@ jobs:
             - run:
                 name: Run a LargeFireBoom Fedora workload
                 command: |
-                    .circleci/firesim-run-workload.sh largefireboom fedora
+                    .circleci/firesim-run-workload.sh largefireboom fedora 30m
     largefireboom-fedora-run-finished:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -835,7 +835,7 @@ jobs:
             - run:
                 name: Run a LargeFireBoom CoreMark workload
                 command: |
-                    .circleci/firesim-run-workload.sh largefireboom coremark
+                    .circleci/firesim-run-workload.sh largefireboom coremark 30m
     largefireboom-coremark-run-finished:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -865,7 +865,7 @@ jobs:
             - run:
                 name: Run a LargeFireBoom SPEC17 intspeed workload
                 command: |
-                    .circleci/firesim-run-workload.sh largefireboom spec17-intspeed
+                    .circleci/firesim-run-workload.sh largefireboom spec17-intspeed 30h
     largefireboom-spec17-intspeed-run-finished:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -895,7 +895,7 @@ jobs:
             - run:
                 name: Run a LargeFireBoom SPEC17 intrate workload
                 command: |
-                    .circleci/firesim-run-workload.sh largefireboom spec17-intrate
+                    .circleci/firesim-run-workload.sh largefireboom spec17-intrate 30h
     largefireboom-spec17-intrate-run-finished:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12

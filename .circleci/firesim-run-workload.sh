@@ -6,6 +6,7 @@
 # usage:
 #   $1 - config string (translates to afi folder inside firesim-configs/*)
 #   $2 - workload name (folder inside firesim-configs/afi-longname/*)
+#   $3 - timeout amount (amount of time to run the workload before killing it)
 #-------------------------------------------------------------
 
 # turn echo on and error on earliest command
@@ -19,6 +20,7 @@ source $SCRIPT_DIR/defaults.sh
 CONFIG_KEY=$1
 AFI_NAME=${afis[$1]}
 WORKLOAD_NAME=$2
+TIMEOUT=$3
 
 # set stricthostkeychecking to no (must happen before rsync)
 run_aws "echo \"Ping $AWS_SERVER\""
@@ -84,7 +86,7 @@ fi
 # release the lock
 flock -u "\$lock_fd"
 
-if timeout -k 3m 30m firesim runworkload $BUILD_ARGS; then
+if timeout -k 3m $TIMEOUT firesim runworkload $BUILD_ARGS; then
     echo "runworkload passed"
     firesim terminaterunfarm -q $BUILD_ARGS
     curl -u $API_TOKEN: \
