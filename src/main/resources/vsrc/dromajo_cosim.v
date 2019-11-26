@@ -2,7 +2,6 @@
 `define HARTID_LEN 32
 
 import "DPI-C" function int dromajo_init(
-    input string binary_file,
     input string bootrom_file,
     input string reset_vector,
     input string dtb_file,
@@ -45,20 +44,15 @@ module DromajoCosimBlackBox
     input           int_xcpt,
     input [XLEN - 1:0] cause
 );
-    string __binary_file, __dtb_file, __mmio_start, __mmio_end;
+    string __dtb_file, __mmio_start, __mmio_end;
     int __itr, __fail;
 
     initial begin
-        // need binary file or dromajo will error
-        if (!$value$plusargs("drj_binary_file=%s", __binary_file)) begin
-            __binary_file = "";
-        end
         // optional dtb param
-        if (!$value$plusargs("drj_dtb_file=%s", __dtb_file)) begin
+        if (!$value$plusargs("drj_dtb=%s", __dtb_file)) begin
             __dtb_file = "";
         end
         __fail = dromajo_init(
-            __binary_file,
             BOOTROM_FILE,
             RESET_VECTOR,
             __dtb_file,

@@ -2,16 +2,108 @@
 #include <svdpi.h>
 
 #include <stdio.h>
+#include <unistd.h>
+#include <getopt.h>
 
 #include "dromajo.h"
+#include <fesvr/htif.h>
 
 #define MAX_ARGS 20
 #define MAX_STR_LEN 24
 
 dromajo_t *dromajo = 0;
 
+int parse_args(
+    int argc,
+    char *argv[])
+{
+    // adapted from htif parse_arguments
+    const char* error_str =
+        "[DRJ_ERR] Please setup simulation arguments correctly\n"
+        "[EMULATOR OPTION]... [VERILOG PLUSARG]... [HOST OPTION]... BINARY [TARGET OPTION]...";
+
+    optind = 0; // reset optind as HTIF may run getopt _after_ others
+    while (1) {
+      static struct option long_options[] = { HTIF_LONG_OPTIONS };
+      int option_index = 0;
+      int c = getopt_long(argc, argv, "-h", long_options, &option_index);
+
+      if (c == -1) break;
+
+      retry:
+
+      switch (c) {
+        case 'h':
+          throw std::invalid_argument(error_str);
+        case HTIF_LONG_OPTIONS_OPTIND:
+          break;
+        case HTIF_LONG_OPTIONS_OPTIND + 1:
+          break;
+        case HTIF_LONG_OPTIONS_OPTIND + 2:
+          break;
+        case HTIF_LONG_OPTIONS_OPTIND + 3:
+          break;
+        case '?':
+            break;
+        case 1: {
+          std::string arg = optarg;
+          if (arg == "+rfb") {
+            c = HTIF_LONG_OPTIONS_OPTIND;
+            optarg = nullptr;
+          }
+          else if (arg.find("+rfb=") == 0) {
+            c = HTIF_LONG_OPTIONS_OPTIND;
+            optarg = optarg + 5;
+          }
+          else if (arg.find("+disk=") == 0) {
+            c = HTIF_LONG_OPTIONS_OPTIND + 1;
+            optarg = optarg + 6;
+          }
+          else if (arg.find("+signature=") == 0) {
+            c = HTIF_LONG_OPTIONS_OPTIND + 2;
+            optarg = optarg + 11;
+          }
+          else if (arg.find("+chroot=") == 0) {
+            c = HTIF_LONG_OPTIONS_OPTIND + 3;
+            optarg = optarg + 8;
+          }
+          else if (arg.find("+permissive-off") == 0) {
+            if (opterr)
+              throw std::invalid_argument(error_str);
+            opterr = 1;
+            break;
+          }
+          else if (arg.find("+permissive") == 0) {
+            if (!opterr)
+              throw std::invalid_argument(error_str);
+            opterr = 0;
+            break;
+          }
+          else {
+            if (!opterr)
+              break;
+            else {
+              optind--;
+              goto done_processing;
+            }
+          }
+          goto retry;
+        }
+      }
+    }
+
+    done_processing:
+
+    // expects the next argument to be the binary (otherwise error)
+    if (optind >= argc) {
+      printf(error_str);
+      exit(1);
+    }
+
+    return optind;
+}
+
 extern "C" int dromajo_init(
-    char* binary_file,
     char* bootrom_file,
     char* reset_vector,
     char* dtb_file,
@@ -71,19 +163,25 @@ extern "C" int dromajo_init(
         local_argv[local_argc] = (char*)dtb_file;
         local_argc += 1;
     }
-    if (strlen(binary_file) != 0) {
-        local_argv[local_argc] = (char*)binary_file;
-        local_argc += 1;
+
+    // get the binary from the input emulator arguments
+    s_vpi_vlog_info info;
+    if (!vpi_get_vlog_info(&info)) {
+        printf("[DRJ_ERR] Failed getting VPI Information\n");
+        exit(1);
     }
+    int bin_idx = parse_args(info.argc, info.argv);
+    local_argv[local_argc] = info.argv[bin_idx];
+    local_argc += 1;
 
     if (MAX_ARGS < local_argc) {
-        printf("[DEBUG] Too many arguments\n");
+        printf("[DRJ_ERR] Too many arguments\n");
         exit(1);
     }
 
     dromajo = new dromajo_t(local_argc, local_argv);
     if (!(dromajo->valid_state())) {
-        printf("[DEBUG] Failed Dromajo initialization\n");
+        printf("[DRJ_ERR] Failed Dromajo initialization\n");
         return 1;
     }
 

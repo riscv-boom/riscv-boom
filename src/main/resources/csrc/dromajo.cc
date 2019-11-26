@@ -3,7 +3,7 @@
 dromajo_t::dromajo_t(int argc, char *argv[])
 {
     //for (int i = 0; i < argc; ++i)
-    //    printf("[DEBUG] dromajo arg %d: %s\n", i, argv[i]);
+    //    printf("[DRJ_DEBUG] dromajo arg %d: %s\n", i, argv[i]);
 
     // call dromajo's init function
     this->state = dromajo_cosim_init(argc, argv);
