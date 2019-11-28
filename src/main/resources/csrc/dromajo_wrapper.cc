@@ -1,4 +1,4 @@
-#include "dromajo.h"
+#include "dromajo_wrapper.h"
 
 dromajo_t::dromajo_t(int argc, char *argv[])
 {
