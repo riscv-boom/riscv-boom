@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <getopt.h>
 
-#include "dromajo.h"
+#include "dromajo_wrapper.h"
 #include <fesvr/htif.h>
 
 #define MAX_ARGS 20

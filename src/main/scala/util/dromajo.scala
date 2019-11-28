@@ -64,8 +64,8 @@ class DromajoCosimBlackBox(
     val cause    = Input(UInt(xLen.W))
   })
 
-  addResource("/vsrc/dromajo_cosim.v")
-  addResource("/csrc/dromajo_cosim.cc")
-  addResource("/csrc/dromajo.cc")
-  addResource("/csrc/dromajo.h")
+  addResource("/vsrc/dromajo_boom.v")
+  addResource("/csrc/dromajo_boom.cc")
+  addResource("/csrc/dromajo_wrapper.cc")
+  addResource("/csrc/dromajo_wrapper.h")
 }
