@@ -69,7 +69,7 @@ case class BoomCoreParams(
   fpu: Option[FPUParams] = Some(FPUParams()),
   usingFPU: Boolean = true,
   haveBasicCounters: Boolean = true,
-  misaWritable: Boolean = true,
+  misaWritable: Boolean = false,
   mtvecInit: Option[BigInt] = Some(BigInt(0)),
   mtvecWritable: Boolean = true,
   haveCFlush: Boolean = false,
