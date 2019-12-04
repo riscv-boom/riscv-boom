@@ -207,7 +207,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val tageNSets = Seq(128, 128, 256, 256, 128, 128)
   val tageHistoryLength = Seq(2, 4, 8, 16, 32, 64)
   val tageTagSz = Seq(7, 7, 8, 8, 9, 9)
-  val tageUBitPeriod = 256
+  val tageUBitPeriod = 2048
 
   //************************************
   // Extra Knobs and Features
