@@ -425,6 +425,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s2_fsrc = WireInit(BSRC_1) // fsrc provides the predictor component which provided the prediction FROM this instruction
   val f2_clear = WireInit(false.B)
   val s2_tlb_resp = RegNext(s1_tlb_resp)
+  val s2_tlb_miss = RegNext(s1_tlb_miss)
   val s2_is_replay = RegNext(s1_is_replay) && s2_valid
   val s2_xcpt = s2_valid && (s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay
   val f3_ready = Wire(Bool())
@@ -459,7 +460,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   when ((s2_valid && !icache.io.resp.valid) ||
         (s2_valid && icache.io.resp.valid && !f3_ready)) {
-    s0_valid := !((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay)
+    s0_valid := (!s2_tlb_resp.ae.inst && !s2_tlb_resp.pf.inst) || s2_is_replay || s2_tlb_miss
     s0_vpc   := s2_vpc
     s0_is_replay := s2_valid && icache.io.resp.valid
     // When this is not a replay (it queried the BPDs, we should use f3 resp in the replaying s1)
@@ -503,7 +504,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val f4_ready = Wire(Bool())
   f3_ready := f3.io.enq.ready
-  f3.io.enq.valid   := s2_valid && (icache.io.resp.valid || s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !f2_clear
+  f3.io.enq.valid   := (s2_valid && !f2_clear &&
+    (icache.io.resp.valid || ((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_tlb_miss))
+  )
   f3.io.enq.bits.pc := s2_vpc
   f3.io.enq.bits.data  := Mux(s2_xcpt, 0.U, icache.io.resp.bits.data)
   f3.io.enq.bits.ghist := s2_ghist
