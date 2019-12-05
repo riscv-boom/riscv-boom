@@ -62,11 +62,12 @@ case class BoomCoreParams(
   numRXQEntries: Int = 4,
   numRCQEntries: Int = 8,
   numDCacheBanks: Int = 1,
+  nPMPs: Int = 8,
   /* more stuff */
 
   useFetchMonitor: Boolean = true,
   bootFreqHz: BigInt = 0,
-  fpu: Option[FPUParams] = Some(FPUParams()),
+  fpu: Option[FPUParams] = Some(FPUParams(sfmaLatency=4, dfmaLatency=4)),
   usingFPU: Boolean = true,
   haveBasicCounters: Boolean = true,
   misaWritable: Boolean = false,
@@ -95,7 +96,7 @@ case class BoomCoreParams(
   val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
   val retireWidth = decodeWidth
   val jumpInFrontend: Boolean = false // unused in boom
-  val nPMPs: Int = 8
+
 
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
 }
