@@ -34,6 +34,13 @@ class dromajo_t
             int64_t cause
         );
 
+        int override_mem(
+            int      hartid,
+            uint32_t dut_addr,
+            uint8_t  dut_size,
+            uint64_t dut_wdata
+        );
+
         int valid_state();
 
     private:
