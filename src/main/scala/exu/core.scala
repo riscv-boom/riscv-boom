@@ -1330,9 +1330,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         dromajo.io.reset := reset
         dromajo.io.valid := rob.io.commit.valids.asUInt
         dromajo.io.hartid := io.hartid
-        dromajo.io.pc     := Cat(rob.io.commit.uops.map(uop => Sext(uop.debug_pc(vaddrBits-1,0), xLen)))
-        dromajo.io.inst   := Cat(rob.io.commit.uops.map(uop => getInst(uop)))
-        dromajo.io.wdata  := Cat(rob.io.commit.uops.map(uop => getWdata(uop)))
+        dromajo.io.pc     := Cat(rob.io.commit.uops.reverse.map(uop => Sext(uop.debug_pc(vaddrBits-1,0), xLen)))
+        dromajo.io.inst   := Cat(rob.io.commit.uops.reverse.map(uop => getInst(uop)))
+        dromajo.io.wdata  := Cat(rob.io.commit.uops.reverse.map(uop => getWdata(uop)))
         dromajo.io.mstatus := 0.U // Currently not used in Dromajo
         dromajo.io.check   := ((1 << coreWidth) - 1).U
         dromajo.io.int_xcpt := rob.io.com_xcpt.valid
