@@ -35,6 +35,16 @@ void dromajo_t::raise_trap(
     dromajo_cosim_raise_trap(this->state, hartid, cause);
 }
 
+int dromajo_t::override_mem(
+    int      hartid,
+    uint32_t dut_addr,
+    uint8_t  dut_size,
+    uint64_t dut_wdata)
+{
+    // call dromajo's override mem function
+    return dromajo_cosim_override_mem(this->state, hartid, dut_addr, dut_wdata, dut_size);
+}
+
 int dromajo_t::valid_state()
 {
     return (this->state != 0);
