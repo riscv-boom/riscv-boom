@@ -861,6 +861,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // reading requires serializing the entire pipeline
   csr.io.fcsr_flags.valid := rob.io.commit.fflags.valid
   csr.io.fcsr_flags.bits  := rob.io.commit.fflags.bits
+  csr.io.set_fs_dirty.get := rob.io.commit.fflags.valid
 
   exe_units.withFilter(_.hasFcsr).map(_.io.fcsr_rm := csr.io.fcsr_rm)
   io.fcsr_rm := csr.io.fcsr_rm
