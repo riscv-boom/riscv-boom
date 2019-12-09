@@ -1304,6 +1304,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         val plicSize = "0x" + f"${PLICConsts.size}%X"
         val clintBase = "0x" + f"${clintParams.baseAddress}%X"
         val clintSize = "0x" + f"${CLINTConsts.size}%X"
+        val memSize = "0x" + f"${extMemParams.master.size}%X"
 
         // instantiate dromajo cosim bbox
         val dromajo = Module(new DromajoCosimBlackBox(
@@ -1316,7 +1317,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
           plicBase,
           plicSize,
           clintBase,
-          clintSize))
+          clintSize,
+          memSize))
 
         def getInst(uop: MicroOp): UInt = {
           Mux(uop.is_rvc, Cat(0.U(16.W), uop.debug_inst(15,0)), uop.debug_inst)

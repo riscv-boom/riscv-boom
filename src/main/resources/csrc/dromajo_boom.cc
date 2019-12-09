@@ -112,7 +112,8 @@ extern "C" int dromajo_init(
     char* plic_base,
     char* plic_size,
     char* clint_base,
-    char* clint_size)
+    char* clint_size,
+    char* mem_size)
 {
     // setup arguments
     char *local_argv[MAX_ARGS];
@@ -155,6 +156,10 @@ extern "C" int dromajo_init(
     strcat(clint_params, ":");
     strcat(clint_params, (char*)clint_size);
     local_argv[local_argc] = (char*)clint_params;
+    local_argc += 1;
+    local_argv[local_argc] = (char*)"--memory_size";
+    local_argc += 1;
+    local_argv[local_argc] = (char*)mem_size;
     local_argc += 1;
 
     if (strlen(dtb_file) != 0) {

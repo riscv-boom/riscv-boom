@@ -10,7 +10,8 @@ import "DPI-C" function int dromajo_init(
     input string plic_base,
     input string plic_size,
     input string clint_base,
-    input string clint_size
+    input string clint_size,
+    input string mem_size
 );
 
 import "DPI-C" function int dromajo_step(
@@ -28,7 +29,7 @@ import "DPI-C" function void dromajo_raise_trap(
 );
 
 module DromajoCosimBlackBox
-    #(parameter COMMIT_WIDTH, XLEN, BOOTROM_FILE, RESET_VECTOR, MMIO_START, MMIO_END, PLIC_BASE, PLIC_SIZE, CLINT_BASE, CLINT_SIZE)
+    #(parameter COMMIT_WIDTH, XLEN, BOOTROM_FILE, RESET_VECTOR, MMIO_START, MMIO_END, PLIC_BASE, PLIC_SIZE, CLINT_BASE, CLINT_SIZE, MEM_SIZE)
 (
     input clock,
     input reset,
@@ -61,7 +62,8 @@ module DromajoCosimBlackBox
             PLIC_BASE,
             PLIC_SIZE,
             CLINT_BASE,
-            CLINT_SIZE);
+            CLINT_SIZE,
+            MEM_SIZE);
         if (__fail != 0) begin
             $display("FAIL: Dromajo Simulation Failed");
             $fatal;
