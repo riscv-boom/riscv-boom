@@ -31,7 +31,8 @@ class DromajoCosimBlackBox(
   plicBase: String,
   plicSize: String,
   clintBase: String,
-  clintSize: String)
+  clintSize: String,
+  memSize: String)
   extends BlackBox(Map(
     "COMMIT_WIDTH" -> IntParam(commitWidth),
     "XLEN" -> IntParam(xLen),
@@ -42,7 +43,8 @@ class DromajoCosimBlackBox(
     "PLIC_BASE" -> StringParam(plicBase),
     "PLIC_SIZE" -> StringParam(plicSize),
     "CLINT_BASE" -> StringParam(clintBase),
-    "CLINT_SIZE" -> StringParam(clintSize)
+    "CLINT_SIZE" -> StringParam(clintSize),
+    "MEM_SIZE" -> StringParam(memSize)
   ))
   with HasBlackBoxResource
 {
