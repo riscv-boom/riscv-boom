@@ -85,7 +85,7 @@ class BoomICacheLogicalTreeNode(icache: ICache, deviceOpt: Option[SimpleDevice],
         nTLBEntries = params.nTLBEntries,
         maxTimSize = params.nSets * (params.nWays-1) * params.blockBytes,
         memories = if(!icache.enableBlackBox) icache.module.asInstanceOf[ICacheModule].dataArrays.map(_._2)
-                   else Seq(),
+                   else Seq()
       )
     )
   }
