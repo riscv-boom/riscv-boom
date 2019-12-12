@@ -64,6 +64,8 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     val mem_grant   = Flipped(Decoupled(new TLBundleD(edge.bundle)))
     val mem_finish  = Decoupled(new TLBundleE(edge.bundle))
 
+    val prober_idle = Input(Bool())
+
     val refill      = Decoupled(new L1DataWriteReq)
 
     val meta_write  = Decoupled(new L1MetaWriteReq)
@@ -144,7 +146,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   val meta_hazard = RegInit(0.U(2.W))
   when (meta_hazard =/= 0.U) { meta_hazard := meta_hazard + 1.U }
   when (io.meta_write.fire()) { meta_hazard := 1.U }
-  io.probe_rdy   := (meta_hazard === 0.U && state.isOneOf(s_invalid, s_refill_req, s_refill_resp))
+  io.probe_rdy   := (meta_hazard === 0.U && state.isOneOf(s_invalid, s_refill_req, s_refill_resp, s_drain_rpq_loads, s_meta_read))
   io.idx.valid := state =/= s_invalid
   io.tag.valid := state =/= s_invalid
   io.way.valid := !state.isOneOf(s_invalid, s_prefetch)
@@ -280,7 +282,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       state := s_meta_read
     }
   } .elsewhen (state === s_meta_read) {
-    io.meta_read.valid := true.B
+    io.meta_read.valid := io.prober_idle
     io.meta_read.bits.idx := req_idx
     io.meta_read.bits.tag := req_tag
     io.meta_read.bits.way_en := req.way_en
@@ -524,6 +526,8 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     val prefetch   = Decoupled(new BoomDCacheReq)
     val wb_req     = Decoupled(new WritebackReq(edge.bundle))
 
+    val prober_idle = Input(Bool())
+
     val clear_all = Input(Bool()) // Clears all uncommitted MSHRs to prepare for fence
 
     val wb_resp   = Input(Bool())
@@ -645,6 +649,8 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     mshr.io.exception    := io.exception
     mshr.io.rob_pnr_idx  := io.rob_pnr_idx
     mshr.io.rob_head_idx := io.rob_head_idx
+
+    mshr.io.prober_idle  := io.prober_idle
 
     mshr.io.wb_resp      := io.wb_resp
 

@@ -8,7 +8,7 @@ package boom.common
 import chisel3._
 import chisel3.util.{RRArbiter, Queue}
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ListBuffer}
 
 import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
@@ -16,7 +16,7 @@ import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalModuleTree, LogicalTreeNode, RocketLogicalTreeNode, ICacheLogicalTreeNode}
 import freechips.rocketchip.rocket._
-import freechips.rocketchip.subsystem.RocketCrossingParams
+import freechips.rocketchip.subsystem.{RocketCrossingParams}
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
@@ -52,7 +52,8 @@ case class BoomTileParams(
   hartId: Int = 0,
   beuAddr: Option[BigInt] = None,
   blockerCtrlAddr: Option[BigInt] = None,
-  boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
+  boundaryBuffers: Boolean = false, // if synthesized with hierarchical PnR, cut feed-throughs?
+  dromajoParams: Option[DromajoParams] = None
   ) extends TileParams
 {
   require(icache.isDefined)
@@ -77,8 +78,8 @@ class BoomTile(
 {
 
   // Private constructor ensures altered LazyModule.p is used implicitly
-  def this(params: BoomTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: LogicalTreeNode)
-    (implicit p: Parameters) = this(params, crossing.crossingType, lookup, p, logicalTreeNode)
+  def this(params: BoomTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: LogicalTreeNode)(implicit p: Parameters) =
+    this(params.copy(dromajoParams = Some(DromajoParams(Some(p(BootROMParams)), p(ExtMem), p(CLINTKey), p(PLICKey)))), crossing.crossingType, lookup, p, logicalTreeNode)
 
   val intOutwardNode = IntIdentityNode()
   val masterNode = visibilityNode

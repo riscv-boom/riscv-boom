@@ -11,7 +11,9 @@ import chisel3.util._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
+import freechips.rocketchip.subsystem.{MemoryPortParams}
 import freechips.rocketchip.config.{Parameters, Field}
+import freechips.rocketchip.devices.tilelink.{BootROMParams, CLINTParams, PLICParams}
 
 import boom.ifu._
 import boom.exu._
@@ -48,14 +50,15 @@ case class BoomCoreParams(
   numRXQEntries: Int = 4,
   numRCQEntries: Int = 8,
   numDCacheBanks: Int = 1,
+  nPMPs: Int = 8,
   /* more stuff */
 
   useFetchMonitor: Boolean = true,
   bootFreqHz: BigInt = 0,
-  fpu: Option[FPUParams] = Some(FPUParams()),
+  fpu: Option[FPUParams] = Some(FPUParams(sfmaLatency=4, dfmaLatency=4)),
   usingFPU: Boolean = true,
   haveBasicCounters: Boolean = true,
-  misaWritable: Boolean = true,
+  misaWritable: Boolean = false,
   mtvecInit: Option[BigInt] = Some(BigInt(0)),
   mtvecWritable: Boolean = true,
   haveCFlush: Boolean = false,
@@ -75,13 +78,13 @@ case class BoomCoreParams(
 // DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams
 {
-  val haveFSDirty = false
+  val haveFSDirty = true
   val pmpGranularity: Int = 4
   val instBits: Int = if (useCompressed) 16 else 32
   val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
   val retireWidth = decodeWidth
   val jumpInFrontend: Boolean = false // unused in boom
-  val nPMPs: Int = 8
+
 
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
 }
@@ -245,3 +248,13 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val corePAddrBits = paddrBits
   val corePgIdxBits = pgIdxBits
 }
+
+/**
+ * Dromajo simulation parameters
+ */
+case class DromajoParams(
+  bootromParams: Option[BootROMParams] = None,
+  extMemParams: Option[MemoryPortParams] = None,
+  clintParams: Option[CLINTParams] = None,
+  plicParams: Option[PLICParams] = None
+)

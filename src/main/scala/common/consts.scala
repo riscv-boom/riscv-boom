@@ -28,6 +28,8 @@ trait BOOMDebugConstants
   val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
   val MEMTRACE_PRINTF     = false // dump trace of memory accesses to L1D for debugging
 
+  val DROMAJO_COSIM_ENABLE = false // enable dromajo cosim
+
   // When enabling DEBUG_PRINTF, the vertical whitespace can be padded out
   // such that viewing the *.out file in vim can line up veritically to
   // enable ctrl+f/ctrl+b to advance the *.out file one cycle without
