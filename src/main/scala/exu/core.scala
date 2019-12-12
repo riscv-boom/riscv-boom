@@ -32,7 +32,6 @@ import java.nio.file.{Paths}
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.dontTouch
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
@@ -1301,7 +1300,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         val mmioStart = "0x" + f"${bootromParams.address + bootromParams.size}%X"
         val mmioEnd = "0x" + f"${extMemParams.master.base}%X"
         val plicBase = "0x" + f"${plicParams.baseAddress}%X"
-        val plicSize = "0x" + f"${PLICConsts.size}%X"
+        val plicSize = "0x" + f"${PLICConsts.size(plicParams.maxHarts)}%X"
         val clintBase = "0x" + f"${clintParams.baseAddress}%X"
         val clintSize = "0x" + f"${CLINTConsts.size}%X"
         val memSize = "0x" + f"${extMemParams.master.size}%X"

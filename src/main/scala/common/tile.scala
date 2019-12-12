@@ -188,7 +188,7 @@ class BoomTile(
   tlMasterXbar.node := frontend.masterNode
 
   private val deviceOpt = None
-  val iCacheLogicalTreeNode = new ICacheLogicalTreeNode(deviceOpt, tileParams.icache.get)
+  val iCacheLogicalTreeNode = new BoomICacheLogicalTreeNode(frontend.icache, deviceOpt, tileParams.icache.get)
 
   // ROCC
   val roccs = p(BuildRoCC).map(_(p))

@@ -14,7 +14,6 @@ package boom.ifu
 import chisel3._
 import chisel3.util._
 import chisel3.internal.sourceinfo.{SourceInfo}
-import chisel3.experimental.{dontTouch}
 import chisel3.experimental.{chiselName}
 
 import freechips.rocketchip.config.{Parameters}
@@ -25,6 +24,9 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
 import freechips.rocketchip.util.property._
 import freechips.rocketchip.rocket.{HasL1ICacheParameters, ICacheParams, ICacheErrors, ICacheReq}
+import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalTreeNode}
+import freechips.rocketchip.diplomaticobjectmodel.DiplomaticObjectModelAddressing
+import freechips.rocketchip.diplomaticobjectmodel.model.{OMComponent, OMICache, OMECC}
 
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
@@ -67,6 +69,26 @@ class ICache(
         fifoId          = Some(0))), // requests handled in FIFO order
       beatBytes = wordBytes,
       minLatency = 1)})
+}
+class BoomICacheLogicalTreeNode(icache: ICache, deviceOpt: Option[SimpleDevice], params: ICacheParams) extends LogicalTreeNode(() => deviceOpt) {
+  override def getOMComponents(resourceBindings: ResourceBindings, children: Seq[OMComponent] = Nil): Seq[OMComponent] = {
+    Seq(
+      OMICache(
+        memoryRegions = DiplomaticObjectModelAddressing.getOMMemoryRegions("ITIM", resourceBindings),
+        interrupts = Nil,
+        nSets = params.nSets,
+        nWays = params.nWays,
+        blockSizeBytes = params.blockBytes,
+        dataMemorySizeBytes = params.nSets * params.nWays * params.blockBytes,
+        dataECC = params.dataECC.map(OMECC.fromString),
+        tagECC = params.tagECC.map(OMECC.fromString),
+        nTLBEntries = params.nTLBEntries,
+        maxTimSize = params.nSets * (params.nWays-1) * params.blockBytes,
+        memories = if(!icache.enableBlackBox) icache.module.asInstanceOf[ICacheModule].dataArrays.map(_._2)
+                   else Seq()
+      )
+    )
+  }
 }
 
 /**
@@ -279,15 +301,37 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
     if (2*tl_out.d.bits.data.getWidth == wordBits) (nSets * refillCycles/2)
     else (nSets * refillCycles)
 
+  val dataArrays = if(cacheParams.fetchBytes <= 8)
+      // Use unbanked icache for narrow accesses.
+      (0 until nWays).map { x =>
+        DescribedSRAM(
+          name = s"dataArrayWay_${x}",
+          desc = "ICache Data Array",
+          size = nSets * refillCycles,
+          data = UInt(dECC.width(wordBits).W)
+        )
+      }
+    else
+      // Use two banks, interleaved.
+      (0 until nWays).map { x =>
+        DescribedSRAM(
+          name = s"dataArrayB0Way_${x}",
+          desc = "ICache Data Array",
+          size = nSets * refillCycles,
+          data = UInt(dECC.width(wordBits/nBanks).W)
+        )} ++
+      (0 until nWays).map { x =>
+        DescribedSRAM(
+          name = s"dataArrayB1Way_${x}",
+          desc = "ICache Data Array",
+          size = nSets * refillCycles,
+          data = UInt(dECC.width(wordBits/nBanks).W)
+        )}
+
   if (cacheParams.fetchBytes <= 8) {
     // Use unbanked icache for narrow accesses.
-    val dataArrays = (0 until nWays).map { x =>
-       SyncReadMem(nSets * refillCycles, UInt(dECC.width(wordBits).W)).suggestName(
-          "dataArrayWay_" + x.toString)
-    }
-
     s1_bankId := 0.U
-    for ((dataArray, i) <- dataArrays zipWithIndex) {
+    for ((dataArray, i) <- dataArrays.map(_._1) zipWithIndex) {
       def row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
       val s0_ren = s0_valid || s0_slaveValid
 
@@ -305,13 +349,9 @@ class ICacheModule(outer: ICache) extends ICacheBaseModule(outer)
       s1_dout(i) := dataArray.read(mem_idx, !wen && s0_ren)
     }
   } else {
-    val dataArraysB0 = (0 until nWays).map { x =>
-      SyncReadMem(ramDepth, UInt(dECC.width(wordBits/nBanks).W)).suggestName(
-        "dataArrayB0Way_" + x.toString)}
-    val dataArraysB1 = (0 until nWays).map { x =>
-      SyncReadMem(ramDepth, UInt(dECC.width(wordBits/nBanks).W)).suggestName(
-        "dataArrayB1Way_" + x.toString)}
     // Use two banks, interleaved.
+    val dataArraysB0 = dataArrays.map(_._1).take(nWays)
+    val dataArraysB1 = dataArrays.map(_._1).drop(nWays)
     require (nBanks == 2)
 
     // Bank0 row's id wraps around if Bank1 is the starting bank.
