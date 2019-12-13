@@ -324,9 +324,16 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
       VecInit(f3_resps.map(r => !r(w).valid && r(w).bits.u === 0.U)).asUInt &
       ~(MaskLower(UIntToOH(provider)) & Fill(tageNTables, provided))
     )
+    val alloc_lfsr = random.LFSR(tageNTables)
+
+    val first_entry = PriorityEncoder(allocatable_slots)
+    val masked_entry = PriorityEncoder(allocatable_slots & alloc_lfsr)
+    val alloc_entry = Mux(allocatable_slots(masked_entry),
+      masked_entry,
+      first_entry)
 
     f3_meta.allocate(w).valid := allocatable_slots =/= 0.U
-    f3_meta.allocate(w).bits  := PriorityEncoder(allocatable_slots)
+    f3_meta.allocate(w).bits  := alloc_entry
 
     val update_was_taken = (s1_update.bits.cfi_idx.valid &&
                             (s1_update.bits.cfi_idx.bits === w.U) &&
