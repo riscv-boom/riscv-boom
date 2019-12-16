@@ -608,7 +608,8 @@ class Rob(
   for (w <- 0 until coreWidth) {
     fflags_val(w) :=
       io.commit.valids(w) &&
-      io.commit.uops(w).fp_val
+      io.commit.uops(w).fp_val &&
+      !io.commit.uops(w).uses_stq
 
     fflags(w) := Mux(fflags_val(w), rob_head_fflags(w), 0.U)
 
