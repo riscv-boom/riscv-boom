@@ -169,13 +169,11 @@ class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
 
   for (i <- 0 until numWakeupPorts) {
     when (io.wakeup_ports(i).valid &&
-         (io.wakeup_ports(i).bits.pdst === next_uop.prs1) &&
-         !(io.ldspec_miss && io.wakeup_ports(i).bits.poisoned)) {
+         (io.wakeup_ports(i).bits.pdst === next_uop.prs1)) {
       p1 := true.B
     }
     when (io.wakeup_ports(i).valid &&
-         (io.wakeup_ports(i).bits.pdst === next_uop.prs2) &&
-         !(io.ldspec_miss && io.wakeup_ports(i).bits.poisoned)) {
+         (io.wakeup_ports(i).bits.pdst === next_uop.prs2)) {
       p2 := true.B
     }
     when (io.wakeup_ports(i).valid &&
