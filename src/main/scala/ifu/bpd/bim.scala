@@ -9,7 +9,7 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 
 import boom.common._
-import boom.util.{BoomCoreStringPrefix}
+import boom.util.{BoomCoreStringPrefix, WrapInc}
 
 
 case class BoomBIMParams(
@@ -28,6 +28,8 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
 {
   override val nSets = params.nSets
   require(isPow2(nSets))
+
+  val nWrBypassEntries = 2
 
   def bimWrite(v: UInt, taken: Bool): UInt = {
     val old_bim_sat_taken  = v === 3.U
@@ -57,6 +59,7 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
 
 
   val s1_resp           = Wire(Vec(bankWidth, new BranchPrediction))
+
   for (w <- 0 until bankWidth) {
 
     s1_resp(w).taken        := s1_req.valid && s1_req_rdata(w)(1) && !doing_reset
@@ -65,29 +68,60 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
     s1_resp(w).predicted_pc.valid := false.B
     s1_resp(w).predicted_pc.bits  := DontCare
     s1_meta.bims(w)            := s1_req_rdata(w)
+  }
 
+  val wrbypass_idxs = Reg(Vec(nWrBypassEntries, UInt(log2Ceil(nSets).W)))
+  val wrbypass      = Reg(Vec(nWrBypassEntries, Vec(bankWidth, UInt(2.W))))
+  val wrbypass_enq_idx = RegInit(0.U(log2Ceil(nWrBypassEntries).W))
+
+  val wrbypass_hits = VecInit((0 until nWrBypassEntries) map { i =>
+    !doing_reset &&
+    wrbypass_idxs(i) === s1_update_idx(log2Ceil(nSets)-1,0)
+  })
+  val wrbypass_hit = wrbypass_hits.reduce(_||_)
+  val wrbypass_hit_idx = PriorityEncoder(wrbypass_hits)
+
+  for (w <- 0 until bankWidth) {
     s1_update_wmask(w)         := false.B
     s1_update_wdata(w)         := DontCare
 
     val update_pc = s1_update.bits.pc + (w << 1).U
 
-    when (s1_update.bits.br_mask(w) || (s1_update.bits.cfi_idx.valid && s1_update.bits.cfi_idx.bits === w.U)) {
-      val was_taken = s1_update.bits.cfi_idx.valid && (s1_update.bits.cfi_idx.bits === w.U) &&
-        ((s1_update.bits.cfi_is_br && s1_update.bits.br_mask(w) && s1_update.bits.cfi_taken) || s1_update.bits.cfi_is_jal)
-      val old_bim_value    = s1_update_meta.bims(w)
+    when (s1_update.bits.br_mask(w) ||
+      (s1_update.bits.cfi_idx.valid && s1_update.bits.cfi_idx.bits === w.U)) {
+      val was_taken = (
+        s1_update.bits.cfi_idx.valid &&
+        (s1_update.bits.cfi_idx.bits === w.U) &&
+        (
+          (s1_update.bits.cfi_is_br && s1_update.bits.br_mask(w) && s1_update.bits.cfi_taken) ||
+          s1_update.bits.cfi_is_jal
+        )
+      )
+      val old_bim_value = Mux(wrbypass_hit, wrbypass(wrbypass_hit_idx)(w), s1_update_meta.bims(w))
 
       s1_update_wmask(w)     := true.B
 
       s1_update_wdata(w)     := bimWrite(old_bim_value, was_taken)
     }
 
+
   }
+
   for (w <- 0 until bankWidth) {
     when (doing_reset || (s1_update_wmask(w) && s1_update.valid)) {
       data(w).write(
         Mux(doing_reset, reset_idx, s1_update_idx),
         Mux(doing_reset, 2.U, s1_update_wdata(w))
       )
+    }
+  }
+  when (s1_update_wmask.reduce(_||_) && s1_update.valid) {
+    when (wrbypass_hit) {
+      wrbypass(wrbypass_hit_idx) := s1_update_wdata
+    } .otherwise {
+      wrbypass(wrbypass_enq_idx)      := s1_update_wdata
+      wrbypass_idxs(wrbypass_enq_idx) := s1_update_idx
+      wrbypass_enq_idx := WrapInc(wrbypass_enq_idx, nWrBypassEntries)
     }
   }
 
