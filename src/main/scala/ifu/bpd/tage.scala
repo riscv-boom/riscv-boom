@@ -233,9 +233,9 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
 class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   val base = Module(new BTBBranchPredictorBank(BoomBTBParams()))
-  val micro = Module(new BTBBranchPredictorBank(
-    BoomBTBParams(nSets = 64, offsetSz = 13, extendedNSets = 0, micro = true))
-  )
+  val micro = Module(new MicroBTBBranchPredictorBank(
+    BoomMicroBTBParams(nSets = 64, offsetSz = 13)
+  ))
   base.io.f1_kill := io.f1_kill
   base.io.f2_kill := io.f2_kill
   base.io.f3_kill := io.f3_kill
