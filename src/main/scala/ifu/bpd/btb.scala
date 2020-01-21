@@ -15,7 +15,7 @@ case class BoomBTBParams(
   nSets: Int = 256,
   offsetSz: Int = 13,
   extendedNSets: Int = 256,
-  bimParams: BoomBIMParams = BoomBIMParams(nSets = 1024)
+  bimNSets: Int = 1024
 )
 
 
@@ -26,12 +26,11 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
   val offsetSz      = params.offsetSz
   val extendedNSets = params.extendedNSets
   val useEBTB       = extendedNSets != 0
-  val bimParams     = params.bimParams
 
   require(isPow2(nSets))
   require(isPow2(extendedNSets) || extendedNSets == 0)
   require(extendedNSets <= nSets)
-  require(nSets <= bimParams.nSets)
+  require(nSets <= params.bimNSets)
 
   class BTBEntry extends Bundle {
     val offset   = SInt(offsetSz.W)
@@ -48,7 +47,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
 
 
 
-  val bim = Module(new BIMBranchPredictorBank(bimParams))
+  val bim = Module(new BIMBranchPredictorBank(params.bimNSets))
   bim.io.f1_kill := io.f1_kill
   bim.io.f2_kill := io.f2_kill
   bim.io.f3_kill := io.f3_kill
@@ -89,9 +88,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
       (s1_req.bits.pc.asSInt + (w << 1).S + s1_req_rbtb(w).offset).asUInt)
     s1_is_br(w)  := !doing_reset && s1_resp(w).valid &&  s1_req_rmeta(w).is_br
     s1_is_jal(w) := !doing_reset && s1_resp(w).valid && !s1_req_rmeta(w).is_br
-  }
 
-  for (w <- 0 until bankWidth) {
     io.f2_resp(w).predicted_pc := RegNext(s1_resp(w))
     io.f2_resp(w).is_br        := RegNext(s1_is_br(w))
     io.f2_resp(w).is_jal       := RegNext(s1_is_jal(w))

@@ -12,10 +12,7 @@ import boom.common._
 import boom.util.{BoomCoreStringPrefix, WrapInc}
 
 
-case class BoomBIMParams(
-  nSets: Int = 512,
-  micro: Boolean = false
-)
+
 
 class BIMMeta(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomFrontendParameters
@@ -24,9 +21,8 @@ class BIMMeta(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 
-class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) extends BranchPredictorBank()(p)
+class BIMBranchPredictorBank(nSets: Int)(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
-  override val nSets = params.nSets
   require(isPow2(nSets))
 
   val nWrBypassEntries = 2
@@ -125,8 +121,6 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
     }
   }
 
-  if (params.micro)
-    io.f1_resp := s1_resp
   io.f2_resp := RegNext(s1_resp)
   io.f3_resp := RegNext(io.f2_resp)
   io.f3_meta := RegNext(RegNext(s1_meta.asUInt))
