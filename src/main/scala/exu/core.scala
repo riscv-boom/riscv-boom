@@ -1427,6 +1427,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   if (p(BoomTilesKey)(0).trace) {
     for (w <- 0 until coreWidth) {
+      io.trace(w).clock      := clock
+      io.trace(w).reset      := reset
       io.trace(w).valid      := rob.io.commit.valids(w)
       io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen)
       io.trace(w).insn       := rob.io.commit.uops(w).debug_inst
