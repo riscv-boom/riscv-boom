@@ -99,10 +99,10 @@ source sourceme-f1-manager.sh
 /bin/expect << EXP
 set timeout -1
 spawn firesim managerinit
-send -- "\r"
-send -- "\r"
-send -- "\r"
-send -- "\r"
+send -- "$AWS_ACCESS_KEY_ID\r"
+send -- "$AWS_SECRET_ACCESS_KEY\r"
+send -- "$AWS_DEFAULT_REGION\r"
+send -- "json\r"
 send -- "\r"
 expect eof
 EXP
