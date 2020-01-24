@@ -1074,7 +1074,6 @@ workflows:
                 type: approval
 
             - initialize-manager:
-                context: aws
                 requires:
                     - aws-approval
 
