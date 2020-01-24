@@ -9,6 +9,9 @@
 # turn echo on and error on earliest command
 set -ex
 
+SCRIPT_DIR="$( cd "$( dirname "$TEMP" )" && pwd )"
+echo "$SCRIPT_DIR"
+
 # get the firesim instance launch script
 git clone --progress --verbose https://github.com/ucb-bar/chipyard.git
 cd chipyard
@@ -17,13 +20,16 @@ git fetch
 git checkout $(cat $HOME/project/CHIPYARD.hash)
 cd sims
 git submodule update --init firesim/
-cp firesim/scripts/machine-launch-script.sh cd $HOME/firesim-instance-launch-script.sh
+cp firesim/scripts/machine-launch-script.sh $HOME/firesim-instance-launch-script.sh
 
 cd $HOME
 
 # add expect to the install
 echo "sudo yum -y install expect" >> firesim-instance-launch-script.sh
 echo "echo \"firesim-ci: installed expect\" >> /home/centos/machine-launchstatus" >> firesim-instance-launch-script.sh
+
+# get the resize root script
+cp $HOME/project/.circleci/firesim-instance-resize-root.json .
 
 # launch manager with cli
 aws ec2 run-instances \
@@ -38,26 +44,22 @@ aws ec2 run-instances \
     --associate-public-ip-address &> output.json
 
 # get the instance id
-grep InstanceId output.json | sed -r 's/.*InstanceId\"(.*)\",/\1/' &> $HOME/FSIM_MANAGER_INSTANCE_DATA.txt
-
-# TODO: remove
-cat $HOME/FSIM_MANAGER_INSTANCE_DATA.txt
+grep InstanceId output.json | sed -r 's/.*InstanceId.*\"(.*)\",/\1/' &> $HOME/FSIM_MANAGER_INSTANCE_DATA.txt
 
 # wait for mins for instance to boot/install items
 sleep 3m
 
 # get the assigned public ip address
-aws ec2 describe-instances --instance-ids $(cat INSTANCE_DATA.txt) &> output.json
-grep PublicIpAddress output.json | sed -r 's/.*PublicIpAddress\"(.*)\",/\1/' >> $HOME/FSIM_MANAGER_INSTANCE_DATA.txt
-
-# TODO: remove
-cat $HOME/FSIM_MANAGER_INSTANCE_DATA.txt
+aws ec2 describe-instances --instance-ids $(cat $HOME/FSIM_MANAGER_INSTANCE_DATA.txt) &> output.json
+grep PublicIpAddress output.json | sed -r 's/.*PublicIpAddress.*\"(.*)\",/\1/' >> $HOME/FSIM_MANAGER_INSTANCE_DATA.txt
 
 # setup AWS_SERVER variable
 AWS_SERVER=centos@$(sed -n '2p' $HOME/FSIM_MANAGER_INSTANCE_DATA.txt)
 
+# get back to initial folder
+cd $HOME/project
+
 # get shared variables
-SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
 # copy over the firesim.pem
