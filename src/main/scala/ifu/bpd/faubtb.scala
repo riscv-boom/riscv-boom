@@ -68,7 +68,7 @@ class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams)(implicit p: Pa
 
   val s1_hit_ohs = VecInit((0 until bankWidth) map { i =>
     VecInit((0 until nWays) map { w =>
-      meta(w)(i).tag === s1_req_tag
+      meta(w)(i).tag === s1_req_tag(tagSz-1,0)
     })
   })
   val s1_hits     = s1_hit_ohs.map { oh => oh.reduce(_||_) }
