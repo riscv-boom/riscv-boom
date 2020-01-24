@@ -67,17 +67,6 @@ class RenameStageIO(
   val rollback = Input(Bool())
 
   val debug_rob_empty = Input(Bool())
-  val debug = Output(new DebugRenameStageIO(numPhysRegs))
-}
-
-/**
- * IO bundle to debug the rename stage
- */
-class DebugRenameStageIO(val numPhysRegs: Int)(implicit p: Parameters) extends BoomBundle
-{
-  val freelist  = Bits(numPhysRegs.W)
-  val isprlist  = Bits(numPhysRegs.W)
-  val busytable = UInt(numPhysRegs.W)
 }
 
 /**
@@ -317,11 +306,4 @@ class RenameStage(
 
     io.ren2_uops(w) := GetNewUopAndBrMask(bypassed_uop, io.brinfo)
   }
-
-  //-------------------------------------------------------------
-  // Debug signals
-
-  io.debug.freelist  := freelist.io.debug.freelist
-  io.debug.isprlist  := freelist.io.debug.isprlist
-  io.debug.busytable := busytable.io.debug.busytable
 }
