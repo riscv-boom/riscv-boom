@@ -28,23 +28,20 @@ class RenameFreeList(
 
   val io = IO(new BoomBundle()(p) {
     // Physical register requests.
-    val reqs          = Input(Vec(plWidth, Bool()))
-    val alloc_pregs   = Output(Vec(plWidth, Valid(UInt(pregSz.W))))
+    val reqs           = Input(Vec(plWidth, Bool()))
+    val alloc_pregs    = Output(Vec(plWidth, Valid(UInt(pregSz.W))))
 
     // Pregs returned by the ROB.
-    val dealloc_pregs = Input(Vec(plWidth, Valid(UInt(pregSz.W))))
+    val dealloc_pregs  = Input(Vec(plWidth, Valid(UInt(pregSz.W))))
 
     // Branch info for starting new allocation lists.
-    val ren_br_tags   = Input(Vec(plWidth, Valid(UInt(brTagSz.W))))
+    val ren_br_tags    = Input(Vec(plWidth, Valid(UInt(brTagSz.W))))
 
     // Mispredict info for recovering speculatively allocated registers.
-    val brinfo        = Input(new BrResolutionInfo)
+    val brinfo         = Input(new BrResolutionInfo)
 
-    val debug = new Bundle {
-      val pipeline_empty = Input(Bool())
-      val freelist = Output(Bits(numPregs.W))
-      val isprlist = Output(Bits(numPregs.W))
-    }
+    // Used to check for physical register leaks.
+    val pipeline_empty = Input(Bool())
   })
   // The free list register array and its branch allocation lists.
   val free_list = RegInit(UInt(numPregs.W), ~(1.U(numPregs.W)))
@@ -88,11 +85,11 @@ class RenameFreeList(
     io.alloc_pregs(w).valid := r_valid
   }
 
-  io.debug.freelist := free_list | io.alloc_pregs.map(p => UIntToOH(p.bits) & Fill(n,p.valid)).reduce(_|_)
-  io.debug.isprlist := 0.U  // TODO track commit free list.
+  // Get the complete freelist as a bit vector (include pipelined selections).
+  val debug_freelist = free_list | io.alloc_pregs.map(p => UIntToOH(p.bits) & Fill(n,p.valid)).reduce(_|_)
 
   val numLregs = if(float) 32 else 31
-  assert (!(io.debug.freelist & dealloc_mask).orR, "[freelist] Returning a free physical register.")
-  assert (!io.debug.pipeline_empty || PopCount(io.debug.freelist) >= (numPregs - numLregs - 1).U,
+  assert (!(debug_freelist & dealloc_mask).orR, "[freelist] Returning a free physical register.")
+  assert (!io.pipeline_empty || PopCount(debug_freelist) >= (numPregs - numLregs - 1).U,
     "[freelist] Leaking physical registers.")
 }
