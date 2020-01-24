@@ -3,6 +3,7 @@
 ############################################################################
 # launch workloads related to this afi
 # note: expects that this is called from the firesim deploy directory
+# note: writes a file in the AWS_WORK_DIR indicating what started running
 #
 # usage:
 #   $1 - config string (translates to afi folder inside firesim-configs/*)
@@ -37,6 +38,7 @@ if [ -f $REMOTE_AWS_WORK_DIR/$AFI_NAME-$WORKLOAD_NAME-FINISHED ]; then
         -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-$WORKLOAD_NAME-run \
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
+    echo "$AFI_NAME-$WORKLOAD_NAME" >> $REMOTE_AWS_WORK_DIR/workloads_running
 fi
 
 # run workload 2 - fedora
@@ -49,6 +51,7 @@ if [ -f $REMOTE_AWS_WORK_DIR/$AFI_NAME-$WORKLOAD_NAME-FINISHED ]; then
         -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-$WORKLOAD_NAME-run \
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
+    echo "$AFI_NAME-$WORKLOAD_NAME" >> $REMOTE_AWS_WORK_DIR/workloads_running
 fi
 
 # run workload 3 - coremark
@@ -61,6 +64,7 @@ if [ -f $REMOTE_AWS_WORK_DIR/$AFI_NAME-$WORKLOAD_NAME-FINISHED ]; then
         -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-$WORKLOAD_NAME-run \
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
+    echo "$AFI_NAME-$WORKLOAD_NAME" >> $REMOTE_AWS_WORK_DIR/workloads_running
 fi
 
 # run workload 4 - spec17-intspeed
@@ -73,6 +77,7 @@ if [ -f $REMOTE_AWS_WORK_DIR/$AFI_NAME-$WORKLOAD_NAME-FINISHED ]; then
         -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-$WORKLOAD_NAME-run \
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
+    echo "$AFI_NAME-$WORKLOAD_NAME" >> $REMOTE_AWS_WORK_DIR/workloads_running
 fi
 
 # run workload 5 - spec17-intrate
@@ -85,4 +90,5 @@ if [ -f $REMOTE_AWS_WORK_DIR/$AFI_NAME-$WORKLOAD_NAME-FINISHED ]; then
         -d build_parameters[CIRCLE_JOB]=launch-$CONFIG_KEY-$WORKLOAD_NAME-run \
         -d revision=$CIRCLE_SHA1 \
         $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
+    echo "$AFI_NAME-$WORKLOAD_NAME" >> $REMOTE_AWS_WORK_DIR/workloads_running
 fi

@@ -17,8 +17,20 @@ Things to look into:
 FireSim CI Notes
 ----------------
 
+Currently only supports 1 AFI to build and test so that the manager stop procedure works.
+
+Stop procedure:
+- When an AFI fails, it will go ahead and stop the instance then stop the CI.
+- When all workloads for an AFI have finished, the AFI will stop.
+
 Requirements:
-- Need to create a manager instance and in the CircleCI UI add AWS_SERVER with "centos@IP_ADDR"
-- Need to add to CircleCI UI the CI_AWS_DIR to point to the "~"
-- Need to install `expect` on the manager instance
-- Add SSH key ("firesim.pem") to the CircleCI UI and use the key in the `config.yml`
+- Add to CircleCI env. var. `$CI_AWS_DIR` point to the "~" of manager instance
+- Add SSH key ("firesim.pem") to the CircleCI SSH keys and use the key in the `config.yml` jobs
+- Fill out the following CircleCI env. var.s to access AWS:
+    - `$AWS_ACCESS_KEY_ID`
+    - `$AWS_SECRET_ACCESS_KEY`
+    - `$AWS_DEFAULT_REGION`
+- Add your `firesim.pem` into the `$FIRESIM_PEM` CircleCI env. var.
+    - Note: This is a single line .pem where all \n's are ,'s
+
+

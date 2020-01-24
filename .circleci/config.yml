@@ -1,7 +1,11 @@
 # CircleCI Configuration File
 
 # version of circleci
-version: 2
+version: 2.1
+
+# "plugins" to use
+orbs:
+    aws-cli: circleci/aws-cli@0.1.19
 
 # set of jobs to run
 jobs:
@@ -641,20 +645,22 @@ jobs:
     ###########################################################################################
 
     initialize-manager:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
+        executor: aws-cli/default
         steps:
             - add_ssh_keys:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - aws-cli/setup
             - run:
                 name: Initialize FireSim manager instance with Chipyard
                 command: |
                     .circleci/firesim-init-manager.sh
+            - save_cache:
+                key: firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
+                paths:
+                    - "/home/riscvuser/FSIM_MANAGER_INSTANCE_DATA.txt"
+
     build-largefireboom-buildroot:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -666,6 +672,9 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Build a LargeFireBoom Buildroot workload
                 command: |
@@ -681,6 +690,9 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Build a LargeFireBoom Fedora workload
                 command: |
@@ -696,6 +708,9 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Build a LargeFireBoom CoreMark workload
                 command: |
@@ -711,6 +726,9 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Build a LargeFireBoom SPEC17 intspeed workload
                 command: |
@@ -726,6 +744,9 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Build a LargeFireBoom SPEC17 intrate workload
                 command: |
@@ -741,22 +762,25 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Build a LargeFireBoom AFI
                 command: |
                     .circleci/firesim-build-afi.sh largefireboom
                 no_output_timeout: 240m
     largefireboom-afi-failed:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
+        executor: aws-cli/default
         steps:
             - add_ssh_keys:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - aws-cli/setup
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: LargeFireBoom AFI build failed
                 command: |
@@ -772,21 +796,24 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Run a LargeFireBoom Buildroot workload
                 command: |
                     .circleci/firesim-run-workload.sh largefireboom buildroot 30m
     largefireboom-buildroot-run-finished:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
+        executor: aws-cli/default
         steps:
             - add_ssh_keys:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - aws-cli/setup
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Buildroot workload finished
                 command: |
@@ -802,21 +829,24 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Run a LargeFireBoom Fedora workload
                 command: |
                     .circleci/firesim-run-workload.sh largefireboom fedora 30m
     largefireboom-fedora-run-finished:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
+        executor: aws-cli/default
         steps:
             - add_ssh_keys:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - aws-cli/setup
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Fedora workload finished
                 command: |
@@ -832,21 +862,24 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Run a LargeFireBoom CoreMark workload
                 command: |
                     .circleci/firesim-run-workload.sh largefireboom coremark 30m
     largefireboom-coremark-run-finished:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
+        executor: aws-cli/default
         steps:
             - add_ssh_keys:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - aws-cli/setup
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: CoreMark workload finished
                 command: |
@@ -862,21 +895,24 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Run a LargeFireBoom SPEC17 intspeed workload
                 command: |
                     .circleci/firesim-run-workload.sh largefireboom spec17-intspeed 30h
     largefireboom-spec17-intspeed-run-finished:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
+        executor: aws-cli/default
         steps:
             - add_ssh_keys:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - aws-cli/setup
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: SPEC17 intspeed workload finished
                 command: |
@@ -892,21 +928,24 @@ jobs:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: Run a LargeFireBoom SPEC17 intrate workload
                 command: |
                     .circleci/firesim-run-workload.sh largefireboom spec17-intrate 30h
     largefireboom-spec17-intrate-run-finished:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
+        executor: aws-cli/default
         steps:
             - add_ssh_keys:
                 fingerprints:
                     - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
             - checkout
+            - aws-cli/setup
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
             - run:
                 name: SPEC17 intrate workload finished
                 command: |
@@ -1031,14 +1070,16 @@ workflows:
         #                    - master
 
         jobs:
-            - initialize-manager
-
             - aws-approval:
                 type: approval
 
-            - launch-largefireboom-afi-build:
+            - initialize-manager
+                context: aws
                 requires:
                     - aws-approval
+
+            - launch-largefireboom-afi-build:
+                requires:
                     - initialize-manager
 
             - build-largefireboom-buildroot:
