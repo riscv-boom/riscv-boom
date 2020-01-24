@@ -374,7 +374,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s1_tlb_resp = Mux(s1_is_replay, RegNext(s0_replay_resp), tlb.io.resp)
   val s1_ppc  = Mux(s1_is_replay, RegNext(s0_replay_ppc), tlb.io.resp.paddr)
   val s1_bpd_resp = Mux(s1_is_replay,
-    Mux(RegNext(s0_s1_use_f3_bpd_resp), bpd.io.f3_resp, RegNext(s0_replay_bpd_resp)), bpd.io.f1_resp)
+    Mux(RegNext(s0_s1_use_f3_bpd_resp), bpd.io.resp.f3, RegNext(s0_replay_bpd_resp)), bpd.io.resp.f1)
 
   icache.io.s1_paddr := s1_ppc
   icache.io.s1_kill  := tlb.io.resp.miss || f1_clear
@@ -433,7 +433,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   icache.io.s2_kill := s2_xcpt
   bpd.io.f2_kill    := s2_xcpt
 
-  val f2_bpd_resp = Mux(s2_is_replay, RegNext(s1_bpd_resp), bpd.io.f2_resp)
+  val f2_bpd_resp = Mux(s2_is_replay, RegNext(s1_bpd_resp), bpd.io.resp.f2)
   val f2_mask = fetchMask(s2_vpc)
   val f2_redirects = (0 until fetchWidth) map { i =>
     s2_valid && f2_mask(i) && f2_bpd_resp.preds(i).predicted_pc.valid &&
@@ -517,7 +517,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   // The BPD resp comes in f3
   f3_bpd_resp.io.enq.valid := f3.io.deq.valid && RegNext(f3.io.enq.ready)
-  f3_bpd_resp.io.enq.bits  := Mux(RegNext(s2_is_replay), RegNext(f2_bpd_resp), bpd.io.f3_resp)
+  f3_bpd_resp.io.enq.bits  := Mux(RegNext(s2_is_replay), RegNext(f2_bpd_resp), bpd.io.resp.f3)
 
   f3.io.deq.ready := f4_ready
   f3_bpd_resp.io.deq.ready := f4_ready

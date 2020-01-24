@@ -104,12 +104,12 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
     s1_is_br(w)  := !doing_reset && s1_resp(w).valid &&  entry_meta.is_br
     s1_is_jal(w) := !doing_reset && s1_resp(w).valid && !entry_meta.is_br
 
-    io.f2_resp(w).predicted_pc := RegNext(s1_resp(w))
-    io.f2_resp(w).is_br        := RegNext(s1_is_br(w))
-    io.f2_resp(w).is_jal       := RegNext(s1_is_jal(w))
-    io.f2_resp(w).taken        := RegNext(s1_is_jal(w)) || bim.io.f2_resp(w).taken
+    io.resp.f2(w).predicted_pc := RegNext(s1_resp(w))
+    io.resp.f2(w).is_br        := RegNext(s1_is_br(w))
+    io.resp.f2(w).is_jal       := RegNext(s1_is_jal(w))
+    io.resp.f2(w).taken        := RegNext(s1_is_jal(w)) || bim.io.resp.f2(w).taken
 
-    io.f3_resp(w)              := RegNext(io.f2_resp(w))
+    io.resp.f3(w)              := RegNext(io.resp.f2(w))
   }
 
   val alloc_way = if (nWays > 1) {

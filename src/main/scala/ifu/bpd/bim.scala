@@ -121,7 +121,7 @@ class BIMBranchPredictorBank(nSets: Int)(implicit p: Parameters) extends BranchP
     }
   }
 
-  io.f2_resp := RegNext(s1_resp)
-  io.f3_resp := RegNext(io.f2_resp)
+  io.resp.f2 := RegNext(s1_resp)
+  io.resp.f3 := RegNext(io.resp.f2)
   io.f3_meta := RegNext(RegNext(s1_meta.asUInt))
 }

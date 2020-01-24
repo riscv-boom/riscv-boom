@@ -253,9 +253,9 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
   micro.io.update := io.update
   micro.io.update.bits.meta := io.update.bits.meta(base.metaSz+micro.metaSz-1,base.metaSz)
 
-  io.f1_resp := micro.io.f1_resp
-  io.f2_resp := base.io.f2_resp
-  io.f3_resp := base.io.f3_resp
+  io.resp.f1 := micro.io.resp.f1
+  io.resp.f2 := base.io.resp.f2
+  io.resp.f3 := base.io.resp.f3
 
   val f3_meta = Wire(new TageMeta)
 
@@ -297,17 +297,17 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
 
 
   for (w <- 0 until bankWidth) {
-    var altpred = base.io.f3_resp(w).taken
-    val final_altpred = WireInit(base.io.f3_resp(w).taken)
+    var altpred = base.io.resp.f3(w).taken
+    val final_altpred = WireInit(base.io.resp.f3(w).taken)
     var provided = false.B
     var provider = 0.U
-    io.f3_resp(w).taken := base.io.f3_resp(w).taken
+    io.resp.f3(w).taken := base.io.resp.f3(w).taken
 
     for (i <- 0 until tageNTables) {
       val hit = f3_resps(i)(w).valid
       val ctr = f3_resps(i)(w).bits.ctr
       when (hit) {
-        io.f3_resp(w).taken := Mux(ctr === 3.U || ctr === 4.U, altpred, ctr(2))
+        io.resp.f3(w).taken := Mux(ctr === 3.U || ctr === 4.U, altpred, ctr(2))
         final_altpred       := altpred
       }
 
@@ -317,7 +317,7 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
     }
     f3_meta.provider(w).valid := provided
     f3_meta.provider(w).bits  := provider
-    f3_meta.alt_differs(w)    := final_altpred =/= io.f3_resp(w).taken
+    f3_meta.alt_differs(w)    := final_altpred =/= io.resp.f3(w).taken
     f3_meta.provider_u(w)     := f3_resps(provider)(w).bits.u
     f3_meta.provider_ctr(w)   := f3_resps(provider)(w).bits.ctr
 

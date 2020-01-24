@@ -36,7 +36,7 @@ class BranchPredictionBundle(implicit p: Parameters) extends BoomBundle()(p)
 {
   val pc = UInt(vaddrBitsExtended.W)
   val preds = Vec(fetchWidth, new BranchPrediction)
-  val meta  = Vec(nBanks, UInt(bpdMaxMetaLength.W))
+  val meta = Output(Vec(nBanks, UInt(bpdMaxMetaLength.W)))
 }
 
 
@@ -114,18 +114,20 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
     val f2_kill = Input(Bool())
     val f3_kill = Input(Bool())
 
-    val f1_resp = Output(Vec(bankWidth, new BranchPrediction))
-    val f2_resp = Output(Vec(bankWidth, new BranchPrediction))
-    val f3_resp = Output(Vec(bankWidth, new BranchPrediction))
+    val resp = Output(new Bundle {
+      val f1 = Vec(bankWidth, new BranchPrediction)
+      val f2 = Vec(bankWidth, new BranchPrediction)
+      val f3 = Vec(bankWidth, new BranchPrediction)
+    })
 
     // Store the meta as a UInt, use width inference to figure out the shape
     val f3_meta = Output(UInt(bpdMaxMetaLength.W))
 
     val update = Input(Valid(new BranchPredictionBankUpdate))
   })
-  io.f1_resp := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
-  io.f2_resp := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
-  io.f3_resp := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
+  io.resp.f1 := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
+  io.resp.f2 := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
+  io.resp.f3 := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
 
   io.f3_meta := 0.U
 
@@ -166,9 +168,11 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     val f2_kill = Input(Bool())
     val f3_kill = Input(Bool())
 
-    val f1_resp = Output(new BranchPredictionBundle)
-    val f2_resp = Output(new BranchPredictionBundle)
-    val f3_resp = Output(new BranchPredictionBundle)
+    val resp = Output(new Bundle {
+      val f1 = new BranchPredictionBundle
+      val f2 = new BranchPredictionBundle
+      val f3 = new BranchPredictionBundle
+    })
 
     // Update
     val update = Input(Valid(new BranchPredictionUpdate))
@@ -208,67 +212,67 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   }
 
   if (nBanks == 1) {
-    io.f1_resp.preds   := banked_predictors(0).io.f1_resp
-    io.f2_resp.preds   := banked_predictors(0).io.f2_resp
-    io.f3_resp.preds   := banked_predictors(0).io.f3_resp
-    io.f3_resp.meta(0) := banked_predictors(0).io.f3_meta
+    io.resp.f1.preds   := banked_predictors(0).io.resp.f1
+    io.resp.f2.preds   := banked_predictors(0).io.resp.f2
+    io.resp.f3.preds   := banked_predictors(0).io.resp.f3
+    io.resp.f3.meta(0) := banked_predictors(0).io.f3_meta
   } else {
     require(nBanks == 2)
 
     // The branch prediction metadata is stored un-shuffled
-    io.f3_resp.meta(0)    := banked_predictors(0).io.f3_meta
-    io.f3_resp.meta(1)    := banked_predictors(1).io.f3_meta
+    io.resp.f3.meta(0)    := banked_predictors(0).io.f3_meta
+    io.resp.f3.meta(1)    := banked_predictors(1).io.f3_meta
 
-    when (bank(io.f1_resp.pc) === 0.U) {
+    when (bank(io.resp.f1.pc) === 0.U) {
       for (i <- 0 until bankWidth) {
-        io.f1_resp.preds(i)           := banked_predictors(0).io.f1_resp(i)
-        io.f1_resp.preds(i+bankWidth) := banked_predictors(1).io.f1_resp(i)
+        io.resp.f1.preds(i)           := banked_predictors(0).io.resp.f1(i)
+        io.resp.f1.preds(i+bankWidth) := banked_predictors(1).io.resp.f1(i)
       }
     } .otherwise {
       for (i <- 0 until bankWidth) {
-        io.f1_resp.preds(i)           := banked_predictors(1).io.f1_resp(i)
-        io.f1_resp.preds(i+bankWidth) := banked_predictors(0).io.f1_resp(i)
+        io.resp.f1.preds(i)           := banked_predictors(1).io.resp.f1(i)
+        io.resp.f1.preds(i+bankWidth) := banked_predictors(0).io.resp.f1(i)
       }
     }
 
-    when (bank(io.f2_resp.pc) === 0.U) {
+    when (bank(io.resp.f2.pc) === 0.U) {
       for (i <- 0 until bankWidth) {
-        io.f2_resp.preds(i)           := banked_predictors(0).io.f2_resp(i)
-        io.f2_resp.preds(i+bankWidth) := banked_predictors(1).io.f2_resp(i)
+        io.resp.f2.preds(i)           := banked_predictors(0).io.resp.f2(i)
+        io.resp.f2.preds(i+bankWidth) := banked_predictors(1).io.resp.f2(i)
       }
     } .otherwise {
       for (i <- 0 until bankWidth) {
-        io.f2_resp.preds(i)           := banked_predictors(1).io.f2_resp(i)
-        io.f2_resp.preds(i+bankWidth) := banked_predictors(0).io.f2_resp(i)
+        io.resp.f2.preds(i)           := banked_predictors(1).io.resp.f2(i)
+        io.resp.f2.preds(i+bankWidth) := banked_predictors(0).io.resp.f2(i)
       }
     }
 
-    when (bank(io.f3_resp.pc) === 0.U) {
+    when (bank(io.resp.f3.pc) === 0.U) {
       for (i <- 0 until bankWidth) {
-        io.f3_resp.preds(i)           := banked_predictors(0).io.f3_resp(i)
-        io.f3_resp.preds(i+bankWidth) := banked_predictors(1).io.f3_resp(i)
+        io.resp.f3.preds(i)           := banked_predictors(0).io.resp.f3(i)
+        io.resp.f3.preds(i+bankWidth) := banked_predictors(1).io.resp.f3(i)
       }
     } .otherwise {
       for (i <- 0 until bankWidth) {
-        io.f3_resp.preds(i)           := banked_predictors(1).io.f3_resp(i)
-        io.f3_resp.preds(i+bankWidth) := banked_predictors(0).io.f3_resp(i)
+        io.resp.f3.preds(i)           := banked_predictors(1).io.resp.f3(i)
+        io.resp.f3.preds(i+bankWidth) := banked_predictors(0).io.resp.f3(i)
       }
     }
   }
 
-  io.f1_resp.pc := RegNext(io.f0_req.bits.pc)
-  io.f2_resp.pc := RegNext(io.f1_resp.pc)
-  io.f3_resp.pc := RegNext(io.f2_resp.pc)
+  io.resp.f1.pc := RegNext(io.f0_req.bits.pc)
+  io.resp.f2.pc := RegNext(io.resp.f1.pc)
+  io.resp.f3.pc := RegNext(io.resp.f2.pc)
 
   // We don't care about meta from the f1 and f2 resps
   // Use the meta from the latest resp
-  io.f1_resp.meta := DontCare
-  io.f2_resp.meta := DontCare
+  io.resp.f1.meta := DontCare
+  io.resp.f2.meta := DontCare
 
   dontTouch(io.f0_req)
-  dontTouch(io.f1_resp)
-  dontTouch(io.f2_resp)
-  dontTouch(io.f3_resp)
+  dontTouch(io.resp.f1)
+  dontTouch(io.resp.f2)
+  dontTouch(io.resp.f3)
   dontTouch(io.update)
 
   if (nBanks == 1) {

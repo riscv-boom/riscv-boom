@@ -98,13 +98,13 @@ class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams)(implicit p: Pa
     alloc_way)
 
   for (w <- 0 until bankWidth) {
-    io.f1_resp(w).predicted_pc := s1_resp(w)
-    io.f1_resp(w).is_br        := s1_is_br(w)
-    io.f1_resp(w).is_jal       := s1_is_jal(w)
-    io.f1_resp(w).taken        := s1_taken(w)
+    io.resp.f1(w).predicted_pc := s1_resp(w)
+    io.resp.f1(w).is_br        := s1_is_br(w)
+    io.resp.f1(w).is_jal       := s1_is_jal(w)
+    io.resp.f1(w).taken        := s1_taken(w)
 
-    io.f2_resp(w) := RegNext(io.f1_resp(w))
-    io.f3_resp(w) := RegNext(io.f2_resp(w))
+    io.resp.f2(w) := RegNext(io.resp.f1(w))
+    io.resp.f3(w) := RegNext(io.resp.f2(w))
   }
   io.f3_meta := RegNext(RegNext(s1_meta.asUInt))
 

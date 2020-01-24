@@ -44,15 +44,15 @@ class SwBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank(
                                       io.update.bits.cfi_idx.valid
 
 
-    io.f1_resp(w).taken := pred_harness.io.req_taken
-    io.f1_resp(w).predicted_pc.valid := btb_harness.io.req_target_valid
-    io.f1_resp(w).predicted_pc.bits  := btb_harness.io.req_target_pc
-    io.f1_resp(w).is_br              := btb_harness.io.req_is_br  && btb_harness.io.req_target_valid
-    io.f1_resp(w).is_jal             := btb_harness.io.req_is_jal && btb_harness.io.req_target_valid
+    io.resp.f1(w).taken := pred_harness.io.req_taken
+    io.resp.f1(w).predicted_pc.valid := btb_harness.io.req_target_valid
+    io.resp.f1(w).predicted_pc.bits  := btb_harness.io.req_target_pc
+    io.resp.f1(w).is_br              := btb_harness.io.req_is_br  && btb_harness.io.req_target_valid
+    io.resp.f1(w).is_jal             := btb_harness.io.req_is_jal && btb_harness.io.req_target_valid
 
     // The Harness to software assumes output comes out in f1
-    io.f3_resp(w).is_br := RegNext(RegNext(pred_harness.io.req_taken))
-    io.f3_resp(w).taken := RegNext(RegNext(pred_harness.io.req_taken))
+    io.resp.f3(w).is_br := RegNext(RegNext(pred_harness.io.req_taken))
+    io.resp.f3(w).taken := RegNext(RegNext(pred_harness.io.req_taken))
   }
 
 }
