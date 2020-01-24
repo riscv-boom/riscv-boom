@@ -627,10 +627,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Backpressure through dispatcher if necessary
   for (i <- 0 until issueParams.size) {
     if (issueParams(i).iqType == IQT_FP.litValue) {
-       fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(i)
+      fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(i)
     } else {
-       issue_units(iu_idx).io.dis_uops <> dispatcher.io.dis_uops(i)
-       iu_idx += 1
+      issue_units(iu_idx).io.dis_uops <> dispatcher.io.dis_uops(i)
+      iu_idx += 1
     }
   }
 
@@ -720,7 +720,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
   if (usingFPU) {
     for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
-       renport <> fpport
+      renport <> fpport
     }
   }
 
