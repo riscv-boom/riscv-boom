@@ -1073,7 +1073,7 @@ workflows:
             - aws-approval:
                 type: approval
 
-            - initialize-manager
+            - initialize-manager:
                 context: aws
                 requires:
                     - aws-approval
