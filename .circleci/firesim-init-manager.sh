@@ -9,7 +9,7 @@
 # turn echo on and error on earliest command
 set -ex
 
-SCRIPT_DIR="$( cd "$( dirname "$TEMP" )" && pwd )"
+SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 echo "$SCRIPT_DIR"
 
 # get the firesim instance launch script
