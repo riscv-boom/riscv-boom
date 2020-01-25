@@ -90,20 +90,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     fp_pipeline.io.wb_pdsts  := DontCare
   }
 
-  val numIrfWritePorts        = exe_units.numIrfWritePorts + memWidth
-  val numLlIrfWritePorts      = exe_units.numLlIrfWritePorts
-  val numIrfReadPorts         = exe_units.numIrfReadPorts
-
-  val numFastWakeupPorts      = exe_units.count(_.bypassable)
-  val numAlwaysBypassable     = exe_units.count(_.alwaysBypassable)
-
-  val numIntIssueWakeupPorts  = numIrfWritePorts + numFastWakeupPorts - numAlwaysBypassable // + memWidth for ll_wb
-  val numIntRenameWakeupPorts = numIntIssueWakeupPorts
-  val numFpWakeupPorts        = if (usingFPU) fp_pipeline.io.wakeups.length else 0
+  val numIrfWritePorts   = exe_units.numIrfWritePorts + memWidth
+  val numLlIrfWritePorts = exe_units.numLlIrfWritePorts
+  val numIrfReadPorts    = exe_units.numIrfReadPorts
+  val numFpWakeupPorts   = if (usingFPU) fp_pipeline.io.wakeups.length else 0
 
   val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
   val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
-  val rename_stage     = Module(new RenameStage(coreWidth, numIntPhysRegs, numIntRenameWakeupPorts, false))
+  val rename_stage     = Module(new RenameStage(coreWidth, numIntPhysRegs, coreWidth, false))
   val fp_rename_stage  = if (usingFPU) Module(new RenameStage(coreWidth, numFpPhysRegs, numFpWakeupPorts, true))
                          else null
   val rename_stages    = if (usingFPU) Seq(rename_stage, fp_rename_stage) else Seq(rename_stage)
@@ -136,11 +130,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val rob              = Module(new Rob(
                            numIrfWritePorts + numFpWakeupPorts, // +memWidth for ll writebacks
                            numFpWakeupPorts))
-  // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
-  val int_iss_wakeups  = Wire(Vec(numIntIssueWakeupPorts, Valid(new ExeUnitResp(xLen))))
-  val int_ren_wakeups  = Wire(Vec(numIntRenameWakeupPorts, Valid(new ExeUnitResp(xLen))))
-  int_iss_wakeups := DontCare
-  int_ren_wakeups := DontCare
+  // Used to wakeup registers in rename and issue. ROB watches execution unit responses.
+  val wb_ports = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
+  val wakeups  = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
+  wakeups := DontCare
 
   require (exe_units.length == issue_units.map(_.issueWidth).sum)
 
@@ -640,82 +633,21 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  require (issue_units.map(_.issueWidth).sum == exe_units.length)
-
-  var iss_wu_idx = 1
-  var ren_wu_idx = 1
-  // The 0th wakeup port goes to the ll_wbarb
-  int_iss_wakeups(0).valid := ll_wbarb.io.out.fire() && ll_wbarb.io.out.bits.uop.dst_rtype === RT_FIX
-  int_iss_wakeups(0).bits  := ll_wbarb.io.out.bits
-
-  int_ren_wakeups(0).valid := ll_wbarb.io.out.fire() && ll_wbarb.io.out.bits.uop.dst_rtype === RT_FIX
-  int_ren_wakeups(0).bits  := ll_wbarb.io.out.bits
-
-  for (i <- 1 until memWidth) {
-    int_iss_wakeups(i).valid := mem_resps(i).valid && mem_resps(i).bits.uop.dst_rtype === RT_FIX
-    int_iss_wakeups(i).bits  := mem_resps(i).bits
-
-    int_ren_wakeups(i).valid := mem_resps(i).valid && mem_resps(i).bits.uop.dst_rtype === RT_FIX
-    int_ren_wakeups(i).bits  := mem_resps(i).bits
-    iss_wu_idx += 1
-    ren_wu_idx += 1
+  // Generate 'slow' wakeup signals from writeback ports.
+  for (i <- 0 until coreWidth) {
+     wakeups(i).bits.uop := resp.bits.uop
+     wakeups(i).valid    := resp.valid
+                           && resp.bits.uop.rf_wen
+                           && !resp.bits.uop.bypassable
+                           && resp.bits.uop.dst_rtype === RT_FIX
   }
-
-  // loop through each issue-port (exe_units are statically connected to an issue-port)
-  for (i <- 0 until exe_units.length) {
-    if (exe_units(i).writesIrf) {
-      val fast_wakeup = Wire(Valid(new ExeUnitResp(xLen)))
-      val slow_wakeup = Wire(Valid(new ExeUnitResp(xLen)))
-      fast_wakeup := DontCare
-      slow_wakeup := DontCare
-
-      val resp = exe_units(i).io.iresp
-      assert(!(resp.valid && resp.bits.uop.rf_wen && resp.bits.uop.dst_rtype =/= RT_FIX))
-
-      // Fast Wakeup (uses just-issued uops that have known latencies)
-      fast_wakeup.bits.uop := iss_uops(i)
-      fast_wakeup.valid    := iss_valids(i) &&
-                              iss_uops(i).bypassable &&
-                              iss_uops(i).dst_rtype === RT_FIX &&
-                              iss_uops(i).ldst_val &&
-                              !(io.lsu.ld_miss && (iss_uops(i).iw_p1_poisoned || iss_uops(i).iw_p2_poisoned))
-
-      // Slow Wakeup (uses write-port to register file)
-      slow_wakeup.bits.uop := resp.bits.uop
-      slow_wakeup.valid    := resp.valid &&
-                                resp.bits.uop.rf_wen &&
-                                !resp.bits.uop.bypassable &&
-                                resp.bits.uop.dst_rtype === RT_FIX
-
-      if (exe_units(i).bypassable) {
-        int_iss_wakeups(iss_wu_idx) := fast_wakeup
-        iss_wu_idx += 1
-      }
-      if (!exe_units(i).alwaysBypassable) {
-        int_iss_wakeups(iss_wu_idx) := slow_wakeup
-        iss_wu_idx += 1
-      }
-
-      if (exe_units(i).bypassable) {
-        int_ren_wakeups(ren_wu_idx) := fast_wakeup
-        ren_wu_idx += 1
-      }
-      if (!exe_units(i).alwaysBypassable) {
-        int_ren_wakeups(ren_wu_idx) := slow_wakeup
-        ren_wu_idx += 1
-      }
-    }
-  }
-  require (iss_wu_idx == numIntIssueWakeupPorts)
-  require (ren_wu_idx == numIntRenameWakeupPorts)
-  require (iss_wu_idx == ren_wu_idx)
 
   // Perform load-hit speculative wakeup through a special port (performs a poison wake-up).
   issue_units map { iu =>
      iu.io.spec_ld_wakeup := io.lsu.spec_ld_wakeup
   }
 
-  for ((renport, intport) <- rename_stage.io.wakeups zip int_ren_wakeups) {
+  for ((renport, intport) <- rename_stage.io.wakeups zip wakeups) {
     renport <> intport
   }
   if (usingFPU) {
