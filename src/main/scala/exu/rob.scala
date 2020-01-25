@@ -323,11 +323,6 @@ class Rob(
       when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx))) {
         rob_bsy(row_idx)      := false.B
         rob_unsafe(row_idx)   := false.B
-        if (O3PIPEVIEW_PRINTF) {
-          printf("%d; O3PipeView:complete:%d\n",
-            rob_uop(row_idx).debug_events.fetch_seq,
-            io.debug_tsc)
-        }
       }
       // TODO check that fflags aren't overwritten
       // TODO check that the wb is to a valid ROB entry, give it a time stamp
@@ -344,11 +339,6 @@ class Rob(
         rob_bsy(cidx)    := false.B
         assert (rob_val(cidx) === true.B, "[rob] store writing back to invalid entry.")
         assert (rob_bsy(cidx) === true.B, "[rob] store writing back to a not-busy entry.")
-
-        if (O3PIPEVIEW_PRINTF) {
-          printf("%d; O3PipeView:complete:%d\n",
-            rob_uop(GetRowIdx(clr_rob_idx.bits)).debug_events.fetch_seq, io.debug_tsc)
-        }
       }
     }
     for (clr <- io.lsu_clr_unsafe) {
@@ -879,105 +869,6 @@ class Rob(
   io.debug.xcpt_val := r_xcpt_val
   io.debug.xcpt_uop := r_xcpt_uop
   io.debug.xcpt_badvaddr := r_xcpt_badvaddr
-
-  if (DEBUG_PRINTF_ROB) {
-    printf("ROB:\n")
-    printf("    Xcpt: V:%c Cause:0x%x RobIdx:%d BMsk:0x%x BadVAddr:0x%x\n",
-      BoolToChar(r_xcpt_val, 'E'),
-      io.debug.xcpt_uop.exc_cause,
-      io.debug.xcpt_uop.rob_idx,
-      io.debug.xcpt_uop.br_mask,
-      io.debug.xcpt_badvaddr)
-
-    var r_idx = 0
-    // scalastyle:off
-    for (i <- 0 until (numRobEntries/coreWidth)) {
-      val row = if (coreWidth == 1) r_idx else (r_idx >> log2Ceil(coreWidth))
-      val r_head = rob_head
-      val r_tail = rob_tail
-
-      printf("    ROB[%d]: %c %c (",
-        row.U(robAddrSz.W),
-        Mux(r_head === row.U && r_tail === row.U, Str("B"),
-          Mux(r_head === row.U, Str("H"),
-            Mux(r_tail === row.U, Str("T"), Str(" ")))),
-        Mux(rob_pnr === row.U, Str("P"), Str(" ")))
-
-      if (coreWidth == 1) {
-        printf("(%c)(%c)(%c) 0x%x [DASM(%x)] %c ",
-          BoolToChar( debug_entry(r_idx+0).valid, 'V'),
-          BoolToChar(  debug_entry(r_idx+0).busy, 'B'),
-          BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
-          debug_entry(r_idx+0).uop.debug_pc(31,0),
-          debug_entry(r_idx+0).uop.debug_inst,
-          BoolToChar(debug_entry(r_idx+0).exception, 'E'))
-      } else if (coreWidth == 2) {
-        val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid
-        printf("(%c%c)(%c%c)(%c%c) 0x%x %x [DASM(%x)][DASM(%x)" + "] %c,%c %d,%d ",
-          BoolToChar( debug_entry(r_idx+0).valid, 'V'),
-          BoolToChar( debug_entry(r_idx+1).valid, 'V'),
-          BoolToChar(  debug_entry(r_idx+0).busy, 'B'),
-          BoolToChar(  debug_entry(r_idx+1).busy, 'B'),
-          BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
-          BoolToChar(debug_entry(r_idx+1).unsafe, 'U'),
-          debug_entry(r_idx+0).uop.debug_pc(31,0),
-          debug_entry(r_idx+1).uop.debug_pc(15,0),
-          debug_entry(r_idx+0).uop.debug_inst,
-          debug_entry(r_idx+1).uop.debug_inst,
-          BoolToChar(debug_entry(r_idx+0).exception, 'E'),
-          BoolToChar(debug_entry(r_idx+1).exception, 'E'),
-          debug_entry(r_idx+0).uop.ftq_idx,
-          debug_entry(r_idx+1).uop.ftq_idx)
-      } else if (coreWidth == 4) {
-        val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid || debug_entry(r_idx+2).valid || debug_entry(r_idx+3).valid
-        printf("(%c%c%c%c)(%c%c%c%c)(%c%c%c%c) 0x%x %x %x %x [DASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + "]%c%c%c%c",
-          BoolToChar(debug_entry(r_idx+0).valid,  'V'),
-          BoolToChar(debug_entry(r_idx+1).valid,  'V'),
-          BoolToChar(debug_entry(r_idx+2).valid,  'V'),
-          BoolToChar(debug_entry(r_idx+3).valid,  'V'),
-          BoolToChar(debug_entry(r_idx+0).busy,   'B'),
-          BoolToChar(debug_entry(r_idx+1).busy,   'B'),
-          BoolToChar(debug_entry(r_idx+2).busy,   'B'),
-          BoolToChar(debug_entry(r_idx+3).busy,   'B'),
-          BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
-          BoolToChar(debug_entry(r_idx+1).unsafe, 'U'),
-          BoolToChar(debug_entry(r_idx+2).unsafe, 'U'),
-          BoolToChar(debug_entry(r_idx+3).unsafe, 'U'),
-          debug_entry(r_idx+0).uop.debug_pc(23,0),
-          debug_entry(r_idx+1).uop.debug_pc(15,0),
-          debug_entry(r_idx+2).uop.debug_pc(15,0),
-          debug_entry(r_idx+3).uop.debug_pc(15,0),
-          debug_entry(r_idx+0).uop.debug_inst,
-          debug_entry(r_idx+1).uop.debug_inst,
-          debug_entry(r_idx+2).uop.debug_inst,
-          debug_entry(r_idx+3).uop.debug_inst,
-          BoolToChar(debug_entry(r_idx+0).exception, 'E'),
-          BoolToChar(debug_entry(r_idx+1).exception, 'E'),
-          BoolToChar(debug_entry(r_idx+2).exception, 'E'),
-          BoolToChar(debug_entry(r_idx+3).exception, 'E'))
-      } else {
-        println("  BOOM's Chisel printf does not support commit_width >= " + coreWidth)
-      }
-
-      var temp_idx = r_idx
-      for (w <- 0 until coreWidth) {
-        printf("(d:%c p%d, bm:%x sdt:%d) ",
-          Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FIX, Str("X"),
-            Mux(debug_entry(temp_idx).uop.dst_rtype === RT_PAS, Str("C"),
-              Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FLT, Str("f"),
-                Mux(debug_entry(temp_idx).uop.dst_rtype === RT_X, Str("-"), Str("?"))))),
-          debug_entry(temp_idx).uop.pdst,
-          debug_entry(temp_idx).uop.br_mask,
-          debug_entry(temp_idx).uop.stale_pdst)
-        temp_idx = temp_idx + 1
-      }
-
-      r_idx = r_idx + coreWidth
-
-      printf("\n")
-    }
-    // scalastyle:off
-  }
 
   override def toString: String = BoomCoreStringPrefix(
     "==ROB==",
