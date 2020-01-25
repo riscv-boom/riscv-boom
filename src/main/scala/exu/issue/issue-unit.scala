@@ -86,8 +86,6 @@ class IssueUnitIO(
   val ld_miss          = Input(Bool())
 
   val event_empty      = Output(Bool()) // used by HPM events; is the issue unit empty?
-
-  val tsc_reg          = Input(UInt(width=xLen.W))
 }
 
 /**

@@ -754,7 +754,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
   require(iss_idx == exe_units.numIrfReaders)
 
-  issue_units.map(_.io.tsc_reg := debug_tsc_reg)
   issue_units.map(_.io.brinfo := br_unit.brinfo)
   issue_units.map(_.io.flush_pipeline := rob.io.flush.valid)
 
