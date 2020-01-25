@@ -17,8 +17,7 @@ case class BoomBTBParams(
   nSets: Int = 128,
   nWays: Int = 2,
   offsetSz: Int = 13,
-  extendedNSets: Int = 32,
-  bimNSets: Int = 2048
+  extendedNSets: Int = 32
 )
 
 
@@ -34,7 +33,6 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
   require(isPow2(extendedNSets) || extendedNSets == 0)
   require(extendedNSets <= nSets)
   require(extendedNSets >= 1)
-  require(nSets <= params.bimNSets)
 
   class BTBEntry extends Bundle {
     val offset   = SInt(offsetSz.W)
@@ -56,16 +54,9 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
   val f3_meta = RegNext(RegNext(s1_meta))
 
 
-  val bim = Module(new BIMBranchPredictorBank(params.bimNSets))
-  bim.io.f1_kill := io.f1_kill
-  bim.io.f2_kill := io.f2_kill
-  bim.io.f3_kill := io.f3_kill
+  io.f3_meta := f3_meta.asUInt
 
-  bim.io.f0_req := io.f0_req
-  bim.io.update := io.update
-  io.f3_meta := Cat(f3_meta.asUInt, bim.io.f3_meta(bim.metaSz-1,0))
-
-  override val metaSz = bim.metaSz + s1_meta.asUInt.getWidth
+  override val metaSz = s1_meta.asUInt.getWidth
 
   val doing_reset = RegInit(true.B)
   val reset_idx   = RegInit(0.U(log2Ceil(nSets).W))
@@ -107,7 +98,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
     io.resp.f2(w).predicted_pc := RegNext(s1_resp(w))
     io.resp.f2(w).is_br        := RegNext(s1_is_br(w))
     io.resp.f2(w).is_jal       := RegNext(s1_is_jal(w))
-    io.resp.f2(w).taken        := RegNext(s1_is_jal(w)) || bim.io.resp.f2(w).taken
+    io.resp.f2(w).taken        := RegNext(s1_is_jal(w)) || io.resp_in.f2(w).taken || RegNext(io.resp_in.f1(w).taken)
 
     io.resp.f3(w)              := RegNext(io.resp.f2(w))
   }
@@ -128,7 +119,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
     alloc_way)
 
   val s1_update_cfi_idx = s1_update.bits.cfi_idx.bits
-  val s1_update_meta    = (s1_update.bits.meta >> bim.metaSz).asTypeOf(new BTBPredictMeta)
+  val s1_update_meta    = s1_update.bits.meta.asTypeOf(new BTBPredictMeta)
 
   val max_offset_value = Cat(0.B, ~(0.U((offsetSz-1).W))).asSInt
   val min_offset_value = Cat(1.B,  (0.U((offsetSz-1).W))).asSInt

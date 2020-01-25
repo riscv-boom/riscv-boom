@@ -54,16 +54,12 @@ class BIMBranchPredictorBank(nSets: Int)(implicit p: Parameters) extends BranchP
   val s1_update_meta    = s1_update.bits.meta.asTypeOf(new BIMMeta)
 
 
-  val s1_resp           = Wire(Vec(bankWidth, new BranchPrediction))
+  val s1_resp           = Wire(Vec(bankWidth, Bool()))
 
   for (w <- 0 until bankWidth) {
 
-    s1_resp(w).taken        := s1_req.valid && s1_req_rdata(w)(1) && !doing_reset
-    s1_resp(w).is_br        := false.B
-    s1_resp(w).is_jal       := false.B
-    s1_resp(w).predicted_pc.valid := false.B
-    s1_resp(w).predicted_pc.bits  := DontCare
-    s1_meta.bims(w)            := s1_req_rdata(w)
+    s1_resp(w)        := s1_req.valid && s1_req_rdata(w)(1) && !doing_reset
+    s1_meta.bims(w)   := s1_req_rdata(w)
   }
 
   val wrbypass_idxs = Reg(Vec(nWrBypassEntries, UInt(log2Ceil(nSets).W)))
@@ -121,7 +117,9 @@ class BIMBranchPredictorBank(nSets: Int)(implicit p: Parameters) extends BranchP
     }
   }
 
-  io.resp.f2 := RegNext(s1_resp)
-  io.resp.f3 := RegNext(io.resp.f2)
+  for (w <- 0 until bankWidth) {
+    io.resp.f2(w).taken := RegNext(s1_resp(w))
+    io.resp.f3(w).taken := RegNext(io.resp.f2(w).taken)
+  }
   io.f3_meta := RegNext(RegNext(s1_meta.asUInt))
 }

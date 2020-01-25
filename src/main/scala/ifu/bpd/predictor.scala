@@ -102,6 +102,14 @@ class BranchPredictionBankRequest(implicit p: Parameters) extends BoomBundle()(p
   val hist  = UInt(globalHistoryLength.W)
 }
 
+class BranchPredictionBankResponse(implicit p: Parameters) extends BoomBundle()(p)
+  with HasBoomFrontendParameters
+{
+  val f1 = Vec(bankWidth, new BranchPrediction)
+  val f2 = Vec(bankWidth, new BranchPrediction)
+  val f3 = Vec(bankWidth, new BranchPrediction)
+}
+
 abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(p)
   with HasBoomFrontendParameters
 {
@@ -114,20 +122,15 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
     val f2_kill = Input(Bool())
     val f3_kill = Input(Bool())
 
-    val resp = Output(new Bundle {
-      val f1 = Vec(bankWidth, new BranchPrediction)
-      val f2 = Vec(bankWidth, new BranchPrediction)
-      val f3 = Vec(bankWidth, new BranchPrediction)
-    })
+    val resp = Output(new BranchPredictionBankResponse)
+    val resp_in = Input(new BranchPredictionBankResponse)
 
     // Store the meta as a UInt, use width inference to figure out the shape
     val f3_meta = Output(UInt(bpdMaxMetaLength.W))
 
     val update = Input(Valid(new BranchPredictionBankUpdate))
   })
-  io.resp.f1 := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
-  io.resp.f2 := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
-  io.resp.f3 := (0.U).asTypeOf(Vec(bankWidth, new BranchPrediction))
+  io.resp := io.resp_in
 
   io.f3_meta := 0.U
 
@@ -178,7 +181,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     val update = Input(Valid(new BranchPredictionUpdate))
   })
 
-  val banked_predictors = Seq.fill(nBanks) { Module(new TageBranchPredictorBank) }
+  val banked_predictors = Seq.fill(nBanks) { Module(new ComposedBranchPredictorBank) }
   for (b <- 0 until nBanks) {
     dontTouch(banked_predictors(b).io)
     banked_predictors(b).io.f1_kill := io.f1_kill
@@ -190,8 +193,12 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     banked_predictors(0).io.f0_req.bits.hist  := io.f0_req.bits.ghist.histories(0)
     banked_predictors(0).io.f0_req.bits.pc    := bankAlign(io.f0_req.bits.pc)
     banked_predictors(0).io.f0_req.valid      := io.f0_req.valid
+
+    banked_predictors(0).io.resp_in           := (0.U).asTypeOf(new BranchPredictionBankResponse)
   } else {
     require(nBanks == 2)
+    banked_predictors(0).io.resp_in           := (0.U).asTypeOf(new BranchPredictionBankResponse)
+    banked_predictors(1).io.resp_in           := (0.U).asTypeOf(new BranchPredictionBankResponse)
     when (bank(io.f0_req.bits.pc) === 0.U) {
       banked_predictors(0).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(0)
       banked_predictors(0).io.f0_req.bits.pc   := bankAlign(io.f0_req.bits.pc)
