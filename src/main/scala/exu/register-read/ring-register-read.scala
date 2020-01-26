@@ -1,11 +1,11 @@
 //******************************************************************************
-// Copyright (c) 2012 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2012 - 2020, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// RISCV Processor Register Read
+// Ring Microarchitecture Register Read
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
@@ -28,27 +28,22 @@ import boom.util._
  * @param numTotalBypassPorts number of bypass ports out of the execution units
  * @param registerWidth size of register in bits
  */
-class RegisterReadIO(
-  val issueWidth: Int,
-  val numTotalReadPorts: Int,
-  val numTotalBypassPorts: Int,
-  val registerWidth: Int
-)(implicit p: Parameters) extends  BoomBundle
+class RingRegisterReadIO(val numReadPortsPerColumn: Int)
+(implicit p: Parameters) extends BoomBundle
 {
   // issued micro-ops
-  val iss_valids = Input(Vec(issueWidth, Bool()))
-  val iss_uops   = Input(Vec(issueWidth, new MicroOp()))
+  val iss_uops = Input(Vec(issueWidth, Valid(new MicroOp)))
 
   // interface with register file's read ports
-  val rf_read_ports = Flipped(Vec(numTotalReadPorts, new RegisterFileReadPortIO(maxPregSz, registerWidth)))
+  val rf_read_ports = Flipped(Vec(coreWidth, Vec(numReadPortsPerColumn, new RegisterFileReadPortIO(ipregSz, xLen))))
 
-  val bypass = Input(new BypassData(numTotalBypassPorts, registerWidth))
+  val bypass = Input(new BypassData(coreWidth, xLen))
 
   // send micro-ops to the execution pipelines
-  val exe_reqs = Vec(issueWidth, (new DecoupledIO(new FuncUnitReq(registerWidth))))
+  val exe_reqs = Vec(issueWidth, new DecoupledIO(new FuncUnitReq(registerWidth)))
 
   val kill   = Input(Bool())
-  val brinfo = Input(new BrResolutionInfo())
+  val brinfo = Input(new BrResolutionInfo)
 }
 
 /**
@@ -63,7 +58,7 @@ class RegisterReadIO(
  * @param numTotalBypassPorts number of bypass ports out of the execution units
  * @param registerWidth size of register in bits
  */
-class RegisterRead(
+class RingRegisterRead(
   issueWidth: Int,
   supportedUnitsArray: Seq[SupportedFuncUnits],
   numTotalReadPorts: Int,
