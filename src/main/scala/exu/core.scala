@@ -130,7 +130,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                            numFpWakeupPorts))
   // Used to wakeup registers in rename and issue. ROB watches execution unit responses.
   val wb_ports = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
-  val wakeups  = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
+  val wakeups  = Wire(Vec(coreWidth, Valid(UInt(pregSz.W))))
   wakeups := DontCare
 
   //***********************************
@@ -621,11 +621,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Generate 'slow' wakeup signals from writeback ports.
   for (i <- 0 until coreWidth) {
-     wakeups(i).bits.uop := resp.bits.uop
-     wakeups(i).valid    := resp.valid
-                           && resp.bits.uop.rf_wen
-                           && !resp.bits.uop.bypassable
-                           && resp.bits.uop.dst_rtype === RT_FIX
+     wakeups(i).bits  := resp.bits.uop.pdst
+     wakeups(i).valid := resp.valid
+                        && resp.bits.uop.rf_wen
+                        && !resp.bits.uop.bypassable
+                        && resp.bits.uop.dst_rtype === RT_FIX
   }
 
   for ((renport, intport) <- rename_stage.io.wakeups zip wakeups) {
