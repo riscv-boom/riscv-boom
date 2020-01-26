@@ -102,10 +102,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                          else null
   val rename_stages    = if (usingFPU) Seq(rename_stage, fp_rename_stage) else Seq(rename_stage)
 
-  val int_issue_queues = ArrayList.fill(coreWidth)(Module(new IssueQueue(intIssueParam, numIntIssueWakeupPorts)))
-  (0 until coreWidth) foreach { w => int_issue_queues(w).suggestName("int_issue_queue_" + s"$w"}
+  val scheduler        = Module(new RingScheduler(intIssueParam.issueWidth))
 
-  val issue_units      = Seq(mem_iss_unit, int_iss_unit)
   val dispatcher       = Module(new BasicDispatcher)
 
   val iregfile         = Module(new RegisterFileSynthesizable(
@@ -121,7 +119,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                                                                    (if (usingFPU) 1 else 0) +
                                                                    (if (usingRoCC) 1 else 0)))
   val iregister_read   = Module(new RegisterRead(
-                           issue_units.map(_.issueWidth).sum,
+                           coreWidth,
                            exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits),
                            numIrfReadPorts,
                            exe_units.withFilter(_.readsIrf).map(x => 2),
@@ -134,8 +132,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val wb_ports = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
   val wakeups  = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
   wakeups := DontCare
-
-  require (exe_units.length == issue_units.map(_.issueWidth).sum)
 
   //***********************************
   // Pipeline State Registers and Wires
@@ -609,23 +605,13 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // Dispatch to issue queues
 
-  // Get uops from rename2
   for (w <- 0 until coreWidth) {
-    dispatcher.io.ren_uops(w).valid := dis_fire(w)
-    dispatcher.io.ren_uops(w).bits  := dis_uops(w)
+    ring_scheduler.io.dis_uops(w).bits  := dis_uops(w)
+    ring_scheduler.io.dis_uops(w).valid := dis_valids(w)
   }
 
-  var iu_idx = 0
-  // Send dispatched uops to correct issue queues
-  // Backpressure through dispatcher if necessary
-  for (i <- 0 until issueParams.size) {
-    if (issueParams(i).iqType == IQT_FP.litValue) {
-      fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(i)
-    } else {
-      issue_units(iu_idx).io.dis_uops <> dispatcher.io.dis_uops(i)
-      iu_idx += 1
-    }
-  }
+  // Only fp_pipeline uses the 'dispatcher' module
+  fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(0)
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -640,11 +626,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                            && resp.bits.uop.rf_wen
                            && !resp.bits.uop.bypassable
                            && resp.bits.uop.dst_rtype === RT_FIX
-  }
-
-  // Perform load-hit speculative wakeup through a special port (performs a poison wake-up).
-  issue_units map { iu =>
-     iu.io.spec_ld_wakeup := io.lsu.spec_ld_wakeup
   }
 
   for ((renport, intport) <- rename_stage.io.wakeups zip wakeups) {
@@ -686,26 +667,17 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
   require(iss_idx == exe_units.numIrfReaders)
 
-  issue_units.map(_.io.brinfo := br_unit.brinfo)
-  issue_units.map(_.io.flush_pipeline := rob.io.flush.valid)
+  scheduler.io.brinfo := br_unit.brinfo
+  scheduler.io.flush  := rob.io.flush.valid
 
   // Load-hit Misspeculations
   require (mem_iss_unit.issueWidth <= 2)
-  issue_units.map(_.io.ld_miss := io.lsu.ld_miss)
+  scheduler.io.ld_miss := io.lsu.ld_miss
 
   mem_units.map(u => u.io.com_exception := rob.io.flush.valid)
 
-  // Wakeup (Issue & Writeback)
-  for {
-    iu <- issue_units
-    (issport, wakeup) <- iu.io.wakeup_ports zip int_iss_wakeups
-  }{
-    issport.valid := wakeup.valid
-    issport.bits.pdst := wakeup.bits.uop.pdst
-    issport.bits.poisoned := wakeup.bits.uop.iw_p1_poisoned || wakeup.bits.uop.iw_p2_poisoned
-
-    require (iu.io.wakeup_ports.length == int_iss_wakeups.length)
-  }
+  // Send slow wakeups to scheduler
+  scheduler.io.wakeups := wakeups
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
