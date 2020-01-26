@@ -59,32 +59,24 @@ class RingRegisterReadIO(val numReadPortsPerColumn: Int)
  * @param registerWidth size of register in bits
  */
 class RingRegisterRead(
-  issueWidth: Int,
   supportedUnitsArray: Seq[SupportedFuncUnits],
-  numTotalReadPorts: Int,
-  numReadPortsArray: Seq[Int],
-                        // each exe_unit must tell us how many max
-                        // operands it can accept (the sum should equal
-                        // numTotalReadPorts)
-  numTotalBypassPorts: Int,
-  registerWidth: Int
+  numReadPortsPerColumn: Int
 )(implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new RegisterReadIO(issueWidth, numTotalReadPorts, numTotalBypassPorts, registerWidth))
+  val io = IO(new RegisterReadIO(numReadPortsPerColumn))
 
-  val rrd_valids       = Wire(Vec(issueWidth, Bool()))
-  val rrd_uops         = Wire(Vec(issueWidth, new MicroOp()))
+  val rrd_valids       = Wire(Vec(coreWidth, Bool()))
+  val rrd_uops         = Wire(Vec(coreWidth, new MicroOp))
 
   val exe_reg_valids   = RegInit(VecInit(Seq.fill(issueWidth) { false.B }))
-  val exe_reg_uops     = Reg(Vec(issueWidth, new MicroOp()))
-  val exe_reg_rs1_data = Reg(Vec(issueWidth, Bits(registerWidth.W)))
-  val exe_reg_rs2_data = Reg(Vec(issueWidth, Bits(registerWidth.W)))
-  val exe_reg_rs3_data = Reg(Vec(issueWidth, Bits(registerWidth.W)))
+  val exe_reg_uops     = Reg(Vec(coreWidth, new MicroOp()))
+  val exe_reg_rs1_data = Reg(Vec(coreWidth, Bits(xLen.W)))
+  val exe_reg_rs2_data = Reg(Vec(coreWidth, Bits(xLen.W)))
 
   //-------------------------------------------------------------
   // hook up inputs
 
-  for (w <- 0 until issueWidth) {
+  for (w <- 0 until coreWidth) {
     val rrd_decode_unit = Module(new RegisterReadDecode(supportedUnitsArray(w)))
     rrd_decode_unit.io.iss_valid := io.iss_valids(w)
     rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
@@ -95,16 +87,12 @@ class RingRegisterRead(
   }
 
   //-------------------------------------------------------------
-  // read ports
+  // read ports TODO: rewrite this as crossbar
 
-  require (numTotalReadPorts == numReadPortsArray.reduce(_+_))
-
-  val rrd_rs1_data   = Wire(Vec(issueWidth, Bits(registerWidth.W)))
-  val rrd_rs2_data   = Wire(Vec(issueWidth, Bits(registerWidth.W)))
-  val rrd_rs3_data   = Wire(Vec(issueWidth, Bits(registerWidth.W)))
+  val rrd_rs1_data = Wire(Vec(coreWidth, Bits(xLen.W)))
+  val rrd_rs2_data = Wire(Vec(coreWidth, Bits(xLen.W)))
   rrd_rs1_data := DontCare
   rrd_rs2_data := DontCare
-  rrd_rs3_data := DontCare
 
   var idx = 0 // index into flattened read_ports array
   for (w <- 0 until issueWidth) {
@@ -143,7 +131,7 @@ class RingRegisterRead(
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // BYPASS MUXES -----------------------------------------------
-  // performed at the end of the register read stage
+  // performed at the end of the register read stage TODO: do this in the ring-style
 
   // NOTES: this code is fairly hard-coded. Sorry.
   // ASSUMPTIONS:
