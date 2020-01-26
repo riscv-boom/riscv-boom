@@ -128,9 +128,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val rob              = Module(new Rob(
                            numIrfWritePorts + numFpWakeupPorts, // +memWidth for ll writebacks
                            numFpWakeupPorts))
-  // Used to wakeup registers in rename and issue. ROB watches execution unit responses.
-  val wb_ports = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
-  val wakeups  = Wire(Vec(coreWidth, Valid(UInt(pregSz.W))))
+
+  val writebacks = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
+  val wakeups    = Wire(Vec(coreWidth, Valid(UInt(pregSz.W)))) // 'Slow' wakeups
   wakeups := DontCare
 
   //***********************************
