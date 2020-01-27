@@ -93,6 +93,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val prs2             = UInt(maxPregSz.W)
   val prs3             = UInt(maxPregSz.W)
 
+  val fast_prs_sel     = Bool() // Which prs was used to pick a dst column? Can receive a bypassed operand.
+                                // 0 = prs1, 1 = prs2
+  def GetFastOperand   = Mux(fast_prs_sel, prs2, prs1)
+
   val prs1_busy        = Bool()
   val prs2_busy        = Bool()
   val prs3_busy        = Bool()

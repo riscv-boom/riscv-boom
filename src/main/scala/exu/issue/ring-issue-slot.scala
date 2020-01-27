@@ -25,7 +25,7 @@ import FUConstants._
  *
  * @param numWakeupPorts number of wakeup ports for the slot
  */
-class RingIssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomBundle
+class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
 {
   val valid         = Output(Bool())
   val will_be_valid = Output(Bool())
@@ -37,7 +37,8 @@ class RingIssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends B
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
   val ldspec_miss   = Input(Bool())
 
-  val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(maxPregSz))))
+  val slow_wakeups  = Input(Vec(coreWidth, Valid(UInt(ipregSz.W))))
+  val fast_wakeup   = Input(Valid(UInt(ipregSz.W)))
 
   val in_uop        = Flipped(Valid(new MicroOp())) // Received from dispatch or another slot during compaction
   val out_uop       = Output(new MicroOp()) // The updated slot uop; will be shifted upwards in a collasping queue
@@ -143,7 +144,10 @@ class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
     p2 := !(io.in_uop.bits.prs2_busy)
   }
 
-  for (i <- 0 until numWakeupPorts) {
+  // Perform slow wakeups
+  // TODO can optimize this once column steering is implemented
+  // Or, should we leave it like this to allow greater dispatching flexibility? TBD.
+  for (w <- 0 until coreWidth) {
     when (io.wakeup_ports(i).valid &&
          (io.wakeup_ports(i).bits.pdst === next_uop.prs1)) {
       p1 := true.B
@@ -151,6 +155,16 @@ class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
     when (io.wakeup_ports(i).valid &&
          (io.wakeup_ports(i).bits.pdst === next_uop.prs2)) {
       p2 := true.B
+    }
+  }
+
+  // Perform fast wakeup
+  val fast_prs = slot_uop.GetFastOperand
+  when (io.fast_wakeup.valid && fast_prs === io.fast_wakeup.bits) {
+    when (slot_uop.fast_prs_sel) {
+      p2 := true.B
+    } .otherwise {
+      p1 := true.B
     }
   }
 
