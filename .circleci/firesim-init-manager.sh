@@ -12,6 +12,9 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 echo "$SCRIPT_DIR"
 
+# install rsync
+sudo apt-get install -y rsync
+
 # get the firesim instance launch script
 git clone --progress --verbose https://github.com/ucb-bar/chipyard.git
 cd chipyard
@@ -44,14 +47,14 @@ aws ec2 run-instances \
     --associate-public-ip-address &> output.json
 
 # get the instance id
-grep InstanceId output.json | sed -r 's/.*InstanceId.*\"(.*)\",/\1/' &> $HOME/FSIM_MANAGER_INSTANCE_DATA.txt
+grep InstanceId output.json | sed -r 's/.*InstanceId.*\"(.*)\",.*/\1/' &> $HOME/FSIM_MANAGER_INSTANCE_DATA.txt
 
 # wait for mins for instance to boot/install items
 sleep 3m
 
 # get the assigned public ip address
 aws ec2 describe-instances --instance-ids $(cat $HOME/FSIM_MANAGER_INSTANCE_DATA.txt) &> output.json
-grep PublicIpAddress output.json | sed -r 's/.*PublicIpAddress.*\"(.*)\",/\1/' >> $HOME/FSIM_MANAGER_INSTANCE_DATA.txt
+grep PublicIpAddress output.json | sed -r 's/.*PublicIpAddress.*\"(.*)\",.*/\1/' >> $HOME/FSIM_MANAGER_INSTANCE_DATA.txt
 
 # setup AWS_SERVER variable
 AWS_SERVER=centos@$(sed -n '2p' $HOME/FSIM_MANAGER_INSTANCE_DATA.txt)
@@ -61,9 +64,6 @@ cd $HOME/project
 
 # get shared variables
 source $SCRIPT_DIR/defaults.sh
-
-# install rsync
-sudo apt-get install -y rsync
 
 # set stricthostkeychecking to no (must happen before rsync)
 run_aws "echo \"Ping $AWS_SERVER\""
