@@ -747,8 +747,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f4 = withReset(reset.toBool || f4_clear) {
     Module(new Queue(new FetchBundle, 1, pipe=true, flow=false))}
 
-  val fb  = Module(new FetchBuffer(numEntries=numFetchBufferEntries))
-  val ftq = Module(new FetchTargetQueue(num_entries=ftqSz))
+  val fb  = Module(new FetchBuffer)
+  val ftq = Module(new FetchTargetQueue)
+
 
   f4_ready := f4.io.enq.ready
   f4.io.enq.valid := f3.io.deq.valid && !f3_clear

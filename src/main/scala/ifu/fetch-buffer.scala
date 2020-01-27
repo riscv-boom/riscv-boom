@@ -39,10 +39,11 @@ class FetchBufferResp(implicit p: Parameters) extends BoomBundle
  *
  * @param num_entries effectively the number of full-sized fetch packets we can hold.
  */
-class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
+class FetchBuffer(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
   with HasBoomFrontendParameters
 {
+  val numEntries = numFetchBufferEntries
   val io = IO(new BoomBundle {
     val enq = Flipped(Decoupled(new FetchBundle()))
     val deq = new DecoupledIO(new FetchBufferResp())

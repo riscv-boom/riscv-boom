@@ -97,10 +97,11 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle
  *
  * @param num_entries # of entries in the FTQ
  */
-class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomModule
+class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
   with HasBoomFrontendParameters
 {
+  val num_entries = ftqSz
   private val idx_sz = log2Ceil(num_entries)
 
   val io = IO(new BoomBundle {
