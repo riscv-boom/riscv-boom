@@ -31,10 +31,6 @@ class ComposedBranchPredictorBank(implicit p: Parameters) extends BranchPredicto
   for (c <- components) {
     c.io.f0_req  := io.f0_req
 
-    c.io.f1_kill := io.f1_kill
-    c.io.f2_kill := io.f2_kill
-    c.io.f3_kill := io.f3_kill
-
     metas = (metas << c.metaSz) | c.io.f3_meta(c.metaSz-1,0)
     meta_sz = meta_sz + c.metaSz
   }

@@ -42,7 +42,6 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
     val f0_req = Input(Valid(new BranchPredictionBankRequest))
 
     val f3_resp = Output(Vec(bankWidth, Valid(new TageResp)))
-    val f3_kill = Input(Bool())
 
     val update_mask    = Input(Vec(bankWidth, Bool()))
     val update_taken   = Input(Vec(bankWidth, Bool()))
@@ -200,34 +199,8 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
 
 class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
-  //val base = Module(new BTBBranchPredictorBank(BoomBTBParams()))
-  // val micro = Module(new MicroBTBBranchPredictorBank(
-  //   BoomMicroBTBParams(nSets = 64, offsetSz = 13)
-  // ))
-  // val micro = Module(new FAMicroBTBBranchPredictorBank(
-  //   BoomFAMicroBTBParams(nWays = 16, offsetSz = 13)
-  // ))
-  // base.io.f1_kill := io.f1_kill
-  // base.io.f2_kill := io.f2_kill
-  // base.io.f3_kill := io.f3_kill
-  // micro.io.f1_kill := io.f1_kill
-  // micro.io.f2_kill := io.f2_kill
-  // micro.io.f3_kill := io.f3_kill
-
-  // base.io.f0_req := io.f0_req
-  // base.io.update := io.update
-  // base.io.update.bits.meta := io.update.bits.meta(base.metaSz-1,0)
-  // micro.io.f0_req := io.f0_req
-  // micro.io.update := io.update
-  // micro.io.update.bits.meta := io.update.bits.meta(base.metaSz+micro.metaSz-1,base.metaSz)
-
-
-  // io.resp.f1 := micro.io.resp.f1
-  // io.resp.f2 := base.io.resp.f2
-  // io.resp.f3 := base.io.resp.f3
 
   val f3_meta = Wire(new TageMeta)
-  // override val metaSz = base.metaSz + micro.metaSz + f3_meta.asUInt.getWidth
   override val metaSz = f3_meta.asUInt.getWidth
   require(metaSz <= bpdMaxMetaLength)
 
@@ -244,7 +217,6 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
 
 
   tables.map(_.io.f0_req  := io.f0_req)
-  tables.map(_.io.f3_kill := f3_kill)
   val f3_resps = VecInit(tables.map(_.io.f3_resp))
 
   val s1_update_meta = s1_update.bits.meta.asTypeOf(new TageMeta)

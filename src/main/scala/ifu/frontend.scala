@@ -306,10 +306,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
   val bpd = Module(new BranchPredictor)
-  bpd.io.f1_kill := false.B
-  bpd.io.f2_kill := false.B
-  bpd.io.f3_kill := false.B
-
   val ras = Reg(Vec(nRasEntries, UInt(vaddrBitsExtended.W)))
 
   val icache = outer.icache.module
@@ -378,7 +374,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   icache.io.s1_paddr := s1_ppc
   icache.io.s1_kill  := tlb.io.resp.miss || f1_clear
-  bpd.io.f1_kill     := icache.io.s1_kill
 
   val f1_mask = fetchMask(s1_vpc)
   val f1_redirects = (0 until fetchWidth) map { i =>
@@ -431,7 +426,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3_ready = Wire(Bool())
 
   icache.io.s2_kill := s2_xcpt
-  bpd.io.f2_kill    := s2_xcpt
 
   val f2_bpd_resp = Mux(s2_is_replay, RegNext(s1_bpd_resp), bpd.io.resp.f2)
   val f2_mask = fetchMask(s2_vpc)
