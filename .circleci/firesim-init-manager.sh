@@ -62,10 +62,22 @@ cd $HOME/project
 # get shared variables
 source $SCRIPT_DIR/defaults.sh
 
+# install rsync
+sudo apt-get install -y rsync
+
+# set stricthostkeychecking to no (must happen before rsync)
+run_aws "echo \"Ping $AWS_SERVER\""
+run "echo \"Ping $AWS_SERVER\""
+
 # copy over the firesim.pem
 # note: this is a bit of a hack to get around you not being able to upload an env. var. into CircleCI with \n's
 echo $FIRESIM_PEM | tr , '\n' > firesim.pem
 copy firesim.pem $AWS_SERVER:$CI_AWS_DIR/
+
+# copy over the spec iso from the build server to the manager instance
+copy $SERVER:$REMOTE_SPEC $HOME/spec-2017.iso
+copy $HOME/spec-2017.iso $AWS_SERVER:$CI_AWS_DIR/
+rm -rf $HOME/spec-2017.iso
 
 # clear folders older than 30 days
 run_script_aws $SCRIPT_DIR/clean-old-files.sh $CI_AWS_DIR
@@ -79,8 +91,16 @@ cat <<EOF >> $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
 
 set -ex
 
-# get chipyard
 mkdir -p $REMOTE_AWS_WORK_DIR
+cd $REMOTE_AWS_WORK_DIR
+
+# install spec
+mkdir -p $REMOTE_AWS_WORK_DIR/spec-2017
+sudo mount $CI_AWS_DIR/spec-2017.iso $SPEC_DIR -o loop
+cd $SPEC_DIR
+./install.sh
+
+# get chipyard
 cd $REMOTE_AWS_WORK_DIR
 rm -rf $REMOTE_AWS_CHIPYARD_DIR
 git clone --progress --verbose https://github.com/ucb-bar/chipyard.git $REMOTE_AWS_CHIPYARD_DIR

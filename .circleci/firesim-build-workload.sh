@@ -37,6 +37,9 @@ set -ex
 cd $REMOTE_AWS_FSIM_DIR
 source sourceme-f1-manager.sh
 
+# get spec17
+export SPEC_DIR=$SPEC_DIR
+
 cd $REMOTE_AWS_MARSHAL_DIR
 ./marshal -v build $REMOTE_AWS_WORK_DIR/$FMRSHL_DIR/$FMRSHL_NAME.json
 ./marshal -v install $REMOTE_AWS_WORK_DIR/$FMRSHL_DIR/$FMRSHL_NAME.json
