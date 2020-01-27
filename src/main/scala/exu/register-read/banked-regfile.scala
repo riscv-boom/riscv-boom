@@ -1,11 +1,11 @@
 //******************************************************************************
-// Copyright (c) 2013 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2013 - 2020, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// Register File (Abstract class and Synthesizable RegFile)
+// Banked Register File
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
