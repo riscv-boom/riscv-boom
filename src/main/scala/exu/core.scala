@@ -620,12 +620,12 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   // Generate 'slow' wakeup signals from writeback ports.
-  for (i <- 0 until coreWidth) {
-     wakeups(i).bits  := resp.bits.uop.pdst
-     wakeups(i).valid := resp.valid
-                        && resp.bits.uop.rf_wen
-                        && !resp.bits.uop.bypassable
-                        && resp.bits.uop.dst_rtype === RT_FIX
+  for (w <- 0 until coreWidth) {
+    val wb = writebacks(w)
+    wakeups(w).bits  := wb.bits.uop.pdst
+    wakeups(w).valid := wb.valid
+                       && wb.bits.uop.rf_wen
+                       && wb.bits.uop.dst_rtype === RT_FIX
   }
 
   for ((renport, intport) <- rename_stage.io.wakeups zip wakeups) {
