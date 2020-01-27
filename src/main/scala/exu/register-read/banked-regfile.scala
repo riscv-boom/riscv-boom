@@ -69,13 +69,13 @@ abstract class BankedRegisterFile(
     val write_ports = Flipped(Vec(coreWidth, Valid(new BankWritePort(maxPregSz, registerWidth))))
   })
 
-  private val rf_cost = (numReadPorts + numWritePorts) * (numReadPorts + 2*numWritePorts)
+  private val rf_cost = coreWidth * (2 + 1) * (2 + 2) // TODO Does this estimate even make much sense?
   private val type_str = if (registerWidth == fLen+1) "Floating Point" else "Integer"
   override def toString: String = BoomCoreStringPrefix(
     "==" + type_str + " Regfile==",
-    "Num RF Read Ports     : " + numReadPorts,
-    "Num RF Write Ports    : " + numWritePorts,
-    "RF Cost (R+W)*(R+2W)  : " + rf_cost,
+    "Num RF Read Ports     : " + coreWidth * 2,
+    "Num RF Write Ports    : " + coreWidth,
+    "RF Cost               : " + rf_cost,
     "Bypassable Units      : " + bypassableArray)
 }
 
