@@ -47,7 +47,6 @@ class RingIssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends B
     val result = new Bundle {
       val p1 = Bool()
       val p2 = Bool()
-      val p3 = Bool()
       val state = UInt(width=2.W)
     }
     Output(result)
@@ -79,17 +78,6 @@ class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
   val state = RegInit(s_invalid)
   val p1    = RegInit(false.B)
   val p2    = RegInit(false.B)
-  val p3    = RegInit(false.B)
-
-  // Poison if woken up by speculative load.
-  // Poison lasts 1 cycle (as ldMiss will come on the next cycle).
-  // SO if poisoned is true, set it to false!
-  val p1_poisoned = RegInit(false.B)
-  val p2_poisoned = RegInit(false.B)
-  p1_poisoned := false.B
-  p2_poisoned := false.B
-  val next_p1_poisoned = Mux(io.in_uop.valid, io.in_uop.bits.iw_p1_poisoned, p1_poisoned)
-  val next_p2_poisoned = Mux(io.in_uop.valid, io.in_uop.bits.iw_p2_poisoned, p2_poisoned)
 
   val slot_uop = RegInit(NullMicroOp)
   val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, slot_uop)
@@ -124,22 +112,17 @@ class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
     next_state := s_invalid
   } .elsewhen ((io.grant && (state === s_valid_1)) ||
     (io.grant && (state === s_valid_2) && p1 && p2)) {
-    // try to issue this uop.
-    when (!(io.ldspec_miss && (p1_poisoned || p2_poisoned))) {
-      next_state := s_invalid
-    }
+    next_state := s_invalid
   } .elsewhen (io.grant && (state === s_valid_2)) {
-    when (!(io.ldspec_miss && (p1_poisoned || p2_poisoned))) {
-      next_state := s_valid_1
-      when (p1) {
-        slot_uop.uopc := uopSTD
-        next_uopc := uopSTD
-        slot_uop.lrs1_rtype := RT_X
-        next_lrs1_rtype := RT_X
-      } .otherwise {
-        slot_uop.lrs2_rtype := RT_X
-        next_lrs2_rtype := RT_X
-      }
+    next_state := s_valid_1
+    when (p1) {
+      slot_uop.uopc := uopSTD
+      next_uopc := uopSTD
+      slot_uop.lrs1_rtype := RT_X
+      next_lrs1_rtype := RT_X
+    } .otherwise {
+      slot_uop.lrs2_rtype := RT_X
+      next_lrs2_rtype := RT_X
     }
   }
 
@@ -154,12 +137,10 @@ class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
   // they are important for shifting the current slot_uop up to an other entry.
   val next_p1 = WireInit(p1)
   val next_p2 = WireInit(p2)
-  val next_p3 = WireInit(p3)
 
   when (io.in_uop.valid) {
     p1 := !(io.in_uop.bits.prs1_busy)
     p2 := !(io.in_uop.bits.prs2_busy)
-    p3 := !(io.in_uop.bits.prs3_busy)
   }
 
   for (i <- 0 until numWakeupPorts) {
@@ -171,34 +152,6 @@ class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
          (io.wakeup_ports(i).bits.pdst === next_uop.prs2)) {
       p2 := true.B
     }
-    when (io.wakeup_ports(i).valid &&
-         (io.wakeup_ports(i).bits.pdst === next_uop.prs3)) {
-      p3 := true.B
-    }
-  }
-
-  assert (!(io.ldspec_dst.valid && io.ldspec_dst.bits === 0.U),
-    "Loads to x0 should never speculatively wakeup other instructions")
-
-  // TODO disable if FP IQ.
-  when (io.ldspec_dst.valid && io.ldspec_dst.bits === next_uop.prs1 && next_uop.lrs1_rtype === RT_FIX) {
-    p1 := true.B
-    p1_poisoned := true.B
-    assert (!next_p1_poisoned)
-  }
-  when (io.ldspec_dst.valid && io.ldspec_dst.bits === next_uop.prs2 && next_uop.lrs2_rtype === RT_FIX) {
-    p2 := true.B
-    p2_poisoned := true.B
-    assert (!next_p2_poisoned)
-  }
-
-  when (io.ldspec_miss && next_p1_poisoned) {
-    assert(next_uop.prs1 =/= 0.U, "Poison bit can't be set for prs1=x0!")
-    p1 := false.B
-  }
-  when (io.ldspec_miss && next_p2_poisoned) {
-    assert(next_uop.prs2 =/= 0.U, "Poison bit can't be set for prs2=x0!")
-    p2 := false.B
   }
 
   // Handle branch misspeculations
@@ -216,14 +169,11 @@ class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
 
   //-------------------------------------------------------------
   // Request Logic
-  io.request := is_valid && p1 && p2 && p3 && !io.kill
-  val high_priority = slot_uop.is_br_or_jmp
-  io.request_hp := io.request && high_priority
 
   when (state === s_valid_1) {
-    io.request := p1 && p2 && p3 && !io.kill
+    io.request := p1 && p2
   } .elsewhen (state === s_valid_2) {
-    io.request := (p1 || p2) && !io.kill
+    io.request := (p1 || p2)
   } .otherwise {
     io.request := false.B
   }
@@ -231,13 +181,10 @@ class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
   //assign outputs
   io.valid := is_valid
   io.uop := slot_uop
-  io.uop.iw_p1_poisoned := p1_poisoned
-  io.uop.iw_p2_poisoned := p2_poisoned
 
   // micro-op will vacate due to grant.
   val may_vacate = io.grant && ((state === s_valid_1) || (state === s_valid_2) && p1 && p2)
-  val squash_grant = io.ldspec_miss && (p1_poisoned || p2_poisoned)
-  io.will_be_valid := is_valid && !(may_vacate && !squash_grant)
+  io.will_be_valid := is_valid && !may_vacate
 
   io.out_uop            := slot_uop
   io.out_uop.iw_state   := next_state
@@ -247,9 +194,6 @@ class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
   io.out_uop.br_mask    := next_br_mask
   io.out_uop.prs1_busy  := !p1
   io.out_uop.prs2_busy  := !p2
-  io.out_uop.prs3_busy  := !p3
-  io.out_uop.iw_p1_poisoned := p1_poisoned
-  io.out_uop.iw_p2_poisoned := p2_poisoned
 
   when (state === s_valid_2) {
     when (p1 && p2) {
@@ -266,6 +210,5 @@ class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
   // debug outputs
   io.debug.p1 := p1
   io.debug.p2 := p2
-  io.debug.p3 := p3
   io.debug.state := state
 }
