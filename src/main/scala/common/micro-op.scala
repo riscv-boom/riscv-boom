@@ -149,6 +149,25 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def unsafe           = uses_ldq || (uses_stq && !is_fence) || (is_br_or_jmp && !is_jal)
 
   def fu_code_is(_fu: UInt) = (fu_code & _fu) =/= 0.U
+
+  // In which column does a physical register reside?
+  def ColIdx(in: UInt) = {
+    val pregSz = in.getWidth
+    val colSz = log2Ceil(coreWidth)
+    in(pregSz-1, pregSz-colSz)
+  }
+
+  // Physical register's specifier within a column.
+  def ColSpec(in: UInt) = {
+    val pregSz = in.getWidth
+    val colSz = log2Ceil(coreWidth)
+    in(pregSz-colSz-1, 0)
+  }
+
+  def dst_col   = VecInit(UIntToOH(ColIdx(pdst)).asBools)
+  def op1_col   = VecInit(UIntToOH(ColIdx(pop1)).asBools)
+  def op2_col   = VecInit(UIntToOH(ColIdx(pop2)).asBools)
+  def stale_col = VecInit(UIntToOH(ColIdx(stale_pdst)).asBools)
 }
 
 /**
