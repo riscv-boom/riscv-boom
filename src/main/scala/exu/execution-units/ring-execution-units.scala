@@ -92,6 +92,10 @@ class RingExecutionUnits(implicit val p: Parameters) extends HasBoomCoreParamete
     exe_units.find(_.hasRocc).get
   }
 
+  lazy val idiv_busy = {
+    !exe_units.find(_.hasDiv).get.io.fu_types(4)
+  }
+
   // Generate column ALUs
   for (w <- 0 until coreWidth) {
     exe_units += Module(new ALUExeUnit)

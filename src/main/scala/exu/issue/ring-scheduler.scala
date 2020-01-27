@@ -29,7 +29,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)(implicit p: Paramet
     val wakeups  = Input(Vec(coreWidth, Valid(UInt(pregSz.W))))
     val ld_miss  = Input(Bool()) // TODO use this
 
-    val div_rdy  = Input(Bool()) // TODO do fu_types instead? Does it make a difference in synth?
+    val div_busy = Input(Bool()) // TODO do fu_types instead? Does it make a difference in synth?
 
     val brinfo   = Input(new BrResolutionInfo)
     val flush    = Input(Bool())

@@ -76,7 +76,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // construct all of the modules
 
   // Only holds integer-registerfile execution units.
-  val exe_units = new boom.exu.ExecutionUnits(fpu=false)
+  val exe_units = new boom.exu.RingExecutionUnits
 
   // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
   var fp_pipeline: FpPipeline = null
@@ -606,8 +606,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Dispatch to issue queues
 
   for (w <- 0 until coreWidth) {
-    ring_scheduler.io.dis_uops(w).bits  := dis_uops(w)
-    ring_scheduler.io.dis_uops(w).valid := dis_valids(w)
+    scheduler.io.dis_uops(w).bits  := dis_uops(w)
+    scheduler.io.dis_uops(w).valid := dis_valids(w) && dis_uops(w).iq_type === IQT_INT
   }
 
   // Only fp_pipeline uses the 'dispatcher' module
@@ -637,47 +637,30 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
   }
 
-  var iss_idx = 0
-  var int_iss_cnt = 0
-  var mem_iss_cnt = 0
-  for (w <- 0 until exe_units.length) {
-    var fu_types = exe_units(w).io.fu_types
-    val exe_unit = exe_units(w)
-    if (exe_unit.readsIrf) {
-      if (exe_unit.supportedFuncUnits.muld) {
-        // Supress just-issued divides from issuing back-to-back, since it's an iterative divider.
-        // But it takes a cycle to get to the Exe stage, so it can't tell us it is busy yet.
-        val idiv_issued = iss_valids(iss_idx) && iss_uops(iss_idx).fu_code_is(FU_DIV)
-        fu_types = fu_types & RegNext(~Mux(idiv_issued, FU_DIV, 0.U))
-      }
+  val idiv_issued = false.B
 
-      if (exe_unit.hasMem) {
-        iss_valids(iss_idx) := mem_iss_unit.io.iss_valids(mem_iss_cnt)
-        iss_uops(iss_idx)   := mem_iss_unit.io.iss_uops(mem_iss_cnt)
-        mem_iss_unit.io.fu_types(mem_iss_cnt) := fu_types
-        mem_iss_cnt += 1
-      } else {
-        iss_valids(iss_idx) := int_iss_unit.io.iss_valids(int_iss_cnt)
-        iss_uops(iss_idx)   := int_iss_unit.io.iss_uops(int_iss_cnt)
-        int_iss_unit.io.fu_types(int_iss_cnt) := fu_types
-        int_iss_cnt += 1
-      }
-      iss_idx += 1
-    }
+  for (w <- 0 until coreWidth) {
+    iss_valids(w) := scheduler.io.iss_uops(w).valid
+    iss_uops(w)   := scheduler.io.iss_uops(w).bits
+
+    idiv_issued = idiv_issued || (iss_valids(iss_idx) && iss_uops(iss_idx).fu_code_is(FU_DIV))
   }
-  require(iss_idx == exe_units.numIrfReaders)
+
+  // Send slow wakeups to scheduler
+  scheduler.io.wakeups := wakeups
+
+  // Load-hit Misspeculations
+  scheduler.io.ld_miss := io.lsu.ld_miss
+
+  // Supress just-issued divides from issuing back-to-back, since it's an iterative divider.
+  // But it takes a cycle to get to the Exe stage, so it can't tell us it is busy yet.
+  scheduler.io.div_busy := RegNext(idiv_issued) || exe_units.idiv_busy
 
   scheduler.io.brinfo := br_unit.brinfo
   scheduler.io.flush  := rob.io.flush.valid
 
-  // Load-hit Misspeculations
-  require (mem_iss_unit.issueWidth <= 2)
-  scheduler.io.ld_miss := io.lsu.ld_miss
-
   mem_units.map(u => u.io.com_exception := rob.io.flush.valid)
 
-  // Send slow wakeups to scheduler
-  scheduler.io.wakeups := wakeups
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
