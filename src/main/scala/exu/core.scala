@@ -118,13 +118,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 1 +
                                                                    (if (usingFPU) 1 else 0) +
                                                                    (if (usingRoCC) 1 else 0)))
-  val iregister_read   = Module(new RegisterRead(
-                           coreWidth,
-                           exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits),
-                           numIrfReadPorts,
-                           exe_units.withFilter(_.readsIrf).map(x => 2),
-                           exe_units.numTotalBypassPorts,
-                           xLen))
+  val iregister_read   = Module(new RegisterRead(exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits)))
   val rob              = Module(new Rob(
                            numIrfWritePorts + numFpWakeupPorts, // +memWidth for ll writebacks
                            numFpWakeupPorts))

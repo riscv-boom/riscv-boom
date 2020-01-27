@@ -29,18 +29,18 @@ import boom.util._
  * @param registerWidth size of register in bits
  */
 class RingRegisterReadIO(val numReadPortsPerColumn: Int)
-(implicit p: Parameters) extends BoomBundle
+  (implicit p: Parameters) extends BoomBundle
 {
   // issued micro-ops
-  val iss_uops = Input(Vec(issueWidth, Valid(new MicroOp)))
+  val iss_uops = Input(Vec(coreWidth, Valid(new MicroOp)))
 
   // interface with register file's read ports
-  val rf_read_ports = Flipped(Vec(coreWidth, Vec(numReadPortsPerColumn, new RegisterFileReadPortIO(ipregSz, xLen))))
+  val rf_read_ports = Flipped(Vec(coreWidth, Vec(2, new RegisterFileReadPortIO(ipregSz, xLen))))
 
   val bypass = Input(new BypassData(coreWidth, xLen))
 
   // send micro-ops to the execution pipelines
-  val exe_reqs = Vec(issueWidth, new DecoupledIO(new FuncUnitReq(registerWidth)))
+  val exe_reqs = Vec(coreWidth, new DecoupledIO(new FuncUnitReq(xLen)))
 
   val kill   = Input(Bool())
   val brinfo = Input(new BrResolutionInfo)
@@ -58,10 +58,8 @@ class RingRegisterReadIO(val numReadPortsPerColumn: Int)
  * @param numTotalBypassPorts number of bypass ports out of the execution units
  * @param registerWidth size of register in bits
  */
-class RingRegisterRead(
-  supportedUnitsArray: Seq[SupportedFuncUnits],
-  numReadPortsPerColumn: Int
-)(implicit p: Parameters) extends BoomModule
+class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
+  (implicit p: Parameters) extends BoomModule
 {
   val io = IO(new RegisterReadIO(numReadPortsPerColumn))
 
