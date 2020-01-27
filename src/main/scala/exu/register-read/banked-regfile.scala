@@ -21,25 +21,16 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
-/**
- * IO bundle for a register read port
- *
- * @param addrWidth size of register address in bits
- * @param dataWidth size of register in bits
- */
-class RegisterFileReadPortIO(val addrWidth: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
+class BankReadPort(val addrWidth: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 {
-  val addr = Input(UInt(addrWidth.W))
-  val data = Output(UInt(dataWidth.W))
+  val prs1_addr = Input(UInt(addrWidth.W))
+  val prs1_data = Output(UInt(dataWidth.W))
+
+  val prs2_addr = Input(UInt(addrWidth.W))
+  val prs2_data = Output(UInt(dataWidth.W))
 }
 
-/**
- * IO bundle for the register write port
- *
- * @param addrWidth size of register address in bits
- * @param dataWidth size of register in bits
- */
-class RegisterFileWritePort(val addrWidth: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
+class BankWritePort(val addrWidth: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 {
   val addr = UInt(addrWidth.W)
   val data = UInt(dataWidth.W)
@@ -48,11 +39,11 @@ class RegisterFileWritePort(val addrWidth: Int, val dataWidth: Int)(implicit p: 
 /**
  * Utility function to turn ExeUnitResps to match the regfile's WritePort I/Os.
  */
-object WritePort
+object GetBankWritePort
 {
   def apply(enq: DecoupledIO[ExeUnitResp], addrWidth: Int, dataWidth: Int, rtype: UInt)
-    (implicit p: Parameters): Valid[RegisterFileWritePort] = {
-     val wport = Wire(Valid(new RegisterFileWritePort(addrWidth, dataWidth)))
+    (implicit p: Parameters): Valid[BankWritePort] = {
+     val wport = Wire(Valid(new BankWritePort(addrWidth, dataWidth)))
 
      wport.valid     := enq.valid && enq.bits.uop.dst_rtype === rtype
      wport.bits.addr := enq.bits.uop.pdst
@@ -63,25 +54,19 @@ object WritePort
 }
 
 /**
- * Register file abstract class
+ * Abstract banked regfile
  *
- * @param numRegisters number of registers
- * @param numReadPorts number of read ports
- * @param numWritePorts number of write ports
+ * @param numRegisters total number of registers (to be divided between banks)
  * @param registerWidth size of registers in bits
- * @param bypassableArray list of write ports from func units to the read port of the regfile
  */
-abstract class RegisterFile(
+abstract class BankedRegisterFile(
   numRegisters: Int,
-  numReadPorts: Int,
-  numWritePorts: Int,
-  registerWidth: Int,
-  bypassableArray: Seq[Boolean]) // which write ports can be bypassed to the read ports?
+  registerWidth: Int)
   (implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BoomBundle {
-    val read_ports = Vec(numReadPorts, new RegisterFileReadPortIO(maxPregSz, registerWidth))
-    val write_ports = Flipped(Vec(numWritePorts, Valid(new RegisterFileWritePort(maxPregSz, registerWidth))))
+    val read_ports  = Vec(coreWidth, new BankReadPort(maxPregSz, registerWidth))
+    val write_ports = Flipped(Vec(coreWidth, Valid(new BankWritePort(maxPregSz, registerWidth))))
   })
 
   private val rf_cost = (numReadPorts + numWritePorts) * (numReadPorts + 2*numWritePorts)
