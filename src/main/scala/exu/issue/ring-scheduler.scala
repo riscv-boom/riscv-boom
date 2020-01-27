@@ -45,6 +45,20 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)(implicit p: Paramet
   val slots = VecInit(issue_table.map(col => VecInit(col.io)))
 
   //----------------------------------------------------------------------------------------------------
+  // Dispatch
+
+  val dis_uops = Wire(Vec(coreWidth, Vec(columnDispatchWidth, new MicroOp)))
+  val dis_vals = Wire(Vec(coreWidth, Vec(columnDispatchWidth, Bool())))
+
+  require (columnDispatchWidth == coreWidth) // TODO implement an arbitration / compaction mechanism
+
+  for (w <- 0 until coreWidth) {
+    dis_uops(w) := VecInit(io.dis_uops.map(_.bits))
+  }
+
+  dis_vals := Transpose(VecInit(io.dis_uops.map(_.bits.dst_col)))
+
+  //----------------------------------------------------------------------------------------------------
   // Selection
 
   val iss_sels = Wire(Vec(coreWidth, Vec(numSlotsPerColumn, Bool())))
