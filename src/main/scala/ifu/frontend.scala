@@ -306,6 +306,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
   val bpd = Module(new BranchPredictor)
+  bpd.io.f3_fire := false.B
   val ras = Reg(Vec(nRasEntries, UInt(vaddrBitsExtended.W)))
 
   val icache = outer.icache.module
@@ -371,6 +372,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s1_ppc  = Mux(s1_is_replay, RegNext(s0_replay_ppc), tlb.io.resp.paddr)
   val s1_bpd_resp = Mux(s1_is_replay,
     Mux(RegNext(s0_s1_use_f3_bpd_resp), bpd.io.resp.f3, RegNext(s0_replay_bpd_resp)), bpd.io.resp.f1)
+  when (s1_is_replay && RegNext(s0_s1_use_f3_bpd_resp)) {
+    bpd.io.f3_fire := true.B
+  }
 
   icache.io.s1_paddr := s1_ppc
   icache.io.s1_kill  := tlb.io.resp.miss || f1_clear
@@ -512,6 +516,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // The BPD resp comes in f3
   f3_bpd_resp.io.enq.valid := f3.io.deq.valid && RegNext(f3.io.enq.ready)
   f3_bpd_resp.io.enq.bits  := Mux(RegNext(s2_is_replay), RegNext(f2_bpd_resp), bpd.io.resp.f3)
+  when (f3_bpd_resp.io.enq.fire() && !RegNext(s2_is_replay)) {
+    bpd.io.f3_fire := true.B
+  }
 
   f3.io.deq.ready := f4_ready
   f3_bpd_resp.io.deq.ready := f4_ready

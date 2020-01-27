@@ -125,6 +125,8 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
     // Store the meta as a UInt, use width inference to figure out the shape
     val f3_meta = Output(UInt(bpdMaxMetaLength.W))
 
+    val f3_fire = Input(Bool())
+
     val update = Input(Valid(new BranchPredictionBankUpdate))
   })
   io.resp := io.resp_in
@@ -164,6 +166,8 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
       val f2 = new BranchPredictionBundle
       val f3 = new BranchPredictionBundle
     })
+
+    val f3_fire = Input(Bool())
 
     // Update
     val update = Input(Valid(new BranchPredictionUpdate))
@@ -208,8 +212,16 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     io.resp.f2.preds   := banked_predictors(0).io.resp.f2
     io.resp.f3.preds   := banked_predictors(0).io.resp.f3
     io.resp.f3.meta(0) := banked_predictors(0).io.f3_meta
+
+    banked_predictors(0).io.f3_fire := io.f3_fire
   } else {
     require(nBanks == 2)
+    banked_predictors(0).io.f3_fire := (
+      io.f3_fire && RegNext(RegNext(RegNext(banked_predictors(0).io.f0_req.valid)))
+    )
+    banked_predictors(1).io.f3_fire := (
+      io.f3_fire && RegNext(RegNext(RegNext(banked_predictors(1).io.f0_req.valid)))
+    )
 
     // The branch prediction metadata is stored un-shuffled
     io.resp.f3.meta(0)    := banked_predictors(0).io.f3_meta
