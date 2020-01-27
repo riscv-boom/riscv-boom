@@ -1,17 +1,13 @@
 //******************************************************************************
-// Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2020, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// RISCV Processor Issue Slot Logic
+// Ring Microarchitecture Issue Slot
 //--------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Note: stores (and AMOs) are "broken down" into 2 uops, but stored within a single issue-slot.
-// TODO XXX make a separate issueSlot for MemoryIssueSlots, and only they break apart stores.
-// TODO Disable ldspec for FP queue.
 
 package boom.exu
 
@@ -29,24 +25,23 @@ import FUConstants._
  *
  * @param numWakeupPorts number of wakeup ports for the slot
  */
-class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomBundle
+class RingIssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomBundle
 {
   val valid         = Output(Bool())
-  val will_be_valid = Output(Bool()) // TODO code review, do we need this signal so explicitely?
+  val will_be_valid = Output(Bool())
   val request       = Output(Bool())
-  val request_hp    = Output(Bool())
   val grant         = Input(Bool())
 
   val brinfo        = Input(new BrResolutionInfo())
   val kill          = Input(Bool()) // pipeline flush
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
-  val ldspec_miss   = Input(Bool()) // Previous cycle's speculative load wakeup was mispredicted.
+  val ldspec_miss   = Input(Bool())
 
   val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(maxPregSz))))
-  val ldspec_dst    = Flipped(Valid(UInt(width=maxPregSz.W)))
-  val in_uop        = Flipped(Valid(new MicroOp())) // if valid, this WILL overwrite an entry!
-  val out_uop   = Output(new MicroOp()) // the updated slot uop; will be shifted upwards in a collasping queue.
-  val uop           = Output(new MicroOp()) // the current Slot's uop. Sent down the pipeline when issued.
+
+  val in_uop        = Flipped(Valid(new MicroOp())) // Received from dispatch or another slot during compaction
+  val out_uop       = Output(new MicroOp()) // The updated slot uop; will be shifted upwards in a collasping queue
+  val uop           = Output(new MicroOp()) // The current slot's uop. Sent down the pipeline when issued
 
   val debug = {
     val result = new Bundle {
@@ -64,7 +59,7 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
  *
  * @param numWakeupPorts number of wakeup ports
  */
-class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
+class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
   extends BoomModule
   with IssueUnitConstants
 {
