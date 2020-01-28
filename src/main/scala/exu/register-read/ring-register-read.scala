@@ -19,23 +19,14 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
 
-/**
- * IO bundle to interface the issue window on the enqueue side and the execution
- * pipelines on the dequeue side.
- *
- * @param issueWidth total issue width from all issue queues
- * @param numTotalReadPorts number of read ports
- * @param numTotalBypassPorts number of bypass ports out of the execution units
- * @param registerWidth size of register in bits
- */
-class RingRegisterReadIO(val numReadPortsPerColumn: Int)
+class RingRegisterReadIO
   (implicit p: Parameters) extends BoomBundle
 {
   // issued micro-ops
   val iss_uops = Input(Vec(coreWidth, Valid(new MicroOp)))
 
   // interface with register file's read ports
-  val rf_read_ports = Flipped(Vec(coreWidth, Vec(2, new RegisterFileReadPortIO(ipregSz, xLen))))
+  val rf_read_ports = Flipped(Vec(coreWidth, new BankReadPort(ipregSz, xLen)))
 
   val bypass = Input(new BypassData(coreWidth, xLen))
 
@@ -51,12 +42,7 @@ class RingRegisterReadIO(val numReadPortsPerColumn: Int)
  * interfaces with the issue window on the enqueue side, and the execution
  * pipelines on the dequeue side.
  *
- * @param issueWidth total issue width from all issue queues
  * @param supportedUnitsArray seq of SupportedFuncUnits classes indicating what the functional units do
- * @param numTotalReadPorts number of read ports
- * @param numReadPortsArray execution units read port sequence
- * @param numTotalBypassPorts number of bypass ports out of the execution units
- * @param registerWidth size of register in bits
  */
 class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   (implicit p: Parameters) extends BoomModule
@@ -66,21 +52,22 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   val rrd_valids       = Wire(Vec(coreWidth, Bool()))
   val rrd_uops         = Wire(Vec(coreWidth, new MicroOp))
 
-  val exe_reg_valids   = RegInit(VecInit(Seq.fill(issueWidth) { false.B }))
-  val exe_reg_uops     = Reg(Vec(coreWidth, new MicroOp()))
+  val exe_reg_valids   = RegInit(VecInit(Seq.fill(coreWidth) { false.B }))
+  val exe_reg_uops     = Reg(Vec(coreWidth, new MicroOp))
   val exe_reg_rs1_data = Reg(Vec(coreWidth, Bits(xLen.W)))
   val exe_reg_rs2_data = Reg(Vec(coreWidth, Bits(xLen.W)))
 
   //-------------------------------------------------------------
   // hook up inputs
 
+  // TODO wouldn't it be better to put rrdd after the registers?
   for (w <- 0 until coreWidth) {
     val rrd_decode_unit = Module(new RegisterReadDecode(supportedUnitsArray(w)))
     rrd_decode_unit.io.iss_valid := io.iss_valids(w)
     rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
 
     rrd_valids(w) := RegNext(rrd_decode_unit.io.rrd_valid &&
-                !IsKilledByBranch(io.brinfo, rrd_decode_unit.io.rrd_uop))
+                     !IsKilledByBranch(io.brinfo, rrd_decode_unit.io.rrd_uop))
     rrd_uops(w)   := RegNext(GetNewUopAndBrMask(rrd_decode_unit.io.rrd_uop, io.brinfo))
   }
 
@@ -102,15 +89,12 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
 
     val rs1_addr = io.iss_uops(w).prs1
     val rs2_addr = io.iss_uops(w).prs2
-    val rs3_addr = io.iss_uops(w).prs3
 
-    if (numReadPorts > 0) io.rf_read_ports(idx+0).addr := rs1_addr
-    if (numReadPorts > 1) io.rf_read_ports(idx+1).addr := rs2_addr
-    if (numReadPorts > 2) io.rf_read_ports(idx+2).addr := rs3_addr
+    io.rf_read_ports(w).prs1_addr := rs1_addr
+    io.rf_read_ports(w).prs2_addr := rs2_addr
 
-    if (numReadPorts > 0) rrd_rs1_data(w) := io.rf_read_ports(idx+0).data
-    if (numReadPorts > 1) rrd_rs2_data(w) := io.rf_read_ports(idx+1).data
-    if (numReadPorts > 2) rrd_rs3_data(w) := io.rf_read_ports(idx+2).data
+    rrd_rs1_data(w) := io.rf_read_ports(w).prs1_data
+    rrd_rs2_data(w) := io.rf_read_ports(w).prs2_data
 
     val rrd_kill = Mux(io.kill, true.B,
                    Mux(io.brinfo.valid && io.brinfo.mispredict,
