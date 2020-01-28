@@ -406,6 +406,17 @@ object Transpose
 }
 
 /**
+ * Transpose a bit matrix with UInt rows.
+ */
+object Transpose
+{
+  def apply(in: Vec[UInt]) = {
+    val n = in(0).getWidth
+    VecInit((0 until n).map(i => VecInit(in.map(row => row(i))).asUInt))
+  }
+}
+
+/**
   * N-wide one-hot priority encoder.
  */
 object SelectFirstN
