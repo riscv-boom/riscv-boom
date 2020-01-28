@@ -74,40 +74,36 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   //-------------------------------------------------------------
   // read ports TODO: rewrite this as crossbar
 
+  val prs1_addr_cols = Wire(Vec(coreWidth, UInt(coreWidth.W)))
+  val prs2_addr_cols = Wire(Vec(coreWidth, UInt(coreWidth.W)))
+
+  prs1_addr_cols := Transpose(io.iss_uops.map(_.op1_col))
+  prs2_addr_cols := Transpose(io.iss_uops.map(_.op2_col))
+
   val rrd_rs1_data = Wire(Vec(coreWidth, Bits(xLen.W)))
   val rrd_rs2_data = Wire(Vec(coreWidth, Bits(xLen.W)))
   rrd_rs1_data := DontCare
   rrd_rs2_data := DontCare
 
-  var idx = 0 // index into flattened read_ports array
-  for (w <- 0 until issueWidth) {
-    val numReadPorts = numReadPortsArray(w)
-
-    // NOTE:
-    // rrdLatency==1, we need to send read address at end of ISS stage,
-    //    in order to get read data back at end of RRD stage.
-
-    val rs1_addr = io.iss_uops(w).prs1
-    val rs2_addr = io.iss_uops(w).prs2
-
-    io.rf_read_ports(w).prs1_addr := rs1_addr
-    io.rf_read_ports(w).prs2_addr := rs2_addr
+  // Col -> Bank Address Crossbar
+  for (w <- 0 until coreWidth) {
+    io.rf_read_ports(w).prs1_addr := Mux1H(prs1_addr_col(w), io.iss_uops.map(_.prs1))
+    io.rf_read_ports(w).prs2_addr := Mux1H(prs2_addr_col(w), io.iss_uops.map(_.prs2))
 
     rrd_rs1_data(w) := io.rf_read_ports(w).prs1_data
     rrd_rs2_data(w) := io.rf_read_ports(w).prs2_data
+  }
 
-    val rrd_kill = Mux(io.kill, true.B,
-                   Mux(io.brinfo.valid && io.brinfo.mispredict,
-                       maskMatch(rrd_uops(w).br_mask, io.brinfo.mask),
-                       false.B))
+  // Setup exe uops
+  for (w <- 0 until coreWidth) {
+    val rrd_kill = io.kill || IsKilledByBranch(io.brinfo, rrd_uops(w))
 
-    exe_reg_valids(w) := Mux(rrd_kill, false.B, rrd_valids(w))
+    exe_reg_valids(w) := !rrd_kill && rrd_valids(w)
     // TODO use only the valids signal, don't require us to set nullUop
+    // why is it like this in the first place?
     exe_reg_uops(w)   := Mux(rrd_kill, NullMicroOp, rrd_uops(w))
 
     exe_reg_uops(w).br_mask := GetNewBrMask(io.brinfo, rrd_uops(w))
-
-    idx += numReadPorts
   }
 
   //-------------------------------------------------------------
