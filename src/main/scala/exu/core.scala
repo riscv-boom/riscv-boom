@@ -1429,9 +1429,16 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     for (w <- 0 until coreWidth) {
       io.trace(w).clock      := clock
       io.trace(w).reset      := reset
-      io.trace(w).valid      := rob.io.commit.valids(w)
-      io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen)
-      io.trace(w).insn       := rob.io.commit.uops(w).debug_inst
+      io.trace(w).valid      := RegNext(rob.io.commit.valids(w))
+      io.trace(w).iaddr      := RegNext(Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen))
+      io.trace(w).insn       := rob.io.commit.debug_insts(w)
+
+      // Comment out this assert because it blows up FPGA synth-asserts
+      // This tests correctedness of the debug_inst mem
+      // when (RegNext(rob.io.commit.valids(w))) {
+      //   assert(rob.io.commit.debug_insts(w) === RegNext(rob.io.commit.uops(w).debug_inst))
+      // }
+
       // These csr signals do not exactly match up with the ROB commit signals.
       io.trace(w).priv       := csr.io.status.prv
       // Can determine if it is an interrupt or not based on the MSB of the cause
