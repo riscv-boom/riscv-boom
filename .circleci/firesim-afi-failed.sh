@@ -11,7 +11,7 @@
 set -ex
 
 # setup AWS_SERVER variable
-AWS_SERVER=centos@$(sed -n '2p' $HOME/FSIM_MANAGER_INSTANCE_DATA.txt)
+AWS_SERVER=centos@$(sed -n '2p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
 
 # get shared variables
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
@@ -32,7 +32,7 @@ UNIQUE_LOG=$(grep -irl "$AFI_NAME" $HOME/build-result-logs/*buildafi*)
 cat $UNIQUE_LOG
 
 # if afi failed... just stop the manager instance
-MANAGER_ID=$(sed -n '1p' $HOME/FSIM_MANAGER_INSTANCE_DATA.txt)
+MANAGER_ID=$(sed -n '1p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
 aws ec2 stop-instances --instance-ids $MANAGER_ID
 
 # this is just to fail

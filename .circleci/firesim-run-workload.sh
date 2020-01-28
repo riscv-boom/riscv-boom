@@ -13,7 +13,7 @@
 set -ex
 
 # setup AWS_SERVER variable
-AWS_SERVER=centos@$(sed -n '2p' $HOME/FSIM_MANAGER_INSTANCE_DATA.txt)
+AWS_SERVER=centos@$(sed -n '2p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
 
 # get shared variables
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"

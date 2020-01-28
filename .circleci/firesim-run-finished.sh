@@ -14,7 +14,7 @@
 set -ex
 
 # setup AWS_SERVER variable
-AWS_SERVER=centos@$(sed -n '2p' $HOME/FSIM_MANAGER_INSTANCE_DATA.txt)
+AWS_SERVER=centos@$(sed -n '2p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
 
 # get shared variables
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
@@ -34,7 +34,7 @@ stop_instance_check () {
         sed -i "/$AFI_NAME-$WORKLOAD_NAME/d" $REMOTE_AWS_WORK_DIR/workloads_running
         if [ ! -s $REMOTE_AWS_WORK_DIR/workloads_running ]; then
             # if all workloads are done... just stop the manager instance
-            MANAGER_ID=$(sed -n '1p' $HOME/FSIM_MANAGER_INSTANCE_DATA.txt)
+            MANAGER_ID=$(sed -n '1p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
             aws ec2 stop-instances --instance-ids $MANAGER_ID
         fi
     else
@@ -108,5 +108,3 @@ else
     stop_instance_check
     exit 1
 fi
-
-# on exit... check if this is the last thing running that needs to exit

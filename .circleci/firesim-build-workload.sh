@@ -12,7 +12,7 @@
 set -ex
 
 # setup AWS_SERVER variable
-AWS_SERVER=centos@$(sed -n '2p' $HOME/FSIM_MANAGER_INSTANCE_DATA.txt)
+AWS_SERVER=centos@$(sed -n '2p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
 
 # get shared variables
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
@@ -37,7 +37,7 @@ set -ex
 cd $REMOTE_AWS_FSIM_DIR
 source sourceme-f1-manager.sh
 
-# get spec17
+# get the SPEC2017 path
 export SPEC_DIR=$SPEC_DIR
 
 cd $REMOTE_AWS_MARSHAL_DIR

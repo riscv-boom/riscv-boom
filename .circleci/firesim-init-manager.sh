@@ -46,18 +46,21 @@ aws ec2 run-instances \
     --user-data file://firesim-instance-launch-script.sh \
     --associate-public-ip-address &> output.json
 
+# location of the file with instance-id and ip-address of the firesim manager
+INSTANCE_FILE=/tmp/FSIM_MANAGER_INSTANCE_DATA.txt
+
 # get the instance id
-grep InstanceId output.json | sed -r 's/.*InstanceId.*\"(.*)\",.*/\1/' &> $HOME/FSIM_MANAGER_INSTANCE_DATA.txt
+grep InstanceId output.json | sed -r 's/.*InstanceId.*\"(.*)\",.*/\1/' &> $INSTANCE_FILE
 
 # wait for mins for instance to boot/install items
 sleep 3m
 
 # get the assigned public ip address
-aws ec2 describe-instances --instance-ids $(cat $HOME/FSIM_MANAGER_INSTANCE_DATA.txt) &> output.json
-grep PublicIpAddress output.json | sed -r 's/.*PublicIpAddress.*\"(.*)\",.*/\1/' >> $HOME/FSIM_MANAGER_INSTANCE_DATA.txt
+aws ec2 describe-instances --instance-ids $(cat $INSTANCE_FILE) &> output.json
+grep PublicIpAddress output.json | sed -r 's/.*PublicIpAddress.*\"(.*)\",.*/\1/' >> $INSTANCE_FILE
 
 # setup AWS_SERVER variable
-AWS_SERVER=centos@$(sed -n '2p' $HOME/FSIM_MANAGER_INSTANCE_DATA.txt)
+AWS_SERVER=centos@$(sed -n '2p' $INSTANCE_FILE)
 
 # get back to initial folder
 cd $HOME/project
@@ -84,7 +87,6 @@ run_script_aws $SCRIPT_DIR/clean-old-files.sh $CI_AWS_DIR
 
 SCRIPT_NAME=firesim-manager-setup.sh
 
-# TODO: make sure the managerinit uses the rootkey.csv values for manager init (also set up region etc)
 # create a script to run
 cat <<EOF >> $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
 #!/bin/bash
@@ -95,9 +97,9 @@ mkdir -p $REMOTE_AWS_WORK_DIR
 cd $REMOTE_AWS_WORK_DIR
 
 # install spec
-mkdir -p $REMOTE_AWS_WORK_DIR/spec-2017
-sudo mount $CI_AWS_DIR/spec-2017.iso $SPEC_DIR -o loop
-cd $SPEC_DIR
+mkdir -p $SPEC_SRC_DIR
+sudo mount $CI_AWS_DIR/spec-2017.iso $SPEC_SRC_DIR -o loop
+cd $SPEC_SRC_DIR
 
 /bin/expect << EXP
 set timeout -1
@@ -123,9 +125,13 @@ git checkout $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)
 ./scripts/init-submodules-no-riscv-tools.sh
 ./scripts/firesim-setup.sh --fast
 
-# setup firesim
+# setup firesim and firemarshal
+chmod 600 $CI_AWS_DIR/firesim.pem
 cd $REMOTE_AWS_FSIM_DIR
 source sourceme-f1-manager.sh
+cd $REMOTE_AWS_MARSHAL_DIR
+./init-submodules.sh
+cd $REMOTE_AWS_FSIM_DIR
 
 # use expect to send newlines to managerinit (for some reason heredoc errors on email input)
 /bin/expect << EXP
@@ -142,9 +148,6 @@ EXP
 # remove boom so it can get added properly
 rm -rf $REMOTE_AWS_CHIPYARD_DIR/generators/boom
 EOF
-
-# TODO: get the right firemarshal hash
-# git checkout -C $REMOTE_AWS_MARSHAL_DIR $HASH_WITH_SPEC_COREMARK"
 
 # execute the script
 chmod +x $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME

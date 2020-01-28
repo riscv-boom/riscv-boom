@@ -106,7 +106,7 @@ REMOTE_CHIPYARD_DIR=$REMOTE_WORK_DIR/chipyard
 REMOTE_VERILATOR_DIR=$REMOTE_WORK_DIR/verilator
 REMOTE_SIM_DIR=$REMOTE_CHIPYARD_DIR/sims/verilator
 REMOTE_JAVA_ARGS="-Xmx8G -Xss8M -Dsbt.ivy.home=$REMOTE_WORK_DIR/.ivy2 -Dsbt.global.base=$REMOTE_WORK_DIR/.sbt -Dsbt.boot.directory=$REMOTE_WORK_DIR/.sbt/boot"
-REMOTE_SPEC=$CI_DIR/../abejgonza/cpu2017-1.0.1.iso
+REMOTE_SPEC=$CI_DIR/../abejgonza/cpu2017-1.0.1.iso # TODO: this is temporary until a better location is found
 
 # remote variables (on manager instance)
 REMOTE_AWS_WORK_DIR=$CI_AWS_DIR/$CIRCLE_PROJECT_REPONAME-$CIRCLE_BRANCH-$CIRCLE_SHA1
@@ -116,6 +116,7 @@ REMOTE_AWS_MARSHAL_DIR=$REMOTE_AWS_FSIM_DIR/sw/firesim-software
 REMOTE_AWS_FSIM_DEPLOY_DIR=$REMOTE_AWS_FSIM_DIR/deploy
 REMOTE_AWS_RESULTS_DIR=$REMOTE_AWS_FSIM_DEPLOY_DIR/results-workload
 SPEC_DIR=$REMOTE_AWS_WORK_DIR/spec-2017
+SPEC_SRC_DIR=$REMOTE_AWS_WORK_DIR/cpu2017-1.0.1
 
 # local variables (aka within the docker container)
 LOCAL_CHECKOUT_DIR=$HOME/project

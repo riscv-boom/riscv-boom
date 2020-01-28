@@ -659,7 +659,7 @@ jobs:
             - save_cache:
                 key: firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
                 paths:
-                    - "/home/riscvuser/FSIM_MANAGER_INSTANCE_DATA.txt"
+                    - "/tmp/FSIM_MANAGER_INSTANCE_DATA.txt"
 
     build-largefireboom-buildroot:
         docker:
@@ -934,7 +934,7 @@ jobs:
             - run:
                 name: Run a LargeFireBoom SPEC17 intrate workload
                 command: |
-                    .circleci/firesim-run-workload.sh largefireboom spec17-intrate 30h
+                    .circleci/firesim-run-workload.sh largefireboom spec17-intrate 72h
     largefireboom-spec17-intrate-run-finished:
         executor: aws-cli/default
         steps:
@@ -956,7 +956,8 @@ workflows:
     version: 2
     build-and-test-boom-configs:
         jobs:
-            # temp
+            # TODO: disable
+            # temp approval to save jobs
             - temp-approval:
                 type: approval
 
@@ -1060,6 +1061,7 @@ workflows:
                     - prepare-hwachaboomconfig
 
     init-firesim:
+        # TODO: re-enable
         # run firesim workflow every thursday
         #triggers:
         #    - schedule:
