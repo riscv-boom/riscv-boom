@@ -92,6 +92,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val prs1             = UInt(maxPregSz.W)
   val prs2             = UInt(maxPregSz.W)
   val prs3             = UInt(maxPregSz.W)
+  val stale_pdst       = UInt(maxPregSz.W)
 
   val fast_prs_sel     = Bool() // Which prs was used to pick a dst column? Can receive a bypassed operand.
                                 // 0 = prs1, 1 = prs2
@@ -100,7 +101,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val prs1_busy        = Bool()
   val prs2_busy        = Bool()
   val prs3_busy        = Bool()
-  val stale_pdst       = UInt(maxPregSz.W)
+
+  val prs1_bypass      = Bool() // Was the uop immediately scheduled after prs1 matched a fast wakeup?
+  val prs2_bypass      = Bool() // Ditto
+
   val exception        = Bool()
   val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity
   val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, csr, etc...)
