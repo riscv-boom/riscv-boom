@@ -112,38 +112,13 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // BYPASS MUXES -----------------------------------------------
-  // performed at the end of the register read stage TODO: do this in the ring-style
 
-  // NOTES: this code is fairly hard-coded. Sorry.
-  // ASSUMPTIONS:
-  //    - rs3 is used for FPU ops which are NOT bypassed (so don't check
-  //       them!).
-  //    - only bypass integer registers.
+  val bypassed_rs1_data = Wire(Vec(coreWidth, Bits(registerWidth.W)))
+  val bypassed_rs2_data = Wire(Vec(coreWidth, Bits(registerWidth.W)))
 
-  val bypassed_rs1_data = Wire(Vec(issueWidth, Bits(registerWidth.W)))
-  val bypassed_rs2_data = Wire(Vec(issueWidth, Bits(registerWidth.W)))
-
-  for (w <- 0 until issueWidth) {
-    val numReadPorts = numReadPortsArray(w)
-    var rs1_cases = Array((false.B, 0.U(registerWidth.W)))
-    var rs2_cases = Array((false.B, 0.U(registerWidth.W)))
-
-    val prs1       = rrd_uops(w).prs1
-    val lrs1_rtype = rrd_uops(w).lrs1_rtype
-    val prs2       = rrd_uops(w).prs2
-    val lrs2_rtype = rrd_uops(w).lrs2_rtype
-
-    for (b <- 0 until io.bypass.getNumPorts)
-    {
-      // can't use "io.bypass.valid(b) since it would create a combinational loop on branch kills"
-      rs1_cases ++= Array((io.bypass.valid(b) && (prs1 === io.bypass.uop(b).pdst) && io.bypass.uop(b).rf_wen
-        && io.bypass.uop(b).dst_rtype === RT_FIX && lrs1_rtype === RT_FIX && (prs1 =/= 0.U), io.bypass.data(b)))
-      rs2_cases ++= Array((io.bypass.valid(b) && (prs2 === io.bypass.uop(b).pdst) && io.bypass.uop(b).rf_wen
-        && io.bypass.uop(b).dst_rtype === RT_FIX && lrs2_rtype === RT_FIX && (prs2 =/= 0.U), io.bypass.data(b)))
-    }
-
-    if (numReadPorts > 0) bypassed_rs1_data(w) := MuxCase(rrd_rs1_data(w), rs1_cases)
-    if (numReadPorts > 1) bypassed_rs2_data(w) := MuxCase(rrd_rs2_data(w), rs2_cases)
+  for (w <- 0 until coreWidth) {
+    bypassed_rs1_data(w) := Mux(rrd_uops(w).prs1_bypass, io.bypass.data(w), rrd_rs1_data(w))
+    bypassed_rs2_data(w) := Mux(rrd_uops(w).prs2_bypass, io.bypass.data(w), rrd_rs2_data(w))
   }
 
   //-------------------------------------------------------------
