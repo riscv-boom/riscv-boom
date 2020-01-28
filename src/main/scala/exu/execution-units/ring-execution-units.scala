@@ -22,7 +22,15 @@ import boom.util.{BoomCoreStringPrefix}
 
 class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
 {
-  val totalIssueWidth = issueParams.map(_.issueWidth).sum
+  // I/O which is used by all units
+  // Unit-specific I/O (e.g. rocc) can still be hooked up with the unit getter functions
+  val io = IO(new BoomBundle {
+    val rrd_uops  = Input(Vec(coreWidth, Valid(new MicroOp)))
+    val exe_resps = Output(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
+
+    val brinfo    = Input(new BrResolutionInfo)
+    val kill      = Input(Bool())
+  })
 
   //*******************************
   // Instantiate the ExecutionUnits
