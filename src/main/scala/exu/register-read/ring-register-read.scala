@@ -74,24 +74,27 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   //-------------------------------------------------------------
   // read ports TODO: rewrite this as crossbar
 
-  val prs1_addr_cols = Wire(Vec(coreWidth, UInt(coreWidth.W)))
-  val prs2_addr_cols = Wire(Vec(coreWidth, UInt(coreWidth.W)))
+  val prs1_addr_cols := Transpose(io.iss_uops.map(_.op1_col))
+  val prs2_addr_cols := Transpose(io.iss_uops.map(_.op2_col))
 
-  prs1_addr_cols := Transpose(io.iss_uops.map(_.op1_col))
-  prs2_addr_cols := Transpose(io.iss_uops.map(_.op2_col))
+  // Col -> Bank Address Crossbar
+  for (w <- 0 until coreWidth) {
+    io.rf_read_ports(w).prs1_addr := Mux1H(prs1_addr_cols(w), io.iss_uops.map(_.prs1))
+    io.rf_read_ports(w).prs2_addr := Mux1H(prs2_addr_cols(w), io.iss_uops.map(_.prs2))
+  }
 
   val rrd_rs1_data = Wire(Vec(coreWidth, Bits(xLen.W)))
   val rrd_rs2_data = Wire(Vec(coreWidth, Bits(xLen.W)))
   rrd_rs1_data := DontCare
   rrd_rs2_data := DontCare
 
-  // Col -> Bank Address Crossbar
-  for (w <- 0 until coreWidth) {
-    io.rf_read_ports(w).prs1_addr := Mux1H(prs1_addr_col(w), io.iss_uops.map(_.prs1))
-    io.rf_read_ports(w).prs2_addr := Mux1H(prs2_addr_col(w), io.iss_uops.map(_.prs2))
+  val prs1_data_banks = RegNext(Transpose(prs1_addr_cols))
+  val prs2_data_banks = RegNext(Transpose(prs2_addr_cols))
 
-    rrd_rs1_data(w) := io.rf_read_ports(w).prs1_data
-    rrd_rs2_data(w) := io.rf_read_ports(w).prs2_data
+  // Bank -> Col Data Crossbar
+  for (w <- 0 until coreWidth) {
+    rrd_rs1_data(w) := Mux1H(prs1_data_banks(w), io.rf_read_ports.map(_.prs1_data))
+    rrd_rs2_data(w) := Mux1H(prs2_data_banks(w), io.rf_read_ports.map(_.prs2_data))
   }
 
   // Setup exe uops
