@@ -69,7 +69,7 @@ abstract class BankedRegisterFile(
     val write_ports = Flipped(Vec(coreWidth, Valid(new BankWritePort(maxPregSz, registerWidth))))
   })
 
-  private val rf_cost = coreWidth * (2 + 1) * (2 + 2) // TODO Does this estimate even make much sense?
+  private val rf_cost = coreWidth * (2 + 1) * (2 + 1*2) // TODO Does this estimate even make much sense?
   private val type_str = if (registerWidth == fLen+1) "Floating Point" else "Integer"
   override def toString: String = BoomCoreStringPrefix(
     "==" + type_str + " Regfile==",
@@ -80,89 +80,48 @@ abstract class BankedRegisterFile(
 }
 
 /**
- * A synthesizable model of a Register File. You will likely want to blackbox this for more than modest port counts.
- *
  * @param numRegisters number of registers
- * @param numReadPorts number of read ports
- * @param numWritePorts number of write ports
  * @param registerWidth size of registers in bits
- * @param bypassableArray list of write ports from func units to the read port of the regfile
  */
-class RegisterFileSynthesizable(
+class BankedRegisterFileSynthesizable(
    numRegisters: Int,
-   numReadPorts: Int,
-   numWritePorts: Int,
    registerWidth: Int,
-   bypassableArray: Seq[Boolean])
    (implicit p: Parameters)
-   extends RegisterFile(numRegisters, numReadPorts, numWritePorts, registerWidth, bypassableArray)
+   extends BankedRegisterFile(numRegisters, registerWidth)
 {
   // --------------------------------------------------------------
 
-  val regfile = Mem(numRegisters, UInt(registerWidth.W))
+  val numRegsPerBank = numRegisters / coreWidth
+  require (numRegisters % coreWidth == 0)
+
+  val regfile = Vec(coreWidth, Mem(numRegisters, UInt(registerWidth.W)))
 
   // --------------------------------------------------------------
-  // Read ports.
+  // Read ports
 
-  val read_data = Wire(Vec(numReadPorts, UInt(registerWidth.W)))
+  // Regfile addresses are registered here rather than in regread
+  // so that this synthezied regfile can easily be replaced by SRAMs.
+  for (w <- 0 until coreWidth) {
+    val prs1_addr = RegNext(io.read_ports(w).prs1_addr)
+    val prs2_addr = RegNext(io.read_ports(w).prs2_addr)
 
-  // Register the read port addresses to give a full cycle to the RegisterRead Stage (if desired).
-  val read_addrs = io.read_ports.map(p => RegNext(p.addr))
-
-  for (i <- 0 until numReadPorts) {
-    read_data(i) :=
-      Mux(read_addrs(i) === 0.U,
+    io.read_ports(w).prs1_data :=
+      Mux(prs1_addr === 0.U,
         0.U,
-        regfile(read_addrs(i)))
-  }
+        regfile(w)(prs1_addr))
 
-  // --------------------------------------------------------------
-  // Bypass out of the ALU's write ports.
-  // We are assuming we cannot bypass a writer to a reader within the regfile memory
-  // for a write that occurs at the end of cycle S1 and a read that returns data on cycle S1.
-  // But since these bypasses are expensive, and not all write ports need to bypass their data,
-  // only perform the w->r bypass on a select number of write ports.
-
-  require (bypassableArray.length == io.write_ports.length)
-
-  if (bypassableArray.reduce(_||_)) {
-    val bypassable_wports = ArrayBuffer[Valid[RegisterFileWritePort]]()
-    io.write_ports zip bypassableArray map { case (wport, b) => if (b) { bypassable_wports += wport} }
-
-    for (i <- 0 until numReadPorts) {
-      val bypass_ens = bypassable_wports.map(x => x.valid &&
-        x.bits.addr =/= 0.U &&
-        x.bits.addr === read_addrs(i))
-
-      val bypass_data = Mux1H(VecInit(bypass_ens), VecInit(bypassable_wports.map(_.bits.data)))
-
-      io.read_ports(i).data := Mux(bypass_ens.reduce(_|_), bypass_data, read_data(i))
-    }
-  } else {
-    for (i <- 0 until numReadPorts) {
-      io.read_ports(i).data := read_data(i)
-    }
+    io.read_ports(w).prs2_data :=
+      Mux(prs2_addr === 0.U,
+        0.U,
+        regfile(w)(prs2_addr))
   }
 
   // --------------------------------------------------------------
   // Write ports.
 
-  for (wport <- io.write_ports) {
-    when (wport.valid && (wport.bits.addr =/= 0.U)) {
-      regfile(wport.bits.addr) := wport.bits.data
-    }
-  }
-
-  // ensure there is only 1 writer per register (unless to preg0)
-  if (numWritePorts > 1) {
-    for (i <- 0 until (numWritePorts - 1)) {
-      for (j <- (i + 1) until numWritePorts) {
-        assert(!io.write_ports(i).valid ||
-               !io.write_ports(j).valid ||
-               (io.write_ports(i).bits.addr =/= io.write_ports(j).bits.addr) ||
-               (io.write_ports(i).bits.addr === 0.U), // note: you only have to check one here
-          "[regfile] too many writers a register")
-      }
+  for (w -> 0 until coreWidth) {
+    when (write_ports(w).valid && (write_ports(w).bits.addr =/= 0.U)) {
+      regfile(w)(write_ports(w).bits.addr) := write_ports(w).bits.data
     }
   }
 }
