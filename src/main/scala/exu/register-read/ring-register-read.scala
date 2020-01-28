@@ -127,25 +127,17 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  for (w <- 0 until issueWidth) {
-    val numReadPorts = numReadPortsArray(w)
-    if (numReadPorts > 0) exe_reg_rs1_data(w) := bypassed_rs1_data(w)
-    if (numReadPorts > 1) exe_reg_rs2_data(w) := bypassed_rs2_data(w)
-    if (numReadPorts > 2) exe_reg_rs3_data(w) := rrd_rs3_data(w)
-    // ASSUMPTION: rs3 is FPU which is NOT bypassed
+  for (w <- 0 until coreWidth) {
+    exe_reg_rs1_data(w) := bypassed_rs1_data(w)
+    exe_reg_rs2_data(w) := bypassed_rs2_data(w)
   }
-  // TODO add assert to detect bypass conflicts on non-bypassable things
-  // TODO add assert that checks bypassing to verify there isn't something it hits rs3
 
   //-------------------------------------------------------------
   // set outputs to execute pipelines
-  for (w <- 0 until issueWidth) {
-    val numReadPorts = numReadPortsArray(w)
-
+  for (w <- 0 until coreWidth) {
     io.exe_reqs(w).valid    := exe_reg_valids(w)
     io.exe_reqs(w).bits.uop := exe_reg_uops(w)
-    if (numReadPorts > 0) io.exe_reqs(w).bits.rs1_data := exe_reg_rs1_data(w)
-    if (numReadPorts > 1) io.exe_reqs(w).bits.rs2_data := exe_reg_rs2_data(w)
-    if (numReadPorts > 2) io.exe_reqs(w).bits.rs3_data := exe_reg_rs3_data(w)
+    io.exe_reqs(w).bits.rs1_data := exe_reg_rs1_data(w)
+    io.exe_reqs(w).bits.rs2_data := exe_reg_rs2_data(w)
   }
 }
