@@ -32,8 +32,8 @@ run_aws "echo \"Ping $AWS_SERVER\""
 copy $LOCAL_FSIM_CFGS_DIR/$AFI_NAME $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/
 
 REMOTE_CFG_DIR=$REMOTE_AWS_FSIM_DEPLOY_DIR/$AFI_NAME
-#BUILD_ARGS="-c $REMOTE_CFG_DIR/$WORKLOAD_NAME/config_runtime.ini -a $REMOTE_AWS_FSIM_DEPLOY_DIR/built-hwdb-entries/$AFI_NAME -r $REMOTE_CFG_DIR/config_build_recipes.ini"
-BUILD_ARGS="-c $REMOTE_CFG_DIR/$WORKLOAD_NAME/config_runtime.ini -a $CI_AWS_DIR/riscv-boom-firesim-ci-57f15deed62bd778cdd9a03dcc8135dbc1526501/chipyard/sims/firesim/deploy/built-hwdb-entries/fireboom-singlecore-no-nic-l2-llc4mb-ddr3 -r $REMOTE_CFG_DIR/config_build_recipes.ini"
+BUILD_ARGS="-c $REMOTE_CFG_DIR/$WORKLOAD_NAME/config_runtime.ini -a $REMOTE_AWS_FSIM_DEPLOY_DIR/built-hwdb-entries/$AFI_NAME -r $REMOTE_CFG_DIR/config_build_recipes.ini"
+#BUILD_ARGS="-c $REMOTE_CFG_DIR/$WORKLOAD_NAME/config_runtime.ini -a $CI_AWS_DIR/riscv-boom-firesim-ci-57f15deed62bd778cdd9a03dcc8135dbc1526501/chipyard/sims/firesim/deploy/built-hwdb-entries/fireboom-singlecore-no-nic-l2-llc4mb-ddr3 -r $REMOTE_CFG_DIR/config_build_recipes.ini"
 SCRIPT_NAME=firesim-run-$AFI_NAME-$WORKLOAD_NAME.sh
 
 cat <<EOF >> $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME

@@ -98,7 +98,17 @@ cd $REMOTE_AWS_WORK_DIR
 mkdir -p $REMOTE_AWS_WORK_DIR/spec-2017
 sudo mount $CI_AWS_DIR/spec-2017.iso $SPEC_DIR -o loop
 cd $SPEC_DIR
-./install.sh
+
+/bin/expect << EXP
+set timeout -1
+spawn ./install.sh
+send -- "$SPEC_DIR\r"
+send -- "yes\r"
+expect eof
+EXP
+
+# expect folder to install to
+# expect yes
 
 # get chipyard
 cd $REMOTE_AWS_WORK_DIR
