@@ -168,10 +168,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
     in(pregSz-colSz-1, 0)
   }
 
-  def dst_col   = VecInit(UIntToOH(ColIdx(pdst)).asBools)
-  def op1_col   = VecInit(UIntToOH(ColIdx(pop1)).asBools)
-  def op2_col   = VecInit(UIntToOH(ColIdx(pop2)).asBools)
-  def stale_col = VecInit(UIntToOH(ColIdx(stale_pdst)).asBools)
+  def dst_col   = UIntToOH(ColIdx(pdst))
+  def op1_col   = UIntToOH(ColIdx(pop1))
+  def op2_col   = UIntToOH(ColIdx(pop2))
+  def stale_col = UIntToOH(ColIdx(stale_pdst))
 }
 
 /**
