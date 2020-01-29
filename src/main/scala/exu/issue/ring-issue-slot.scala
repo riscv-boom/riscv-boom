@@ -158,13 +158,19 @@ class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
     }
   }
 
+  // These should be false unless a fast wakeup hit during the previous cycle
+  slot_uop.prs1_bypass := false.B
+  slot_uop.prs2_bypass := false.B
+
   // Perform fast wakeup
-  val fast_prs = slot_uop.GetFastOperand
+  val fast_prs = next_uop.GetFastOperand
   when (io.fast_wakeup.valid && fast_prs === io.fast_wakeup.bits) {
     when (slot_uop.fast_prs_sel) {
       p2 := true.B
+      slot_uop.prs2_bypass := true.B
     } .otherwise {
       p1 := true.B
+      slot_uop.prs1_bypass := true.B
     }
   }
 
