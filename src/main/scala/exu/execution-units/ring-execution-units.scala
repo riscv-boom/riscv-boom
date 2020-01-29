@@ -152,20 +152,28 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
   //----------------------------------------------------------------------------------------------------
   // Req -> EU crossbar
 
-  val req_col_sels = Transpose(io.exe_reqs.map(_.bits.uop.eu_code))
+  val col_sels = Transpose(io.exe_reqs.map(_.bits.uop.eu_code))
 
   // Hookup column units
   for (w <- 0 until coreWidth) {
     column_exe_units(w).io.req.bits  := io.exe_reqs(w).bits
-    column_exe_units(w).io.req.valid := req_col_sels(0)(w)
+    column_exe_units(w).io.req.valid := col_sels(0)(w)
   }
 
   // Hookup shared units
-  for ((i,unit) <- (1 until coreWidth) zip shared_exe_units) {
-    unit.io.req.bits  := Mux1H(req_col_sels(i), io.exe_reqs.map(_.bits))
-    unit.io.req.valid := Mux1H(req_col_sels(i), io.exe_reqs.map(_.valid))
+  for ((i,eu) <- (1 until coreWidth) zip shared_exe_units) {
+    eu.io.req.bits  := Mux1H(col_sels(i), io.exe_reqs.map(_.bits))
+    eu.io.req.valid := Mux1H(col_sels(i), io.exe_reqs.map(_.valid))
   }
 
+  //----------------------------------------------------------------------------------------------------
   // EU -> Resp crossbar
 
+  val eu_sels = Transpose(Seq(VecInit(column_exe_units.map(_.io.iresp.valid)).asUInt) ++
+                          shared_exe_units.map(_.io.resp.bits.uop.dst_col & Fill(coreWidth, _.io.resp.valid)))
+
+  for (w <- 0 until coreWidth) {
+    io.exe_resps(w).bits  := Mux1H(eu_sels(w), Seq(column_units(w).io.resp.bits) ++ shared_units.map(_.io.resp.bits))
+    io.exe_resps(w).valid := eu_sels(w).orR
+  }
 }
