@@ -56,7 +56,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)(implicit p: Paramet
     dis_uops(w) := VecInit(io.dis_uops.map(_.bits))
   }
 
-  dis_vals := Transpose(VecInit(io.dis_uops.map(_.bits.dst_col)))
+  dis_vals := Transpose(VecInit(io.dis_uops.map(_.bits.dst_col.asBools)))
 
   //----------------------------------------------------------------------------------------------------
   // Selection
@@ -105,7 +105,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)(implicit p: Paramet
   // Compaction
 
   for (w <- 0 until coreWidth) {
-    val valids = slots(w).map(_.valid) ++ dis_valids(w)
+    val valids = slots(w).map(_.valid) ++ dis_vals(w)
     val uops = slots(w).map(_.uop) ++ dis_uops(w)
     val next_valids = slots(w).map(_.will_be_valid) ++ dis_valids(w)
 
