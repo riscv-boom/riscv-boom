@@ -32,7 +32,7 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
     val kill      = Input(Bool())
   })
 
-  //*******************************
+  //----------------------------------------------------------------------------------------------------
   // Instantiate the ExecutionUnits
 
   private val column_exe_units = ArrayBuffer[ExecutionUnit]()
@@ -40,8 +40,8 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
 
   def exe_units = column_exe_units ++ shared_exe_units
 
-  //*******************************
-  // Act like a collection
+  //----------------------------------------------------------------------------------------------------
+  // Getters
 
   def length = exe_units.length
 
@@ -104,6 +104,9 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
     !exe_units.find(_.hasDiv).get.io.fu_types(4)
   }
 
+  //----------------------------------------------------------------------------------------------------
+  // Generate the units
+
   // Generate column ALUs
   for (w <- 0 until coreWidth) {
     column_exe_units += Module(new ALUExeUnit)
@@ -130,6 +133,9 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
                                             hasCSR  = true,
                                             hasRocc = true))
 
+  //----------------------------------------------------------------------------------------------------
+  // Generator string output
+
   val exeUnitsStr = new StringBuilder
   for (exe_unit <- exe_units) {
     exeUnitsStr.append(exe_unit.toString)
@@ -142,4 +148,24 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
          "==" + coreWidth + " Issue==")
     ) + "\n"
     + exeUnitsStr.toString)
+
+  //----------------------------------------------------------------------------------------------------
+  // Req -> EU crossbar
+
+  val req_col_sels = Transpose(io.exe_reqs.map(_.bits.uop.eu_code))
+
+  // Hookup column units
+  for (w <- 0 until coreWidth) {
+    column_exe_units(w).io.req.bits  := io.exe_reqs(w).bits
+    column_exe_units(w).io.req.valid := req_col_sels(0)(w)
+  }
+
+  // Hookup shared units
+  for ((i,unit) <- (1 until coreWidth) zip shared_exe_units) {
+    unit.io.req.bits  := Mux1H(req_col_sels(i), io.exe_reqs.map(_.bits))
+    unit.io.req.valid := Mux1H(req_col_sels(i), io.exe_reqs.map(_.valid))
+  }
+
+  // EU -> Resp crossbar
+
 }
