@@ -25,6 +25,9 @@ CONFIG_KEY=$1
 AFI_NAME=${afis[$1]}
 WORKLOAD_NAME=$2
 
+# install rsync
+sudo apt-get install -y rsync
+
 # see if the instance should be stopped
 # TODO: if can't use context aka doesn't work, just stop on afi fail
 stop_instance_check () {
