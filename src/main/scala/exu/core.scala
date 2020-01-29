@@ -42,7 +42,7 @@ import freechips.rocketchip.devices.tilelink.{PLICConsts, CLINTConsts}
 import boom.common._
 import boom.exu.FUConstants._
 import boom.common.BoomTilesKey
-import boom.util.{RobTypeToChars, BoolToChar, GetNewUopAndBrMask, Sext, WrapInc, BoomCoreStringPrefix, DromajoCosimBlackBox}
+import boom.util.{RobTypeToChars, BoolToChar, GetNewUopAndBrMask, Sext, WrapInc, BoomCoreStringPrefix, DromajoCosimBlackBox, AlignPCToBoundary}
 
 /**
  * IO bundle for the BOOM Core. Connects the external components such as
@@ -426,6 +426,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Branch Unit Requests
   bru_pc_req.valid := RegNext(iss_valids(brunit_idx))
   bru_pc_req.bits  := RegNext(iss_uops(brunit_idx).ftq_idx)
+  exe_units(brunit_idx).io.get_ftq_pc := DontCare
   exe_units(brunit_idx).io.get_ftq_pc.fetch_pc := RegNext(io.ifu.get_pc.fetch_pc)
   exe_units(brunit_idx).io.get_ftq_pc.next_val := RegNext(io.ifu.get_pc.next_val)
   exe_units(brunit_idx).io.get_ftq_pc.next_pc  := RegNext(io.ifu.get_pc.next_pc)
@@ -1429,8 +1430,17 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     for (w <- 0 until coreWidth) {
       io.trace(w).clock      := clock
       io.trace(w).reset      := reset
+
+      // Delay the trace so we have a cycle to pull PCs out of the FTQ
       io.trace(w).valid      := RegNext(rob.io.commit.valids(w))
-      io.trace(w).iaddr      := RegNext(Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen))
+
+      // Recalculate the PC
+      io.ifu.get_pc.debug_ftq_idx(w) := rob.io.commit.uops(w).ftq_idx
+      io.trace(w).iaddr      := RegNext(Sext(AlignPCToBoundary(io.ifu.get_pc.debug_fetch_pc(w), icBlockBytes)
+                                      + rob.io.commit.uops(w).pc_lob
+                                      - Mux(rob.io.commit.uops(w).edge_inst, 2.U, 0.U), xLen))
+
+      // use debug_insts instead of uop.debug_inst to use the rob's debug_inst_mem
       io.trace(w).insn       := rob.io.commit.debug_insts(w)
 
       // Comment out this assert because it blows up FPGA synth-asserts
@@ -1438,18 +1448,24 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       // when (RegNext(rob.io.commit.valids(w))) {
       //   assert(rob.io.commit.debug_insts(w) === RegNext(rob.io.commit.uops(w).debug_inst))
       // }
+      // This tests correctedness of recovering pcs through ftq debug ports
+      // when (RegNext(rob.io.commit.valids(w))) {
+      //   assert(Sext(io.trace(w).iaddr, xLen) ===
+      //     RegNext(Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen)))
+      // }
 
       // These csr signals do not exactly match up with the ROB commit signals.
-      io.trace(w).priv       := csr.io.status.prv
+      io.trace(w).priv       := RegNext(csr.io.status.prv)
       // Can determine if it is an interrupt or not based on the MSB of the cause
-      io.trace(w).exception  := rob.io.com_xcpt.valid && !rob.io.com_xcpt.bits.cause(xLen - 1)
-      io.trace(w).interrupt  := rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.cause(xLen - 1)
-      io.trace(w).cause      := rob.io.com_xcpt.bits.cause
-      io.trace(w).tval       := csr.io.tval
+      io.trace(w).exception  := RegNext(rob.io.com_xcpt.valid && !rob.io.com_xcpt.bits.cause(xLen - 1))
+      io.trace(w).interrupt  := RegNext(rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.cause(xLen - 1))
+      io.trace(w).cause      := RegNext(rob.io.com_xcpt.bits.cause)
+      io.trace(w).tval       := RegNext(csr.io.tval)
     }
     dontTouch(io.trace)
   } else {
     io.trace := DontCare
     io.trace map (t => t.valid := false.B)
+    io.ifu.get_pc.debug_ftq_idx := DontCare
   }
 }
