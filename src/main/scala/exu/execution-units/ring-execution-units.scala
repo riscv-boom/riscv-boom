@@ -35,7 +35,10 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
   //*******************************
   // Instantiate the ExecutionUnits
 
-  private val exe_units = ArrayBuffer[ExecutionUnit]()
+  private val column_exe_units = ArrayBuffer[ExecutionUnit]()
+  private val shared_exe_units = ArrayBuffer[ExecutionUnit]()
+
+  def exe_units = column_exe_units ++ shared_exe_units
 
   //*******************************
   // Act like a collection
@@ -69,41 +72,41 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
   }
 
   lazy val memory_units = {
-    exe_units.filter(_.hasMem)
+    shared_exe_units.filter(_.hasMem)
   }
 
   lazy val br_unit = {
-    require (exe_units.count(_.hasBrUnit) == 1)
-    exe_units.find(_.hasBrUnit).get
+    require (shared_exe_units.count(_.hasBrUnit) == 1)
+    shared_exe_units.find(_.hasBrUnit).get
   }
 
   lazy val csr_unit = {
     require (exe_units.count(_.hasCSR) == 1)
-    exe_units.find(_.hasCSR).get
+    shared_exe_units.find(_.hasCSR).get
   }
 
   lazy val br_unit_io = {
-    require (exe_units.count(_.hasBrUnit) == 1)
-    (exe_units.find(_.hasBrUnit).get).io.br_unit
+    require (shared_exe_units.count(_.hasBrUnit) == 1)
+    (shared_exe_units.find(_.hasBrUnit).get).io.br_unit
   }
 
   lazy val br_unit_idx = {
-    exe_units.indexWhere(_.hasBrUnit)
+    shared_exe_units.indexWhere(_.hasBrUnit)
   }
 
   lazy val rocc_unit = {
     require (usingRoCC)
     require (exe_units.count(_.hasRocc) == 1)
-    exe_units.find(_.hasRocc).get
+    shared_exe_units.find(_.hasRocc).get
   }
 
   lazy val idiv_busy = {
-    !exe_units.find(_.hasDiv).get.io.fu_types(4)
+    !shared_exe_units.find(_.hasDiv).get.io.fu_types(4)
   }
 
   // Generate column ALUs
   for (w <- 0 until coreWidth) {
-    exe_units += Module(new ALUExeUnit)
+    column_exe_units += Module(new ALUExeUnit)
   }
 
   // Generate memory access units. Only 1 supported for now
@@ -114,21 +117,21 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
 
     memExeUnit.io.ll_iresp.ready := DontCare
 
-    exe_units += memExeUnit
+    shared_exe_units += memExeUnit
   }
 
   // Branch unit
-  exe_units += Module(new ALUExeUnit(hasAlu = false, hasBrUnit = true))
+  shared_exe_units += Module(new ALUExeUnit(hasAlu = false, hasBrUnit = true))
 
   // Put remaining functional units in a shared execution unit
-  exe_units += Module(new ALUExeUnit(hasAlu  = false,
+  shared_exe_units += Module(new ALUExeUnit(hasAlu  = false,
                                      hasMul  = true,
                                      hasDiv  = true,
                                      hasCSR  = true,
                                      hasRocc = true))
 
   val exeUnitsStr = new StringBuilder
-  for (exe_unit <- exe_units) {
+  for (exe_unit <- column_exe_units ++ shared_exe_units) {
     exeUnitsStr.append(exe_unit.toString)
   }
 
@@ -136,12 +139,7 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
     (BoomCoreStringPrefix("===ExecutionUnits===") + "\n"
     + (BoomCoreStringPrefix(
          "==" + coreWidth + "-wide Machine==",
-         "==" + totalIssueWidth + " Issue==")
+         "==" + coreWidth + " Issue==")
     ) + "\n"
     + exeUnitsStr.toString)
-
-  require (exe_units.length != 0)
-  require (exe_units.map(_.hasMem).reduce(_|_), "Datapath is missing a memory unit.")
-  require (exe_units.map(_.hasMul).reduce(_|_), "Datapath is missing a multiplier.")
-  require (exe_units.map(_.hasDiv).reduce(_|_), "Datapath is missing a divider.")
 }
