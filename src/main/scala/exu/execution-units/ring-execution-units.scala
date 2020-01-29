@@ -25,7 +25,7 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
   // I/O which is used by all units
   // Unit-specific I/O (e.g. rocc) can still be hooked up with the unit getter functions
   val io = IO(new BoomBundle {
-    val rrd_uops  = Input(Vec(coreWidth, Valid(new MicroOp)))
+    val exe_reqs  = Vec(coreWidth, Flipped(DecuopledIO(new FuncUnitReq(xLen))))
     val exe_resps = Output(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
 
     val brinfo    = Input(new BrResolutionInfo)
@@ -159,12 +159,18 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
   for (w <- 0 until coreWidth) {
     column_exe_units(w).io.req.bits  := io.exe_reqs(w).bits
     column_exe_units(w).io.req.valid := col_sels(0)(w)
+
+    column_exe_units(w).io.brinfo    := io.brinfo
+    column_exe_units(w).io.kill      := io.kill
   }
 
   // Hookup shared units
   for ((i,eu) <- (1 until coreWidth) zip shared_exe_units) {
     eu.io.req.bits  := Mux1H(col_sels(i), io.exe_reqs.map(_.bits))
     eu.io.req.valid := col_sels(i).orR
+
+    eu.io.brinfo    := io.brinfo
+    eu.io.kill      := io.kill
   }
 
   //----------------------------------------------------------------------------------------------------
