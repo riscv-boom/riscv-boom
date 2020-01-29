@@ -84,13 +84,15 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)(implicit p: Paramet
 
   val arbiters = Seq(rrd_arb, exu_arb, wb_arb)
 
-  val arb_gnts = Wire(Vec(coreWidth, Bool()))
+  val arb_gnts = UInt(~(0.U(coreWidth.W)))
 
   arbiters.foreach( arb ->
     arb.io.uops := sel_uops
     arb.io.reqs := sel_vals
-    arb_gnts := arb.io.gnts
+    arb_gnts = arb_gnts & arb.io.gnts.asUInt
   ))
+
+  arb_gnts = arb_gnts.asBools
 
   //----------------------------------------------------------------------------------------------------
   // Grants
