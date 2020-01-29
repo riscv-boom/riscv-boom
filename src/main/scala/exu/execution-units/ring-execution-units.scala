@@ -152,7 +152,8 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
   //----------------------------------------------------------------------------------------------------
   // Req -> EU crossbar
 
-  val col_sels = Transpose(io.exe_reqs.map(_.bits.uop.eu_code))
+  val xbarSize = shared_units.length + 1
+  val col_sels = Transpose(io.exe_reqs.map(_.bits.uop.eu_code & Fill(xbarSize, _.valid)))
 
   // Hookup column units
   for (w <- 0 until coreWidth) {
@@ -163,7 +164,7 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
   // Hookup shared units
   for ((i,eu) <- (1 until coreWidth) zip shared_exe_units) {
     eu.io.req.bits  := Mux1H(col_sels(i), io.exe_reqs.map(_.bits))
-    eu.io.req.valid := Mux1H(col_sels(i), io.exe_reqs.map(_.valid))
+    eu.io.req.valid := col_sels(i).orR
   }
 
   //----------------------------------------------------------------------------------------------------
