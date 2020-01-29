@@ -41,6 +41,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val debug_pc         = UInt(coreMaxAddrBits.W)
   val iq_type          = UInt(IQT_SZ.W)        // which issue unit do we use?
   val fu_code          = UInt(FUConstants.FUC_SZ.W) // which functional unit do we use?
+  val eu_code          = UInt(4.W) // Just hard-code this for now
   val ctrl             = new CtrlSignals
 
   // What is the next state of this uop in the issue window? useful
