@@ -72,36 +72,36 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
   }
 
   lazy val memory_units = {
-    shared_exe_units.filter(_.hasMem)
+    exe_units.filter(_.hasMem)
   }
 
   lazy val br_unit = {
-    require (shared_exe_units.count(_.hasBrUnit) == 1)
-    shared_exe_units.find(_.hasBrUnit).get
+    require (exe_units.count(_.hasBrUnit) == 1)
+    exe_units.find(_.hasBrUnit).get
   }
 
   lazy val csr_unit = {
     require (exe_units.count(_.hasCSR) == 1)
-    shared_exe_units.find(_.hasCSR).get
+    exe_units.find(_.hasCSR).get
   }
 
   lazy val br_unit_io = {
-    require (shared_exe_units.count(_.hasBrUnit) == 1)
-    (shared_exe_units.find(_.hasBrUnit).get).io.br_unit
+    require (exe_units.count(_.hasBrUnit) == 1)
+    (exe_units.find(_.hasBrUnit).get).io.br_unit
   }
 
   lazy val br_unit_idx = {
-    shared_exe_units.indexWhere(_.hasBrUnit)
+    exe_units.indexWhere(_.hasBrUnit)
   }
 
   lazy val rocc_unit = {
     require (usingRoCC)
     require (exe_units.count(_.hasRocc) == 1)
-    shared_exe_units.find(_.hasRocc).get
+    exe_units.find(_.hasRocc).get
   }
 
   lazy val idiv_busy = {
-    !shared_exe_units.find(_.hasDiv).get.io.fu_types(4)
+    !exe_units.find(_.hasDiv).get.io.fu_types(4)
   }
 
   // Generate column ALUs
@@ -131,7 +131,7 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
                                             hasRocc = true))
 
   val exeUnitsStr = new StringBuilder
-  for (exe_unit <- column_exe_units ++ shared_exe_units) {
+  for (exe_unit <- exe_units) {
     exeUnitsStr.append(exe_unit.toString)
   }
 
