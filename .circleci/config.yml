@@ -7,6 +7,48 @@ version: 2.1
 orbs:
     aws-cli: circleci/aws-cli@0.1.19
 
+parameters:
+    largefireboom_buildroot:
+        type: boolean
+        default: false
+    largefireboom_fedora:
+        type: boolean
+        default: false
+    largefireboom_coremark:
+        type: boolean
+        default: false
+    largefireboom_spec17-intspeed:
+        type: boolean
+        default: false
+    largefireboom_spec17-intrate:
+        type: boolean
+        default: false
+    launchrunfarm_passed:
+        type: boolean
+        default: false
+    infrasetup_passed:
+        type: boolean
+        default: false
+    runworkload_passed:
+        type: boolean
+        default: false
+
+    build-and-test-boom-configs-run:
+        type: boolean
+        default: true
+    init-firesim-run:
+        type: boolean
+        default: true
+    finish-firesim-afi-run:
+        type: boolean
+        default: false
+    launch-firesim-workloads-run:
+        type: boolean
+        default: false
+    finish-firesim-workload-run:
+        type: boolean
+        default: false
+
 # set of jobs to run
 jobs:
     install-riscv-toolchain:
@@ -785,7 +827,7 @@ jobs:
                 name: LargeFireBoom AFI build failed
                 command: |
                     .circleci/firesim-afi-failed.sh largefireboom
-    launch-largefireboom-buildroot-run:
+    launch-largefireboom-workloads:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
         environment:
@@ -799,11 +841,42 @@ jobs:
             - restore_cache:
                 keys:
                     - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run a LargeFireBoom Buildroot workload
-                command: |
-                    .circleci/firesim-run-workload.sh largefireboom buildroot 30m
-    largefireboom-buildroot-run-finished:
+            - when:
+                condition: << pipeline.parameters.largefireboom_buildroot >>
+                steps:
+                    - run:
+                        name: Run a LargeFireBoom Buildroot workload
+                        command: |
+                            .circleci/firesim-run-workload.sh largefireboom buildroot 30m
+            - when:
+                condition: << pipeline.parameters.largefireboom_fedora >>
+                steps:
+                    - run:
+                        name: Run a LargeFireBoom Fedora workload
+                        command: |
+                            .circleci/firesim-run-workload.sh largefireboom fedora 30m
+            - when:
+                condition: << pipeline.parameters.largefireboom_coremark >>
+                steps:
+                    - run:
+                        name: Run a LargeFireBoom CoreMark workload
+                        command: |
+                            .circleci/firesim-run-workload.sh largefireboom coremark 30m
+            - when:
+                condition: << pipeline.parameters.largefireboom_spec17-intspeed >>
+                steps:
+                    - run:
+                        name: Run a LargeFireBoom SPEC17 intspeed workload
+                        command: |
+                            .circleci/firesim-run-workload.sh largefireboom spec17-intspeed 30h
+            - when:
+                condition: << pipeline.parameters.largefireboom_spec17-intrate >>
+                steps:
+                    - run:
+                        name: Run a LargeFireBoom SPEC17 intrate workload
+                        command: |
+                            .circleci/firesim-run-workload.sh largefireboom spec17-intrate 72h
+    largefireboom-workload-finished:
         executor: aws-cli/default
         steps:
             - add_ssh_keys:
@@ -814,147 +887,47 @@ jobs:
             - restore_cache:
                 keys:
                     - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Buildroot workload finished
-                command: |
-                    .circleci/firesim-run-finished.sh largefireboom buildroot
-    launch-largefireboom-fedora-run:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run a LargeFireBoom Fedora workload
-                command: |
-                    .circleci/firesim-run-workload.sh largefireboom fedora 30m
-    largefireboom-fedora-run-finished:
-        executor: aws-cli/default
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - aws-cli/setup
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Fedora workload finished
-                command: |
-                    .circleci/firesim-run-finished.sh largefireboom fedora
-    launch-largefireboom-coremark-run:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run a LargeFireBoom CoreMark workload
-                command: |
-                    .circleci/firesim-run-workload.sh largefireboom coremark 30m
-    largefireboom-coremark-run-finished:
-        executor: aws-cli/default
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - aws-cli/setup
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: CoreMark workload finished
-                command: |
-                    .circleci/firesim-run-finished.sh largefireboom coremark
-    launch-largefireboom-spec17-intspeed-run:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run a LargeFireBoom SPEC17 intspeed workload
-                command: |
-                    .circleci/firesim-run-workload.sh largefireboom spec17-intspeed 30h
-    largefireboom-spec17-intspeed-run-finished:
-        executor: aws-cli/default
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - aws-cli/setup
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: SPEC17 intspeed workload finished
-                command: |
-                    .circleci/firesim-run-finished.sh largefireboom spec17-intspeed
-    launch-largefireboom-spec17-intrate-run:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Run a LargeFireBoom SPEC17 intrate workload
-                command: |
-                    .circleci/firesim-run-workload.sh largefireboom spec17-intrate 72h
-    largefireboom-spec17-intrate-run-finished:
-        executor: aws-cli/default
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - aws-cli/setup
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: SPEC17 intrate workload finished
-                command: |
-                    .circleci/firesim-run-finished.sh largefireboom spec17-intrate
+            - when:
+                condition: << pipeline.parameters.largefireboom_buildroot >>
+                steps:
+                    - run:
+                        name: Buildroot workload finished
+                        command: |
+                            .circleci/firesim-run-finished.sh largefireboom buildroot << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
+            - when:
+                condition: << pipeline.parameters.largefireboom_fedora >>
+                steps:
+                    - run:
+                        name: Fedora workload finished
+                        command: |
+                            .circleci/firesim-run-finished.sh largefireboom fedora << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
+            - when:
+                condition: << pipeline.parameters.largefireboom_coremark >>
+                steps:
+                    - run:
+                        name: CoreMark workload finished
+                        command: |
+                            .circleci/firesim-run-finished.sh largefireboom coremark << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
+            - when:
+                condition: << pipeline.parameters.largefireboom_spec17-intspeed >>
+                steps:
+                    - run:
+                        name: SPEC17 intspeed workload finished
+                        command: |
+                            .circleci/firesim-run-finished.sh largefireboom spec17-intspeed << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
+            - when:
+                condition: << pipeline.parameters.largefireboom_spec17-intrate >>
+                steps:
+                    - run:
+                        name: SPEC17 intrate workload finished
+                        command: |
+                            .circleci/firesim-run-finished.sh largefireboom spec17-intrate << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
 
 # Order and dependencies of jobs to run
 workflows:
     version: 2
     build-and-test-boom-configs:
+        when: << pipeline.parameters.build-and-test-boom-configs-run >>
         jobs:
             # TODO: disable
             # temp approval to save jobs
@@ -1071,6 +1044,7 @@ workflows:
         #                only:
         #                    - master
 
+        when: << pipeline.parameters.init-firesim-run >>
         jobs:
             - aws-approval:
                 type: approval
@@ -1112,3 +1086,20 @@ workflows:
                     - build-largefireboom-fedora
                     - build-largefireboom-coremark
                     - build-largefireboom-spec17-intspeed
+
+    finish-firesim-afi:
+        when: << pipeline.parameters.finish-firesim-afi-run >>
+        jobs:
+            - largefireboom-afi-failed
+
+    launch-firesim-workloads:
+        when: << pipeline.parameters.launch-firesim-workloads-run >>
+        jobs:
+            - launch-largefireboom-workloads
+
+    finish-firesim-workload:
+        when: << pipeline.parameters.finish-firesim-workload-run >>
+        jobs:
+            - largefireboom-workload-finished
+
+

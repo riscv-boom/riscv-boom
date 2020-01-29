@@ -53,17 +53,46 @@ if firesim buildafi -b $REMOTE_AWS_FSIM_DEPLOY_DIR/$AFI_NAME/config_build.ini -r
     echo "AFI successfully built"
 else
     # spawn fail job
-    echo "AFI failed... spawning failure job"
+    echo "AFI failed... spawning failure workflow"
+
+    # launch workloads related to this afi
     curl -u $API_TOKEN: \
-        -d build_parameters[CIRCLE_JOB]=$CONFIG_KEY-afi-failed \
-        -d revision=$CIRCLE_SHA1 \
-        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/tree/$CIRCLE_BRANCH
+        -X POST \
+        $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/pipeline \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/json" \
+        -H "x-attribution-login: boom-ci" \
+        -d '{
+  "branch": "$CIRCLE_BRANCH",
+  "parameters": {
+    "build-and-test-boom-configs-run": false,
+    "finish-firesim-afi-run": true
+  }
+}'
+
     exit 1
 fi
 
-# launch workloads related to this afi
-cd $REMOTE_AWS_FSIM_DEPLOY_DIR
-./$AFI_NAME/launch-workloads.sh $CONFIG_KEY $AFI_NAME $API_TOKEN $CIRCLE_SHA1 $API_URL $CIRCLE_PROJECT_USERNAME $CIRCLE_PROJECT_REPONAME $CIRCLE_BRANCH
+# launch workloads
+#   modify this to choose which workloads to run on what afi
+curl -u $API_TOKEN: \
+    -X POST \
+    $API_URL/project/github/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME/pipeline \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json" \
+    -H "x-attribution-login: boom-ci" \
+    -d '{
+  "branch": "$CIRCLE_BRANCH",
+  "parameters": {
+    "build-and-test-boom-configs-run": false,
+    "launch-firesim-workloads-run": true,
+    "largefireboom_buildroot": true,
+    "largefireboom_fedora": true,
+    "largefireboom_coremark": false,
+    "largefireboom_spec17-intspeed": false,
+    "largefireboom_spec17-intrate": false
+  }
+}'
 
 EOF
 

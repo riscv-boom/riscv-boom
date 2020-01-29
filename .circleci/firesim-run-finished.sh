@@ -8,6 +8,9 @@
 # usage:
 #   $1 - config string (translates to afi folder inside firesim-configs/*)
 #   $2 - workload name (folder inside firesim-configs/afi-longname/*)
+#   $3 - launchrunfarm failed - true/false
+#   $4 - infrasetup failed - true/false
+#   $5 - runworkload failed - true/false
 #-------------------------------------------------------------
 
 # turn echo on and error on earliest command
@@ -24,6 +27,9 @@ source $SCRIPT_DIR/defaults.sh
 CONFIG_KEY=$1
 AFI_NAME=${afis[$1]}
 WORKLOAD_NAME=$2
+LAUNCHRUNFARM_PASSED=$3
+INFRASETUP_PASSED=$4
+RUNWORKLOAD_PASSED=$5
 
 # install rsync
 sudo apt-get install -y rsync

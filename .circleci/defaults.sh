@@ -128,7 +128,7 @@ LOCAL_SIM_DIR=$LOCAL_CHIPYARD_DIR/sims/verilator
 LOCAL_FSIM_CFGS_DIR=$LOCAL_CHECKOUT_DIR/.circleci/firesim-configs
 
 # api url to do curls
-API_URL=https://circleci.com/api/v1.1
+API_URL=https://circleci.com/api/v2
 
 # key value store to get the build strings
 declare -A mapping
