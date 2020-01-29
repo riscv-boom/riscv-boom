@@ -750,13 +750,16 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  iss_idx = 0
+  exe_units.io.exe_reqs <> iregister_read.io.exe_reqs
+
+  exe_units.io.brinfo := brunit.brinfo
+  exe_units.io.kill   := rob.io.flush.valid
+
+  // TODO rip this out and do bypassing inside the EXU module
   var bypass_idx = 0
   for (w <- 0 until exe_units.length) {
     val exe_unit = exe_units(w)
     if (exe_unit.readsIrf) {
-      exe_unit.io.req <> iregister_read.io.exe_reqs(iss_idx)
-
       if (exe_unit.bypassable) {
         for (i <- 0 until exe_unit.numBypassStages) {
           bypasses.valid(bypass_idx) := exe_unit.io.bypass.valid(i)
@@ -765,7 +768,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
           bypass_idx += 1
         }
       }
-      iss_idx += 1
     }
   }
   require (bypass_idx == exe_units.numTotalBypassPorts)
