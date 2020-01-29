@@ -5,7 +5,7 @@
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// RISC-V Constructing the Execution Units
+// Execution Unit Generator + Container Module for the Ring Microarchitecture
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
@@ -125,10 +125,10 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
 
   // Put remaining functional units in a shared execution unit
   shared_exe_units += Module(new ALUExeUnit(hasAlu  = false,
-                                     hasMul  = true,
-                                     hasDiv  = true,
-                                     hasCSR  = true,
-                                     hasRocc = true))
+                                            hasMul  = true,
+                                            hasDiv  = true,
+                                            hasCSR  = true,
+                                            hasRocc = true))
 
   val exeUnitsStr = new StringBuilder
   for (exe_unit <- column_exe_units ++ shared_exe_units) {
