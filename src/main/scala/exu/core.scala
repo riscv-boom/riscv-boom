@@ -106,19 +106,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   val dispatcher       = Module(new BasicDispatcher)
 
-  val iregfile         = Module(new RegisterFileSynthesizable(
-                             numIntPhysRegs,
-                             numIrfReadPorts,
-                             numIrfWritePorts,
-                             xLen,
-                             Seq.fill(memWidth) {true} ++ exe_units.bypassable_write_port_mask)) // bypassable ll_wb
+  val iregfile         = Module(new BankedRegisterFileSynthesizable(numIntPhysRegs, xLen))
 
   // wb arbiter for the 0th ll writeback
   // TODO: should this be a multi-arb?
   val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 1 +
                                                                    (if (usingFPU) 1 else 0) +
                                                                    (if (usingRoCC) 1 else 0)))
-  val iregister_read   = Module(new RegisterRead(exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits)))
+  val iregister_read   = Module(new RingRegisterRead(exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits)))
   val rob              = Module(new Rob(
                            numIrfWritePorts + numFpWakeupPorts, // +memWidth for ll writebacks
                            numFpWakeupPorts))
@@ -572,7 +567,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   rob.io.enq_valids := dis_fire
   rob.io.enq_uops   := dis_uops
-  rob.io.enq_partial_stall := dis_stalls.last // TODO come up with better ROB compacting scheme.
+  rob.io.enq_partial_stall := dis_stalls.last
   rob.io.debug_tsc := debug_tsc_reg
   rob.io.csr_stall := csr.io.csr_stall
 
@@ -665,10 +660,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Register Read <- Issue (rrd <- iss)
   iregister_read.io.rf_read_ports <> iregfile.io.read_ports
 
-  for (w <- 0 until exe_units.numIrfReaders) {
-    iregister_read.io.iss_valids(w) :=
-      iss_valids(w) && !(io.lsu.ld_miss && (iss_uops(w).iw_p1_poisoned || iss_uops(w).iw_p2_poisoned))
-  }
+  iregister_read.io.iss_valids := iss_valids
   iregister_read.io.iss_uops := iss_uops
   iregister_read.io.iss_uops map { u => u.iw_p1_poisoned := false.B; u.iw_p2_poisoned := false.B }
 
