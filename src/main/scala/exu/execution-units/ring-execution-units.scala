@@ -169,6 +169,10 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
 
   //----------------------------------------------------------------------------------------------------
   // EU -> Resp crossbar
+  // TODO: This doesn't prevent collisions between scheduled operations (ALU etc.) and
+  // long-latency operations (div & load miss). Possible to fix by backpressuring div unit and
+  // refill buffers respectively, but a bit messy. The refill buffers are especially bad because
+  // there's a pipe stage between them and the writeback crossbar.
 
   val eu_sels = Transpose(Seq(VecInit(column_exe_units.map(_.io.iresp.valid)).asUInt) ++
                           shared_exe_units.map(_.io.resp.bits.uop.dst_col & Fill(coreWidth, _.io.resp.valid)))
