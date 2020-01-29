@@ -39,11 +39,11 @@ class ExecutionArbiter extends BoomModule
     val gnts = Output(Vec(coreWidth, Bool()))
   })
 
-  val shared_exe_reqs = Transpose((0 until w).map(w => io.uops(w).eu_code(4,1)))
+  val shared_exe_reqs = Transpose((0 until w).map(w => io.uops(w).shared_eu_code))
   val shared_exe_gnts = Transpose(shared_exe_reqs.map(r => PriorityEncoderOH(r)))
 
   for (w <- 0 until coreWidth) {
-    io.gnts(w) := shared_exe_gnts(w).orR || !io.uops(w).uses_shared_unit && io.reqs(w)
+    io.gnts(w) := shared_exe_gnts(w).orR || !io.uops(w).shared_eu_code.orR && io.reqs(w)
   }
 }
 
