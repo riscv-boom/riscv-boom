@@ -72,7 +72,7 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   }
 
   //-------------------------------------------------------------
-  // read ports TODO: rewrite this as crossbar
+  // read ports
 
   val prs1_addr_cols := Transpose(io.iss_uops.map(_.op1_col))
   val prs2_addr_cols := Transpose(io.iss_uops.map(_.op2_col))
@@ -98,6 +98,7 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   }
 
   // Setup exe uops
+  // TODO These registers and the bypassing logic should be moved to the new exu module
   for (w <- 0 until coreWidth) {
     val rrd_kill = io.kill || IsKilledByBranch(io.brinfo, rrd_uops(w))
 
