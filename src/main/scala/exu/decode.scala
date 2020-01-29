@@ -517,6 +517,14 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   uop.iq_type    := cs.iq_type
   uop.fu_code    := cs.fu_code
 
+  // Just hard-code this for now
+  val fu = uop.fu_code
+  uop.eu_code    := VecInit(fu(0),                  // ALU
+                            fu(2),                  // MEM
+                            fu(1),                  // BRU
+                            fu(3) || fu(4) || fu(5) // MUL || DIV || CSR
+                            ).asUInt
+
   // x-registers placed in 0-31, f-registers placed in 32-63.
   // This allows us to straight-up compare register specifiers and not need to
   // verify the rtypes (e.g., bypassing in rename).
