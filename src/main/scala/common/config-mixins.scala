@@ -148,6 +148,40 @@ class WithRationalBoomTiles extends Config((site, here, up) => {
 })
 
 /**
+ * N-wide Ring-BOOM.
+ */
+class WithRingBooms(n: Int) extends Config((site, here, up) => {
+  case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
+    core = b.core.copy(
+      fetchWidth = (n+1)/2 * 4,
+      useCompressed = true,
+      decodeWidth = n,
+      numRobEntries = 16*n,
+      issueParams = Seq(
+        IssueParams(issueWidth=n, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=n)),
+      numIntPhysRegisters = 32 + 16*n,
+      numFpPhysRegisters = 32 + 12*n,
+      numLdqEntries = 4*n,
+      numStqEntries = 4*n,
+      maxBrCount = 4*n,
+      numFetchBufferEntries = 8*n,
+      ftq = FtqParameters(nEntries=16),
+      btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=20),
+      bpdBaseOnly = None,
+      gshare = Some(GShareParameters(historyLength=23, numSets=4096)),
+      tage = None,
+      bpdRandom = None,
+      fpu = None),
+    dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
+                               nSets=64, nWays=4, nMSHRs=4, nTLBEntries=16)),
+    icache = Some(ICacheParams(fetchBytes = 2*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=4, prefetch=true))
+  )}
+  case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+  case XLen => 64
+  case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
+})
+
+/**
  * 1-wide BOOM.
  */
 class WithSmallBooms extends Config((site, here, up) => {
