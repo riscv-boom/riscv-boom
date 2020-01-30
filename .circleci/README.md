@@ -26,6 +26,7 @@ Stop procedure:
 Requirements:
 - Add to CircleCI env. var. `$CI_AWS_DIR` point to the "~" of manager instance
 - Add SSH key ("firesim.pem") to the CircleCI SSH keys and use the key in the `config.yml` jobs
+- Add `$API_TOKEN` to the env. vars in CircleCI - make sure it is the user API token (found in user settings, not in project settings)
 - Fill out the following CircleCI env. var.s to access AWS:
     - `$AWS_ACCESS_KEY_ID`
     - `$AWS_SECRET_ACCESS_KEY`

@@ -7,7 +7,9 @@ version: 2.1
 orbs:
     aws-cli: circleci/aws-cli@0.1.19
 
+# pipeline parameters
 parameters:
+    # parameters to manage workload/job flow
     largefireboom_buildroot:
         type: boolean
         default: false
@@ -33,6 +35,7 @@ parameters:
         type: boolean
         default: false
 
+    # workload run parameters
     build-and-test-boom-configs-run:
         type: boolean
         default: true
