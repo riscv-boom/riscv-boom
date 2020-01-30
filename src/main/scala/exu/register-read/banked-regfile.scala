@@ -85,7 +85,7 @@ abstract class BankedRegisterFile(
  */
 class BankedRegisterFileSynthesizable(
    numRegisters: Int,
-   registerWidth: Int,
+   registerWidth: Int)
    (implicit p: Parameters)
    extends BankedRegisterFile(numRegisters, registerWidth)
 {

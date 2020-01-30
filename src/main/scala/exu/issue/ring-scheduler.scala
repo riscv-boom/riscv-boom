@@ -41,7 +41,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)(implicit p: Paramet
   //----------------------------------------------------------------------------------------------------
   // Generate table of issue slots
 
-  val issue_table = Seq.fill(coreWidth)( Seq.fill(numSlotsPerColumn)( Module(new RingIssueSlot) )
+  val issue_table = Seq.fill(coreWidth)( Seq.fill(numSlotsPerColumn)( Module(new RingIssueSlot) ))
   val slots = VecInit(issue_table.map(col => VecInit(col.io)))
 
   for (w <- 0 until coreWidth) {

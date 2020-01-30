@@ -598,9 +598,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   for (w <- 0 until coreWidth) {
     val wbresp = exe_units.io.exe_resps(w)
     wakeups(w).bits  := wbresp.bits.uop.pdst
-    wakeups(w).valid := wbresp.valid
-                       && wbresp.bits.uop.rf_wen
-                       && wbresp.bits.uop.dst_rtype === RT_FIX
+    wakeups(w).valid := (  wbresp.valid
+                        && wbresp.bits.uop.rf_wen
+                        && wbresp.bits.uop.dst_rtype === RT_FIX )
   }
 
   for ((renport, intport) <- rename_stage.io.wakeups zip wakeups) {

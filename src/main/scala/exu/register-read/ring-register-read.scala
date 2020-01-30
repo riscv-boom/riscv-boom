@@ -74,8 +74,8 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   //-------------------------------------------------------------
   // read ports
 
-  val prs1_addr_cols := Transpose(io.iss_uops.map(_.op1_col))
-  val prs2_addr_cols := Transpose(io.iss_uops.map(_.op2_col))
+  val prs1_addr_cols = Transpose(io.iss_uops.map(_.op1_col))
+  val prs2_addr_cols = Transpose(io.iss_uops.map(_.op2_col))
 
   // Col -> Bank Address Crossbar
   for (w <- 0 until coreWidth) {
