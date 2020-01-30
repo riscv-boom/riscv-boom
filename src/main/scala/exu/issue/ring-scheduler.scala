@@ -20,7 +20,8 @@ import freechips.rocketchip.util.Str
 import FUConstants._
 import boom.common._
 
-class RingScheduler(numSlots: Int, columnDispatchWidth: Int)(implicit p: Parameters)
+class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
+  (implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BoomBundle{
     val dis_uops = Flipped(Vec(coreWidth, DecoupledIO(new MicroOp)))
