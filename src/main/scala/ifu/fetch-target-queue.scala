@@ -75,6 +75,11 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle
   // the next_pc may not be valid (stalled or still being fetched)
   val next_val = Output(Bool())
   val next_pc  = Output(UInt(vaddrBitsExtended.W))
+
+  // Used to regenerate PC for trace port stuff in FireSim
+  // Don't tape this out, this blows up the FTQ
+  val debug_ftq_idx  = Input(Vec(coreWidth, UInt(log2Ceil(ftqSz).W)))
+  val debug_fetch_pc = Output(Vec(coreWidth, UInt(vaddrBitsExtended.W)))
 }
 
 /**
@@ -292,6 +297,10 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
   io.get_ftq_pc.fetch_pc := ram(curr_idx).fetch_pc
   io.get_ftq_pc.next_pc := ram(WrapInc(curr_idx, num_entries)).fetch_pc
   io.get_ftq_pc.next_val := WrapInc(curr_idx, num_entries) =/= enq_ptr.value
+
+  for (w <- 0 until coreWidth) {
+    io.get_ftq_pc.debug_fetch_pc(w) := ram(io.get_ftq_pc.debug_ftq_idx(w)).fetch_pc
+  }
 
   //-------------------------------------------------------------
   // **** Handle Flush/Pipeline Redirections ****
