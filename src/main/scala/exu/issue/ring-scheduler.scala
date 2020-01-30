@@ -44,6 +44,16 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)(implicit p: Paramet
   val issue_table = Seq.fill(coreWidth)( Seq.fill(numSlotsPerColumn)( Module(new RingIssueSlot) )
   val slots = VecInit(issue_table.map(col => VecInit(col.io)))
 
+  for (w <- 0 until coreWidth) {
+    for (i <- 0 until numSlotsPerColumn) {
+      slots(w)(i).slow_wakeups := io.wakeups
+      slots(w)(i).ldspec_miss  := io.ld_miss
+
+      slots(w)(i).brinfo := io.brinfo
+      slots(w)(i).kill   := io.kill
+    }
+  }
+
   //----------------------------------------------------------------------------------------------------
   // Dispatch
 
@@ -108,7 +118,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)(implicit p: Paramet
 
   for (w <- 0 until coreWidth) {
     val valids = slots(w).map(_.valid) ++ dis_vals(w)
-    val uops = slots(w).map(_.uop) ++ dis_uops(w)
+    val uops = slots(w).map(_.out_uop) ++ dis_uops(w)
     val next_valids = slots(w).map(_.will_be_valid) ++ dis_valids(w)
 
     val max = columnDispatchWidth
@@ -124,6 +134,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)(implicit p: Paramet
 
       slot(w)(i).in_uop.bits  := Mux1H(uop_sel, uops.slice(i+1,i+max+1))
       slot(w)(i).in_uop.valid := will_be_valid
+
+      slot(w)(i).clear := !counts(i)(0)
     }
   }
 }
