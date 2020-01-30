@@ -130,8 +130,7 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
   shared_exe_units += Module(new ALUExeUnit(hasAlu  = false,
                                             hasMul  = true,
                                             hasDiv  = true,
-                                            hasCSR  = true,
-                                            hasRocc = true))
+                                            hasCSR  = true))
 
   //----------------------------------------------------------------------------------------------------
   // Generator string output
