@@ -175,8 +175,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
   // Get the columns of the uop's physical registers
   def dst_col   = UIntToOH(ColIdx(pdst))
-  def op1_col   = UIntToOH(ColIdx(pop1))
-  def op2_col   = UIntToOH(ColIdx(pop2))
+  def op1_col   = UIntToOH(ColIdx(prs1))
+  def op2_col   = UIntToOH(ColIdx(prs2))
   def stale_col = UIntToOH(ColIdx(stale_pdst))
 
   // Getters that help with arbitration during scheduling
