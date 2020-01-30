@@ -99,7 +99,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                          else null
   val rename_stages    = if (usingFPU) Seq(rename_stage, fp_rename_stage) else Seq(rename_stage)
 
-  val scheduler        = Module(new RingScheduler(intIssueParam.issueWidth))
+  val scheduler        = Module(new RingScheduler(intIssueParam.numEntries, intIssueParam.dispatchWidth))
 
   val dispatcher       = Module(new BasicDispatcher)
 
@@ -585,13 +585,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // Dispatch to issue queues
 
-  for (w <- 0 until coreWidth) {
-    scheduler.io.dis_uops(w).bits  := dis_uops(w)
-    scheduler.io.dis_uops(w).valid := dis_valids(w) && dis_uops(w).iq_type === IQT_INT
-  }
-
-  // Only fp_pipeline uses the 'dispatcher' module
-  fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(0)
+  scheduler.io.dis_uops   <> dispatcher.io.dis_uops(IQT_INT.litValue)
+  fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(IQT_FP.litValue)
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
