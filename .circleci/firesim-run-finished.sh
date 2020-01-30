@@ -35,7 +35,6 @@ RUNWORKLOAD_PASSED=$5
 sudo apt-get install -y rsync
 
 # see if the instance should be stopped
-# TODO: if can't use context aka doesn't work, just stop on afi fail
 stop_instance_check () {
     # search inside "workloads_running" file for the AFI+WORKLOAD name
     if grep "$AFI_NAME-$WORKLOAD_NAME" $REMOTE_AWS_WORK_DIR/workloads_running; then

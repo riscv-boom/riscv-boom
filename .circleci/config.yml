@@ -51,6 +51,14 @@ parameters:
 
 # re-usable commands
 commands:
+    ssh-checkout:
+        description: "Add SSH key and checkout code"
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+
     toolchain-build:
         description: "Build a toolchain"
         parameters:
@@ -71,7 +79,7 @@ commands:
                     .circleci/build-toolchains.sh << parameters.tools-version >>
                 no_output_timeout: 120m
             - save_cache:
-                key: << paramters.tools-version >>-installed-v4-{{ checksum "../<< parameters.tools-version >>.hash" }}
+                key: << parameters.tools-version >>-installed-v4-{{ checksum "../<< parameters.tools-version >>.hash" }}
                 paths:
                     - "/home/riscvuser/<< parameters.tools-version >>-install"
 
@@ -87,10 +95,7 @@ commands:
                 type: string
                 default: "120m"
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
-            - checkout
+            - ssh-checkout
             - run:
                 name: Create hash of toolchains
                 command: |
@@ -145,10 +150,7 @@ commands:
             workload:
                 type: string
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
+            - ssh-checkout
             - restore_cache:
                 keys:
                     - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
@@ -166,7 +168,7 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            toolchain-build:
+            - toolchain-build:
                 tools-version: "riscv-tools"
     install-esp-toolchain:
         docker:
@@ -175,7 +177,7 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            toolchain-build:
+            - toolchain-build:
                 tools-version: "esp-tools"
     prepare-build-environment:
         docker:
@@ -184,10 +186,7 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
-            - checkout
+            - ssh-checkout
             - restore_cache:
                 keys:
                     - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
@@ -453,10 +452,7 @@ jobs:
     initialize-manager:
         executor: aws-cli/default
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
+            - ssh-checkout
             - aws-cli/setup
             - run:
                 name: Initialize FireSim manager instance with Chipyard
@@ -524,10 +520,7 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
+            - ssh-checkout
             - restore_cache:
                 keys:
                     - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
@@ -539,10 +532,7 @@ jobs:
     largefireboom-afi-failed:
         executor: aws-cli/default
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
+            - ssh-checkout
             - aws-cli/setup
             - restore_cache:
                 keys:
@@ -558,10 +548,7 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
+            - ssh-checkout
             - restore_cache:
                 keys:
                     - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
@@ -603,10 +590,7 @@ jobs:
     largefireboom-workload-finished:
         executor: aws-cli/default
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
+            - ssh-checkout
             - aws-cli/setup
             - restore_cache:
                 keys:

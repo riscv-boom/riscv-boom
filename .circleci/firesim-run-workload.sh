@@ -63,6 +63,7 @@ workload_finished () {
   "branch": "$CIRCLE_BRANCH",
   "parameters": {
     "build-and-test-boom-configs-run": false,
+    "init-firesim-run": false,
     "finish-firesim-workload-run": true,
     "$AFI_NAME_$WORKLOAD_NAME": true,
     "launchrunfarm_passed": \$1,

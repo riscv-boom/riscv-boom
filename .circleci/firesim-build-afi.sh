@@ -66,6 +66,7 @@ else
   "branch": "$CIRCLE_BRANCH",
   "parameters": {
     "build-and-test-boom-configs-run": false,
+    "init-firesim-run": false,
     "finish-firesim-afi-run": true
   }
 }'
@@ -85,6 +86,7 @@ curl -u $API_TOKEN: \
   "branch": "$CIRCLE_BRANCH",
   "parameters": {
     "build-and-test-boom-configs-run": false,
+    "init-firesim-run": false,
     "launch-firesim-workloads-run": true,
     "largefireboom_buildroot": true,
     "largefireboom_fedora": true,
