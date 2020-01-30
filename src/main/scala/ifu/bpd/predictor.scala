@@ -44,6 +44,11 @@ class BranchPredictionBundle(implicit p: Parameters) extends BoomBundle()(p)
 class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomFrontendParameters
 {
+  // Indicates that this update is due to a speculated misprediction
+  // Local predictors typically update themselves with speculative info
+  // Global predictors only care about non-speculative updates
+  val is_spec       = Bool()
+
   val pc            = UInt(vaddrBitsExtended.W)
   // Mask of instructions which are branches.
   // If these are not cfi_idx, then they were predicted not taken
@@ -73,6 +78,8 @@ class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
 class BranchPredictionBankUpdate(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomFrontendParameters
 {
+  val is_spec          = Bool()
+
   val pc               = UInt(vaddrBitsExtended.W)
 
   val br_mask          = UInt(bankWidth.W)
@@ -149,6 +156,9 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
 
   val s2_req     = RegNext(s1_req)
   val s2_req_idx = RegNext(s1_req_idx)
+
+  val s3_req     = RegNext(s2_req)
+  val s3_req_idx = RegNext(s2_req_idx)
 }
 
 
@@ -279,26 +289,28 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   dontTouch(io.resp.f3)
   dontTouch(io.update)
 
+  for (i <- 0 until nBanks) {
+    banked_predictors(i).io.update.bits.is_spec          := io.update.bits.is_spec
+    banked_predictors(i).io.update.bits.meta             := io.update.bits.meta(i)
+    banked_predictors(i).io.update.bits.cfi_idx.bits     := io.update.bits.cfi_idx.bits
+    banked_predictors(i).io.update.bits.cfi_taken        := io.update.bits.cfi_taken
+    banked_predictors(i).io.update.bits.cfi_mispredicted := io.update.bits.cfi_mispredicted
+    banked_predictors(i).io.update.bits.cfi_is_br        := io.update.bits.cfi_is_br
+    banked_predictors(i).io.update.bits.cfi_is_jal       := io.update.bits.cfi_is_jal
+    banked_predictors(i).io.update.bits.target           := io.update.bits.target
+
+  }
+
   if (nBanks == 1) {
     banked_predictors(0).io.update.valid                 := io.update.valid
     banked_predictors(0).io.update.bits.pc               := bankAlign(io.update.bits.pc)
     banked_predictors(0).io.update.bits.br_mask          := io.update.bits.br_mask
-    banked_predictors(0).io.update.bits.cfi_idx          := io.update.bits.cfi_idx
-    banked_predictors(0).io.update.bits.cfi_taken        := io.update.bits.cfi_taken
-    banked_predictors(0).io.update.bits.cfi_mispredicted := io.update.bits.cfi_mispredicted
-    banked_predictors(0).io.update.bits.cfi_is_br        := io.update.bits.cfi_is_br
-    banked_predictors(0).io.update.bits.cfi_is_jal       := io.update.bits.cfi_is_jal
+    banked_predictors(0).io.update.bits.cfi_idx.valid    := io.update.bits.cfi_idx.valid
     banked_predictors(0).io.update.bits.hist             := io.update.bits.ghist.histories(0)
-    banked_predictors(0).io.update.bits.target           := io.update.bits.target
-    banked_predictors(0).io.update.bits.meta             := io.update.bits.meta(0)
   } else {
     require(nBanks == 2)
     // Split the single update bundle for the fetchpacket into two updates
     // 1 for each bank.
-
-    // The meta was not interleaved
-    banked_predictors(0).io.update.bits.meta := io.update.bits.meta(0)
-    banked_predictors(1).io.update.bits.meta := io.update.bits.meta(1)
 
     when (bank(io.update.bits.pc) === 0.U) {
       banked_predictors(0).io.update.valid := io.update.valid
@@ -334,23 +346,6 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
       banked_predictors(0).io.update.bits.hist := io.update.bits.ghist.histories(1)
     }
 
-    banked_predictors(0).io.update.bits.cfi_idx.bits  := io.update.bits.cfi_idx.bits
-    banked_predictors(1).io.update.bits.cfi_idx.bits  := io.update.bits.cfi_idx.bits
-
-    banked_predictors(0).io.update.bits.cfi_taken  := io.update.bits.cfi_taken
-    banked_predictors(1).io.update.bits.cfi_taken  := io.update.bits.cfi_taken
-
-    banked_predictors(0).io.update.bits.cfi_mispredicted  := io.update.bits.cfi_mispredicted
-    banked_predictors(1).io.update.bits.cfi_mispredicted  := io.update.bits.cfi_mispredicted
-
-    banked_predictors(0).io.update.bits.cfi_is_br := io.update.bits.cfi_is_br
-    banked_predictors(1).io.update.bits.cfi_is_br := io.update.bits.cfi_is_br
-
-    banked_predictors(0).io.update.bits.cfi_is_jal := io.update.bits.cfi_is_jal
-    banked_predictors(1).io.update.bits.cfi_is_jal := io.update.bits.cfi_is_jal
-
-    banked_predictors(0).io.update.bits.target := io.update.bits.target
-    banked_predictors(1).io.update.bits.target := io.update.bits.target
   }
 
   when (io.update.valid) {

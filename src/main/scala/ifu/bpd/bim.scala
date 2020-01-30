@@ -100,14 +100,14 @@ class BIMBranchPredictorBank(nSets: Int)(implicit p: Parameters) extends BranchP
   }
 
   for (w <- 0 until bankWidth) {
-    when (doing_reset || (s1_update_wmask(w) && s1_update.valid)) {
+    when (doing_reset || (s1_update_wmask(w) && s1_update.valid && !s1_update.bits.is_spec)) {
       data(w).write(
         Mux(doing_reset, reset_idx, s1_update_idx),
         Mux(doing_reset, 2.U, s1_update_wdata(w))
       )
     }
   }
-  when (s1_update_wmask.reduce(_||_) && s1_update.valid) {
+  when (s1_update_wmask.reduce(_||_) && s1_update.valid && !s1_update.bits.is_spec) {
     when (wrbypass_hit) {
       wrbypass(wrbypass_hit_idx) := s1_update_wdata
     } .otherwise {

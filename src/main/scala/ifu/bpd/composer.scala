@@ -31,7 +31,9 @@ class ComposedBranchPredictorBank(implicit p: Parameters) extends BranchPredicto
   for (c <- components) {
     c.io.f0_req  := io.f0_req
     c.io.f3_fire := io.f3_fire
-    metas = (metas << c.metaSz) | c.io.f3_meta(c.metaSz-1,0)
+    if (c.metaSz > 0) {
+      metas = (metas << c.metaSz) | c.io.f3_meta(c.metaSz-1,0)
+    }
     meta_sz = meta_sz + c.metaSz
   }
   require(meta_sz < bpdMaxMetaLength)

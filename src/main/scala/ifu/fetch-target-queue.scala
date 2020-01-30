@@ -210,14 +210,16 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   io.ras_update     := RegNext(ras_update)
   io.ras_update_pc  := RegNext(ras_update_pc)
   io.ras_update_idx := RegNext(ras_update_idx)
-  when (bpd_ptr =/= deq_ptr && enq_ptr =/= WrapInc(bpd_ptr, num_entries)) {
 
-    val entry = ram(bpd_ptr)
+  val bpd_idx = Mux(RegNext(io.brupdate.b2.mispredict), RegNext(io.brupdate.b2.uop.ftq_idx), bpd_ptr)
+  val entry = ram(bpd_idx)
+  when (bpd_ptr =/= deq_ptr && enq_ptr =/= WrapInc(bpd_ptr, num_entries) || RegNext(io.brupdate.b2.mispredict)) {
     val cfi_idx = entry.cfi_idx.bits
 
     // TODO: We should try to commit branch prediction updates earlier
     bpdupdate.valid              := !first_empty && (entry.cfi_idx.valid || entry.br_mask =/= 0.U)
-    bpdupdate.bits.pc            := pcs(bpd_ptr)
+    bpdupdate.bits.is_spec       := RegNext(io.brupdate.b2.mispredict)
+    bpdupdate.bits.pc            := pcs(bpd_idx)
 
     bpdupdate.bits.br_mask       := Mux(entry.cfi_idx.valid,
       MaskLower(UIntToOH(cfi_idx)) & entry.br_mask, entry.br_mask)
@@ -225,7 +227,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     bpdupdate.bits.cfi_idx.bits     := entry.cfi_idx.bits
     bpdupdate.bits.cfi_mispredicted := entry.cfi_mispredicted
     bpdupdate.bits.cfi_taken        := entry.cfi_taken
-    bpdupdate.bits.target           := pcs(WrapInc(bpd_ptr, num_entries))
+    bpdupdate.bits.target           := pcs(WrapInc(bpd_idx, num_entries))
     bpdupdate.bits.cfi_is_br        := entry.br_mask(cfi_idx)
     bpdupdate.bits.cfi_is_jal       := entry.cfi_type === CFI_JAL || entry.cfi_type === CFI_JALR
     bpdupdate.bits.ghist            := entry.ghist
@@ -234,12 +236,14 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     // ras_update_pc  := bankAlign(pcs(bpd_ptr)) + (entry.cfi_idx.bits << 1) + Mux(entry.cfi_npc_plus4, 4.U, 2.U)
     // ras_update_idx := WrapInc(entry.ghist.ras_idx, nRasEntries)
 
-    bpd_ptr := WrapInc(bpd_ptr, num_entries)
+    when (!RegNext(io.brupdate.b2.mispredict)) {
+      bpd_ptr := WrapInc(bpd_ptr, num_entries)
+    }
 
     first_empty := false.B
   }
   io.bpdupdate           := RegNext(bpdupdate)
-  io.bpdupdate.bits.meta := bpd_meta.read(bpd_ptr)
+  io.bpdupdate.bits.meta := bpd_meta.read(bpd_idx)
 
 
   when (io.redirect.valid) {

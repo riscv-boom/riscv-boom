@@ -282,7 +282,7 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
     val update_was_taken = (s1_update.bits.cfi_idx.valid &&
                             (s1_update.bits.cfi_idx.bits === w.U) &&
                             s1_update.bits.cfi_taken)
-    when (s1_update.bits.br_mask(w) && s1_update.valid) {
+    when (s1_update.bits.br_mask(w) && s1_update.valid && !s1_update.bits.is_spec) {
       when (s1_update_meta.provider(w).valid) {
         val provider = s1_update_meta.provider(w).bits
 
@@ -300,7 +300,7 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
       }
     }
   }
-  when (s1_update.valid && s1_update.bits.cfi_mispredicted && s1_update.bits.cfi_idx.valid) {
+  when (s1_update.valid && !s1_update.bits.is_spec && s1_update.bits.cfi_mispredicted && s1_update.bits.cfi_idx.valid) {
     val idx = s1_update.bits.cfi_idx.bits
     val allocate = s1_update_meta.allocate(idx)
     when (allocate.valid) {

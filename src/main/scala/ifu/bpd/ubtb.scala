@@ -113,10 +113,10 @@ class MicroBTBBranchPredictorBank(params: BoomMicroBTBParams)(implicit p: Parame
   val s1_update_wbtb_data     = Wire(new MicroBTBEntry)
   s1_update_wbtb_data.offset := new_offset_value
   val s1_update_wbtb_mask = (UIntToOH(s1_update_cfi_idx) &
-    Fill(bankWidth, s1_update.bits.cfi_idx.valid && s1_update.valid && s1_update.bits.cfi_taken))
+    Fill(bankWidth, s1_update.bits.cfi_idx.valid && s1_update.valid && s1_update.bits.cfi_taken && !s1_update.bits.is_spec))
 
   val s1_update_wmeta_mask = ((s1_update_wbtb_mask | s1_update.bits.br_mask) &
-    Fill(bankWidth, s1_update.valid))
+    Fill(bankWidth, s1_update.valid && !s1_update.bits.is_spec))
   val s1_update_wmeta_data = Wire(Vec(bankWidth, new MicroBTBMeta))
   for (w <- 0 until bankWidth) {
     s1_update_wmeta_data(w).tag     := s1_update_idx >> log2Ceil(nSets)
