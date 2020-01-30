@@ -90,9 +90,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     fp_pipeline.io.wb_pdsts  := DontCare
   }
 
-  val numIrfWritePorts   = exe_units.numIrfWritePorts + memWidth
-  val numLlIrfWritePorts = exe_units.numLlIrfWritePorts
-  val numIrfReadPorts    = exe_units.numIrfReadPorts
   val numFpWakeupPorts   = if (usingFPU) fp_pipeline.io.wakeups.length else 0
 
   val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
@@ -108,18 +105,12 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   val iregfile         = Module(new BankedRegisterFileSynthesizable(numIntPhysRegs, xLen))
 
-  // wb arbiter for the 0th ll writeback
-  // TODO: should this be a multi-arb?
-  val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 1 +
-                                                                   (if (usingFPU) 1 else 0) +
-                                                                   (if (usingRoCC) 1 else 0)))
   val iregister_read   = Module(new RingRegisterRead(exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits)))
   val rob              = Module(new Rob(
                            numIrfWritePorts + numFpWakeupPorts, // +memWidth for ll writebacks
                            numFpWakeupPorts))
 
-  val writebacks = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
-  val wakeups    = Wire(Vec(coreWidth, Valid(UInt(pregSz.W)))) // 'Slow' wakeups
+  val wakeups          = Wire(Vec(coreWidth, Valid(UInt(pregSz.W)))) // 'Slow' wakeups
   wakeups := DontCare
 
   //***********************************
@@ -610,11 +601,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Generate 'slow' wakeup signals from writeback ports.
   for (w <- 0 until coreWidth) {
-    val wb = writebacks(w)
-    wakeups(w).bits  := wb.bits.uop.pdst
-    wakeups(w).valid := wb.valid
-                       && wb.bits.uop.rf_wen
-                       && wb.bits.uop.dst_rtype === RT_FIX
+    val wbresp = exe_units.io.exe_resps(w)
+    wakeups(w).bits  := wbresp.bits.uop.pdst
+    wakeups(w).valid := wbresp.valid
+                       && wbresp.bits.uop.rf_wen
+                       && wbresp.bits.uop.dst_rtype === RT_FIX
   }
 
   for ((renport, intport) <- rename_stage.io.wakeups zip wakeups) {
@@ -811,50 +802,34 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  var w_cnt = 1
-  iregfile.io.write_ports(0) := WritePort(ll_wbarb.io.out, ipregSz, xLen, RT_FIX)
-  ll_wbarb.io.in(0) <> mem_resps(0)
-  assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
-  for (i <- 1 until memWidth) {
-    iregfile.io.write_ports(w_cnt) := WritePort(mem_resps(i), ipregSz, xLen, RT_FIX)
-    w_cnt += 1
+  // Hook the writebacks up to the regfile
+  for (w <- 0 until coreWidth) {
+    val wbresp = exe_units.io.exe_resps(w)
+    val wbpdst = wbresp.bits.uop.pdst
+    val wbdata = wbresp.bits.data
+
+    def wbIsValid(rtype: UInt) =
+      wbresp.valid && wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype === rtype
+    val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N
+
+    iregfile.io.write_ports(w).valid     := wbIsValid(RT_FIX)
+    iregfile.io.write_ports(w).bits.addr := wbpdst
+    wbresp.ready := true.B // TODO this should just be a Valid(resp), not Decoupled(resp)
+
+    iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
+
+    assert (!wbIsValid(RT_FLT), "[fppipeline] An FP writeback is being attempted to the Int Regfile.")
+
+    assert (!(wbresp.valid &&
+      !wbresp.bits.uop.rf_wen &&
+      wbresp.bits.uop.dst_rtype === RT_FIX),
+      "[fppipeline] An Int writeback is being attempted with rf_wen disabled.")
+
+    assert (!(wbresp.valid &&
+      wbresp.bits.uop.rf_wen &&
+      wbresp.bits.uop.dst_rtype =/= RT_FIX),
+      "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+i+").iresp")
   }
-
-  for (i <- 0 until exe_units.length) {
-    if (exe_units(i).writesIrf) {
-      val wbresp = exe_units(i).io.iresp
-      val wbpdst = wbresp.bits.uop.pdst
-      val wbdata = wbresp.bits.data
-
-      def wbIsValid(rtype: UInt) =
-        wbresp.valid && wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype === rtype
-      val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N
-
-      iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
-      iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
-      wbresp.ready := true.B
-      if (exe_units(i).hasCSR) {
-        iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
-      } else {
-        iregfile.io.write_ports(w_cnt).bits.data := wbdata
-      }
-
-      assert (!wbIsValid(RT_FLT), "[fppipeline] An FP writeback is being attempted to the Int Regfile.")
-
-      assert (!(wbresp.valid &&
-        !wbresp.bits.uop.rf_wen &&
-        wbresp.bits.uop.dst_rtype === RT_FIX),
-        "[fppipeline] An Int writeback is being attempted with rf_wen disabled.")
-
-      assert (!(wbresp.valid &&
-        wbresp.bits.uop.rf_wen &&
-        wbresp.bits.uop.dst_rtype =/= RT_FIX),
-        "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+i+").iresp")
-      w_cnt += 1
-    }
-  }
-  require(w_cnt == iregfile.io.write_ports.length)
-
 
   if (usingFPU) {
     // Connect IFPU
@@ -866,7 +841,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
   if (usingRoCC) {
     require(usingFPU)
-    ll_wbarb.io.in(2)       <> exe_units.rocc_unit.io.ll_iresp
+    ll_wbarb.io.in(2)        <> exe_units.rocc_unit.io.ll_iresp
   }
 
   //-------------------------------------------------------------
