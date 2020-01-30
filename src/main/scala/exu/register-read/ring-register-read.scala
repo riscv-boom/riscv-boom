@@ -23,7 +23,8 @@ class RingRegisterReadIO
   (implicit p: Parameters) extends BoomBundle
 {
   // issued micro-ops
-  val iss_uops = Input(Vec(coreWidth, Valid(new MicroOp)))
+  val iss_uops   = Input(Vec(coreWidth, new MicroOp))
+  val iss_valids = Input(Vec(coreWidth, Bool()))
 
   // interface with register file's read ports
   val rf_read_ports = Flipped(Vec(coreWidth, new BankReadPort(ipregSz, xLen)))
