@@ -119,7 +119,7 @@ class BankedRegisterFileSynthesizable(
   // --------------------------------------------------------------
   // Write ports.
 
-  for (w -> 0 until coreWidth) {
+  for (w <- 0 until coreWidth) {
     when (write_ports(w).valid && (write_ports(w).bits.addr =/= 0.U)) {
       regfile(w)(write_ports(w).bits.addr) := write_ports(w).bits.data
     }
