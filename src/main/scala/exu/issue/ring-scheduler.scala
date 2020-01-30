@@ -78,12 +78,11 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)(implicit p: Paramet
   for (w <- 0 until coreWidth) {
     val col_reqs = slots(w).map(_.request)
     val col_uops = slots(w).map(_.uop)
+
     iss_sels(w) := PriorityEncoderOH(col_reqs)
     sel_uops(w) := Mux1H(col_uops, iss_sel(w))
     sel_vals(w) := iss_sels(w).reduce(_||_)
   }
-
-  io.iss_uops := sel_uops
 
   //----------------------------------------------------------------------------------------------------
   // Arbitration
@@ -105,12 +104,30 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)(implicit p: Paramet
   arb_gnts = arb_gnts.asBools
 
   //----------------------------------------------------------------------------------------------------
-  // Grants
+  // Grant, Fast Wakeup, and Issue
 
+  // Grant signals
   for (w <- 0 until coreWidth) {
     for (i <- 0 until numSlotsPerColumn) {
       slots(w)(i).grant := iss_sels(w)(i) && arb_gnts(w)
     }
+  }
+
+  // Connect fast wakeups
+  for (w <- 0 until coreWidth) {
+    val fast_wakeup = Wire(Valid(UInt(ipregSz.W)))
+    fast_wakeup.bits  := sel_uops(w).pdst
+    fast_wakeup.valid := arb_gnts(w)
+
+    for (slot <- slots((w + 1) % coreWidth)) {
+      slot.fast_wakeup := fast_wakeup
+    }
+  }
+
+  // Hookup issue output
+  for (w <- 0 until coreWidth) {
+    io.iss_uops(w).bits  := sel_uops(w)
+    io.iss_uops(w).valid := arb_gnts(w)
   }
 
   //----------------------------------------------------------------------------------------------------
