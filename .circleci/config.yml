@@ -49,6 +49,114 @@ parameters:
         type: boolean
         default: false
 
+# re-usable commands
+commands:
+    toolchain-build:
+        description: "Build a toolchain"
+        parameters:
+            tools-version:
+                type: string
+        steps:
+            - checkout
+            - run:
+                name: Create hash of toolchains
+                command: |
+                    .circleci/create-hash.sh
+            - restore_cache:
+                keys:
+                    - << parameters.tools-version >>-installed-v4-{{ checksum "../<< parameters.tools-version >>.hash" }}
+            - run:
+                name: Building << parameters.tools-version >>
+                command: |
+                    .circleci/build-toolchains.sh << parameters.tools-version >>
+                no_output_timeout: 120m
+            - save_cache:
+                key: << paramters.tools-version >>-installed-v4-{{ checksum "../<< parameters.tools-version >>.hash" }}
+                paths:
+                    - "/home/riscvuser/<< parameters.tools-version >>-install"
+
+    prepare-rtl:
+        description: "Run the prepare step of RTL"
+        parameters:
+            tools-version:
+                type: string
+                default: "riscv-tools"
+            config-key:
+                type: string
+            timeout:
+                type: string
+                default: "120m"
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
+            - checkout
+            - run:
+                name: Create hash of toolchains
+                command: |
+                    .circleci/create-hash.sh
+            - restore_cache:
+                keys:
+                    - << parameters.tools-version >>-installed-v4-{{ checksum "../<< parameters.tools-version >>.hash" }}
+            - restore_cache:
+                keys:
+                    - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
+            - restore_cache:
+                keys:
+                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - run:
+                name: Building << parameters.config-key >> Config using Verilator
+                command: .circleci/do-rtl-build.sh << parameters.config-key >>
+                no_output_timeout: << parameters.timeout >>
+            - save_cache:
+                key: << parameters.config-key >>config-{{ .Branch }}-{{ .Revision }}
+                paths:
+                    - "/home/riscvuser/chipyard"
+
+    test-setup:
+        description: "Setup the environment for tests to run"
+        parameters:
+            tools-version:
+                type: string
+                default: "riscv-tools"
+            config-key:
+                type: string
+        steps:
+            - checkout
+            - run:
+                name: Create hash of toolchains
+                command: |
+                    .circleci/create-hash.sh
+            - restore_cache:
+                keys:
+                    - << parameters.tools-version >>-installed-v4-{{ checksum "../<< parameters.tools-version >>.hash" }}
+            - restore_cache:
+                keys:
+                    - << parameters.config-key >>config-{{ .Branch }}-{{ .Revision }}
+            - restore_cache:
+                keys:
+                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+
+    firesim-workload-build:
+        description: "Build a FireSim workload"
+        parameters:
+            config-key:
+                type: string
+            workload:
+                type: string
+        steps:
+            - add_ssh_keys:
+                fingerprints:
+                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
+            - checkout
+            - restore_cache:
+                keys:
+                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
+            - run:
+                name: Build a << parameters.config-key >> << parameters.workload >> workload
+                command: |
+                    .circleci/firesim-build-workload.sh << parameters.config-key >> << parameters.workload >>
+
 # set of jobs to run
 jobs:
     install-riscv-toolchain:
@@ -58,23 +166,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - run:
-                name: Building riscv-tools
-                command: |
-                    .circleci/build-toolchains.sh riscv-tools
-                no_output_timeout: 120m
-            - save_cache:
-                key: riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-                paths:
-                    - "/home/riscvuser/riscv-tools-install"
+            toolchain-build:
+                tools-version: "riscv-tools"
     install-esp-toolchain:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -82,23 +175,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - esp-tools-installed-v4-{{ checksum "../esp-tools.hash" }}
-            - run:
-                name: Building esp-tools
-                command: |
-                    .circleci/build-toolchains.sh esp-tools
-                no_output_timeout: 120m
-            - save_cache:
-                key: esp-tools-installed-v4-{{ checksum "../esp-tools.hash" }}
-                paths:
-                    - "/home/riscvuser/esp-tools-install"
+            toolchain-build:
+                tools-version: "esp-tools"
     prepare-build-environment:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -147,31 +225,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
-            - run:
-                name: Building SmallBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh smallboom
-                no_output_timeout: 120m
-            - save_cache:
-                key: smallboomconfig-{{ .Branch }}-{{ .Revision }}
-                paths:
-                    - "/home/riscvuser/chipyard"
+            - prepare-rtl:
+                config-key: "smallboom"
     prepare-mediumboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -179,31 +234,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
-            - run:
-                name: Building MediumBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh mediumboom
-                no_output_timeout: 120m
-            - save_cache:
-                key: mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-                paths:
-                    - "/home/riscvuser/chipyard"
+            - prepare-rtl:
+                config-key: "mediumboom"
     prepare-largeboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -211,31 +243,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
-            - run:
-                name: Building LargeBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh largeboom
-                no_output_timeout: 120m
-            - save_cache:
-                key: largeboomconfig-{{ .Branch }}-{{ .Revision }}
-                paths:
-                    - "/home/riscvuser/chipyard"
+            - prepare-rtl:
+                config-key: "largeboom"
     prepare-megaboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -243,31 +252,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
-            - run:
-                name: Building MegaBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh megaboom
-                no_output_timeout: 240m
-            - save_cache:
-                key: megaboomconfig-{{ .Branch }}-{{ .Revision }}
-                paths:
-                    - "/home/riscvuser/chipyard"
+            - prepare-rtl:
+                config-key: "megaboom"
+                timeout: "240m"
     prepare-smallboomandrocketconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -275,31 +262,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
-            - run:
-                name: Building SmallBoomAndRocketConfig using Verilator
-                command: .circleci/do-rtl-build.sh boomandrocket
-                no_output_timeout: 120m
-            - save_cache:
-                key: smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
-                paths:
-                    - "/home/riscvuser/chipyard"
+            - prepare-rtl:
+                config-key: "boomandrocket"
     prepare-smallrv32boomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -307,31 +271,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
-            - run:
-                name: Building SmallRV32BoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh rv32boom
-                no_output_timeout: 120m
-            - save_cache:
-                key: smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
-                paths:
-                    - "/home/riscvuser/chipyard"
+            - prepare-rtl:
+                config-key: "rv32boom"
     prepare-hwachaboomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -339,31 +280,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - esp-tools-installed-v4-{{ checksum "../esp-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
-            - run:
-                name: Building HwachaBoomConfig using Verilator
-                command: .circleci/do-rtl-build.sh hwachaboom
-                no_output_timeout: 120m
-            - save_cache:
-                key: hwachaboomconfig-{{ .Branch }}-{{ .Revision }}
-                paths:
-                    - "/home/riscvuser/chipyard"
+            - prepare-rtl:
+                tools-version: "esp-tools"
+                config-key: "hwachaboom"
     smallboomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -371,20 +290,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - smallboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "smallboom"
             - run:
                 name: Run SmallBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh smallboom 50
@@ -396,20 +303,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - smallboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "smallboom"
             - run:
                 name: Run SmallBoomConfig riscv tests
                 command: .circleci/run-tests.sh smallboom
@@ -420,20 +315,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "mediumboom"
             - run:
                 name: Run MediumBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh mediumboom 50
@@ -445,20 +328,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "mediumboom"
             - run:
                 name: Run MediumBoomConfig riscv tests
                 command: .circleci/run-tests.sh mediumboom
@@ -469,20 +340,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - largeboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "largeboom"
             - run:
                 name: Run LargeBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh largeboom 40
@@ -494,20 +353,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - largeboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "largeboom"
             - run:
                 name: Run LargeBoomConfig riscv tests
                 command: .circleci/run-tests.sh largeboom
@@ -518,20 +365,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - megaboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "megaboom"
             - run:
                 name: Run MegaBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh megaboom 40
@@ -543,20 +378,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - megaboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "megaboom"
             - run:
                 name: Run MegaBoomConfig riscv tests
                 command: .circleci/run-tests.sh megaboom
@@ -568,20 +391,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "boomandrocket"
             - run:
                 name: Run SmallBoomAndRocketConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh boomandrocket 50
@@ -593,20 +404,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "boomandrocket"
             - run:
                 name: Run SmallBoomAndRocketConfig riscv tests
                 command: .circleci/run-tests.sh boomandrocket
@@ -617,20 +416,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "rv32boom"
             - run:
                 name: Run SmallRV32BoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh rv32boom 50
@@ -642,20 +429,8 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "rv32boom"
             - run:
                 name: Run SmallRV32BoomConfig riscv tests
                 command: .circleci/run-tests.sh rv32boom
@@ -666,20 +441,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - esp-tools-installed-v4-{{ checksum "../esp-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - hwachaboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+            - test-setup:
+                config-key: "hwachaboom"
+                tools-version: "esp-tools"
             - run:
                 name: Run HwachaBoomConfig riscv tests
                 command: .circleci/run-tests.sh hwachaboom
@@ -710,17 +474,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Build a LargeFireBoom Buildroot workload
-                command: |
-                    .circleci/firesim-build-workload.sh largefireboom buildroot
+            - firesim-workload-build:
+                config-key: "largefireboom"
+                workload: "buildroot"
     build-largefireboom-fedora:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -728,17 +484,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Build a LargeFireBoom Fedora workload
-                command: |
-                    .circleci/firesim-build-workload.sh largefireboom fedora
+            - firesim-workload-build:
+                config-key: "largefireboom"
+                workload: "fedora"
     build-largefireboom-coremark:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -746,17 +494,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Build a LargeFireBoom CoreMark workload
-                command: |
-                    .circleci/firesim-build-workload.sh largefireboom coremark
+            - firesim-workload-build:
+                config-key: "largefireboom"
+                workload: "coremark"
     build-largefireboom-spec17-intspeed:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -764,17 +504,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Build a LargeFireBoom SPEC17 intspeed workload
-                command: |
-                    .circleci/firesim-build-workload.sh largefireboom spec17-intspeed
+            - firesim-workload-build:
+                config-key: "largefireboom"
+                workload: "spec17-intspeed"
     build-largefireboom-spec17-intrate:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -782,17 +514,9 @@ jobs:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
         steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "2b:95:8d:2e:23:b9:cf:0a:d6:65:4c:d5:76:93:42:07"
-            - checkout
-            - restore_cache:
-                keys:
-                    - firesim-aws-instance-data-{{ .Branch }}-{{ .Revision }}
-            - run:
-                name: Build a LargeFireBoom SPEC17 intrate workload
-                command: |
-                    .circleci/firesim-build-workload.sh largefireboom spec17-intrate
+            - firesim-workload-build:
+                config-key: "largefireboom"
+                workload: "spec17-intrate"
     launch-largefireboom-afi-build:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -1101,5 +825,3 @@ workflows:
         when: << pipeline.parameters.finish-firesim-workload-run >>
         jobs:
             - largefireboom-workload-finished
-
-
