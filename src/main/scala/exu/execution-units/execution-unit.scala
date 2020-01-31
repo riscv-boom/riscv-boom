@@ -86,8 +86,9 @@ class ExecutionUnitIO(
 
 
   val bypass   = Output(new BypassData(numBypassPorts, dataWidth))
-  val brinfo   = Input(new BrResolutionInfo())
 
+  val brinfo   = Input(new BrResolutionInfo())
+  val kill     = Input(Bool())
 
   // only used by the rocc unit
   val rocc = if (hasRocc) new RoCCShimCoreIO else null
@@ -278,7 +279,7 @@ class ALUExeUnit(
     //ROCC Rocc Commands are taken by the RoCC unit
 
     alu.io.req.bits.uop      := io.req.bits.uop
-    alu.io.req.bits.kill     := io.req.bits.kill
+    alu.io.kill     := io.kill
     alu.io.req.bits.rs1_data := io.req.bits.rs1_data
     alu.io.req.bits.rs2_data := io.req.bits.rs2_data
     alu.io.req.bits.rs3_data := DontCare
@@ -304,7 +305,6 @@ class ALUExeUnit(
     rocc.io.req.valid         := io.req.valid && io.req.bits.uop.uopc === uopROCC
     rocc.io.req.bits          := DontCare
     rocc.io.req.bits.uop      := io.req.bits.uop
-    rocc.io.req.bits.kill     := io.req.bits.kill
     rocc.io.req.bits.rs1_data := io.req.bits.rs1_data
     rocc.io.req.bits.rs2_data := io.req.bits.rs2_data
     rocc.io.brinfo            <> io.brinfo // We should assert on this somewhere
@@ -328,7 +328,7 @@ class ALUExeUnit(
     imul.io.req.bits.uop      := io.req.bits.uop
     imul.io.req.bits.rs1_data := io.req.bits.rs1_data
     imul.io.req.bits.rs2_data := io.req.bits.rs2_data
-    imul.io.req.bits.kill     := io.req.bits.kill
+    imul.io.kill     := io.kill
     imul.io.brinfo <> io.brinfo
     iresp_fu_units += imul
   }
@@ -350,7 +350,7 @@ class ALUExeUnit(
     queue.io.enq.bits.data   := ifpu.io.resp.bits.data
     queue.io.enq.bits.fflags := ifpu.io.resp.bits.fflags
     queue.io.brinfo := io.brinfo
-    queue.io.flush := io.req.bits.kill
+    queue.io.flush := io.kill
 
     io.ll_fresp <> queue.io.deq
     ifpu_busy := !(queue.io.empty)
@@ -368,7 +368,7 @@ class ALUExeUnit(
     div.io.req.bits.rs1_data   := io.req.bits.rs1_data
     div.io.req.bits.rs2_data   := io.req.bits.rs2_data
     div.io.brinfo              := io.brinfo
-    div.io.req.bits.kill       := io.req.bits.kill
+    div.io.kill       := io.kill
 
     // share write port with the pipelined units
     div.io.resp.ready := !(iresp_fu_units.map(_.io.resp.valid).reduce(_|_))
@@ -477,7 +477,7 @@ class FPUExeUnit(
     fpu.io.req.bits.rs1_data := io.req.bits.rs1_data
     fpu.io.req.bits.rs2_data := io.req.bits.rs2_data
     fpu.io.req.bits.rs3_data := io.req.bits.rs3_data
-    fpu.io.req.bits.kill     := io.req.bits.kill
+    fpu.io.kill     := io.kill
     fpu.io.fcsr_rm           := io.fcsr_rm
     fpu.io.brinfo            <> io.brinfo
     fpu.io.resp.ready        := DontCare
@@ -499,7 +499,7 @@ class FPUExeUnit(
     fdivsqrt.io.req.bits.rs1_data := io.req.bits.rs1_data
     fdivsqrt.io.req.bits.rs2_data := io.req.bits.rs2_data
     fdivsqrt.io.req.bits.rs3_data := DontCare
-    fdivsqrt.io.req.bits.kill     := io.req.bits.kill
+    fdivsqrt.io.kill     := io.kill
     fdivsqrt.io.fcsr_rm           := io.fcsr_rm
     fdivsqrt.io.brinfo <> io.brinfo
 
@@ -536,7 +536,7 @@ class FPUExeUnit(
     queue.io.enq.bits.data   := fpu.io.resp.bits.data
     queue.io.enq.bits.fflags := fpu.io.resp.bits.fflags
     queue.io.brinfo          := io.brinfo
-    queue.io.flush           := io.req.bits.kill
+    queue.io.flush           := io.kill
 
     assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
 
@@ -547,7 +547,7 @@ class FPUExeUnit(
     fp_sdq.io.enq.bits.data  := ieee(io.req.bits.rs2_data)
     fp_sdq.io.enq.bits.fflags:= DontCare
     fp_sdq.io.brinfo         := io.brinfo
-    fp_sdq.io.flush          := io.req.bits.kill
+    fp_sdq.io.flush          := io.kill
 
     assert(!(fp_sdq.io.enq.valid && !fp_sdq.io.enq.ready))
 

@@ -99,6 +99,7 @@ class FunctionalUnitIo(
   val resp   = (new DecoupledIO(new FuncUnitResp(dataWidth)))
 
   val brinfo = Input(new BrResolutionInfo())
+  val kill   = Input(Bool())
 
   val bypass = Output(new BypassData(numBypassStages, dataWidth))
 
@@ -136,8 +137,6 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   val rs1_data = UInt(dataWidth.W)
   val rs2_data = UInt(dataWidth.W)
   val rs3_data = UInt(dataWidth.W) // only used for FMA units
-
-  val kill = Bool() // kill everything
 }
 
 /**
@@ -273,13 +272,13 @@ abstract class PipelinedFunctionalUnit(
     val r_uops   = Reg(Vec(numStages, new MicroOp()))
 
     // handle incoming request
-    r_valids(0) := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop) && !io.req.bits.kill
+    r_valids(0) := io.req.valid && !IsKilledByBranch(io.brinfo, io.req.bits.uop) && !io.kill
     r_uops(0)   := io.req.bits.uop
     r_uops(0).br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
 
     // handle middle of the pipeline
     for (i <- 1 until numStages) {
-      r_valids(i) := r_valids(i-1) && !IsKilledByBranch(io.brinfo, r_uops(i-1)) && !io.req.bits.kill
+      r_valids(i) := r_valids(i-1) && !IsKilledByBranch(io.brinfo, r_uops(i-1)) && !io.kill
       r_uops(i)   := r_uops(i-1)
       r_uops(i).br_mask := GetNewBrMask(io.brinfo, r_uops(i-1))
 
@@ -374,7 +373,7 @@ class ALUUnit(isBranchUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)
     // Did I just get killed by the previous cycle's branch,
     // or by a flush pipeline?
     val killed = WireInit(false.B)
-    when (io.req.bits.kill ||
+    when (io.kill ||
            (io.brinfo.valid &&
              io.brinfo.mispredict &&
              maskMatch(io.brinfo.mask, uop.br_mask)
@@ -813,15 +812,15 @@ abstract class IterativeFunctionalUnit(dataWidth: Int)(implicit p: Parameters)
   val r_uop = Reg(new MicroOp())
 
   val do_kill = Wire(Bool())
-  do_kill := io.req.bits.kill // irrelevant default
+  do_kill := io.kill // irrelevant default
 
   when (io.req.fire()) {
     // update incoming uop
-    do_kill := IsKilledByBranch(io.brinfo, io.req.bits.uop) || io.req.bits.kill
+    do_kill := IsKilledByBranch(io.brinfo, io.req.bits.uop) || io.kill
     r_uop := io.req.bits.uop
     r_uop.br_mask := GetNewBrMask(io.brinfo, io.req.bits.uop)
   } .otherwise {
-    do_kill := IsKilledByBranch(io.brinfo, r_uop) || io.req.bits.kill
+    do_kill := IsKilledByBranch(io.brinfo, r_uop) || io.kill
     r_uop.br_mask := GetNewBrMask(io.brinfo, r_uop)
   }
 

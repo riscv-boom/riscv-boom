@@ -935,10 +935,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     fp_pipeline.io.flush_pipeline := rob.io.flush.valid
   }
 
-  for (w <- 0 until exe_units.length) {
-    exe_units(w).io.req.bits.kill := rob.io.flush.valid
-  }
-
   assert (!(RegNext(rob.io.com_xcpt.valid) && !rob.io.flush.valid),
     "[core] exception occurred, but pipeline flush signal not set!")
 
