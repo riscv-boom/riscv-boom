@@ -16,8 +16,14 @@
 # turn echo on and error on earliest command
 set -ex
 
-# setup AWS_SERVER variable
-AWS_SERVER=centos@$(sed -n '2p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
+# setup AWS_SERVER variable (override with AWS_IP_ADDR_OVERRIDE if defined)
+if [ -v AWS_IP_ADDR_OVERRIDE ]; then
+    echo "Override AWS IP address with $AWS_IP_ADDR_OVERRIDE"
+    AWS_SERVER=centos@$AWS_IP_ADDR_OVERRIDE
+else
+    echo "Using default IP address"
+    AWS_SERVER=centos@$(sed -n '2p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
+fi
 
 # get shared variables
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
@@ -42,8 +48,12 @@ stop_instance_check () {
     if grep "$AFI_NAME-$WORKLOAD_NAME" $HOME/workloads_running; then
         # delete line and check if file is empty
         sed -i "/$AFI_NAME-$WORKLOAD_NAME/d" $HOME/workloads_running
+        # workloads still running
+        echo "[CHECK] workloads still running..."
+        cat $HOME/workloads_running
         if [ ! -s $REMOTE_AWS_WORK_DIR/workloads_running ]; then
             # if all workloads are done... just stop the manager instance
+            echo "[CHECK] stop manager instance..."
             MANAGER_ID=$(sed -n '1p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
             aws ec2 stop-instances --instance-ids $MANAGER_ID
         else

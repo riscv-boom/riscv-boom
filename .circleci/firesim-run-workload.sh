@@ -12,12 +12,23 @@
 # turn echo on and error on earliest command
 set -ex
 
-# setup AWS_SERVER variable
-AWS_SERVER=centos@$(sed -n '2p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
+# setup AWS_SERVER variable (override with AWS_IP_ADDR_OVERRIDE if defined)
+if [ -v AWS_IP_ADDR_OVERRIDE ]; then
+    echo "Override AWS IP address with $AWS_IP_ADDR_OVERRIDE"
+    AWS_SERVER=centos@$AWS_IP_ADDR_OVERRIDE
+else
+    echo "Using default IP address"
+    AWS_SERVER=centos@$(sed -n '2p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
+fi
 
 # get shared variables
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
+
+if [ -v AWS_IP_ADDR_OVERRIDE ]; then
+    echo "Reset the \"workloads_running\" file"
+    run_aws "rm $REMOTE_AWS_WORK_DIR/workloads_running"
+fi
 
 # setup arguments
 CONFIG_KEY=$1

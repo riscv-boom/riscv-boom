@@ -640,29 +640,16 @@ workflows:
     build-and-test-boom-configs:
         when: << pipeline.parameters.build-and-test-boom-configs-run >>
         jobs:
-            # TODO: disable
-            # temp approval to save jobs
-            - temp-approval:
-                type: approval
-
             # Make the toolchains
-            - install-riscv-toolchain:
-                requires:
-                    - temp-approval
+            - install-riscv-toolchain
 
-            - install-esp-toolchain:
-                requires:
-                    - temp-approval
+            - install-esp-toolchain
 
             # Build verilator
-            - prepare-build-environment:
-                requires:
-                    - temp-approval
+            - prepare-build-environment
 
             # Run generic syntax checking
-            - run-scala-checkstyle:
-                requires:
-                    - temp-approval
+            - run-scala-checkstyle
 
             # Prepare the verilator builds
             - prepare-smallboomconfig:
@@ -745,15 +732,14 @@ workflows:
                     - prepare-hwachaboomconfig
 
     init-firesim:
-        # TODO: re-enable
         # run firesim workflow every thursday
-        #triggers:
-        #    - schedule:
-        #        cron: "0 0 * * 4"
-        #        filters:
-        #            branches:
-        #                only:
-        #                    - master
+        triggers:
+            - schedule:
+                cron: "0 0 * * 4"
+                filters:
+                    branches:
+                        only:
+                            - master
 
         when: << pipeline.parameters.init-firesim-run >>
         jobs:

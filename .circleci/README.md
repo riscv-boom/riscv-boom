@@ -34,4 +34,8 @@ Requirements:
 - Add your `firesim.pem` into the `$FIRESIM_PEM` CircleCI env. var.
     - Note: This is a single line .pem where all \n's are ,'s
 
-
+If the workloads fail to run AND the manager instance stops, you can still run tests again:
+    - Re-boot the instance (note: the IP address has changed)
+    - Add to the CircleCI UI `$AWS_IP_ADDR_OVERRIDE` with the new IP address
+    - Re-run the tests
+    - REMEMBER TO REMOVE THE ENVIRONMENT VARIABLE ONCE DONE! OTHERWISE THE CI WILL BREAK ON THE WORKLOAD STEPS
