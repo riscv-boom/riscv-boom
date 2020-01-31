@@ -36,14 +36,19 @@ sudo apt-get install -y rsync
 
 # see if the instance should be stopped
 stop_instance_check () {
+    # copy over workload running file
+    copy $AWS_SERVER:$REMOTE_AWS_WORK_DIR/workloads_running $HOME/workloads_running
     # search inside "workloads_running" file for the AFI+WORKLOAD name
-    if grep "$AFI_NAME-$WORKLOAD_NAME" $REMOTE_AWS_WORK_DIR/workloads_running; then
+    if grep "$AFI_NAME-$WORKLOAD_NAME" $HOME/workloads_running; then
         # delete line and check if file is empty
-        sed -i "/$AFI_NAME-$WORKLOAD_NAME/d" $REMOTE_AWS_WORK_DIR/workloads_running
+        sed -i "/$AFI_NAME-$WORKLOAD_NAME/d" $HOME/workloads_running
         if [ ! -s $REMOTE_AWS_WORK_DIR/workloads_running ]; then
             # if all workloads are done... just stop the manager instance
             MANAGER_ID=$(sed -n '1p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
             aws ec2 stop-instances --instance-ids $MANAGER_ID
+        else
+            # copy back file
+            copy $HOME/workloads_running $AWS_SERVER:$REMOTE_AWS_WORK_DIR/workloads_running
         fi
     else
         # error... this script should not enter twice on the same AFI and same workload

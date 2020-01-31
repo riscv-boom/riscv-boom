@@ -90,9 +90,9 @@ curl -u $API_TOKEN: \
     "launch-firesim-workloads-run": true,
     "largefireboom_buildroot": true,
     "largefireboom_fedora": true,
-    "largefireboom_coremark": false,
-    "largefireboom_spec17-intspeed": false,
-    "largefireboom_spec17-intrate": false
+    "largefireboom_coremark": true,
+    "largefireboom_spec17-intspeed": true,
+    "largefireboom_spec17-intrate": true
   }
 }'
 
