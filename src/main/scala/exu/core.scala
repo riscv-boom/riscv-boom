@@ -107,7 +107,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   val iregister_read   = Module(new RingRegisterRead(exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits)))
   val rob              = Module(new Rob(
-                           coreWidth + numFpWakeupPorts, // +memWidth for ll writebacks
+                           coreWidth + numFpWakeupPorts,
                            numFpWakeupPorts))
 
   val wakeups          = Wire(Vec(coreWidth, Valid(UInt(ipregSz.W)))) // 'Slow' wakeups
@@ -844,48 +844,31 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Writeback
   // ---------
-  // First connect the ll_wport
-  val ll_uop = ll_wbarb.io.out.bits.uop
-  rob.io.wb_resps(0).valid  := ll_wbarb.io.out.valid && !(ll_uop.uses_stq && !ll_uop.is_amo)
-  rob.io.wb_resps(0).bits   <> ll_wbarb.io.out.bits
-  rob.io.debug_wb_valids(0) := ll_wbarb.io.out.valid && ll_uop.dst_rtype =/= RT_X
-  rob.io.debug_wb_wdata(0)  := ll_wbarb.io.out.bits.data
-  var cnt = 1
-  for (i <- 1 until memWidth) {
-    val mem_uop = mem_resps(i).bits.uop
-    rob.io.wb_resps(cnt).valid := mem_resps(i).valid && !(mem_uop.uses_stq && !mem_uop.is_amo)
-    rob.io.wb_resps(cnt).bits  := mem_resps(i).bits
-    rob.io.debug_wb_valids(cnt) := mem_resps(i).valid && mem_uop.dst_rtype =/= RT_X
-    rob.io.debug_wb_wdata(cnt)  := mem_resps(i).bits.data
+
+  var cnt = 0
+  for (w <- 0 until coreWidth) {
+    val resp   = exe_units.io.exe_resps(w)
+    val wb_uop = resp.bits.uop
+    val data   = resp.bits.data
+
+    rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo)
+    rob.io.wb_resps(cnt).bits  <> resp.bits
+
+    rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
+    rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
+    csr.io.rw.rdata,
+    data)
+
     cnt += 1
   }
-  var f_cnt = 0 // rob fflags port index
-  for (eu <- exe_units) {
-    if (eu.writesIrf)
-    {
-      val resp   = eu.io.iresp
-      val wb_uop = resp.bits.uop
-      val data   = resp.bits.data
 
-      rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo)
-      rob.io.wb_resps(cnt).bits  <> resp.bits
-      rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
-      if (eu.hasFFlags) {
-        rob.io.fflags(f_cnt) <> resp.bits.fflags
-        f_cnt += 1
-      }
-      if (eu.hasCSR) {
-        rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
-          csr.io.rw.rdata,
-          data)
-      } else {
-        rob.io.debug_wb_wdata(cnt) := data
-      }
-      cnt += 1
+  var f_cnt = 0
+  for (eu <- exe_units) {
+    val resp = eu.io.iresp
+    if (eu.hasFFlags) {
+      rob.io.fflags(f_cnt) <> resp.bits.fflags
     }
   }
-
-  require(cnt == numIrfWritePorts)
   if (usingFPU) {
     for ((wdata, wakeup) <- fp_pipeline.io.debug_wb_wdata zip fp_pipeline.io.wakeups) {
       rob.io.wb_resps(cnt) <> wakeup
