@@ -75,8 +75,7 @@ abstract class BankedRegisterFile(
     "==" + type_str + " Regfile==",
     "Num RF Read Ports     : " + coreWidth * 2,
     "Num RF Write Ports    : " + coreWidth,
-    "RF Cost               : " + rf_cost,
-    "Bypassable Units      : " + bypassableArray)
+    "RF Cost               : " + rf_cost)
 }
 
 /**
@@ -94,7 +93,7 @@ class BankedRegisterFileSynthesizable(
   val numRegsPerBank = numRegisters / coreWidth
   require (numRegisters % coreWidth == 0)
 
-  val regfile = Vec(coreWidth, Mem(numRegisters, UInt(registerWidth.W)))
+  val regfile = Seq.fill(coreWidth)( Mem(numRegsPerBank, UInt(registerWidth.W)) )
 
   // --------------------------------------------------------------
   // Read ports
@@ -120,8 +119,8 @@ class BankedRegisterFileSynthesizable(
   // Write ports.
 
   for (w <- 0 until coreWidth) {
-    when (write_ports(w).valid && (write_ports(w).bits.addr =/= 0.U)) {
-      regfile(w)(write_ports(w).bits.addr) := write_ports(w).bits.data
+    when (io.write_ports(w).valid && (io.write_ports(w).bits.addr =/= 0.U)) {
+      regfile(w)(io.write_ports(w).bits.addr) := io.write_ports(w).bits.data
     }
   }
 }

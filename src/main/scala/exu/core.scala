@@ -107,10 +107,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   val iregister_read   = Module(new RingRegisterRead(exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits)))
   val rob              = Module(new Rob(
-                           numIrfWritePorts + numFpWakeupPorts, // +memWidth for ll writebacks
+                           coreWidth + numFpWakeupPorts, // +memWidth for ll writebacks
                            numFpWakeupPorts))
 
-  val wakeups          = Wire(Vec(coreWidth, Valid(UInt(pregSz.W)))) // 'Slow' wakeups
+  val wakeups          = Wire(Vec(coreWidth, Valid(UInt(ipregSz.W)))) // 'Slow' wakeups
   wakeups := DontCare
 
   //***********************************
@@ -132,9 +132,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val dis_ready  = Wire(Bool())
 
   // Issue Stage/Register Read
-  val iss_valids = Wire(Vec(exe_units.numIrfReaders, Bool()))
-  val iss_uops   = Wire(Vec(exe_units.numIrfReaders, new MicroOp()))
-  val bypasses   = Wire(new BypassData(exe_units.numTotalBypassPorts, xLen))
+  val iss_valids = Wire(Vec(coreWidth, Bool()))
+  val iss_uops   = Wire(Vec(coreWidth, new MicroOp()))
+  val bypasses   = Wire(new BypassData(coreWidth, xLen))
 
   // Branch Unit
   val br_unit = Wire(new BranchUnitResp())
@@ -245,9 +245,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         "RAS Size              : " + (if (enableBTB) boomParams.btb.nRAS else 0)) + "\n"
     + iregfile.toString + "\n"
     + BoomCoreStringPrefix(
-        "Num Slow Wakeup Ports : " + numIrfWritePorts,
-        "Num Fast Wakeup Ports : " + exe_units.count(_.bypassable),
-        "Num Bypass Ports      : " + exe_units.numTotalBypassPorts) + "\n"
+        "Num Slow Wakeup Ports : " + coreWidth,
+        "Num Fast Wakeup Ports : " + coreWidth,
+        "Num Bypass Ports      : " + coreWidth) + "\n"
     + BoomCoreStringPrefix(
         "DCache Ways           : " + dcacheParams.nWays,
         "DCache Sets           : " + dcacheParams.nSets,
@@ -585,8 +585,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // Dispatch to issue queues
 
-  scheduler.io.dis_uops   <> dispatcher.io.dis_uops(IQT_INT.litValue)
-  fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(IQT_FP.litValue)
+  scheduler.io.dis_uops   <> dispatcher.io.dis_uops(IQT_INT.litValue.toInt)
+  fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(IQT_FP.litValue.toInt)
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -612,13 +612,13 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
   }
 
-  val idiv_issued = false.B
+  var idiv_issued = false.B
 
   for (w <- 0 until coreWidth) {
     iss_valids(w) := scheduler.io.iss_uops(w).valid
     iss_uops(w)   := scheduler.io.iss_uops(w).bits
 
-    idiv_issued = idiv_issued || (iss_valids(iss_idx) && iss_uops(iss_idx).fu_code_is(FU_DIV))
+    idiv_issued = idiv_issued || (iss_valids(w) && iss_uops(w).fu_code_is(FU_DIV))
   }
 
   // Send slow wakeups to scheduler
@@ -632,7 +632,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   scheduler.io.div_busy := RegNext(idiv_issued) || exe_units.idiv_busy
 
   scheduler.io.brinfo := br_unit.brinfo
-  scheduler.io.flush  := rob.io.flush.valid
+  scheduler.io.kill   := rob.io.flush.valid
 
   mem_units.map(u => u.io.com_exception := rob.io.flush.valid)
 
@@ -738,7 +738,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   exe_units.io.exe_reqs <> iregister_read.io.exe_reqs
 
-  exe_units.io.brinfo := brunit.brinfo
+  exe_units.io.brinfo := br_unit.brinfo
   exe_units.io.kill   := rob.io.flush.valid
 
   // TODO rip this out and do bypassing inside the EXU module
@@ -756,7 +756,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       }
     }
   }
-  require (bypass_idx == exe_units.numTotalBypassPorts)
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -809,9 +808,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
     iregfile.io.write_ports(w).valid     := wbIsValid(RT_FIX)
     iregfile.io.write_ports(w).bits.addr := wbpdst
-    wbresp.ready := true.B // TODO this should just be a Valid(resp), not Decoupled(resp)
-
-    iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
+    iregfile.io.write_ports(w).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
 
     assert (!wbIsValid(RT_FLT), "[fppipeline] An FP writeback is being attempted to the Int Regfile.")
 
@@ -823,20 +820,20 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     assert (!(wbresp.valid &&
       wbresp.bits.uop.rf_wen &&
       wbresp.bits.uop.dst_rtype =/= RT_FIX),
-      "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+i+").iresp")
+      "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+w+").iresp")
   }
 
   if (usingFPU) {
     // Connect IFPU
     fp_pipeline.io.from_int  <> exe_units.ifpu_unit.io.ll_fresp
     // Connect FPIU
-    ll_wbarb.io.in(1)        <> fp_pipeline.io.to_int
+    //ll_wbarb.io.in(1)        <> fp_pipeline.io.to_int TODO
     // Connect FLDs
     fp_pipeline.io.ll_wports <> exe_units.memory_units.map(_.io.ll_fresp)
   }
   if (usingRoCC) {
     require(usingFPU)
-    ll_wbarb.io.in(2)        <> exe_units.rocc_unit.io.ll_iresp
+    //ll_wbarb.io.in(2)        <> exe_units.rocc_unit.io.ll_iresp TODO
   }
 
   //-------------------------------------------------------------

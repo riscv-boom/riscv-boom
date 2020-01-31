@@ -14,18 +14,19 @@ package boom.exu
 import scala.collection.mutable.{ArrayBuffer}
 
 import chisel3._
+import chisel3.util._
 
 import freechips.rocketchip.config.{Parameters}
 
 import boom.common._
-import boom.util.{BoomCoreStringPrefix}
+import boom.util._
 
 class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
 {
   // I/O which is used by all units
   // Unit-specific I/O (e.g. rocc) can still be hooked up with the unit getter functions
   val io = IO(new BoomBundle {
-    val exe_reqs  = Vec(coreWidth, Flipped(DecuopledIO(new FuncUnitReq(xLen))))
+    val exe_reqs  = Vec(coreWidth, Flipped(DecoupledIO(new FuncUnitReq(xLen))))
     val exe_resps = Output(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
 
     val brinfo    = Input(new BrResolutionInfo)
@@ -83,6 +84,18 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
   lazy val csr_unit = {
     require (exe_units.count(_.hasCSR) == 1)
     exe_units.find(_.hasCSR).get
+  }
+
+  lazy val ifpu_unit = {
+    require (usingFPU)
+    require (exe_units.count(_.hasIfpu) == 1)
+    exe_units.find(_.hasIfpu).get
+  }
+
+  lazy val fpiu_unit = {
+    require (usingFPU)
+    require (exe_units.count(_.hasFpiu) == 1)
+    exe_units.find(_.hasFpiu).get
   }
 
   lazy val br_unit_io = {
@@ -151,8 +164,8 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
   //----------------------------------------------------------------------------------------------------
   // Req -> EU crossbar
 
-  val xbarSize = shared_units.length + 1
-  val col_sels = Transpose(io.exe_reqs.map(_.bits.uop.eu_code & Fill(xbarSize, _.valid)))
+  val xbarSize = shared_exe_units.length + 1
+  val col_sels = Transpose(VecInit(io.exe_reqs.map(req => req.bits.uop.eu_code & Fill(xbarSize, req.valid))))
 
   // Hookup column units
   for (w <- 0 until coreWidth) {
@@ -179,11 +192,11 @@ class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
   // refill buffers respectively, but a bit messy. The refill buffers are especially bad because
   // there's a pipe stage between them and the writeback crossbar.
 
-  val eu_sels = Transpose(Seq(VecInit(column_exe_units.map(_.io.iresp.valid)).asUInt) ++
-                          shared_exe_units.map(_.io.resp.bits.uop.dst_col & Fill(coreWidth, _.io.resp.valid)))
+  val eu_sels = Transpose(VecInit(Seq(VecInit(column_exe_units.map(_.io.iresp.valid)).asUInt) ++
+    shared_exe_units.map(eu => eu.io.iresp.bits.uop.dst_col & Fill(coreWidth, eu.io.iresp.valid))))
 
   for (w <- 0 until coreWidth) {
-    io.exe_resps(w).bits  := Mux1H(eu_sels(w), Seq(column_units(w).io.resp.bits) ++ shared_units.map(_.io.resp.bits))
+    io.exe_resps(w).bits  := Mux1H(eu_sels(w), Seq(column_exe_units(w).io.iresp.bits) ++ shared_exe_units.map(_.io.iresp.bits))
     io.exe_resps(w).valid := eu_sels(w).orR
   }
 }

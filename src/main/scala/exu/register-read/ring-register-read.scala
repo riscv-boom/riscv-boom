@@ -48,7 +48,7 @@ class RingRegisterReadIO
 class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   (implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new RegisterReadIO(numReadPortsPerColumn))
+  val io = IO(new RingRegisterReadIO)
 
   val rrd_valids       = Wire(Vec(coreWidth, Bool()))
   val rrd_uops         = Wire(Vec(coreWidth, new MicroOp))
@@ -75,8 +75,8 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   //-------------------------------------------------------------
   // read ports
 
-  val prs1_addr_cols = Transpose(io.iss_uops.map(_.op1_col))
-  val prs2_addr_cols = Transpose(io.iss_uops.map(_.op2_col))
+  val prs1_addr_cols = Transpose(VecInit(io.iss_uops.map(_.op1_col)))
+  val prs2_addr_cols = Transpose(VecInit(io.iss_uops.map(_.op2_col)))
 
   // Col -> Bank Address Crossbar
   for (w <- 0 until coreWidth) {
@@ -115,8 +115,8 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   //-------------------------------------------------------------
   // BYPASS MUXES -----------------------------------------------
 
-  val bypassed_rs1_data = Wire(Vec(coreWidth, Bits(registerWidth.W)))
-  val bypassed_rs2_data = Wire(Vec(coreWidth, Bits(registerWidth.W)))
+  val bypassed_rs1_data = Wire(Vec(coreWidth, Bits(xLen.W)))
+  val bypassed_rs2_data = Wire(Vec(coreWidth, Bits(xLen.W)))
 
   for (w <- 0 until coreWidth) {
     bypassed_rs1_data(w) := Mux(rrd_uops(w).prs1_bypass, io.bypass.data(w), rrd_rs1_data(w))

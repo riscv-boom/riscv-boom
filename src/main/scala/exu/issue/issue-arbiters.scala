@@ -19,7 +19,7 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
 
-class RegisterReadArbiter extends BoomModule
+class RegisterReadArbiter(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BoomBundle {
     val reqs = Input(Vec(coreWidth, Bool()))
@@ -28,11 +28,11 @@ class RegisterReadArbiter extends BoomModule
     val gnts = Output(Vec(coreWidth, Bool()))
   })
 
-  val prs1_bank_reqs = Transpose((0 until w).map(w => io.uops(w).prs1_col & Fill(coreWidth, io.reqs(w) && io.uops(w).prs1_do_read)))
-  val prs2_bank_reqs = Transpose((0 until w).map(w => io.uops(w).prs2_col & Fill(coreWidth, io.reqs(w) && io.uops(w).prs2_do_read)))
+  val prs1_bank_reqs = Transpose(VecInit((0 until coreWidth).map(w => io.uops(w).op1_col & Fill(coreWidth, io.reqs(w) && io.uops(w).prs1_do_read))))
+  val prs2_bank_reqs = Transpose(VecInit((0 until coreWidth).map(w => io.uops(w).op2_col & Fill(coreWidth, io.reqs(w) && io.uops(w).prs2_do_read))))
 
-  val prs1_bank_gnts = Transpose(prs1_bank_reqs.map(r => PriorityEncoderOH(r)))
-  val prs2_bank_gnts = Transpose(prs2_bank_reqs.map(r => PriorityEncoderOH(r)))
+  val prs1_bank_gnts = Transpose(VecInit(prs1_bank_reqs.map(r => PriorityEncoderOH(r))))
+  val prs2_bank_gnts = Transpose(VecInit(prs2_bank_reqs.map(r => PriorityEncoderOH(r))))
 
   for (w <- 0 until coreWidth) {
     io.gnts(w) := (prs1_bank_gnts(w).orR || !io.uops(w).prs1_do_read && io.reqs(w)) &&
@@ -40,7 +40,7 @@ class RegisterReadArbiter extends BoomModule
   }
 }
 
-class ExecutionArbiter extends BoomModule
+class ExecutionArbiter(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BoomBundle {
     val reqs = Input(Vec(coreWidth, Bool()))
@@ -49,15 +49,15 @@ class ExecutionArbiter extends BoomModule
     val gnts = Output(Vec(coreWidth, Bool()))
   })
 
-  val shared_exe_reqs = Transpose((0 until w).map(w => io.uops(w).shared_eu_code))
-  val shared_exe_gnts = Transpose(shared_exe_reqs.map(r => PriorityEncoderOH(r)))
+  val shared_exe_reqs = Transpose(VecInit((0 until coreWidth).map(w => io.uops(w).shared_eu_code)))
+  val shared_exe_gnts = Transpose(VecInit(shared_exe_reqs.map(r => PriorityEncoderOH(r))))
 
   for (w <- 0 until coreWidth) {
     io.gnts(w) := shared_exe_gnts(w).orR || !io.uops(w).shared_eu_code.orR && io.reqs(w)
   }
 }
 
-class WritebackArbiter extends BoomModule
+class WritebackArbiter(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BoomBundle {
     val reqs = Input(Vec(coreWidth, Bool()))
@@ -72,8 +72,9 @@ class WritebackArbiter extends BoomModule
   val wb_table = Reg(Vec(coreWidth, UInt(maxLatency.W)))
 
   for (w <- 0 until coreWidth) {
-    io.gnts(w) := !(wb_table(w) & io.uops(w).exe_wb_latency).orR && io.reqs(w)
+    val latency = io.uops(w).exe_wb_latency
 
-    wb_table(w) := Mux(fire(w), wb_table(w) | wb_table(w), wb_table) >> 1
+    io.gnts(w) := !(wb_table(w) & latency).orR && io.reqs(w)
+    wb_table(w) := Mux(io.fire(w), wb_table(w) | latency, wb_table(w)) >> 1
   }
 }

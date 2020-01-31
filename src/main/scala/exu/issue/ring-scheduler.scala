@@ -19,6 +19,7 @@ import freechips.rocketchip.util.Str
 
 import FUConstants._
 import boom.common._
+import boom.util._
 
 class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   (implicit p: Parameters) extends BoomModule
@@ -27,13 +28,13 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val dis_uops = Flipped(Vec(coreWidth, DecoupledIO(new MicroOp)))
     val iss_uops = Output(Vec(coreWidth, Valid(new MicroOp)))
 
-    val wakeups  = Input(Vec(coreWidth, Valid(UInt(pregSz.W))))
+    val wakeups  = Input(Vec(coreWidth, Valid(UInt(ipregSz.W))))
     val ld_miss  = Input(Bool()) // TODO use this
 
     val div_busy = Input(Bool()) // TODO do fu_types instead? Does it make a difference in synth?
 
     val brinfo   = Input(new BrResolutionInfo)
-    val flush    = Input(Bool())
+    val kill     = Input(Bool())
   })
 
   val numSlotsPerColumn = numSlots / coreWidth
@@ -43,7 +44,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   // Generate table of issue slots
 
   val issue_table = Seq.fill(coreWidth)( Seq.fill(numSlotsPerColumn)( Module(new RingIssueSlot) ))
-  val slots = VecInit(issue_table.map(col => VecInit(col.io)))
+  val slots = VecInit(issue_table.map(col => VecInit(col.map(_.io))))
 
   for (w <- 0 until coreWidth) {
     for (i <- 0 until numSlotsPerColumn) {
@@ -67,7 +68,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     dis_uops(w) := VecInit(io.dis_uops.map(_.bits))
   }
 
-  dis_vals := Transpose(VecInit(io.dis_uops.map(_.bits.dst_col.asBools)))
+  dis_vals := Transpose(VecInit(io.dis_uops.map(uop => VecInit(uop.bits.dst_col.asBools))))
 
   //----------------------------------------------------------------------------------------------------
   // Selection
@@ -81,7 +82,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val col_uops = slots(w).map(_.uop)
 
     iss_sels(w) := PriorityEncoderOH(col_reqs)
-    sel_uops(w) := Mux1H(col_uops, iss_sel(w))
+    sel_uops(w) := Mux1H(iss_sels(w), col_uops)
     sel_vals(w) := iss_sels(w).reduce(_||_)
   }
 
@@ -94,15 +95,13 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
   val arbiters = Seq(rrd_arb, exu_arb, wb_arb)
 
-  val arb_gnts = UInt(~(0.U(coreWidth.W)))
+  var arb_gnts = ~(0.U(coreWidth.W))
 
   for (arb <- arbiters) {
     arb.io.uops := sel_uops
     arb.io.reqs := sel_vals
     arb_gnts = arb_gnts & arb.io.gnts.asUInt
   }
-
-  arb_gnts = arb_gnts.asBools
 
   //----------------------------------------------------------------------------------------------------
   // Grant, Fast Wakeup, and Issue
@@ -137,23 +136,23 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   for (w <- 0 until coreWidth) {
     val valids = slots(w).map(_.valid) ++ dis_vals(w)
     val uops = slots(w).map(_.out_uop) ++ dis_uops(w)
-    val next_valids = slots(w).map(_.will_be_valid) ++ dis_valids(w)
+    val next_valids = slots(w).map(_.will_be_valid) ++ dis_vals(w)
 
     val max = columnDispatchWidth
     def Inc(count: UInt, inc: Bool) = Mux(inc && !count(max), count << 1, count)
 
     val counts = valids.scanLeft(1.U((max+1).W))((c,v) => Inc(c,!v))
-    val sels = counts zip valids map { (c,v) => c.takeRight(max).map(b => b && v) }
+    val sels = (counts zip valids).map { case (c,v) => c(1,max+1) & Fill(max,v) }
                 .takeRight(numSlotsPerColumn + coreWidth - 1)
 
     for (i <- 0 until numSlotsPerColumn) {
       val uop_sel = (0 until max).map(j => sels(i+j)(j))
       val will_be_valid = Mux1H(uop_sel, next_valids.slice(i+1,i+max+1))
 
-      slot(w)(i).in_uop.bits  := Mux1H(uop_sel, uops.slice(i+1,i+max+1))
-      slot(w)(i).in_uop.valid := will_be_valid
+      slots(w)(i).in_uop.bits  := Mux1H(uop_sel, uops.slice(i+1,i+max+1))
+      slots(w)(i).in_uop.valid := will_be_valid
 
-      slot(w)(i).clear := !counts(i)(0)
+      slots(w)(i).clear := !counts(i)(0)
     }
   }
 }

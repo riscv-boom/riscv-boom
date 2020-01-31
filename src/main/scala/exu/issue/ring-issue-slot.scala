@@ -59,11 +59,11 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
  *
  * @param numWakeupPorts number of wakeup ports
  */
-class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
+class RingIssueSlot(implicit p: Parameters)
   extends BoomModule
   with IssueUnitConstants
 {
-  val io = IO(new IssueSlotIO(numWakeupPorts))
+  val io = IO(new RingIssueSlotIO)
 
   // slot invalid?
   // slot is valid, holding 1 uop
@@ -148,12 +148,12 @@ class RingIssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
   // TODO can optimize this once column steering is implemented
   // Or, should we leave it like this to allow greater dispatching flexibility? TBD.
   for (w <- 0 until coreWidth) {
-    when (io.wakeup_ports(i).valid &&
-         (io.wakeup_ports(i).bits.pdst === next_uop.prs1)) {
+    when (io.slow_wakeups(w).valid &&
+         (io.slow_wakeups(w).bits === next_uop.prs1)) {
       p1 := true.B
     }
-    when (io.wakeup_ports(i).valid &&
-         (io.wakeup_ports(i).bits.pdst === next_uop.prs2)) {
+    when (io.slow_wakeups(w).valid &&
+         (io.slow_wakeups(w).bits === next_uop.prs2)) {
       p2 := true.B
     }
   }
