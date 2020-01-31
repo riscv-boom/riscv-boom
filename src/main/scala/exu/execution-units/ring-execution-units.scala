@@ -21,7 +21,7 @@ import freechips.rocketchip.config.{Parameters}
 import boom.common._
 import boom.util._
 
-class RingExecutionUnits(implicit val p: Parameters) extends BoomModule
+class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 {
   // I/O which is used by all units
   // Unit-specific I/O (e.g. rocc) can still be hooked up with the unit getter functions
