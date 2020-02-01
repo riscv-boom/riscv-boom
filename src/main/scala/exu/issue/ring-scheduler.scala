@@ -142,7 +142,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     def Inc(count: UInt, inc: Bool) = Mux(inc && !count(max), count << 1, count)
 
     val counts = valids.scanLeft(1.U((max+1).W))((c,v) => Inc(c,!v))
-    val sels = (counts zip valids).map { case (c,v) => c(1,max) & Fill(max,v) }
+    val sels = (counts zip valids).map { case (c,v) => c(max,1) & Fill(max,v) }
                 .takeRight(numSlotsPerColumn + coreWidth - 1)
 
     for (i <- 0 until numSlotsPerColumn) {

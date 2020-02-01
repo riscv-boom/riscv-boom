@@ -147,10 +147,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   assert (!(br_unit.brinfo.mispredict && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
 
-  for (eu <- exe_units) {
-    eu.io.brinfo := br_unit.brinfo
-  }
-
   if (usingFPU) {
     fp_pipeline.io.brinfo := br_unit.brinfo
   }

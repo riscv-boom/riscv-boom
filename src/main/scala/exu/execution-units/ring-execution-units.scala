@@ -72,48 +72,48 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     exe_units.count(f)
   }
 
-  lazy val memory_units = {
+  def memory_units = {
     exe_units.filter(_.hasMem)
   }
 
-  lazy val br_unit = {
+  def br_unit = {
     require (exe_units.count(_.hasBrUnit) == 1)
     exe_units.find(_.hasBrUnit).get
   }
 
-  lazy val csr_unit = {
+  def csr_unit = {
     require (exe_units.count(_.hasCSR) == 1)
     exe_units.find(_.hasCSR).get
   }
 
-  lazy val ifpu_unit = {
+  def ifpu_unit = {
     require (usingFPU)
     require (exe_units.count(_.hasIfpu) == 1)
     exe_units.find(_.hasIfpu).get
   }
 
-  lazy val fpiu_unit = {
+  def fpiu_unit = {
     require (usingFPU)
     require (exe_units.count(_.hasFpiu) == 1)
     exe_units.find(_.hasFpiu).get
   }
 
-  lazy val br_unit_io = {
+  def br_unit_io = {
     require (exe_units.count(_.hasBrUnit) == 1)
     (exe_units.find(_.hasBrUnit).get).io.br_unit
   }
 
-  lazy val br_unit_idx = {
+  def br_unit_idx = {
     exe_units.indexWhere(_.hasBrUnit)
   }
 
-  lazy val rocc_unit = {
+  def rocc_unit = {
     require (usingRoCC)
     require (exe_units.count(_.hasRocc) == 1)
     exe_units.find(_.hasRocc).get
   }
 
-  lazy val idiv_busy = {
+  def idiv_busy = {
     !exe_units.find(_.hasDiv).get.io.fu_types(4)
   }
 
