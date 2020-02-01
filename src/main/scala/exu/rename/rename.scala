@@ -40,6 +40,8 @@ class RenameStageIO(
   val numWbPorts: Int)
   (implicit p: Parameters) extends BoomBundle
 {
+  val pregSz = log2Ceil(numPhysRegs)
+
   val ren_stalls = Output(Vec(plWidth, Bool()))
 
   val kill = Input(Bool())
@@ -58,7 +60,7 @@ class RenameStageIO(
   val dis_ready = Input(Bool())
 
   // wakeup ports
-  val wakeups = Flipped(Vec(numWbPorts, Valid(new ExeUnitResp(xLen))))
+  val wakeups = Flipped(Vec(numWbPorts, Valid(UInt(pregSz.W))))
 
   // commit stage
   val com_valids = Input(Vec(plWidth, Bool()))
@@ -272,10 +274,7 @@ class RenameStage(
   busytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
   busytable.io.rebusy_reqs := ren2_alloc_reqs
   busytable.io.wb_valids := io.wakeups.map(_.valid)
-  busytable.io.wb_pdsts := io.wakeups.map(_.bits.uop.pdst)
-
-  assert (!(io.wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= rtype).reduce(_||_)),
-   "[rename] Wakeup has wrong rtype.")
+  busytable.io.wb_pdsts := io.wakeups.map(_.bits)
 
   for ((uop, w) <- ren2_uops.zipWithIndex) {
     val busy = busytable.io.busy_resps(w)
