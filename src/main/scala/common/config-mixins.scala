@@ -171,12 +171,13 @@ class WithRingBooms(n: Int) extends Config((site, here, up) => {
       gshare = Some(GShareParameters(historyLength=23, numSets=4096)),
       tage = None,
       bpdRandom = None,
-      fpu = None),
+      fpu = None,
+      usingFPU = false),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                nSets=64, nWays=4, nMSHRs=4, nTLBEntries=16)),
     icache = Some(ICacheParams(fetchBytes = 2*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=4, prefetch=true))
   )}
-  case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+  case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
   case XLen => 64
   case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
 })

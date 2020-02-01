@@ -177,7 +177,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   }
 
   // Hookup shared units
-  for ((i,eu) <- (1 until coreWidth) zip shared_exe_units) {
+  for ((i,eu) <- (1 until xbarSize) zip shared_exe_units) {
     eu.io.req.bits  := Mux1H(col_sels(i), io.exe_reqs.map(_.bits))
     eu.io.req.valid := col_sels(i).orR
 
@@ -193,10 +193,10 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // there's a pipe stage between them and the writeback crossbar.
 
   val eu_sels = Transpose(VecInit(Seq(VecInit(column_exe_units.map(_.io.iresp.valid)).asUInt) ++
-    shared_exe_units.map(eu => eu.io.iresp.bits.uop.dst_col & Fill(coreWidth, eu.io.iresp.valid))))
+    shared_exe_units.filter(_.writesIrf).map(eu => eu.io.iresp.bits.uop.dst_col & Fill(coreWidth, eu.io.iresp.valid))))
 
   for (w <- 0 until coreWidth) {
-    io.exe_resps(w).bits  := Mux1H(eu_sels(w), Seq(column_exe_units(w).io.iresp.bits) ++ shared_exe_units.map(_.io.iresp.bits))
+    io.exe_resps(w).bits  := Mux1H(eu_sels(w), Seq(column_exe_units(w).io.iresp.bits) ++ shared_exe_units.filter(_.writesIrf).map(_.io.iresp.bits))
     io.exe_resps(w).valid := eu_sels(w).orR
   }
 }

@@ -76,7 +76,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // construct all of the modules
 
   // Only holds integer-registerfile execution units.
-  val exe_units = new boom.exu.RingExecutionUnits
+  val exe_units = Module(new boom.exu.RingExecutionUnits)
 
   // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
   var fp_pipeline: FpPipeline = null

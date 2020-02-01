@@ -185,14 +185,14 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   // currently, only support one of each.
   require (issueParams.count(_.iqType == IQT_FP.litValue) == 1 || !usingFPU)
-  require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1)
+  //require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1)
   require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
 
   val intIssueParam = issueParams.find(_.iqType == IQT_INT.litValue).get
-  val memIssueParam = issueParams.find(_.iqType == IQT_MEM.litValue).get
+  //val memIssueParam = issueParams.find(_.iqType == IQT_MEM.litValue).get
 
   val intWidth = intIssueParam.issueWidth
-  val memWidth = memIssueParam.issueWidth
+  val memWidth = 1 // TODO
 
   issueParams.map(x => require(x.dispatchWidth <= coreWidth && x.dispatchWidth > 0))
 

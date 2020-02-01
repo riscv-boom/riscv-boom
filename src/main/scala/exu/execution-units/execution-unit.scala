@@ -169,7 +169,7 @@ abstract class ExecutionUnit(
   // TODO add "number of fflag ports", so we can properly account for FPU+Mem combinations
   def hasFFlags     : Boolean = hasFpu || hasFdiv
 
-  require ((hasFpu || hasFdiv) ^ (hasAlu || hasMul || hasMem || hasIfpu),
+  require ((hasFpu || hasFdiv) ^ (hasAlu || hasMem || hasBrUnit || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
   def hasFcsr = hasIfpu || hasFpu || hasFdiv
 
@@ -213,7 +213,7 @@ class ALUExeUnit(
   (implicit p: Parameters)
   extends ExecutionUnit(
     readsIrf         = true,
-    writesIrf        = hasAlu || hasMul || hasDiv,
+    writesIrf        = hasAlu || hasMem || hasMul || hasDiv,
     writesLlIrf      = hasMem || hasRocc,
     writesLlFrf      = (hasIfpu || hasMem) && p(tile.TileKey).core.fpu != None,
     numBypassStages  =
@@ -395,14 +395,14 @@ class ALUExeUnit(
 
     io.lsu_io.req := maddrcalc.io.resp
 
-    io.ll_iresp <> io.lsu_io.iresp
+    io.iresp <> io.lsu_io.iresp
     if (usingFPU) {
       io.ll_fresp <> io.lsu_io.fresp
     }
   }
 
   // Outputs (Write Port #0)  ---------------
-  if (writesIrf) {
+  if (writesIrf && !hasMem) {
     io.iresp.valid     := iresp_fu_units.map(_.io.resp.valid).reduce(_|_)
     io.iresp.bits.uop  := PriorityMux(iresp_fu_units.map(f =>
       (f.io.resp.valid, f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())

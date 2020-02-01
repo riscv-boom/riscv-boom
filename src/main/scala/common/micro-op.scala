@@ -182,7 +182,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // Getters that help with arbitration during scheduling
   def prs1_do_read   = lrs1_rtype === RT_FIX && !prs1_bypass
   def prs2_do_read   = lrs2_rtype === RT_FIX && !prs2_bypass
-  def shared_eu_code = eu_code(4,1)
+  def shared_eu_code = eu_code(3,1)
   def exe_wb_latency = (fu_code(2) | fu_code(3)) << 3 | fu_code(0)
 }
 
