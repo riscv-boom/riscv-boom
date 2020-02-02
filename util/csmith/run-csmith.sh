@@ -99,6 +99,8 @@ run_once () {
         return 0
     fi
 
+    # cleanup output
+    sed -i "/UART/d" $BASE_NAME.sim.out
     cmp -s $BASE_NAME.sim.out $BASE_NAME.spike.out
     RV=$?
     if [ $RV -ne 0 ]; then

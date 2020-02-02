@@ -52,6 +52,11 @@ parameters:
         type: boolean
         default: false
 
+    # other misc parameters
+    docker-version:
+        type: string
+        default: "0.0.12"
+
 # re-usable commands
 commands:
     ssh-checkout:
@@ -166,7 +171,7 @@ commands:
 jobs:
     install-riscv-toolchain:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -175,7 +180,7 @@ jobs:
                 tools-version: "riscv-tools"
     install-esp-toolchain:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -184,7 +189,7 @@ jobs:
                 tools-version: "esp-tools"
     prepare-build-environment:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -211,7 +216,7 @@ jobs:
                     - "/home/riscvuser/verilator"
     run-scala-checkstyle:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -222,7 +227,7 @@ jobs:
                 command: make checkstyle
     prepare-smallboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -231,7 +236,7 @@ jobs:
                 config-key: "smallboom"
     prepare-mediumboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -240,7 +245,7 @@ jobs:
                 config-key: "mediumboom"
     prepare-largeboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -249,7 +254,7 @@ jobs:
                 config-key: "largeboom"
     prepare-megaboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -259,7 +264,7 @@ jobs:
                 timeout: "240m"
     prepare-smallboomandrocketconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -268,7 +273,7 @@ jobs:
                 config-key: "boomandrocket"
     prepare-smallrv32boomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -277,7 +282,7 @@ jobs:
                 config-key: "rv32boom"
     prepare-hwachaboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -287,7 +292,7 @@ jobs:
                 config-key: "hwachaboom"
     smallboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -300,7 +305,7 @@ jobs:
                 no_output_timeout: 30m
     smallboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -312,7 +317,7 @@ jobs:
                 command: .circleci/run-tests.sh smallboom
     mediumboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -325,7 +330,7 @@ jobs:
                 no_output_timeout: 30m
     mediumboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -337,7 +342,7 @@ jobs:
                 command: .circleci/run-tests.sh mediumboom
     largeboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -350,7 +355,7 @@ jobs:
                 no_output_timeout: 30m
     largeboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -362,7 +367,7 @@ jobs:
                 command: .circleci/run-tests.sh largeboom
     megaboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -375,7 +380,7 @@ jobs:
                 no_output_timeout: 30m
     megaboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -388,7 +393,7 @@ jobs:
                 no_output_timeout: 30m
     smallboomandrocketconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -401,7 +406,7 @@ jobs:
                 no_output_timeout: 30m
     smallboomandrocketconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -413,7 +418,7 @@ jobs:
                 command: .circleci/run-tests.sh boomandrocket
     smallrv32boomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -426,7 +431,7 @@ jobs:
                 no_output_timeout: 30m
     smallrv32boomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -438,7 +443,7 @@ jobs:
                 command: .circleci/run-tests.sh rv32boom
     hwachaboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -468,7 +473,7 @@ jobs:
 
     build-largefireboom-buildroot:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -478,7 +483,7 @@ jobs:
                 workload: "buildroot"
     build-largefireboom-fedora:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -488,7 +493,7 @@ jobs:
                 workload: "fedora"
     build-largefireboom-coremark:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -498,7 +503,7 @@ jobs:
                 workload: "coremark"
     build-largefireboom-spec17-intspeed:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -508,7 +513,7 @@ jobs:
                 workload: "spec17-intspeed"
     build-largefireboom-spec17-intrate:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -518,7 +523,7 @@ jobs:
                 workload: "spec17-intrate"
     launch-largefireboom-afi-build:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -546,7 +551,7 @@ jobs:
                     .circleci/firesim-afi-failed.sh largefireboom
     launch-largefireboom-workloads:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: riscvboom/riscvboom-images:<< pipeline.parameters.docker-version >>
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
