@@ -47,7 +47,9 @@ class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
   // Indicates that this update is due to a speculated misprediction
   // Local predictors typically update themselves with speculative info
   // Global predictors only care about non-speculative updates
-  val is_spec       = Bool()
+  val is_mispredict_update = Bool()
+  val is_repair_update = Bool()
+  def is_commit_update = !(is_mispredict_update || is_repair_update)
 
   val pc            = UInt(vaddrBitsExtended.W)
   // Mask of instructions which are branches.
@@ -78,7 +80,9 @@ class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
 class BranchPredictionBankUpdate(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomFrontendParameters
 {
-  val is_spec          = Bool()
+  val is_mispredict_update = Bool()
+  val is_repair_update = Bool()
+  def is_commit_update = !(is_mispredict_update || is_repair_update)
 
   val pc               = UInt(vaddrBitsExtended.W)
 
@@ -104,9 +108,11 @@ class BranchPredictionRequest(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 class BranchPredictionBankRequest(implicit p: Parameters) extends BoomBundle()(p)
+  with HasBoomFrontendParameters
 {
   val pc    = UInt(vaddrBitsExtended.W)
   val hist  = UInt(globalHistoryLength.W)
+  val mask  = UInt(bankWidth.W)
 }
 
 class BranchPredictionBankResponse(implicit p: Parameters) extends BoomBundle()(p)
@@ -191,6 +197,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   if (nBanks == 1) {
     banked_predictors(0).io.f0_req.bits.hist  := io.f0_req.bits.ghist.histories(0)
     banked_predictors(0).io.f0_req.bits.pc    := bankAlign(io.f0_req.bits.pc)
+    banked_predictors(0).io.f0_req.bits.mask  := fetchMask(io.f0_req.bits.pc)
     banked_predictors(0).io.f0_req.valid      := io.f0_req.valid
 
     banked_predictors(0).io.resp_in           := (0.U).asTypeOf(new BranchPredictionBankResponse)
@@ -201,18 +208,22 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     when (bank(io.f0_req.bits.pc) === 0.U) {
       banked_predictors(0).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(0)
       banked_predictors(0).io.f0_req.bits.pc   := bankAlign(io.f0_req.bits.pc)
+      banked_predictors(0).io.f0_req.bits.mask := fetchMask(io.f0_req.bits.pc)
       banked_predictors(0).io.f0_req.valid     := io.f0_req.valid
 
       banked_predictors(1).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(1)
       banked_predictors(1).io.f0_req.bits.pc   := nextBank(io.f0_req.bits.pc)
+      banked_predictors(1).io.f0_req.bits.mask := ~(0.U(bankWidth.W))
       banked_predictors(1).io.f0_req.valid     := io.f0_req.valid
     } .otherwise {
       banked_predictors(0).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(1)
       banked_predictors(0).io.f0_req.bits.pc   := nextBank(io.f0_req.bits.pc)
+      banked_predictors(0).io.f0_req.bits.mask := ~(0.U(bankWidth.W))
       banked_predictors(0).io.f0_req.valid     := io.f0_req.valid && !mayNotBeDualBanked(io.f0_req.bits.pc)
 
       banked_predictors(1).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(0)
       banked_predictors(1).io.f0_req.bits.pc   := bankAlign(io.f0_req.bits.pc)
+      banked_predictors(1).io.f0_req.bits.mask := fetchMask(io.f0_req.bits.pc)
       banked_predictors(1).io.f0_req.valid     := io.f0_req.valid
     }
   }
@@ -290,7 +301,9 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   dontTouch(io.update)
 
   for (i <- 0 until nBanks) {
-    banked_predictors(i).io.update.bits.is_spec          := io.update.bits.is_spec
+    banked_predictors(i).io.update.bits.is_mispredict_update := io.update.bits.is_mispredict_update
+    banked_predictors(i).io.update.bits.is_repair_update     := io.update.bits.is_repair_update
+
     banked_predictors(i).io.update.bits.meta             := io.update.bits.meta(i)
     banked_predictors(i).io.update.bits.cfi_idx.bits     := io.update.bits.cfi_idx.bits
     banked_predictors(i).io.update.bits.cfi_taken        := io.update.bits.cfi_taken

@@ -133,10 +133,10 @@ class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) exte
   s1_update_wbtb_data.extended := offset_is_extended
   s1_update_wbtb_data.offset   := new_offset_value
   val s1_update_wbtb_mask = (UIntToOH(s1_update_cfi_idx) &
-    Fill(bankWidth, s1_update.bits.cfi_idx.valid && s1_update.valid && s1_update.bits.cfi_taken && !s1_update.bits.is_spec))
+    Fill(bankWidth, s1_update.bits.cfi_idx.valid && s1_update.valid && s1_update.bits.cfi_taken && s1_update.bits.is_commit_update))
 
   val s1_update_wmeta_mask = ((s1_update_wbtb_mask | s1_update.bits.br_mask) &
-    Fill(bankWidth, s1_update.valid && !s1_update.bits.is_spec))
+    Fill(bankWidth, s1_update.valid && s1_update.bits.is_commit_update))
   val s1_update_wmeta_data = Wire(Vec(bankWidth, new BTBMeta))
   for (w <- 0 until bankWidth) {
     s1_update_wmeta_data(w).tag     := s1_update_idx >> log2Ceil(nSets)

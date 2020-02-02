@@ -21,7 +21,7 @@ case class BoomLoopPredictorParams(
 class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   val tagSz = 10
-  override val nSets = 32
+  override val nSets = 16
 
 
 
@@ -49,10 +49,11 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
       val f3_pred     = Output(Bool())
       val f3_meta     = Output(new LoopMeta)
 
-      val mispredict_valid = Input(Bool())
-      val mispredict_idx   = Input(UInt())
-      val mispredict_resolve_dir = Input(Bool())
-      val mispredict_meta  = Input(new LoopMeta)
+      val update_mispredict = Input(Bool())
+      val update_repair     = Input(Bool())
+      val update_idx   = Input(UInt())
+      val update_resolve_dir = Input(Bool())
+      val update_meta  = Input(new LoopMeta)
     })
 
     val doing_reset = RegInit(true.B)
@@ -62,29 +63,40 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
 
 
     val entries = Reg(Vec(nSets, new LoopEntry))
-    val f3_entry = RegNext(entries(io.f2_req_idx))
+    val f2_entry = WireInit(entries(io.f2_req_idx))
+    when (io.update_repair && io.update_idx === io.f2_req_idx) {
+      f2_entry.s_cnt := io.update_meta.s_cnt
+    } .elsewhen (io.update_mispredict && io.update_idx === io.f2_req_idx) {
+      f2_entry.s_cnt := 0.U
+    }
+    val f3_entry = RegNext(f2_entry)
+    val f3_scnt  = Mux(io.update_repair && io.update_idx === RegNext(io.f2_req_idx),
+      io.update_meta.s_cnt,
+      f3_entry.s_cnt)
     val f3_tag   = RegNext(io.f2_req_idx(tagSz+log2Ceil(nSets)-1,log2Ceil(nSets)))
 
     io.f3_pred := io.f3_pred_in
-    io.f3_meta.s_cnt := f3_entry.s_cnt
+    io.f3_meta.s_cnt := f3_scnt
 
     when (io.f3_req_fire) {
       when (f3_entry.tag === f3_tag) {
-        when (f3_entry.s_cnt === f3_entry.p_cnt && f3_entry.conf === 7.U) {
+        when (f3_scnt === f3_entry.p_cnt && f3_entry.conf === 7.U) {
           io.f3_pred := !io.f3_pred_in
           entries(RegNext(io.f2_req_idx)).s_cnt := 0.U
         } .otherwise {
-          entries(RegNext(io.f2_req_idx)).s_cnt := f3_entry.s_cnt + 1.U
+          entries(RegNext(io.f2_req_idx)).s_cnt := f3_scnt + 1.U
         }
       }
     }
 
-    when (io.mispredict_valid && !doing_reset) {
-      val entry = entries(io.mispredict_idx)
-      val tag = io.mispredict_idx(tagSz+log2Ceil(nSets)-1,log2Ceil(nSets))
-      val tag_match = entry.tag === tag
-      val ctr_match = entry.p_cnt === io.mispredict_meta.s_cnt
-      val wentry = WireInit(entry)
+
+    val entry = entries(io.update_idx)
+    val tag = io.update_idx(tagSz+log2Ceil(nSets)-1,log2Ceil(nSets))
+    val tag_match = entry.tag === tag
+    val ctr_match = entry.p_cnt === io.update_meta.s_cnt
+    val wentry = WireInit(entry)
+
+    when (io.update_mispredict && !doing_reset) {
 
       // Learned, tag match -> decrement confidence
       when (entry.conf === 7.U && tag_match) {
@@ -103,7 +115,7 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
       } .elsewhen (entry.conf =/= 0.U && tag_match && !ctr_match) {
         wentry.conf  := 0.U
         wentry.s_cnt := 0.U
-        wentry.p_cnt := io.mispredict_meta.s_cnt
+        wentry.p_cnt := io.update_meta.s_cnt
 
       // Confident, no tag match -> (TODO: decrement age counters)
       } .elsewhen (entry.conf =/= 0.U && !tag_match) {
@@ -115,7 +127,7 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
 
       // Unconfident, tag match, no ctr match -> set previous counter
       } .elsewhen (entry.conf === 0.U && tag_match && !ctr_match) {
-        wentry.p_cnt := io.mispredict_meta.s_cnt
+        wentry.p_cnt := io.update_meta.s_cnt
         wentry.s_cnt := 0.U
 
       // Unconfident, no tag match -> set previous counter and tag
@@ -123,23 +135,15 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
         wentry.tag := tag
         wentry.conf := 1.U
         wentry.s_cnt := 0.U
-        wentry.p_cnt := io.mispredict_meta.s_cnt
+        wentry.p_cnt := io.update_meta.s_cnt
       }
 
-      entries(io.mispredict_idx) := wentry
-
-
-      // when (entry.conf === 0.U || entry.p_cnt =/= io.mispredict_meta.s_cnt) {
-      //   entries(io.mispredict_idx).p_cnt := io.mispredict_meta.s_cnt
-      // }
-      // when (entry.conf =/= 7.U && entry.p_cnt === io.mispredict_meta.s_cnt) {
-      //   entries(io.mispredict_idx).conf := entry.conf + 1.U
-      // }
-      // when (entry.conf === 7.U ||
-      //       entry.p_cnt =/= io.mispredict_meta.s_cnt) {
-      //   entries(io.mispredict_idx).conf := 0.U
-      // }
-      // entries(io.mispredict_idx).s_cnt := 0.U
+      entries(io.update_idx) := wentry
+    } .elsewhen (io.update_repair && !doing_reset) {
+      when (tag_match && !(io.f3_req_fire && io.update_idx === RegNext(io.f2_req_idx))) {
+        wentry.s_cnt := io.update_meta.s_cnt
+        entries(io.update_idx) := wentry
+      }
     }
 
     when (doing_reset) {
@@ -147,9 +151,6 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
     }
 
     dontTouch(entries)
-    // when (reset.asBool) {
-    //   entries.map { e => e.age := 0.U }
-    // }
   }
 
 
@@ -163,15 +164,22 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
   for (w <- 0 until bankWidth) {
     columns(w).io.f2_req_valid := s2_req.valid
     columns(w).io.f2_req_idx  := s2_req_idx
-    columns(w).io.f3_req_fire := s3_req.valid && io.f3_fire && RegNext(io.resp_in.f2(w).predicted_pc.valid && io.resp_in.f2(w).is_br)
+    columns(w).io.f3_req_fire := (s3_req.valid && s3_req.bits.mask(w) && io.f3_fire &&
+      RegNext(io.resp_in.f2(w).predicted_pc.valid && io.resp_in.f2(w).is_br))
 
     columns(w).io.f3_pred_in  := io.resp_in.f3(w).taken
     io.resp.f3(w).taken       := columns(w).io.f3_pred
 
-    columns(w).io.mispredict_valid       := s1_update.valid && s1_update.bits.br_mask(w) && s1_update.bits.is_spec && s1_update.bits.cfi_mispredicted
-    columns(w).io.mispredict_idx         := s1_update_idx
-    columns(w).io.mispredict_resolve_dir := s1_update.bits.cfi_taken
-    columns(w).io.mispredict_meta        := update_meta(w)
+    columns(w).io.update_mispredict      := (s1_update.valid &&
+                                             s1_update.bits.br_mask(w) &&
+                                             s1_update.bits.is_mispredict_update &&
+                                             s1_update.bits.cfi_mispredicted)
+    columns(w).io.update_repair          := (s1_update.valid &&
+                                             s1_update.bits.br_mask(w) &&
+                                            s1_update.bits.is_repair_update)
+    columns(w).io.update_idx             := s1_update_idx
+    columns(w).io.update_resolve_dir     := s1_update.bits.cfi_taken
+    columns(w).io.update_meta            := update_meta(w)
 
     f3_meta(w) := columns(w).io.f3_meta
   }

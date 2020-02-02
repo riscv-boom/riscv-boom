@@ -120,19 +120,19 @@ class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams)(implicit p: Pa
   val s1_update_wbtb_data     = Wire(new MicroBTBEntry)
   s1_update_wbtb_data.offset := new_offset_value
   val s1_update_wbtb_mask = (UIntToOH(s1_update_cfi_idx) &
-    Fill(bankWidth, s1_update.bits.cfi_idx.valid && s1_update.valid && s1_update.bits.cfi_taken && !s1_update.bits.is_spec))
+    Fill(bankWidth, s1_update.bits.cfi_idx.valid && s1_update.valid && s1_update.bits.cfi_taken && s1_update.bits.is_commit_update))
 
   val s1_update_wmeta_mask = ((s1_update_wbtb_mask | s1_update.bits.br_mask) &
-    Fill(bankWidth, s1_update.valid && !s1_update.bits.is_spec))
+    Fill(bankWidth, s1_update.valid && s1_update.bits.is_commit_update))
 
   // Write the BTB with the target
-  when (s1_update.valid && s1_update.bits.cfi_taken && s1_update.bits.cfi_idx.valid && !s1_update.bits.is_spec) {
+  when (s1_update.valid && s1_update.bits.cfi_taken && s1_update.bits.cfi_idx.valid && s1_update.bits.is_commit_update) {
     btb(s1_update_write_way)(s1_update_cfi_idx).offset := new_offset_value
   }
 
   // Write the meta
   for (w <- 0 until bankWidth) {
-    when (s1_update.valid && !s1_update.bits.is_spec &&
+    when (s1_update.valid && s1_update.bits.is_commit_update &&
       (s1_update.bits.br_mask(w) ||
         (s1_update_cfi_idx === w.U && s1_update.bits.cfi_taken && s1_update.bits.cfi_idx.valid))) {
       val was_taken = (s1_update_cfi_idx === w.U && s1_update.bits.cfi_idx.valid &&

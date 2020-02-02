@@ -135,7 +135,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
 
 
   val pcs      = Reg(Vec(num_entries, UInt(vaddrBitsExtended.W)))
-  val bpd_meta = SyncReadMem(num_entries, Vec(nBanks, UInt(bpdMaxMetaLength.W)))
+  val meta     = SyncReadMem(num_entries, Vec(nBanks, UInt(bpdMaxMetaLength.W)))
   val ram      = Reg(Vec(num_entries, new FTQBundle))
 
   val do_enq = io.enq.fire()
@@ -180,7 +180,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
       )
     )
 
-    bpd_meta.write(enq_ptr, io.enq.bits.bpd_meta)
+    meta.write(enq_ptr, io.enq.bits.bpd_meta)
 
     enq_ptr := WrapInc(enq_ptr, num_entries)
   }
@@ -201,9 +201,6 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   // We can update the branch predictors when we know the target of the
   // CFI in this fetch bundle
 
-  val bpdupdate = Wire(Valid(new BranchPredictionUpdate))
-  bpdupdate.valid := false.B
-  bpdupdate.bits  := DontCare
   val ras_update = WireInit(false.B)
   val ras_update_pc = WireInit(0.U(vaddrBitsExtended.W))
   val ras_update_idx = WireInit(0.U(log2Ceil(nRasEntries).W))
@@ -211,40 +208,75 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   io.ras_update_pc  := RegNext(ras_update_pc)
   io.ras_update_idx := RegNext(ras_update_idx)
 
-  val bpd_idx = Mux(RegNext(io.brupdate.b2.mispredict), RegNext(io.brupdate.b2.uop.ftq_idx), bpd_ptr)
-  val entry = ram(bpd_idx)
-  when (bpd_ptr =/= deq_ptr && enq_ptr =/= WrapInc(bpd_ptr, num_entries) || RegNext(io.brupdate.b2.mispredict)) {
-    val cfi_idx = entry.cfi_idx.bits
+  val bpd_update_mispredict = RegInit(false.B)
+  val bpd_update_repair = RegInit(false.B)
+  val bpd_repair_idx = Reg(UInt(log2Ceil(ftqSz).W))
+  val bpd_end_idx = Reg(UInt(log2Ceil(ftqSz).W))
+  val bpd_repair_pc = Reg(UInt(vaddrBitsExtended.W))
 
-    // TODO: We should try to commit branch prediction updates earlier
-    bpdupdate.valid              := !first_empty && (entry.cfi_idx.valid || entry.br_mask =/= 0.U)
-    bpdupdate.bits.is_spec       := RegNext(io.brupdate.b2.mispredict)
-    bpdupdate.bits.pc            := pcs(bpd_idx)
+  val bpd_idx = Mux(bpd_update_repair || bpd_update_mispredict, bpd_repair_idx, bpd_ptr)
+  val bpd_entry = RegNext(ram(bpd_idx))
+  val bpd_meta  = meta.read(bpd_idx)
+  val bpd_pc    = RegNext(pcs(bpd_idx))
+  val bpd_target = RegNext(pcs(WrapInc(bpd_idx, num_entries)))
 
-    bpdupdate.bits.br_mask       := Mux(entry.cfi_idx.valid,
-      MaskLower(UIntToOH(cfi_idx)) & entry.br_mask, entry.br_mask)
-    bpdupdate.bits.cfi_idx.valid    := entry.cfi_idx.valid
-    bpdupdate.bits.cfi_idx.bits     := entry.cfi_idx.bits
-    bpdupdate.bits.cfi_mispredicted := entry.cfi_mispredicted
-    bpdupdate.bits.cfi_taken        := entry.cfi_taken
-    bpdupdate.bits.target           := pcs(WrapInc(bpd_idx, num_entries))
-    bpdupdate.bits.cfi_is_br        := entry.br_mask(cfi_idx)
-    bpdupdate.bits.cfi_is_jal       := entry.cfi_type === CFI_JAL || entry.cfi_type === CFI_JALR
-    bpdupdate.bits.ghist            := entry.ghist
 
-    // ras_update     := entry.cfi_is_call
-    // ras_update_pc  := bankAlign(pcs(bpd_ptr)) + (entry.cfi_idx.bits << 1) + Mux(entry.cfi_npc_plus4, 4.U, 2.U)
-    // ras_update_idx := WrapInc(entry.ghist.ras_idx, nRasEntries)
-
-    when (!RegNext(io.brupdate.b2.mispredict)) {
-      bpd_ptr := WrapInc(bpd_ptr, num_entries)
+  when (io.brupdate.b2.mispredict) {
+    bpd_update_mispredict := true.B
+    bpd_repair_idx        := io.brupdate.b2.uop.ftq_idx
+    bpd_end_idx           := enq_ptr
+  } .elsewhen (bpd_update_mispredict) {
+    bpd_update_mispredict := false.B
+    bpd_update_repair     := true.B
+    bpd_repair_idx        := WrapInc(bpd_repair_idx, num_entries)
+  } .elsewhen (bpd_update_repair && RegNext(bpd_update_mispredict)) {
+    bpd_repair_pc         := bpd_pc
+    bpd_repair_idx        := WrapInc(bpd_repair_idx, num_entries)
+  } .elsewhen (bpd_update_repair) {
+    bpd_repair_idx        := WrapInc(bpd_repair_idx, num_entries)
+    when (WrapInc(bpd_repair_idx, num_entries) === bpd_end_idx ||
+      bpd_pc === bpd_repair_pc)  {
+      bpd_update_repair := false.B
     }
+
+  }
+
+
+  val do_commit_update     = (!bpd_update_mispredict &&
+                              !bpd_update_repair &&
+                               bpd_ptr =/= deq_ptr &&
+                               enq_ptr =/= WrapInc(bpd_ptr, num_entries) &&
+                              !io.brupdate.b2.mispredict)
+  val do_mispredict_update = bpd_update_mispredict
+  val do_repair_update     = bpd_update_repair
+
+  when (RegNext(do_commit_update || do_repair_update || do_mispredict_update)) {
+    val cfi_idx = bpd_entry.cfi_idx.bits
+    val valid_repair = do_repair_update && bpd_pc =/= bpd_repair_pc
+
+    io.bpdupdate.valid := (!first_empty &&
+                           (bpd_entry.cfi_idx.valid || bpd_entry.br_mask =/= 0.U) &&
+                           !(RegNext(do_repair_update) && !valid_repair))
+    io.bpdupdate.bits.is_mispredict_update := RegNext(do_mispredict_update)
+    io.bpdupdate.bits.is_repair_update     := RegNext(do_repair_update)
+    io.bpdupdate.bits.pc      := bpd_pc
+    io.bpdupdate.bits.br_mask := Mux(bpd_entry.cfi_idx.valid,
+      MaskLower(UIntToOH(cfi_idx)) & bpd_entry.br_mask, bpd_entry.br_mask)
+    io.bpdupdate.bits.cfi_idx := bpd_entry.cfi_idx
+    io.bpdupdate.bits.cfi_mispredicted := bpd_entry.cfi_mispredicted
+    io.bpdupdate.bits.cfi_taken  := bpd_entry.cfi_taken
+    io.bpdupdate.bits.target     := bpd_target
+    io.bpdupdate.bits.cfi_is_br  := bpd_entry.br_mask(cfi_idx)
+    io.bpdupdate.bits.cfi_is_jal := bpd_entry.cfi_type === CFI_JAL || bpd_entry.cfi_type === CFI_JALR
+    io.bpdupdate.bits.ghist      := bpd_entry.ghist
+    io.bpdupdate.bits.meta       := bpd_meta
 
     first_empty := false.B
   }
-  io.bpdupdate           := RegNext(bpdupdate)
-  io.bpdupdate.bits.meta := bpd_meta.read(bpd_idx)
 
+  when (do_commit_update) {
+    bpd_ptr := WrapInc(bpd_ptr, num_entries)
+  }
 
   when (io.redirect.valid) {
     enq_ptr    := WrapInc(io.redirect.bits, num_entries)
