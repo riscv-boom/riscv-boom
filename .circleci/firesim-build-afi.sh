@@ -91,8 +91,8 @@ curl -u $API_TOKEN: \
     "largefireboom_buildroot": true,
     "largefireboom_fedora": true,
     "largefireboom_coremark": true,
-    "largefireboom_spec17-intspeed": true,
-    "largefireboom_spec17-intrate": true
+    "largefireboom_spec17-intspeed": false,
+    "largefireboom_spec17-intrate": false
   }
 }'
 
