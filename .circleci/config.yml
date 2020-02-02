@@ -60,6 +60,17 @@ parameters:
         type: boolean
         default: false
 
+    # misc parameters
+    verilator-cache-version:
+        type: string
+        default: "v13"
+    tools-cache-version:
+        type: string
+        default: "v4"
+    chipyard-cache-version:
+        type: string
+        default: "v13"
+
 # re-usable commands
 commands:
     ssh-checkout:
@@ -83,14 +94,14 @@ commands:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - << parameters.tools-version >>-installed-v4-{{ checksum "../<< parameters.tools-version >>.hash" }}
+                    - << parameters.tools-version >>-installed-<< pipeline.parameters.tools-cache-version >>-{{ checksum "../<< parameters.tools-version >>.hash" }}
             - run:
                 name: Building << parameters.tools-version >>
                 command: |
                     .circleci/build-toolchains.sh << parameters.tools-version >>
                 no_output_timeout: 120m
             - save_cache:
-                key: << parameters.tools-version >>-installed-v4-{{ checksum "../<< parameters.tools-version >>.hash" }}
+                key: << parameters.tools-version >>-installed-<< pipeline.parameters.tools-cache-version >>-{{ checksum "../<< parameters.tools-version >>.hash" }}
                 paths:
                     - "/home/riscvuser/<< parameters.tools-version >>-install"
 
@@ -113,13 +124,13 @@ commands:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - << parameters.tools-version >>-installed-v4-{{ checksum "../<< parameters.tools-version >>.hash" }}
+                    - << parameters.tools-version >>-installed-<< pipeline.parameters.tools-cache-version >>-{{ checksum "../<< parameters.tools-version >>.hash" }}
             - restore_cache:
                 keys:
-                    - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-<< pipeline.parameters.chipyard-cache-version >>-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+                    - verilator-<< pipeline.parameters.verilator-cache-version >>-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building << parameters.config-key >> Config using Verilator
                 command: .circleci/do-rtl-build.sh << parameters.config-key >>
@@ -145,13 +156,13 @@ commands:
                     .circleci/create-hash.sh
             - restore_cache:
                 keys:
-                    - << parameters.tools-version >>-installed-v4-{{ checksum "../<< parameters.tools-version >>.hash" }}
+                    - << parameters.tools-version >>-installed-<< pipeline.parameters.tools-cache-version >>-{{ checksum "../<< parameters.tools-version >>.hash" }}
             - restore_cache:
                 keys:
                     - << parameters.config-key >>config-{{ .Branch }}-{{ .Revision }}
             - restore_cache:
                 keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+                    - verilator-<< pipeline.parameters.verilator-cache-version >>-{{ checksum "CHIPYARD.hash" }}
 
     firesim-workload-build:
         description: "Build a FireSim workload"
@@ -188,21 +199,21 @@ jobs:
             - ssh-checkout
             - restore_cache:
                 keys:
-                    - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
+                    - chipyard-<< pipeline.parameters.chipyard-cache-version >>-{{ checksum "CHIPYARD.hash" }}
             - restore_cache:
                 keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
+                    - verilator-<< pipeline.parameters.verilator-cache-version >>-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Build Verilator and checkout submodules
                 command: |
                     .circleci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
             - save_cache:
-                key: chipyard-v13-{{ checksum "CHIPYARD.hash" }}
+                key: chipyard-<< pipeline.parameters.chipyard-cache-version >>-{{ checksum "CHIPYARD.hash" }}
                 paths:
                     - "/home/riscvuser/chipyard"
             - save_cache:
-                key: verilator-v13-{{ checksum "CHIPYARD.hash" }}
+                key: verilator-<< pipeline.parameters.verilator-cache-version >>-{{ checksum "CHIPYARD.hash" }}
                 paths:
                     - "/home/riscvuser/verilator"
     run-scala-checkstyle:
