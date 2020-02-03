@@ -17,9 +17,12 @@ import chisel3._
 import chisel3.util._
 
 import freechips.rocketchip.config.{Parameters}
+import freechips.rocketchip.rocket.{BP}
+import freechips.rocketchip.tile
 
 import boom.common._
 import boom.util._
+import boom.ifu.{GetPCFromFtqIO}
 
 class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 {
@@ -32,7 +35,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     val kill      = Input(Bool())
 
     // TODO get rid of this output
-    val bypass = Output(new BypassData(coreWidth, dataWidth))
+    val bypass = Output(new BypassData(coreWidth, xLen))
 
     // only used by the mem unit
     val lsu_io = Vec(memWidth, Flipped(new boom.lsu.LSUExeIO))
@@ -43,8 +46,11 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     val get_ftq_pc = Flipped(new GetPCFromFtqIO)
     val status     = Input(new freechips.rocketchip.rocket.MStatus)
 
+    // only used by the div unit
+    val idiv_busy = Output(Bool())
+
     // only used by the CSR unit
-    val csr_unit_resp = Flipped(DecoupledIO(new FuncUnitResp(xLen)))
+    val csr_unit_resp = DecoupledIO(new FuncUnitResp(xLen))
 
     // only used by the rocc unit
     val rocc = if (usingRoCC) new RoCCShimCoreIO else null
@@ -195,8 +201,10 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     column_exe_units(w).io.req.bits  := io.exe_reqs(w).bits
     column_exe_units(w).io.req.valid := col_sels(0)(w)
 
-    column_exe_units(w).io.brinfo    := io.brinfo
-    column_exe_units(w).io.kill      := io.kill
+    column_exe_units(w).io.brinfo := io.brinfo
+    column_exe_units(w).io.kill   := io.kill
+
+    column_exe_units(w).io.iresp.ready := DontCare
   }
 
   // Hookup shared units
@@ -204,8 +212,10 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     eu.io.req.bits  := Mux1H(col_sels(i), io.exe_reqs.map(_.bits))
     eu.io.req.valid := col_sels(i).orR
 
-    eu.io.brinfo    := io.brinfo
-    eu.io.kill      := io.kill
+    eu.io.brinfo := io.brinfo
+    eu.io.kill   := io.kill
+
+    if (eu.writesIrf) eu.io.iresp.ready := DontCare
   }
 
   //----------------------------------------------------------------------------------------------------
@@ -227,8 +237,9 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // Punch through misc unit I/O to core
 
   // ALU bypasses
+  io.bypass := DontCare
   for (w <- 0 until coreWidth) {
-    io.bypass((w + 1) % coreWidth) := column_units(w).io.bypass(0)
+    io.bypass.data((w + 1) % coreWidth) := column_exe_units(w).io.bypass.data(0)
   }
 
   // Memory access units
@@ -241,8 +252,11 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
   // Branch unit
   io.br_unit := br_unit_io
-  io.get_ftq_pc <> br_unit.io.get_ftq_pc
+  br_unit.io.get_ftq_pc <> io.get_ftq_pc
   br_unit.io.status := io.status
+
+  // Div unit
+  io.idiv_busy := idiv_busy
 
   // CSR unit
   io.csr_unit_resp <> csr_unit.io.iresp

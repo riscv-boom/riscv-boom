@@ -386,7 +386,8 @@ class ALUExeUnit(
     val maddrcalc = Module(new MemAddrCalcUnit)
     maddrcalc.io.req        <> io.req
     maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
-    maddrcalc.io.brinfo     <> io.brinfo
+    maddrcalc.io.brinfo     := io.brinfo
+    maddrcalc.io.kill       := io.kill
     maddrcalc.io.status     := io.status
     maddrcalc.io.bp         := io.bp
     maddrcalc.io.resp.ready := DontCare

@@ -103,6 +103,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     arb_gnts = arb_gnts & arb.io.gnts.asUInt
   }
 
+  wb_arb.io.fire := arb_gnts.asBools
+
   //----------------------------------------------------------------------------------------------------
   // Grant, Fast Wakeup, and Issue
 

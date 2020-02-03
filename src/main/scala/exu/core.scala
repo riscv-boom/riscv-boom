@@ -138,7 +138,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Branch Unit
   val br_unit = Wire(new BranchUnitResp())
-  br_unit <> exe_units.io.br_unit_io
+  br_unit <> exe_units.io.br_unit
 
   val flush_ifu = br_unit.brinfo.mispredict || // In practice, means flushing everything prior to dispatch.
                          rob.io.flush.valid || // i.e. 'flush in-order part of the pipeline'
@@ -579,8 +579,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // Dispatch to issue queues
 
-  scheduler.io.dis_uops   <> dispatcher.io.dis_uops(IQT_INT.litValue.toInt)
-  fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(IQT_FP.litValue.toInt)
+  // Get uops from rename2
+  for (w <- 0 until coreWidth) {
+    dispatcher.io.ren_uops(w).valid := dis_fire(w)
+    dispatcher.io.ren_uops(w).bits  := dis_uops(w)
+  }
+
+  scheduler.io.dis_uops <> dispatcher.io.dis_uops(issueParams.indexWhere(_.iqType == IQT_INT.litValue))
+  if (usingFPU) fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(issueParams.indexWhere(_.iqType == IQT_FP.litValue))
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -628,9 +634,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   scheduler.io.brinfo := br_unit.brinfo
   scheduler.io.kill   := rob.io.flush.valid
 
-  mem_units.map(u => u.io.com_exception := rob.io.flush.valid)
-
-
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // **** Register Read Stage ****
@@ -656,6 +659,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // CSR instructions so I never speculate these instructions.
 
   val csr_unit_resp = exe_units.io.csr_unit_resp
+  csr_unit_resp.ready := DontCare
 
   // for critical path reasons, we aren't zero'ing this out if resp is not valid
   val csr_rw_cmd = csr_unit_resp.bits.uop.ctrl.csr_cmd
@@ -709,10 +713,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   csr.io.fcsr_flags.bits  := rob.io.commit.fflags.bits
   csr.io.set_fs_dirty.get := rob.io.commit.fflags.valid
 
-  exe_units.io.fcsr_rm := csr.io.fcsr_rm
   io.fcsr_rm := csr.io.fcsr_rm
 
   if (usingFPU) {
+    exe_units.io.fcsr_rm   := csr.io.fcsr_rm
     fp_pipeline.io.fcsr_rm := csr.io.fcsr_rm
   }
 
@@ -804,7 +808,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     // Connect FPIU
     //ll_wbarb.io.in(1)        <> fp_pipeline.io.to_int TODO
     // Connect FLDs
-    fp_pipeline.io.ll_wports <> exe_units.memory_units.map(_.io.ll_fresp)
+    //fp_pipeline.io.ll_wports <> exe_units.memory_units.map(_.io.ll_fresp)
   }
   if (usingRoCC) {
     require(usingFPU)
@@ -868,12 +872,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   rob.io.brinfo <> br_unit.brinfo
 
   exe_units.io.status := csr.io.status
-
-  // Connect breakpoint info to memaddrcalcunit
-  for (i <- 0 until memWidth) {
-    mem_units(i).io.status := csr.io.status
-    mem_units(i).io.bp     := csr.io.bp
-  }
+  exe_units.io.bp     := csr.io.bp
+  exe_units.io.com_exception := rob.io.flush.valid
 
   // LSU <> ROB
   rob.io.lsu_clr_bsy    := io.lsu.clr_bsy
