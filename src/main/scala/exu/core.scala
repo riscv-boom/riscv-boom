@@ -138,8 +138,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Branch Unit
   val br_unit = Wire(new BranchUnitResp())
-  val brunit_idx = exe_units.br_unit_idx
-  br_unit <> exe_units.br_unit_io
+  br_unit <> exe_units.io.br_unit_io
 
   val flush_ifu = br_unit.brinfo.mispredict || // In practice, means flushing everything prior to dispatch.
                          rob.io.flush.valid || // i.e. 'flush in-order part of the pipeline'
@@ -151,11 +150,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     fp_pipeline.io.brinfo := br_unit.brinfo
   }
 
-  // Load/Store Unit & ExeUnits
-  val mem_units = exe_units.memory_units
-  val mem_resps = mem_units.map(_.io.ll_iresp)
-  for (i <- 0 until memWidth) {
-    mem_units(i).io.lsu_io <> io.lsu.exe(i)
+  // Load/Store Unit <-> ExeUnits
+  for (w <- 0 until memWidth) {
+    exe_units.io.lsu_io(w) <> io.lsu.exe(w)
   }
 
   //-------------------------------------------------------------
@@ -390,9 +387,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val iss_br = iss_uops zip iss_valids map { case (u,v) => u.is_br_or_jmp && v }
   bru_pc_req.valid := RegNext(iss_br.reduce(_||_))
   bru_pc_req.bits  := RegNext(Mux1H(iss_br, iss_uops.map(_.ftq_idx)))
-  exe_units(brunit_idx).io.get_ftq_pc.fetch_pc := RegNext(io.ifu.get_pc.fetch_pc)
-  exe_units(brunit_idx).io.get_ftq_pc.next_val := RegNext(io.ifu.get_pc.next_val)
-  exe_units(brunit_idx).io.get_ftq_pc.next_pc  := RegNext(io.ifu.get_pc.next_pc)
+  exe_units.io.get_ftq_pc.fetch_pc := RegNext(io.ifu.get_pc.fetch_pc)
+  exe_units.io.get_ftq_pc.next_val := RegNext(io.ifu.get_pc.next_val)
+  exe_units.io.get_ftq_pc.next_pc  := RegNext(io.ifu.get_pc.next_pc)
 
   // Frontend Exception Requests
   val xcpt_idx = PriorityEncoder(dec_xcpts)
@@ -513,10 +510,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val dis_prior_slot_unique = (dis_uops zip dis_valids).scanLeft(false.B) {case (s,(u,v)) => s || v && u.is_unique}
   val wait_for_empty_pipeline = (0 until coreWidth).map(w => (dis_uops(w).is_unique || custom_csrs.disableOOO) &&
                                   (!rob.io.empty || !io.lsu.fencei_rdy || dis_prior_slot_valid(w)))
-  val rocc_shim_busy = if (usingRoCC) !exe_units.rocc_unit.io.rocc.rxq_empty else false.B
+  val rocc_shim_busy = if (usingRoCC) !exe_units.io.rocc.rxq_empty else false.B
   val wait_for_rocc = (0 until coreWidth).map(w =>
                         (dis_uops(w).is_fence || dis_uops(w).is_fencei) && (io.rocc.busy || rocc_shim_busy))
-  val rxq_full = if (usingRoCC) exe_units.rocc_unit.io.rocc.rxq_full else false.B
+  val rxq_full = if (usingRoCC) exe_units.io.rocc.rxq_full else false.B
   val block_rocc = (dis_uops zip dis_valids).map{case (u,v) => v && u.uopc === uopROCC}.scanLeft(rxq_full)(_||_)
   val dis_rocc_alloc_stall = (dis_uops.map(_.uopc === uopROCC) zip block_rocc) map {case (p,r) =>
                                if (usingRoCC) p && r else false.B}
@@ -575,7 +572,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   if (usingRoCC) {
     for (w <- 0 until coreWidth) {
       // We guarantee only decoding 1 RoCC instruction per cycle
-      dis_uops(w).rxq_idx := exe_units.rocc_unit.io.rocc.rxq_idx(w)
+      dis_uops(w).rxq_idx := exe_units.io.rocc.rxq_idx(w)
     }
   }
 
@@ -626,7 +623,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Supress just-issued divides from issuing back-to-back, since it's an iterative divider.
   // But it takes a cycle to get to the Exe stage, so it can't tell us it is busy yet.
-  scheduler.io.div_busy := RegNext(idiv_issued) || exe_units.idiv_busy
+  scheduler.io.div_busy := RegNext(idiv_issued) || exe_units.io.idiv_busy
 
   scheduler.io.brinfo := br_unit.brinfo
   scheduler.io.kill   := rob.io.flush.valid
@@ -712,7 +709,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   csr.io.fcsr_flags.bits  := rob.io.commit.fflags.bits
   csr.io.set_fs_dirty.get := rob.io.commit.fflags.valid
 
-  exe_units.withFilter(_.hasFcsr).map(_.io.fcsr_rm := csr.io.fcsr_rm)
+  exe_units.io.fcsr_rm := csr.io.fcsr_rm
   io.fcsr_rm := csr.io.fcsr_rm
 
   if (usingFPU) {
@@ -721,11 +718,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   csr.io.hartid := io.hartid
   csr.io.interrupts := io.interrupts
-
-// TODO can we add this back in, but handle reset properly and save us
-//      the mux above on csr.io.rw.cmd?
-//   assert (!(csr_rw_cmd =/= rocket.CSR.N && !exe_units(0).io.resp(0).valid),
-//   "CSRFile is being written to spuriously.")
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -738,21 +730,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   exe_units.io.brinfo := br_unit.brinfo
   exe_units.io.kill   := rob.io.flush.valid
 
-  // TODO rip this out and do bypassing inside the EXU module
-  var bypass_idx = 0
-  for (w <- 0 until exe_units.length) {
-    val exe_unit = exe_units(w)
-    if (exe_unit.readsIrf) {
-      if (exe_unit.bypassable) {
-        for (i <- 0 until exe_unit.numBypassStages) {
-          bypasses.valid(bypass_idx) := exe_unit.io.bypass.valid(i)
-          bypasses.uop(bypass_idx)   := exe_unit.io.bypass.uop(i)
-          bypasses.data(bypass_idx)  := exe_unit.io.bypass.data(i)
-          bypass_idx += 1
-        }
-      }
-    }
-  }
+  bypasses := exe_units.io.bypass
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -889,7 +867,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // branch resolution
   rob.io.brinfo <> br_unit.brinfo
 
-  exe_units(brunit_idx).io.status := csr.io.status
+  exe_units.io.status := csr.io.status
 
   // Connect breakpoint info to memaddrcalcunit
   for (i <- 0 until memWidth) {
