@@ -82,6 +82,9 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   for (w <- 0 until coreWidth) {
     io.rf_read_ports(w).prs1_addr := Mux1H(prs1_addr_cols(w), io.iss_uops.map(_.prs1))
     io.rf_read_ports(w).prs2_addr := Mux1H(prs2_addr_cols(w), io.iss_uops.map(_.prs2))
+
+    assert (PopCount(prs1_addr_cols(w)) <= 1.U, "[rrd] prs1_addr xbar collision on port " + w)
+    assert (PopCount(prs2_addr_cols(w)) <= 1.U, "[rrd] prs2_addr xbar collision on port " + w)
   }
 
   val rrd_rs1_data = Wire(Vec(coreWidth, Bits(xLen.W)))
@@ -96,6 +99,9 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   for (w <- 0 until coreWidth) {
     rrd_rs1_data(w) := Mux1H(prs1_data_banks(w), io.rf_read_ports.map(_.prs1_data))
     rrd_rs2_data(w) := Mux1H(prs2_data_banks(w), io.rf_read_ports.map(_.prs2_data))
+
+    assert (PopCount(prs1_data_banks(w)) <= 1.U, "[rrd] prs1_data xbar collision on port " + w)
+    assert (PopCount(prs2_data_banks(w)) <= 1.U, "[rrd] prs2_data xbar collision on port " + w)
   }
 
   // Setup exe uops

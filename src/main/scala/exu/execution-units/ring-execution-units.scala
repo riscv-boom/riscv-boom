@@ -217,6 +217,8 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     eu.io.req.bits  := Mux1H(col_sels(i), io.exe_reqs.map(_.bits))
     eu.io.req.valid := col_sels(i).orR
 
+    assert (PopCount(col_sels(i)) <= 1.U, "[exe] shared unit request crossbar collision on port " + i)
+
     eu.io.brinfo := io.brinfo
     eu.io.kill   := io.kill
 
@@ -236,6 +238,8 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   for (w <- 0 until coreWidth) {
     io.exe_resps(w).bits  := Mux1H(eu_sels(w), Seq(column_exe_units(w).io.iresp.bits) ++ shared_exe_units.filter(_.writesIrf).map(_.io.iresp.bits))
     io.exe_resps(w).valid := eu_sels(w).orR
+
+    assert (PopCount(eu_sels(w)) <= 1.U, "[exe] writeback crossbar collision on port " + w)
   }
 
   //----------------------------------------------------------------------------------------------------
