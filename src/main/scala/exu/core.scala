@@ -655,14 +655,14 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // committing, so to get this to work I stall the entire pipeline for
   // CSR instructions so I never speculate these instructions.
 
-  val csr_exe_unit = exe_units.csr_unit
+  val csr_unit_resp = exe_units.io.csr_unit_resp
 
   // for critical path reasons, we aren't zero'ing this out if resp is not valid
-  val csr_rw_cmd = csr_exe_unit.io.iresp.bits.uop.ctrl.csr_cmd
-  val wb_wdata = csr_exe_unit.io.iresp.bits.data
+  val csr_rw_cmd = csr_unit_resp.bits.uop.ctrl.csr_cmd
+  val wb_wdata   = csr_unit_resp.bits.data
 
-  csr.io.rw.addr        := csr_exe_unit.io.iresp.bits.uop.csr_addr
-  csr.io.rw.cmd         := freechips.rocketchip.rocket.CSR.maskCmd(csr_exe_unit.io.iresp.valid, csr_rw_cmd)
+  csr.io.rw.addr        := csr_unit_resp.bits.uop.csr_addr
+  csr.io.rw.cmd         := freechips.rocketchip.rocket.CSR.maskCmd(csr_unit_resp.valid, csr_rw_cmd)
   csr.io.rw.wdata       := wb_wdata
 
   // Extra I/O

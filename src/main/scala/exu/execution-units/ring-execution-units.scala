@@ -34,20 +34,23 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     // TODO get rid of this output
     val bypass = Output(new BypassData(coreWidth, dataWidth))
 
-    // only used by the rocc unit
-    val rocc = if (usingRoCC) new RoCCShimCoreIO else null
+    // only used by the mem unit
+    val lsu_io = Vec(memWidth, Flipped(new boom.lsu.LSUExeIO))
+    val bp     = Input(Vec(nBreakpoints, new BP))
 
     // only used by the branch unit
     val br_unit    = Output(new BranchUnitResp)
     val get_ftq_pc = Flipped(new GetPCFromFtqIO)
     val status     = Input(new freechips.rocketchip.rocket.MStatus)
 
+    // only used by the CSR unit
+    val csr_unit_resp = Flipped(DecoupledIO(new FuncUnitResp(xLen)))
+
+    // only used by the rocc unit
+    val rocc = if (usingRoCC) new RoCCShimCoreIO else null
+
     // only used by the fpu unit
     val fcsr_rm = if (usingFPU) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
-
-    // only used by the mem unit
-    val lsu_io = Vec(memWidth, Flipped(new boom.lsu.LSUExeIO))
-    val bp     = Input(Vec(nBreakpoints, new BP))
 
     // TODO move this out of ExecutionUnit
     val com_exception = Input(Bool())
@@ -228,11 +231,6 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     io.bypass((w + 1) % coreWidth) := column_units(w).io.bypass(0)
   }
 
-  // Branch unit
-  io.br_unit := br_unit_io
-  io.get_ftq_pc <> br_unit.io.get_ftq_pc
-  br_unit.io.status := io.status
-
   // Memory access units
   for ((mem_unit, w) <- mem_units.zipWithIndex) {
     mem_unit.io.lsu_io <> io.lsu_io(w)
@@ -240,6 +238,14 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     mem_unit.io.status := io.status
     mem_unit.io.com_exception := io.com_exception
   }
+
+  // Branch unit
+  io.br_unit := br_unit_io
+  io.get_ftq_pc <> br_unit.io.get_ftq_pc
+  br_unit.io.status := io.status
+
+  // CSR unit
+  io.csr_unit_resp <> csr_unit.io.iresp
 
   // Core <-> FPU transfer units
   if (usingFPU) {
