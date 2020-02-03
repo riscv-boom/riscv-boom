@@ -213,7 +213,7 @@ class ALUExeUnit(
   (implicit p: Parameters)
   extends ExecutionUnit(
     readsIrf         = true,
-    writesIrf        = hasAlu || hasMem || hasMul || hasDiv,
+    writesIrf        = hasAlu || hasMem || hasBrUnit || hasMul || hasDiv || hasRocc || hasIfpu,
     writesLlIrf      = hasMem || hasRocc,
     writesLlFrf      = (hasIfpu || hasMem) && p(tile.TileKey).core.fpu != None,
     numBypassStages  =
