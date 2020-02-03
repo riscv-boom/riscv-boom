@@ -151,28 +151,33 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
   // Generate column ALUs
   for (w <- 0 until coreWidth) {
-    column_exe_units += Module(new ALUExeUnit)
+    val alu = Module(new ALUExeUnit)
+    column_exe_units += alu
   }
 
   // Generate memory access units. Only 1 supported for now
   for (w <- 0 until memWidth) {
-    val memExeUnit = Module(new ALUExeUnit(
+    val mem_unit = Module(new ALUExeUnit(
       hasAlu = false,
       hasMem = true))
 
-    memExeUnit.io.ll_iresp.ready := DontCare
+    mem_unit.io.ll_iresp.ready := DontCare
 
-    shared_exe_units += memExeUnit
+    shared_exe_units += mem_unit
   }
 
   // Branch unit
-  shared_exe_units += Module(new ALUExeUnit(hasAlu = false, hasBrUnit = true))
+  { // scoped to prevent name conflict
+  val br_unit = Module(new ALUExeUnit(hasAlu = true, hasBrUnit = true))
+  shared_exe_units += br_unit
+  }
 
   // Put remaining functional units in a shared execution unit
-  shared_exe_units += Module(new ALUExeUnit(hasAlu  = false,
-                                            hasMul  = true,
-                                            hasDiv  = true,
-                                            hasCSR  = true))
+  val misc_unit = Module(new ALUExeUnit(hasAlu  = false,
+                                        hasMul  = true,
+                                        hasDiv  = true,
+                                        hasCSR  = true))
+  shared_exe_units += misc_unit
 
   //----------------------------------------------------------------------------------------------------
   // Generator string output
