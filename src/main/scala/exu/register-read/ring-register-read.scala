@@ -75,8 +75,10 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
   //-------------------------------------------------------------
   // read ports
 
-  val prs1_addr_cols = Transpose(VecInit(io.iss_uops.map(_.op1_col)))
-  val prs2_addr_cols = Transpose(VecInit(io.iss_uops.map(_.op2_col)))
+  val prs1_addr_cols = Transpose(VecInit(io.iss_uops zip io.iss_valids map { case (u,v) =>
+                         u.op1_col & Fill(coreWidth, v && u.prs1_do_read) } ))
+  val prs2_addr_cols = Transpose(VecInit(io.iss_uops zip io.iss_valids map { case (u,v) =>
+                         u.op2_col & Fill(coreWidth, v && u.prs2_do_read) } ))
 
   // Col -> Bank Address Crossbar
   for (w <- 0 until coreWidth) {
