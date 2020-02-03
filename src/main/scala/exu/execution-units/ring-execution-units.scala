@@ -23,14 +23,34 @@ import boom.util._
 
 class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 {
-  // I/O which is used by all units
-  // Unit-specific I/O (e.g. rocc) can still be hooked up with the unit getter functions
   val io = IO(new BoomBundle {
+    // I/O used by all units
     val exe_reqs  = Vec(coreWidth, Flipped(DecoupledIO(new FuncUnitReq(xLen))))
     val exe_resps = Output(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
 
     val brinfo    = Input(new BrResolutionInfo)
     val kill      = Input(Bool())
+
+    // TODO get rid of this output
+    val bypass = Output(new BypassData(coreWidth, dataWidth))
+
+    // only used by the rocc unit
+    val rocc = if (usingRoCC) new RoCCShimCoreIO else null
+
+    // only used by the branch unit
+    val br_unit    = Output(new BranchUnitResp)
+    val get_ftq_pc = Flipped(new GetPCFromFtqIO)
+    val status     = Input(new freechips.rocketchip.rocket.MStatus)
+
+    // only used by the fpu unit
+    val fcsr_rm = if (usingFPU) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
+
+    // only used by the mem unit
+    val lsu_io = Vec(memWidth, Flipped(new boom.lsu.LSUExeIO))
+    val bp     = Input(Vec(nBreakpoints, new BP))
+
+    // TODO move this out of ExecutionUnit
+    val com_exception = Input(Bool())
   })
 
   //----------------------------------------------------------------------------------------------------
@@ -72,7 +92,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     exe_units.count(f)
   }
 
-  def memory_units = {
+  def mem_units = {
     exe_units.filter(_.hasMem)
   }
 
@@ -198,5 +218,39 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   for (w <- 0 until coreWidth) {
     io.exe_resps(w).bits  := Mux1H(eu_sels(w), Seq(column_exe_units(w).io.iresp.bits) ++ shared_exe_units.filter(_.writesIrf).map(_.io.iresp.bits))
     io.exe_resps(w).valid := eu_sels(w).orR
+  }
+
+  //----------------------------------------------------------------------------------------------------
+  // Punch through misc unit I/O to core
+
+  // ALU bypasses
+  for (w <- 0 until coreWidth) {
+    io.bypass((w + 1) % coreWidth) := column_units(w).io.bypass(0)
+  }
+
+  // Branch unit
+  io.br_unit := br_unit_io
+  io.get_ftq_pc <> br_unit.io.get_ftq_pc
+  br_unit.io.status := io.status
+
+  // Memory access units
+  for ((mem_unit, w) <- mem_units.zipWithIndex) {
+    mem_unit.io.lsu_io <> io.lsu_io(w)
+    mem_unit.io.bp     := io.bp
+    mem_unit.io.status := io.status
+    mem_unit.io.com_exception := io.com_exception
+  }
+
+  // Core <-> FPU transfer units
+  if (usingFPU) {
+    for (unit <- exe_units.filter(_.hasFcsr)) {
+      unit.io.fcsr_rm := io.fcsr_rm
+    }
+  }
+
+  // RoCC unit
+  if (usingRoCC) {
+    rocc_unit.io.rocc <> io.rocc
+    rocc_unit.io.com_exception := io.com_exception
   }
 }
