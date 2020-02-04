@@ -283,7 +283,7 @@ class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implici
       VecInit(f3_resps.map(r => !r(w).valid && r(w).bits.u === 0.U)).asUInt &
       ~(MaskLower(UIntToOH(provider)) & Fill(tageNTables, provided))
     )
-    val alloc_lfsr = random.LFSR(tageNTables)
+    val alloc_lfsr = random.LFSR(tageNTables max 2)
 
     val first_entry = PriorityEncoder(allocatable_slots)
     val masked_entry = PriorityEncoder(allocatable_slots & alloc_lfsr)
