@@ -167,13 +167,12 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   }
 
   // Branch unit
-  val br_exe_unit = Module(new ALUExeUnit(hasAlu = true, hasBrUnit = true))
+  val br_exe_unit = Module(new ALUExeUnit(hasBrUnit = true))
   br_exe_unit.suggestName("br_unit")
   shared_exe_units += br_exe_unit
 
   // Put remaining functional units in a shared execution unit
-  val misc_unit = Module(new ALUExeUnit(hasAlu  = false,
-                                        hasMul  = true,
+  val misc_unit = Module(new ALUExeUnit(hasMul  = true,
                                         hasDiv  = true,
                                         hasCSR  = true))
   misc_unit.suggestName("misc_unit")
