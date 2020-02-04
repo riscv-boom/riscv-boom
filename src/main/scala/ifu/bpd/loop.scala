@@ -32,6 +32,7 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
   class LoopEntry extends Bundle {
     val tag   = UInt(tagSz.W)
     val conf  = UInt(3.W)
+    val age   = UInt(3.W)
     val p_cnt = UInt(10.W)
     val s_cnt = UInt(10.W)
   }
@@ -82,9 +83,11 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
       when (f3_entry.tag === f3_tag) {
         when (f3_scnt === f3_entry.p_cnt && f3_entry.conf === 7.U) {
           io.f3_pred := !io.f3_pred_in
+          entries(RegNext(io.f2_req_idx)).age   := 7.U
           entries(RegNext(io.f2_req_idx)).s_cnt := 0.U
         } .otherwise {
           entries(RegNext(io.f2_req_idx)).s_cnt := f3_scnt + 1.U
+          entries(RegNext(io.f2_req_idx)).age   := Mux(f3_entry.age === 7.U, 7.U, f3_entry.age + 1.U)
         }
       }
     }
@@ -103,7 +106,7 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
         wentry.s_cnt := 0.U
         wentry.conf  := 0.U
 
-      // Learned, no tag match -> (TODO: decrement age counters)
+      // Learned, no tag match -> do nothing? Don't evict super-confident entries?
       } .elsewhen (entry.conf === 7.U && !tag_match) {
 
       // Confident, tag match, ctr_match -> increment confidence, reset counter
@@ -117,23 +120,34 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
         wentry.s_cnt := 0.U
         wentry.p_cnt := io.update_meta.s_cnt
 
-      // Confident, no tag match -> (TODO: decrement age counters)
-      } .elsewhen (entry.conf =/= 0.U && !tag_match) {
+      // Confident, no tag match, age is 0 -> replace this entry with our own, set our age high to avoid ping-pong
+      } .elsewhen (entry.conf =/= 0.U && !tag_match && entry.age === 0.U) {
+        wentry.tag   := tag
+        wentry.conf  := 1.U
+        wentry.s_cnt := 0.U
+        wentry.p_cnt := io.update_meta.s_cnt
+
+      // Confident, no tag match, age > 0 -> decrement age
+      } .elsewhen (entry.conf =/= 0.U && !tag_match && entry.age =/= 0.U) {
+        wentry.age := entry.age - 1.U
 
       // Unconfident, tag match, ctr match -> increment confidence
       } .elsewhen (entry.conf === 0.U && tag_match && ctr_match) {
         wentry.conf  := 1.U
+        wentry.age   := 7.U
         wentry.s_cnt := 0.U
 
       // Unconfident, tag match, no ctr match -> set previous counter
       } .elsewhen (entry.conf === 0.U && tag_match && !ctr_match) {
         wentry.p_cnt := io.update_meta.s_cnt
+        wentry.age   := 7.U
         wentry.s_cnt := 0.U
 
       // Unconfident, no tag match -> set previous counter and tag
       } .elsewhen (entry.conf === 0.U && !tag_match) {
-        wentry.tag := tag
-        wentry.conf := 1.U
+        wentry.tag   := tag
+        wentry.conf  := 1.U
+        wentry.age   := 7.U
         wentry.s_cnt := 0.U
         wentry.p_cnt := io.update_meta.s_cnt
       }
@@ -147,8 +161,8 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
     }
 
     when (doing_reset) {
-      entries(reset_idx) := (0.U).asTypeOf(new LoopEntry)
-    }
+      entries(reset_idx) := (0.U).asTypeOf(new LoopEntry) 
+   }
 
     dontTouch(entries)
   }
