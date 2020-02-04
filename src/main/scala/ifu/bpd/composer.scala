@@ -11,20 +11,30 @@ import freechips.rocketchip.tilelink._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
+case object BoomBPDComposition extends Field[Function2[BranchPredictionBankResponse, Parameters, Tuple2[Seq[BranchPredictorBank], BranchPredictionBankResponse]]](
+  (resp_in: BranchPredictionBankResponse, p: Parameters) => {
+    val loop = Module(new LoopBranchPredictorBank()(p))
+    val tage = Module(new TageBranchPredictorBank()(p))
+    val btb = Module(new BTBBranchPredictorBank(BoomBTBParams())(p))
+    val ubtb = Module(new FAMicroBTBBranchPredictorBank(
+      BoomFAMicroBTBParams(nWays = 16, offsetSz = 13)
+    )(p))
+    val bim = Module(new BIMBranchPredictorBank(2048)(p))
+    ubtb.io.resp_in  := resp_in
+    bim.io.resp_in   := ubtb.io.resp
+    btb.io.resp_in   := bim.io.resp
+    tage.io.resp_in  := btb.io.resp
+    loop.io.resp_in  := tage.io.resp
+
+    (Seq(loop, tage, btb, ubtb, bim), loop.io.resp)
+  }
+)
 
 class ComposedBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
-  val tage = Module(new TageBranchPredictorBank)
 
-  val btb = Module(new BTBBranchPredictorBank(BoomBTBParams()))
-
-  val ubtb = Module(new FAMicroBTBBranchPredictorBank(
-    BoomFAMicroBTBParams(nWays = 16, offsetSz = 13)
-  ))
-
-  val bim = Module(new BIMBranchPredictorBank(2048))
-
-  val components = Seq(tage, btb, ubtb, bim)
+  val (components, resp) = p(BoomBPDComposition)(io.resp_in, p)
+  io.resp := resp
 
   var metas = 0.U(1.W)
   var meta_sz = 0
@@ -46,12 +56,5 @@ class ComposedBranchPredictorBank(implicit p: Parameters) extends BranchPredicto
     c.io.update.bits.meta := update_meta
     update_meta = update_meta >> c.metaSz
   }
-
-
-  ubtb.io.resp_in  := io.resp_in
-  bim.io.resp_in   := ubtb.io.resp
-  btb.io.resp_in   := bim.io.resp
-  tage.io.resp_in  := btb.io.resp
-  io.resp          := tage.io.resp
 
 }
