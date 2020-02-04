@@ -19,7 +19,7 @@ case class BoomFAMicroBTBParams(
 )
 
 
-class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams)(implicit p: Parameters) extends BranchPredictorBank()(p)
+class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams = BoomFAMicroBTBParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   override val nWays         = params.nWays
   val tagSz         = vaddrBitsExtended - log2Ceil(fetchWidth) - 1

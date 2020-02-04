@@ -21,7 +21,7 @@ class BIMMeta(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 
-class BIMBranchPredictorBank(nSets: Int)(implicit p: Parameters) extends BranchPredictorBank()(p)
+class BIMBranchPredictorBank(nSets: Int = 2048)(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   require(isPow2(nSets))
 

@@ -13,15 +13,7 @@ import boom.util.{BoomCoreStringPrefix, MaskLower, WrapInc}
 
 import scala.math.min
 
-class TageMeta(implicit p: Parameters) extends BoomBundle()(p)
-  with HasBoomFrontendParameters
-{
-  val provider      = Vec(bankWidth, Valid(UInt(log2Ceil(tageNTables).W)))
-  val alt_differs   = Vec(bankWidth, Bool())
-  val provider_u    = Vec(bankWidth, UInt(2.W))
-  val provider_ctr  = Vec(bankWidth, UInt(3.W))
-  val allocate      = Vec(bankWidth, Valid(UInt(log2Ceil(tageNTables).W)))
-}
+
 
 
 
@@ -30,8 +22,7 @@ class TageResp extends Bundle {
   val u   = UInt(2.W)
 }
 
-
-class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
+class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPeriod: Int)
   (implicit p: Parameters) extends BoomModule()(p)
   with HasBoomFrontendParameters
 {
@@ -121,13 +112,13 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
     io.f3_resp(w).bits.ctr := RegNext(s2_req_rtage(w).ctr)
   }
 
-  val clear_u_ctr = RegInit(0.U((log2Ceil(tageUBitPeriod) + log2Ceil(nRows) + 1).W))
+  val clear_u_ctr = RegInit(0.U((log2Ceil(uBitPeriod) + log2Ceil(nRows) + 1).W))
   when (doing_reset) { clear_u_ctr := 1.U } .otherwise { clear_u_ctr := clear_u_ctr + 1.U }
 
-  val doing_clear_u = clear_u_ctr(log2Ceil(tageUBitPeriod)-1,0) === 0.U
-  val doing_clear_u_hi = doing_clear_u && clear_u_ctr(log2Ceil(tageUBitPeriod) + log2Ceil(nRows)) === 1.U
-  val doing_clear_u_lo = doing_clear_u && clear_u_ctr(log2Ceil(tageUBitPeriod) + log2Ceil(nRows)) === 0.U
-  val clear_u_idx = clear_u_ctr >> log2Ceil(tageUBitPeriod)
+  val doing_clear_u = clear_u_ctr(log2Ceil(uBitPeriod)-1,0) === 0.U
+  val doing_clear_u_hi = doing_clear_u && clear_u_ctr(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 1.U
+  val doing_clear_u_lo = doing_clear_u && clear_u_ctr(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 0.U
+  val clear_u_idx = clear_u_ctr >> log2Ceil(uBitPeriod)
 
   val (update_idx, update_tag) = compute_tag_and_hash(fetchIdx(io.update_pc), io.update_hist)
 
@@ -197,8 +188,32 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
 
 }
 
-class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
+
+case class BoomTageParams(
+  //                                           nSets, histLen, tagSz
+  tableInfo: Seq[Tuple3[Int, Int, Int]] = Seq((  128,       2,     7),
+                                              (  128,       4,     7),
+                                              (  256,       8,     8),
+                                              (  256,      16,     8),
+                                              (  128,      32,     9),
+                                              (  128,      64,     9)),
+  uBitPeriod: Int = 2048
+)
+
+
+class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
+  val tageUBitPeriod = params.uBitPeriod
+  val tageNTables    = params.tableInfo.size
+
+  class TageMeta extends Bundle
+  {
+    val provider      = Vec(bankWidth, Valid(UInt(log2Ceil(tageNTables).W)))
+    val alt_differs   = Vec(bankWidth, Output(Bool()))
+    val provider_u    = Vec(bankWidth, Output(UInt(2.W)))
+    val provider_ctr  = Vec(bankWidth, Output(UInt(3.W)))
+    val allocate      = Vec(bankWidth, Valid(UInt(log2Ceil(tageNTables).W)))
+  }
 
   val f3_meta = Wire(new TageMeta)
   override val metaSz = f3_meta.asUInt.getWidth
@@ -210,8 +225,8 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
                     Mux(u === 3.U, 3.U, u + 1.U)))
   }
 
-  val tables = (0 until tageNTables) map { i =>
-    Module(new TageTable(tageNSets(i), tageTagSz(i), tageHistoryLength(i)))
+  val tables = params.tableInfo map {
+    case (n, l, s) => Module(new TageTable(n, s, l, params.uBitPeriod))
   }
 
 

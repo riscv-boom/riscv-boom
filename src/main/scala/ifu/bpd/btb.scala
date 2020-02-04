@@ -21,7 +21,7 @@ case class BoomBTBParams(
 )
 
 
-class BTBBranchPredictorBank(params: BoomBTBParams)(implicit p: Parameters) extends BranchPredictorBank()(p)
+class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   override val nSets         = params.nSets
   override val nWays         = params.nWays

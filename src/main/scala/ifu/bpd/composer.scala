@@ -15,11 +15,9 @@ case object BoomBPDComposition extends Field[Function2[BranchPredictionBankRespo
   (resp_in: BranchPredictionBankResponse, p: Parameters) => {
     val loop = Module(new LoopBranchPredictorBank()(p))
     val tage = Module(new TageBranchPredictorBank()(p))
-    val btb = Module(new BTBBranchPredictorBank(BoomBTBParams())(p))
-    val ubtb = Module(new FAMicroBTBBranchPredictorBank(
-      BoomFAMicroBTBParams(nWays = 16, offsetSz = 13)
-    )(p))
-    val bim = Module(new BIMBranchPredictorBank(2048)(p))
+    val btb = Module(new BTBBranchPredictorBank()(p))
+    val ubtb = Module(new FAMicroBTBBranchPredictorBank()(p))
+    val bim = Module(new BIMBranchPredictorBank()(p))
     ubtb.io.resp_in  := resp_in
     bim.io.resp_in   := ubtb.io.resp
     btb.io.resp_in   := bim.io.resp
