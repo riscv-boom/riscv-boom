@@ -22,7 +22,7 @@ import boom.common._
 import boom.util._
 
 class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
-  (implicit p: Parameters) extends BoomModule
+  (implicit p: Parameters) extends BoomModule with IssueUnitConstants
 {
   val io = IO(new BoomBundle{
     val dis_uops = Flipped(Vec(coreWidth, DecoupledIO(new MicroOp)))
@@ -43,7 +43,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   //----------------------------------------------------------------------------------------------------
   // Generate table of issue slots
 
-  val issue_table = Seq.fill(coreWidth)( Seq.fill(numSlotsPerColumn)( Module(new RingIssueSlot) ))
+  val issue_table = Seq.fill(coreWidth)( Seq.fill(numSlotsPerColumn)( Module(new RingIssueSlot) ) )
   val slots = VecInit(issue_table.map(col => VecInit(col.map(_.io))))
 
   for (w <- 0 until coreWidth) {
@@ -59,13 +59,33 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   //----------------------------------------------------------------------------------------------------
   // Dispatch
 
+  // TODO clean this up
+  val dis_uops_setup = Wire(Vec(coreWidth, new MicroOp))
+  for (w <- 0 until coreWidth) {
+    dis_uops_setup(w) := io.dis_uops(w).bits
+    dis_uops_setup(w).iw_p1_poisoned := false.B
+    dis_uops_setup(w).iw_p2_poisoned := false.B
+    dis_uops_setup(w).iw_state := s_valid_1
+
+    // For StoreAddrGen for Int, or AMOAddrGen, we go to addr gen state
+    when ((io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype === RT_FIX) ||
+           io.dis_uops(w).bits.uopc === uopAMO_AG) {
+      dis_uops_setup(w).iw_state := s_valid_2
+      // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here
+    } .elsewhen (io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype =/= RT_FIX) {
+      dis_uops_setup(w).lrs2_rtype := RT_X
+      dis_uops_setup(w).prs2_busy  := false.B
+    }
+    dis_uops_setup(w).prs3_busy := false.B
+  }
+
   val dis_uops = Wire(Vec(coreWidth, Vec(columnDispatchWidth, new MicroOp)))
   val dis_vals = Wire(Vec(coreWidth, Vec(columnDispatchWidth, Bool())))
 
   require (columnDispatchWidth == coreWidth) // TODO implement an arbitration / compaction mechanism
 
   for (w <- 0 until coreWidth) {
-    dis_uops(w) := VecInit(io.dis_uops.map(_.bits))
+    dis_uops(w) := dis_uops_setup
   }
 
   dis_vals := Transpose(VecInit(io.dis_uops.map(uop => VecInit((uop.bits.dst_col & Fill(coreWidth, uop.valid)).asBools))))
