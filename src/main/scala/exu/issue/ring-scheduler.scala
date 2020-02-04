@@ -68,7 +68,14 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     dis_uops(w) := VecInit(io.dis_uops.map(_.bits))
   }
 
-  dis_vals := Transpose(VecInit(io.dis_uops.map(uop => VecInit(uop.bits.dst_col.asBools))))
+  dis_vals := Transpose(VecInit(io.dis_uops.map(uop => VecInit((uop.bits.dst_col & Fill(coreWidth, uop.valid)).asBools))))
+
+  val col_readys = Transpose(VecInit((0 until coreWidth).map(w =>
+    VecInit((0 until columnDispatchWidth).map(k => PopCount(slots(w).map(_.valid)) + k.U < numSlotsPerColumn.U)).asUInt)))
+
+  for (w <- 0 until coreWidth) {
+    io.dis_uops(w).ready := (io.dis_uops(w).bits.dst_col & col_readys(w)).orR
+  }
 
   //----------------------------------------------------------------------------------------------------
   // Selection
@@ -141,18 +148,17 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val next_valids = slots(w).map(_.will_be_valid) ++ dis_vals(w)
 
     val max = columnDispatchWidth
-    def Inc(count: UInt, inc: Bool) = Mux(inc && !count(max), count << 1, count)
+    def Inc(count: UInt, inc: Bool) = Mux(inc && !count(max), count << 1, count)(max,0)
 
     val counts = valids.scanLeft(1.U((max+1).W))((c,v) => Inc(c,!v))
     val sels = (counts zip valids).map { case (c,v) => c(max,1) & Fill(max,v) }
-                .takeRight(numSlotsPerColumn + coreWidth - 1)
+                .takeRight(numSlotsPerColumn + max - 1)
 
     for (i <- 0 until numSlotsPerColumn) {
       val uop_sel = (0 until max).map(j => sels(i+j)(j))
-      val will_be_valid = Mux1H(uop_sel, next_valids.slice(i+1,i+max+1))
 
       slots(w)(i).in_uop.bits  := Mux1H(uop_sel, uops.slice(i+1,i+max+1))
-      slots(w)(i).in_uop.valid := will_be_valid
+      slots(w)(i).in_uop.valid := Mux1H(uop_sel, next_valids.slice(i+1,i+max+1))
 
       slots(w)(i).clear := !counts(i)(0)
     }
