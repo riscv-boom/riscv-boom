@@ -152,6 +152,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // Generate column ALUs
   for (w <- 0 until coreWidth) {
     val alu = Module(new ALUExeUnit)
+    alu.suggestName("alu_" + w)
     column_exe_units += alu
   }
 
@@ -160,23 +161,22 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     val mem_unit = Module(new ALUExeUnit(
       hasAlu = false,
       hasMem = true))
-
+    mem_unit.suggestName("mem_unit_" + w)
     mem_unit.io.ll_iresp.ready := DontCare
-
     shared_exe_units += mem_unit
   }
 
   // Branch unit
-  { // scoped to prevent name conflict
-  val br_unit = Module(new ALUExeUnit(hasAlu = true, hasBrUnit = true))
-  shared_exe_units += br_unit
-  }
+  val br_exe_unit = Module(new ALUExeUnit(hasAlu = true, hasBrUnit = true))
+  br_exe_unit.suggestName("br_unit")
+  shared_exe_units += br_exe_unit
 
   // Put remaining functional units in a shared execution unit
   val misc_unit = Module(new ALUExeUnit(hasAlu  = false,
                                         hasMul  = true,
                                         hasDiv  = true,
                                         hasCSR  = true))
+  misc_unit.suggestName("misc_unit")
   shared_exe_units += misc_unit
 
   //----------------------------------------------------------------------------------------------------
