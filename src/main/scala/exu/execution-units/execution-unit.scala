@@ -161,9 +161,9 @@ abstract class ExecutionUnit(
     hasRocc, hasBrUnit, hasFpu || hasIfpu || hasFdiv, hasMem,
     numBypassStages, dataWidth))
 
-  if (writesIrf)   { io.iresp.bits.fflags.valid    := false.B; assert(io.iresp.ready) }
+  if (writesIrf)   { io.iresp.bits.fflags.valid    := false.B }
   if (writesLlIrf) { io.ll_iresp.bits.fflags.valid := false.B }
-  if (writesFrf)   { io.fresp.bits.fflags.valid    := false.B; assert(io.fresp.ready) }
+  if (writesFrf)   { io.fresp.bits.fflags.valid    := false.B }
   if (writesLlFrf) { io.ll_fresp.bits.fflags.valid := false.B }
 
   // TODO add "number of fflag ports", so we can properly account for FPU+Mem combinations
