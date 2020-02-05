@@ -59,7 +59,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
 {
   val rtype = RT_FIX
 
-  val io = IO(new RenameStageIO)
+  val io = IO(new RingRenameIO)
 
   //-------------------------------------------------------------
   // Helper Functions
@@ -70,34 +70,24 @@ class RingRename(implicit p: Parameters) extends BoomModule
 
     val bypass_hits_rs1 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs1 }
     val bypass_hits_rs2 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs2 }
-    val bypass_hits_rs3 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs3 }
     val bypass_hits_dst = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.ldst }
 
     val bypass_sel_rs1 = PriorityEncoderOH(bypass_hits_rs1.reverse).reverse
     val bypass_sel_rs2 = PriorityEncoderOH(bypass_hits_rs2.reverse).reverse
-    val bypass_sel_rs3 = PriorityEncoderOH(bypass_hits_rs3.reverse).reverse
     val bypass_sel_dst = PriorityEncoderOH(bypass_hits_dst.reverse).reverse
 
     val do_bypass_rs1 = bypass_hits_rs1.reduce(_||_)
     val do_bypass_rs2 = bypass_hits_rs2.reduce(_||_)
-    val do_bypass_rs3 = bypass_hits_rs3.reduce(_||_)
     val do_bypass_dst = bypass_hits_dst.reduce(_||_)
 
     val bypass_pdsts = older_uops.map(_.pdst)
 
     when (do_bypass_rs1) { bypassed_uop.prs1       := Mux1H(bypass_sel_rs1, bypass_pdsts) }
     when (do_bypass_rs2) { bypassed_uop.prs2       := Mux1H(bypass_sel_rs2, bypass_pdsts) }
-    when (do_bypass_rs3) { bypassed_uop.prs3       := Mux1H(bypass_sel_rs3, bypass_pdsts) }
     when (do_bypass_dst) { bypassed_uop.stale_pdst := Mux1H(bypass_sel_dst, bypass_pdsts) }
 
     bypassed_uop.prs1_busy := uop.prs1_busy || do_bypass_rs1
     bypassed_uop.prs2_busy := uop.prs2_busy || do_bypass_rs2
-    bypassed_uop.prs3_busy := uop.prs3_busy || do_bypass_rs3
-
-    if (!float) {
-      bypassed_uop.prs3      := DontCare
-      bypassed_uop.prs3_busy := false.B
-    }
 
     bypassed_uop
   }
@@ -110,17 +100,17 @@ class RingRename(implicit p: Parameters) extends BoomModule
     32,
     numIntPhysRegs,
     false,
-    float))
+    false))
   val freelist = Module(new RenameFreeList(
     coreWidth,
     numIntPhysRegs,
-    float))
+    false))
   val busytable = Module(new RenameBusyTable(
     coreWidth,
     numIntPhysRegs,
     numWbPorts,
     false,
-    float))
+    false))
 
   //-------------------------------------------------------------
   // Pipeline State & Wires
@@ -164,7 +154,6 @@ class RingRename(implicit p: Parameters) extends BoomModule
   for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops zip io.com_uops.reverse zipWithIndex) {
     map_reqs(w).lrs1 := ren1.lrs1
     map_reqs(w).lrs2 := ren1.lrs2
-    map_reqs(w).lrs3 := ren1.lrs3
     map_reqs(w).ldst := ren1.ldst
 
     remap_reqs(w).ldst := Mux(io.rollback, com.ldst      , ren2.ldst)
@@ -186,7 +175,6 @@ class RingRename(implicit p: Parameters) extends BoomModule
 
     uop.prs1       := mappings.prs1
     uop.prs2       := mappings.prs2
-    uop.prs3       := mappings.prs3 // only FP has 3rd operand
     uop.stale_pdst := mappings.stale_pdst
   }
 
@@ -251,7 +239,6 @@ class RingRename(implicit p: Parameters) extends BoomModule
 
     uop.prs1_busy := uop.lrs1_rtype === rtype && busy.prs1_busy
     uop.prs2_busy := uop.lrs2_rtype === rtype && busy.prs2_busy
-    uop.prs3_busy := uop.frs3_en && busy.prs3_busy
 
     val valid = ren2_valids(w)
     assert (!(valid && busy.prs1_busy && rtype === RT_FIX && uop.lrs1 === 0.U), "[rename] x0 is busy??")
