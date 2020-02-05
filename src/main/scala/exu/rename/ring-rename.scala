@@ -1,19 +1,13 @@
 //******************************************************************************
-// Copyright (c) 2012 - 2019, The Regents of the University of California (Regents).
+// Copyright (c) 2012 - 2020, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// RISCV Processor Datapath: Rename Logic
+// Column-Steering Renamer for the Ring Microarchitecture
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-//
-// Supports 1-cycle and 2-cycle latencies. (aka, passthrough versus registers between ren1 and ren2).
-//    - ren1: read the map tables and allocate a new physical register from the freelist.
-//    - ren2: read the busy table for the physical operands.
-//
-// Ren1 data is provided as an output to be fed directly into the ROB.
 
 package boom.exu
 
@@ -27,45 +21,32 @@ import boom.util._
 
 /**
  * IO bundle to interface with the Register Rename logic
- *
- * @param plWidth pipeline width
- * @param numIntPregs number of int physical registers
- * @param numFpPregs number of FP physical registers
- * @param numWbPorts number of int writeback ports
- * @param numWbPorts number of FP writeback ports
  */
-class RenameStageIO(
-  val plWidth: Int,
-  val numPhysRegs: Int,
-  val numWbPorts: Int)
-  (implicit p: Parameters) extends BoomBundle
+class RingRenameIO(implicit p: Parameters) extends BoomBundle
 {
-  val pregSz = log2Ceil(numPhysRegs)
+  val ren_stalls = Output(Vec(coreWidth, Bool()))
 
-  val ren_stalls = Output(Vec(plWidth, Bool()))
-
-  val kill = Input(Bool())
-
-  val dec_fire  = Input(Vec(plWidth, Bool())) // will commit state updates
-  val dec_uops  = Input(Vec(plWidth, new MicroOp()))
+  val dec_fire  = Input(Vec(coreWidth, Bool())) // will commit state updates
+  val dec_uops  = Input(Vec(coreWidth, new MicroOp()))
 
   // physical specifiers available AND busy/ready status available.
-  val ren2_mask = Vec(plWidth, Output(Bool())) // mask of valid instructions
-  val ren2_uops = Vec(plWidth, Output(new MicroOp()))
+  val ren2_mask = Output(Vec(coreWidth, Bool())) // mask of valid instructions
+  val ren2_uops = Output(Vec(coreWidth, new MicroOp))
 
   // branch resolution (execute)
   val brinfo = Input(new BrResolutionInfo())
+  val kill = Input(Bool())
 
   val dis_fire  = Input(Vec(coreWidth, Bool()))
   val dis_ready = Input(Bool())
 
   // wakeup ports
-  val wakeups = Flipped(Vec(numWbPorts, Valid(UInt(pregSz.W))))
+  val wakeups = Flipped(Vec(numWbPorts, Valid(UInt(ipregSz.W))))
 
   // commit stage
-  val com_valids = Input(Vec(plWidth, Bool()))
-  val com_uops = Input(Vec(plWidth, new MicroOp()))
-  val rbk_valids = Input(Vec(plWidth, Bool()))
+  val com_valids = Input(Vec(coreWidth, Bool()))
+  val com_uops = Input(Vec(coreWidth, new MicroOp()))
+  val rbk_valids = Input(Vec(coreWidth, Bool()))
   val rollback = Input(Bool())
 
   val debug_rob_empty = Input(Bool())
@@ -73,23 +54,12 @@ class RenameStageIO(
 
 /**
  * Rename stage that connets the map table, free list, and busy table.
- * Can be used in both the FP pipeline and the normal execute pipeline.
- *
- * @param plWidth pipeline width
- * @param numWbPorts number of int writeback ports
- * @param numWbPorts number of FP writeback ports
  */
-class RenameStage(
-  plWidth: Int,
-  numPhysRegs: Int,
-  numWbPorts: Int,
-  float: Boolean)
-(implicit p: Parameters) extends BoomModule
+class RingRename(implicit p: Parameters) extends BoomModule
 {
-  val pregSz = log2Ceil(numPhysRegs)
-  val rtype = Mux(float.B, RT_FLT, RT_FIX)
+  val rtype = RT_FIX
 
-  val io = IO(new RenameStageIO(plWidth, numPhysRegs, numWbPorts))
+  val io = IO(new RenameStageIO)
 
   //-------------------------------------------------------------
   // Helper Functions
@@ -136,18 +106,18 @@ class RenameStage(
   // Rename Structures
 
   val maptable = Module(new RenameMapTable(
-    plWidth,
+    coreWidth,
     32,
-    numPhysRegs,
+    numIntPhysRegs,
     false,
     float))
   val freelist = Module(new RenameFreeList(
-    plWidth,
-    numPhysRegs,
+    coreWidth,
+    numIntPhysRegs,
     float))
   val busytable = Module(new RenameBusyTable(
-    plWidth,
-    numPhysRegs,
+    coreWidth,
+    numIntPhysRegs,
     numWbPorts,
     false,
     float))
@@ -156,22 +126,22 @@ class RenameStage(
   // Pipeline State & Wires
 
   // Stage 1
-  val ren1_fire       = Wire(Vec(plWidth, Bool()))
-  val ren1_uops       = Wire(Vec(plWidth, new MicroOp))
+  val ren1_fire       = Wire(Vec(coreWidth, Bool()))
+  val ren1_uops       = Wire(Vec(coreWidth, new MicroOp))
 
   // Stage 2
-  val ren2_valids     = Wire(Vec(plWidth, Bool()))
-  val ren2_uops       = Wire(Vec(plWidth, new MicroOp))
+  val ren2_valids     = Wire(Vec(coreWidth, Bool()))
+  val ren2_uops       = Wire(Vec(coreWidth, new MicroOp))
   val ren2_fire       = io.dis_fire
   val ren2_ready      = io.dis_ready
-  val ren2_alloc_reqs = Wire(Vec(plWidth, Bool()))
-  val ren2_br_tags    = Wire(Vec(plWidth, Valid(UInt(brTagSz.W))))
+  val ren2_alloc_reqs = Wire(Vec(coreWidth, Bool()))
+  val ren2_br_tags    = Wire(Vec(coreWidth, Valid(UInt(brTagSz.W))))
 
   // Commit/Rollback
-  val com_valids      = Wire(Vec(plWidth, Bool()))
-  val rbk_valids      = Wire(Vec(plWidth, Bool()))
+  val com_valids      = Wire(Vec(coreWidth, Bool()))
+  val rbk_valids      = Wire(Vec(coreWidth, Bool()))
 
-  for (w <- 0 until plWidth) {
+  for (w <- 0 until coreWidth) {
     ren1_fire(w)          := io.dec_fire(w)
     ren1_uops(w)          := io.dec_uops(w)
 
@@ -187,8 +157,8 @@ class RenameStage(
   // Rename Table
 
   // Maptable inputs.
-  val map_reqs   = Wire(Vec(plWidth, new MapReq(lregSz)))
-  val remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
+  val map_reqs   = Wire(Vec(coreWidth, new MapReq(lregSz)))
+  val remap_reqs = Wire(Vec(coreWidth, new RemapReq(lregSz, ipregSz)))
 
   // Generate maptable requests.
   for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops zip io.com_uops.reverse zipWithIndex) {
@@ -223,7 +193,7 @@ class RenameStage(
   //-------------------------------------------------------------
   // pipeline registers
 
-  for (w <- 0 until plWidth) {
+  for (w <- 0 until coreWidth) {
     val r_valid  = RegInit(false.B)
     val r_uop    = Reg(new MicroOp)
     val next_uop = Wire(new MicroOp)
@@ -293,7 +263,7 @@ class RenameStage(
 
   io.ren2_mask := ren2_valids
 
-  for (w <- 0 until plWidth) {
+  for (w <- 0 until coreWidth) {
     val can_allocate = freelist.io.alloc_pregs(w).valid
 
     // Push back against Decode stage if Rename1 can't proceed.
