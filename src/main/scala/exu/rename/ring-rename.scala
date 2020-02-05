@@ -61,7 +61,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
 
   val io = IO(new RingRenameIO)
 
-  //-------------------------------------------------------------
+  //----------------------------------------------------------------------------------------------------
   // Helper Functions
 
   def BypassAllocations(uop: MicroOp, older_uops: Seq[MicroOp], alloc_reqs: Seq[Bool]): MicroOp = {
@@ -92,7 +92,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
     bypassed_uop
   }
 
-  //-------------------------------------------------------------
+  //----------------------------------------------------------------------------------------------------
   // Rename Structures
 
   val maptable = Module(new RenameMapTable(
@@ -101,10 +101,12 @@ class RingRename(implicit p: Parameters) extends BoomModule
     numIntPhysRegs,
     false,
     false))
-  val freelist = Module(new RenameFreeList(
-    coreWidth,
-    numIntPhysRegs,
-    false))
+  val freelists = Seq.fill(coreWidth) {
+    Module(new RenameFreeList(
+      coreWidth,
+      numIntPhysRegs / coreWidth,
+      false))
+  }
   val busytable = Module(new RenameBusyTable(
     coreWidth,
     numIntPhysRegs,
@@ -112,7 +114,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
     false,
     false))
 
-  //-------------------------------------------------------------
+  //----------------------------------------------------------------------------------------------------
   // Pipeline State & Wires
 
   // Stage 1
@@ -143,8 +145,8 @@ class RingRename(implicit p: Parameters) extends BoomModule
     ren2_br_tags(w).bits  := ren2_uops(w).br_tag
   }
 
-  //-------------------------------------------------------------
-  // Rename Table
+  //----------------------------------------------------------------------------------------------------
+  // Map Table
 
   // Maptable inputs.
   val map_reqs   = Wire(Vec(coreWidth, new MapReq(lregSz)))
@@ -178,8 +180,8 @@ class RingRename(implicit p: Parameters) extends BoomModule
     uop.stale_pdst := mappings.stale_pdst
   }
 
-  //-------------------------------------------------------------
-  // pipeline registers
+  //----------------------------------------------------------------------------------------------------
+  // Pipeline Registers
 
   for (w <- 0 until coreWidth) {
     val r_valid  = RegInit(false.B)
@@ -204,29 +206,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
     ren2_uops(w)   := r_uop
   }
 
-  //-------------------------------------------------------------
-  // Free List
-
-  // Freelist inputs.
-  freelist.io.reqs := ren2_alloc_reqs
-  freelist.io.dealloc_pregs zip com_valids zip rbk_valids map
-    {case ((d,c),r) => d.valid := c || r}
-  freelist.io.dealloc_pregs zip io.com_uops map
-    {case (d,c) => d.bits := Mux(io.rollback, c.pdst, c.stale_pdst)}
-  freelist.io.ren_br_tags := ren2_br_tags
-  freelist.io.brinfo := io.brinfo
-  freelist.io.pipeline_empty := io.debug_rob_empty
-
-  assert (ren2_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
-           "[rename-stage] A uop is trying to allocate the zero physical register.")
-
-  // Freelist outputs.
-  for ((uop, w) <- ren2_uops.zipWithIndex) {
-    val preg = freelist.io.alloc_pregs(w).bits
-    uop.pdst := Mux(uop.ldst =/= 0.U || float.B, preg, 0.U)
-  }
-
-  //-------------------------------------------------------------
+  //----------------------------------------------------------------------------------------------------
   // Busy Table
 
   busytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
@@ -245,13 +225,48 @@ class RingRename(implicit p: Parameters) extends BoomModule
     assert (!(valid && busy.prs2_busy && rtype === RT_FIX && uop.lrs2 === 0.U), "[rename] x0 is busy??")
   }
 
-  //-------------------------------------------------------------
+  //----------------------------------------------------------------------------------------------------
+  // Column Arbitration
+
+  val column_arbiter = Module(new ColumnArbiter)
+
+  for (w <- 0 until coreWidth) {
+    column_arbiter.io.uops(w).bits  := ren2_uops(w)
+    column_arbiter.io.uops(w).valid := ren2_valids(w)
+  }
+
+  val col_gnts = column_arbiter.io.gnts
+
+  //----------------------------------------------------------------------------------------------------
+  // Free Lists
+
+  for (c <- 0 until coreWidth) {
+    for (w <- 0 until coreWidth) {
+      freelists(c).io.reqs(w)                := col_gnts(w)(c) && ren2_alloc_reqs(w)
+      freelists(c).io.dealloc_pregs(w).valid := io.com_uops(w).dst_col(c) && (com_valids(w) || rbk_valids(w))
+      freelists(c).io.dealloc_pregs(w).bits  := Mux(io.rollback, io.com_uops(w).pdst, io.com_uops(w).stale_pdst)
+    }
+    freelists(c).io.ren_br_tags    := ren2_br_tags
+    freelists(c).io.brinfo         := io.brinfo
+    freelists(c).io.pipeline_empty := io.debug_rob_empty
+  }
+
+  // Freelist outputs.
+  for ((uop, w) <- ren2_uops.zipWithIndex) {
+    val preg = Mux1H(col_gnts(w), freelists.map(_.io.alloc_pregs(w).bits))
+    uop.pdst := Mux(uop.ldst =/= 0.U, Cat(OHToUInt(col_gnts(w)), preg), 0.U)
+  }
+
+  assert (ren2_alloc_reqs zip ren2_uops map {case (r,u) => !r || u.pdst =/= 0.U} reduce (_&&_),
+           "[rename-stage] A uop is trying to allocate the zero physical register.")
+
+  //----------------------------------------------------------------------------------------------------
   // Outputs
 
   io.ren2_mask := ren2_valids
 
   for (w <- 0 until coreWidth) {
-    val can_allocate = freelist.io.alloc_pregs(w).valid
+    val can_allocate = (col_gnts & VecInit(freelists.map(_.io.alloc_pregs(w).valid)).asUInt).orR
 
     // Push back against Decode stage if Rename1 can't proceed.
     io.ren_stalls(w) := (ren2_uops(w).dst_rtype === rtype) && !can_allocate
