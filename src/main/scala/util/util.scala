@@ -235,6 +235,17 @@ object WrapDec
 }
 
 /**
+  * Rotate a bit-vector left by one.
+ */
+object RotateLeft
+{
+  def apply(in: UInt) = {
+    val w = in.getWidth
+    Cat(in(w-2,0), in(w-1))
+  }
+}
+
+/**
  * Object to mask off lower bits of a PC to align to a "b"
  * Byte boundary.
  */

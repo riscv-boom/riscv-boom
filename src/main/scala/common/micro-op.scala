@@ -179,6 +179,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def op2_col   = UIntToOH(ColIdx(prs2))
   def stale_col = UIntToOH(ColIdx(stale_pdst))
 
+  def writes_int_rf = dst_rtype === RT_FIX && ldst_val
+
   // Getters that help with arbitration during scheduling
   def prs1_do_read   = lrs1_rtype === RT_FIX && !prs1_bypass
   def prs2_do_read   = lrs2_rtype === RT_FIX && !prs2_bypass
