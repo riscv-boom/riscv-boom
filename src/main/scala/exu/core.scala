@@ -105,7 +105,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   val iregfile         = Module(new BankedRegisterFileSynthesizable(numIntPhysRegs, xLen))
 
-  val iregister_read   = Module(new RingRegisterRead(exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits)))
+  val iregister_read   = Module(new RingRegisterRead)
   val rob              = Module(new Rob(
                            coreWidth + numFpWakeupPorts,
                            numFpWakeupPorts))

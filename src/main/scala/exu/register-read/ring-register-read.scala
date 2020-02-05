@@ -45,8 +45,7 @@ class RingRegisterReadIO
  *
  * @param supportedUnitsArray seq of SupportedFuncUnits classes indicating what the functional units do
  */
-class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
-  (implicit p: Parameters) extends BoomModule
+class RingRegisterRead(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new RingRegisterReadIO)
 
@@ -63,7 +62,17 @@ class RingRegisterRead(supportedUnitsArray: Seq[SupportedFuncUnits])
 
   // TODO wouldn't it be better to put rrdd after the registers?
   for (w <- 0 until coreWidth) {
-    val rrd_decode_unit = Module(new RegisterReadDecode(supportedUnitsArray(w)))
+    val supportedUnits = new SupportedFuncUnits(
+                           alu  = true ,
+                           bru  = true ,
+                           mem  = true ,
+                           muld = true ,
+                           fpu  = false,
+                           csr  = true ,
+                           fdiv = false,
+                           ifpu = false)
+
+    val rrd_decode_unit = Module(new RegisterReadDecode(supportedUnits))
     rrd_decode_unit.io.iss_valid := io.iss_valids(w)
     rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
 
