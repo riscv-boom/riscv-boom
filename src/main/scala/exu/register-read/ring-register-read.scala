@@ -108,8 +108,12 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
 
   // Bank -> Col Data Crossbar
   for (w <- 0 until coreWidth) {
-    rrd_rs1_data(w) := Mux1H(prs1_data_banks(w), io.rf_read_ports.map(_.prs1_data))
-    rrd_rs2_data(w) := Mux1H(prs2_data_banks(w), io.rf_read_ports.map(_.prs2_data))
+    rrd_rs1_data(w) := Mux(rrd_uops(w).prs1 === 0.U,
+                         0.U,
+                         Mux1H(prs1_data_banks(w), io.rf_read_ports.map(_.prs1_data)))
+    rrd_rs2_data(w) := Mux(rrd_uops(w).prs2 === 0.U,
+                         0.U,
+                         Mux1H(prs2_data_banks(w), io.rf_read_ports.map(_.prs2_data)))
 
     assert (PopCount(prs1_data_banks(w)) <= 1.U, "[rrd] prs1_data xbar collision on port " + w)
     assert (PopCount(prs2_data_banks(w)) <= 1.U, "[rrd] prs2_data xbar collision on port " + w)

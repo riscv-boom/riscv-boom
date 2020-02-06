@@ -104,15 +104,8 @@ class BankedRegisterFileSynthesizable(
     val prs1_addr = RegNext(io.read_ports(w).prs1_addr)
     val prs2_addr = RegNext(io.read_ports(w).prs2_addr)
 
-    io.read_ports(w).prs1_data :=
-      Mux(prs1_addr === 0.U,
-        0.U,
-        regfile(w)(prs1_addr))
-
-    io.read_ports(w).prs2_data :=
-      Mux(prs2_addr === 0.U,
-        0.U,
-        regfile(w)(prs2_addr))
+    io.read_ports(w).prs1_data := regfile(w)(prs1_addr)
+    io.read_ports(w).prs2_data := regfile(w)(prs2_addr)
   }
 
   // --------------------------------------------------------------
