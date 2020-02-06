@@ -1422,7 +1422,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     for (w <- 0 until coreWidth) {
        exe_units.rocc_unit.io.rocc.dis_rocc_vals(w) := (
          dis_fire(w) &&
-         dis_uops(w).uopc === uopROCC)
+         dis_uops(w).uopc === uopROCC &&
+         !dis_uops(w).exception
+       )
     }
   }
 
