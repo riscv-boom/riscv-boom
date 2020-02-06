@@ -14,7 +14,7 @@ import boom.util.{BoomCoreStringPrefix, WrapInc}
 import scala.math.min
 
 case class BoomFAMicroBTBParams(
-  nWays: Int = 8,
+  nWays: Int = 16,
   offsetSz: Int = 13
 )
 
