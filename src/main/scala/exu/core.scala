@@ -446,23 +446,21 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   // Inputs
-  for (rename <- rename_stages) {
-    rename.io.kill := flush_ifu
-    rename.io.brinfo := br_unit.brinfo
+  rename_stage.io.kill := flush_ifu
+  rename_stage.io.brinfo := br_unit.brinfo
 
-    rename.io.debug_rob_empty := rob.io.empty
+  rename_stage.io.debug_rob_empty := rob.io.empty
 
-    rename.io.dec_fire := dec_fire
-    rename.io.dec_uops := dec_uops
+  rename_stage.io.dec_fire := dec_fire
+  rename_stage.io.dec_uops := dec_uops
 
-    rename.io.dis_fire := dis_fire
-    rename.io.dis_ready := dis_ready
+  rename_stage.io.dis_fire := dis_fire
+  rename_stage.io.dis_ready := dis_ready
 
-    rename.io.com_valids := rob.io.commit.valids
-    rename.io.com_uops := rob.io.commit.uops
-    rename.io.rbk_valids := rob.io.commit.rbk_valids
-    rename.io.rollback := rob.io.commit.rollback
-  }
+  rename_stage.io.com_valids := rob.io.commit.valids
+  rename_stage.io.com_uops := rob.io.commit.uops
+  rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
+  rename_stage.io.rollback := rob.io.commit.rollback
 
   // Outputs
   dis_uops := rename_stage.io.ren2_uops
