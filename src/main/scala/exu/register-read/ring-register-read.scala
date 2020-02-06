@@ -77,7 +77,7 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
     rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
 
     rrd_valids(w) := RegNext(rrd_decode_unit.io.rrd_valid &&
-                     !IsKilledByBranch(io.brinfo, rrd_decode_unit.io.rrd_uop))
+                     !IsKilledByBranch(io.brinfo, rrd_decode_unit.io.rrd_uop) && !io.kill)
     rrd_uops(w)   := RegNext(GetNewUopAndBrMask(rrd_decode_unit.io.rrd_uop, io.brinfo))
   }
 
