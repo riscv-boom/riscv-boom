@@ -253,11 +253,11 @@ class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implici
 
 
   for (w <- 0 until bankWidth) {
-    var altpred = io.resp_in.f3(w).taken
-    val final_altpred = WireInit(io.resp_in.f3(w).taken)
+    var altpred = io.resp_in(0).f3(w).taken
+    val final_altpred = WireInit(io.resp_in(0).f3(w).taken)
     var provided = false.B
     var provider = 0.U
-    io.resp.f3(w).taken := io.resp_in.f3(w).taken
+    io.resp.f3(w).taken := io.resp_in(0).f3(w).taken
 
     for (i <- 0 until tageNTables) {
       val hit = f3_resps(i)(w).valid

@@ -179,9 +179,9 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
     columns(w).io.f2_req_valid := s2_req.valid
     columns(w).io.f2_req_idx  := s2_req_idx
     columns(w).io.f3_req_fire := (s3_req.valid && s3_req.bits.mask(w) && io.f3_fire &&
-      RegNext(io.resp_in.f2(w).predicted_pc.valid && io.resp_in.f2(w).is_br))
+      RegNext(io.resp_in(0).f2(w).predicted_pc.valid && io.resp_in(0).f2(w).is_br))
 
-    columns(w).io.f3_pred_in  := io.resp_in.f3(w).taken
+    columns(w).io.f3_pred_in  := io.resp_in(0).f3(w).taken
     io.resp.f3(w).taken       := columns(w).io.f3_pred
 
     columns(w).io.update_mispredict      := (s1_update.valid &&

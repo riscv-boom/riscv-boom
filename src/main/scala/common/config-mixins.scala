@@ -276,3 +276,42 @@ class WithMegaBooms extends Config((site, here, up) => {
   case XLen => 64
   case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
 })
+
+class WithBoom2BPD extends Config((site, here, up) => {
+  case BoomBPDComposition => ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
+    // gshare is just variant of TAGE with 1 table
+    val gshare = Module(new TageBranchPredictorBank(
+      BoomTageParams(tableInfo = Seq((256, 16, 7)))
+    )(p))
+    val btb = Module(new BTBBranchPredictorBank()(p))
+    val bim = Module(new BIMBranchPredictorBank()(p))
+    val preds = Seq(bim, btb, gshare)
+    preds.map(_.io := DontCare)
+
+    bim.io.resp_in(0)  := resp_in
+    btb.io.resp_in(0)  := bim.io.resp
+    gshare.io.resp_in(0) := btb.io.resp
+    (preds, gshare.io.resp)
+  })
+})
+
+class WithAlpha21264BPD extends Config((site, here, up) => {
+  case BoomBPDComposition => ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
+    val btb = Module(new BTBBranchPredictorBank()(p))
+    val gbim = Module(new BIMBranchPredictorBank(
+      BoomBIMParams(indexWithGhist = true)
+    )(p))
+    val local = Module(new LocalBranchPredictorBank()(p))
+    val tourney = Module(new TourneyBranchPredictorBank()(p))
+    val preds = Seq(local, btb, gbim, tourney)
+    preds.map(_.io := DontCare)
+
+    gbim.io.resp_in(0) := resp_in
+    local.io.resp_in(0) := resp_in
+    tourney.io.resp_in(0) := gbim.io.resp
+    tourney.io.resp_in(1) := local.io.resp
+    btb.io.resp_in(0)  := tourney.io.resp
+
+    (preds, btb.io.resp)
+  })
+})

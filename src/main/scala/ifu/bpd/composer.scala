@@ -16,23 +16,27 @@ case object BoomBPDComposition extends Field[Function2[BranchPredictionBankRespo
     val loop = Module(new LoopBranchPredictorBank()(p))
     val tage = Module(new TageBranchPredictorBank()(p))
     val btb = Module(new BTBBranchPredictorBank()(p))
-    val ubtb = Module(new FAMicroBTBBranchPredictorBank()(p))
     val bim = Module(new BIMBranchPredictorBank()(p))
-    ubtb.io.resp_in  := resp_in
-    bim.io.resp_in   := ubtb.io.resp
-    btb.io.resp_in   := bim.io.resp
-    tage.io.resp_in  := btb.io.resp
-    loop.io.resp_in  := tage.io.resp
+    val ubtb = Module(new FAMicroBTBBranchPredictorBank()(p))
+    val preds = Seq(loop, tage, btb, ubtb, bim)
+    preds.map(_.io := DontCare)
 
-    (Seq(loop, tage, btb, ubtb, bim), loop.io.resp)
+    ubtb.io.resp_in(0)  := resp_in
+    bim.io.resp_in(0)   := ubtb.io.resp
+    btb.io.resp_in(0)   := bim.io.resp
+    tage.io.resp_in(0)  := btb.io.resp
+    loop.io.resp_in(0)  := tage.io.resp
+
+    (preds, loop.io.resp)
   }
 )
 
 class ComposedBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
 
-  val (components, resp) = p(BoomBPDComposition)(io.resp_in, p)
+  val (components, resp) = p(BoomBPDComposition)(io.resp_in(0), p)
   io.resp := resp
+
 
   var metas = 0.U(1.W)
   var meta_sz = 0

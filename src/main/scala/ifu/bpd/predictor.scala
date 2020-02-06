@@ -127,13 +127,15 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
   with HasBoomFrontendParameters
 {
   val metaSz = 0
-  
+  def nInputs = 1
 
   val io = IO(new Bundle {
     val f0_req = Input(Valid(new BranchPredictionBankRequest))
+    // Local history not available until end of f1
+    val f1_req_lhist = Input(UInt(localHistoryLength.W))
 
+    val resp_in = Input(Vec(nInputs, new BranchPredictionBankResponse))
     val resp = Output(new BranchPredictionBankResponse)
-    val resp_in = Input(new BranchPredictionBankResponse)
 
     // Store the meta as a UInt, use width inference to figure out the shape
     val f3_meta = Output(UInt(bpdMaxMetaLength.W))
@@ -142,7 +144,7 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
 
     val update = Input(Valid(new BranchPredictionBankUpdate))
   })
-  io.resp := io.resp_in
+  io.resp := io.resp_in(0)
 
   io.f3_meta := 0.U
 
@@ -199,12 +201,17 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     banked_predictors(0).io.f0_req.bits.pc    := bankAlign(io.f0_req.bits.pc)
     banked_predictors(0).io.f0_req.bits.mask  := fetchMask(io.f0_req.bits.pc)
     banked_predictors(0).io.f0_req.valid      := io.f0_req.valid
+    banked_predictors(0).io.f1_req_lhist      := DontCare
 
-    banked_predictors(0).io.resp_in           := (0.U).asTypeOf(new BranchPredictionBankResponse)
+    banked_predictors(0).io.resp_in(0)           := (0.U).asTypeOf(new BranchPredictionBankResponse)
   } else {
     require(nBanks == 2)
-    banked_predictors(0).io.resp_in           := (0.U).asTypeOf(new BranchPredictionBankResponse)
-    banked_predictors(1).io.resp_in           := (0.U).asTypeOf(new BranchPredictionBankResponse)
+
+    banked_predictors(0).io.f1_req_lhist      := DontCare
+    banked_predictors(1).io.f1_req_lhist      := DontCare
+
+    banked_predictors(0).io.resp_in(0)           := (0.U).asTypeOf(new BranchPredictionBankResponse)
+    banked_predictors(1).io.resp_in(0)           := (0.U).asTypeOf(new BranchPredictionBankResponse)
     when (bank(io.f0_req.bits.pc) === 0.U) {
       banked_predictors(0).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(0)
       banked_predictors(0).io.f0_req.bits.pc   := bankAlign(io.f0_req.bits.pc)
@@ -311,7 +318,6 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     banked_predictors(i).io.update.bits.cfi_is_br        := io.update.bits.cfi_is_br
     banked_predictors(i).io.update.bits.cfi_is_jal       := io.update.bits.cfi_is_jal
     banked_predictors(i).io.update.bits.target           := io.update.bits.target
-
   }
 
   if (nBanks == 1) {
