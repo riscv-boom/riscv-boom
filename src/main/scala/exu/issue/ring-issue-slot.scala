@@ -134,11 +134,6 @@ class RingIssueSlot(implicit p: Parameters)
 
   // Wakeup Compare Logic
 
-  // these signals are the "next_p*" for the current slot's micro-op.
-  // they are important for shifting the current slot_uop up to an other entry.
-  val next_p1 = WireInit(p1)
-  val next_p2 = WireInit(p2)
-
   when (io.in_uop.valid) {
     p1 := !(io.in_uop.bits.prs1_busy)
     p2 := !(io.in_uop.bits.prs2_busy)
@@ -174,12 +169,12 @@ class RingIssueSlot(implicit p: Parameters)
   // Perform fast wakeup
   val fast_prs = next_uop.GetFastOperand
   when (io.fast_wakeup.valid && fast_prs === io.fast_wakeup.bits) {
-    when (slot_uop.fast_prs_sel) {
+    when (next_uop.fast_prs_sel) {
       p2 := true.B
-      slot_uop.prs2_bypass := true.B
+      slot_uop.prs2_bypass := next_uop.prs2_busy
     } .otherwise {
       p1 := true.B
-      slot_uop.prs1_bypass := true.B
+      slot_uop.prs1_bypass := next_uop.prs1_busy
     }
   }
 
