@@ -146,7 +146,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   for (w <- 0 until coreWidth) {
     val fast_wakeup = Wire(Valid(UInt(ipregSz.W)))
     fast_wakeup.bits  := sel_uops(w).pdst
-    fast_wakeup.valid := arb_gnts(w) && sel_uops(w).fu_code(0) // TODO currently only bypass ALU ops
+    fast_wakeup.valid := arb_gnts(w) && sel_uops(w).writes_int_rf && sel_uops(w).fu_code(0)
+    // TODO currently only bypass ALU ops
 
     for (slot <- slots((w + 1) % coreWidth)) {
       slot.fast_wakeup := fast_wakeup
