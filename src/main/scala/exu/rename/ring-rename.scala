@@ -41,7 +41,7 @@ class RingRenameIO(implicit p: Parameters) extends BoomBundle
   val dis_ready = Input(Bool())
 
   // wakeup ports
-  val wakeups = Flipped(Vec(numWbPorts, Valid(UInt(ipregSz.W))))
+  val wakeups = Flipped(Vec(coreWidth, Valid(UInt(ipregSz.W))))
 
   // commit stage
   val com_valids = Input(Vec(coreWidth, Bool()))
@@ -110,7 +110,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
   val busytable = Module(new RenameBusyTable(
     coreWidth,
     numIntPhysRegs,
-    numWbPorts,
+    coreWidth,
     false,
     false))
 
@@ -266,7 +266,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
   io.ren2_mask := ren2_valids
 
   for (w <- 0 until coreWidth) {
-    val can_allocate = (col_gnts & VecInit(freelists.map(_.io.alloc_pregs(w).valid)).asUInt).orR
+    val can_allocate = (col_gnts(w) & VecInit(freelists.map(_.io.alloc_pregs(w).valid)).asUInt).orR
 
     // Push back against Decode stage if Rename1 can't proceed.
     io.ren_stalls(w) := (ren2_uops(w).dst_rtype === rtype) && !can_allocate

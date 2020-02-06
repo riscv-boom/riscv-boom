@@ -49,8 +49,8 @@ class ColumnArbiter(implicit p: Parameters) extends BoomModule
     var op1_col = uop.bits.op1_col
     var op2_col = uop.bits.op2_col
 
-    var prs1_busy = uops.bits.prs1_busy
-    var prs2_busy = uops.bits.prs2_busy
+    var prs1_busy = uop.bits.prs1_busy
+    var prs2_busy = uop.bits.prs2_busy
 
     for ((bp_uop, bp_col) <- io.uops zip prev_dst_cols) {
       val prs1_do_bypass = uop.bits.lrs1 === bp_uop.bits.ldst && bp_uop.bits.writes_int_rf && bp_uop.valid
