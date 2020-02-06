@@ -64,9 +64,15 @@ class RenameBusyTable(
     val prs3_was_bypassed = (0 until i).map(j =>
       io.ren_uops(i).lrs3 === io.ren_uops(j).ldst && io.rebusy_reqs(j)).foldLeft(false.B)(_||_)
 
-    io.busy_resps(i).prs1_busy := busy_table(io.ren_uops(i).prs1) || prs1_was_bypassed && bypass.B
-    io.busy_resps(i).prs2_busy := busy_table(io.ren_uops(i).prs2) || prs2_was_bypassed && bypass.B
-    io.busy_resps(i).prs3_busy := busy_table(io.ren_uops(i).prs3) || prs3_was_bypassed && bypass.B
+    if (bypass) {
+      io.busy_resps(i).prs1_busy := busy_table(io.ren_uops(i).prs1) || prs1_was_bypassed
+      io.busy_resps(i).prs2_busy := busy_table(io.ren_uops(i).prs2) || prs2_was_bypassed
+      io.busy_resps(i).prs3_busy := busy_table(io.ren_uops(i).prs3) || prs3_was_bypassed
+    } else {
+      io.busy_resps(i).prs1_busy := busy_table(io.ren_uops(i).prs1)
+      io.busy_resps(i).prs2_busy := busy_table(io.ren_uops(i).prs2)
+      io.busy_resps(i).prs3_busy := busy_table(io.ren_uops(i).prs3)
+    }
     if (!float) io.busy_resps(i).prs3_busy := false.B
   }
 

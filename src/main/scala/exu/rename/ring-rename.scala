@@ -156,6 +156,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
   for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops zip io.com_uops.reverse zipWithIndex) {
     map_reqs(w).lrs1 := ren1.lrs1
     map_reqs(w).lrs2 := ren1.lrs2
+    map_reqs(w).lrs3 := DontCare
     map_reqs(w).ldst := ren1.ldst
 
     remap_reqs(w).ldst := Mux(io.rollback, com.ldst      , ren2.ldst)
