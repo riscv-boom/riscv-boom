@@ -162,6 +162,15 @@ class RingIssueSlot(implicit p: Parameters)
   slot_uop.prs1_bypass := false.B
   slot_uop.prs2_bypass := false.B
 
+  // Can't currently issue two cycles after recieving a fast wakeup,
+  // as there is only 1 bypass path and the result still needs to reach the regfile.
+  when (next_uop.prs1_bypass) {
+    p1 := false.B
+  }
+  when (next_uop.prs2_bypass) {
+    p2 := false.B
+  }
+
   // Perform fast wakeup
   val fast_prs = next_uop.GetFastOperand
   when (io.fast_wakeup.valid && fast_prs === io.fast_wakeup.bits) {
