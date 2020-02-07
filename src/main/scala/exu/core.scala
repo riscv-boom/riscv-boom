@@ -384,7 +384,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   ftq_arb.io.out.ready  := true.B
 
   // Branch Unit Requests
-  val iss_br = iss_uops zip iss_valids map { case (u,v) => u.is_br_or_jmp && v }
+  val iss_br = iss_uops zip iss_valids map { case (u,v) => u.fu_code(1) && v }
   bru_pc_req.valid := RegNext(iss_br.reduce(_||_))
   bru_pc_req.bits  := RegNext(Mux1H(iss_br, iss_uops.map(_.ftq_idx)))
   exe_units.io.get_ftq_pc.fetch_pc := RegNext(io.ifu.get_pc.fetch_pc)
