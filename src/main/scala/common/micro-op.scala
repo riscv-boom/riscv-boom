@@ -185,7 +185,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def prs1_do_read   = lrs1_rtype === RT_FIX && !prs1_bypass && lrs1 =/= 0.U
   def prs2_do_read   = lrs2_rtype === RT_FIX && !prs2_bypass && lrs2 =/= 0.U
   def shared_eu_code = eu_code(3,1)
-  def exe_wb_latency = fu_code(2) << 3 | fu_code(3) << 2 | fu_code(0) | fu_code(1)
+  def exe_wb_latency = (fu_code(3) | fu_code(2)) << 2 | (fu_code(1) | fu_code(0))
 }
 
 /**
