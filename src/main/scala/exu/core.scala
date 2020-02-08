@@ -849,18 +849,35 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // ---------
 
   var cnt = 0
+
+  // Column resps
   for (w <- 0 until coreWidth) {
     val resp   = exe_units.io.exe_resps(w)
     val wb_uop = resp.bits.uop
     val data   = resp.bits.data
 
     rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo)
-    rob.io.wb_resps(cnt).bits  <> resp.bits
+    rob.io.wb_resps(cnt).bits  := resp.bits
 
     rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
-    rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
+    rob.io.debug_wb_wdata(cnt)  := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
     csr.io.rw.rdata,
     data)
+
+    cnt += 1
+  }
+
+  // Long-latency resps
+  for (eu <- exe_units.withFilter(_.writesLlIrf)) {
+    val resp   = eu.io.ll_iresp
+    val wb_uop = resp.bits.uop
+    val data   = resp.bits.data
+
+    rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo)
+    rob.io.wb_resps(cnt).bits  := resp.bits
+
+    rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
+    rob.io.debug_wb_wdata(cnt)  := data
 
     cnt += 1
   }
