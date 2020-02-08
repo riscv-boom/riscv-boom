@@ -242,7 +242,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // EU -> Slow (LL) Resp crossbar
 
   val slow_eu_reqs = Transpose(VecInit(shared_exe_units.filter(_.writesLlIrf).map(eu =>
-    eu.io.ll_iresp.bits.uop.dst_col & Fill(coreWidth, eu.io.ll_iresp.valid)).asUInt))
+    eu.io.ll_iresp.bits.uop.dst_col & Fill(coreWidth, eu.io.ll_iresp.valid))))
   val slow_eu_gnts = Transpose(VecInit(slow_eu_reqs.map(r => PriorityEncoderOH(r))))
 
   for (w <- 0 until coreWidth) {
@@ -250,8 +250,8 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     io.ll_resps(w).valid := slow_eu_reqs(w).orR
   }
 
-  for (eu <- shared_exe_units.filter(_.writesLlIrf)) {
-    eu.io.ll_iresp.ready := (slow_eu_gnts(i) & eu.io.ll_iresp.bits.uop.dst_col).orR
+  for ((eu,gnt) <- shared_exe_units.filter(_.writesLlIrf) zip slow_eu_gnts) {
+    eu.io.ll_iresp.ready := (gnt & eu.io.ll_iresp.bits.uop.dst_col).orR
   }
 
   //----------------------------------------------------------------------------------------------------
