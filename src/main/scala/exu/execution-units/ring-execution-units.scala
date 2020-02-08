@@ -30,6 +30,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     // I/O used by all units
     val exe_reqs  = Vec(coreWidth, Flipped(DecoupledIO(new FuncUnitReq(xLen))))
     val exe_resps = Output(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
+    val ll_resps  = Output(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
 
     val brinfo    = Input(new BrResolutionInfo)
     val kill      = Input(Bool())
@@ -225,20 +226,32 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   }
 
   //----------------------------------------------------------------------------------------------------
-  // EU -> Resp crossbar
-  // TODO: This doesn't prevent collisions between scheduled operations (ALU etc.) and
-  // long-latency operations (div & load miss). Possible to fix by backpressuring div unit and
-  // refill buffers respectively, but a bit messy. The refill buffers are especially bad because
-  // there's a pipe stage between them and the writeback crossbar.
+  // EU -> Fast Resp crossbar
 
-  val eu_sels = Transpose(VecInit(Seq(VecInit(column_exe_units.map(_.io.iresp.valid)).asUInt) ++
+  val fast_eu_sels = Transpose(VecInit(Seq(VecInit(column_exe_units.map(_.io.iresp.valid)).asUInt) ++
     shared_exe_units.filter(_.writesIrf).map(eu => eu.io.iresp.bits.uop.dst_col & Fill(coreWidth, eu.io.iresp.valid))))
 
   for (w <- 0 until coreWidth) {
-    io.exe_resps(w).bits  := Mux1H(eu_sels(w), Seq(column_exe_units(w).io.iresp.bits) ++ shared_exe_units.filter(_.writesIrf).map(_.io.iresp.bits))
-    io.exe_resps(w).valid := eu_sels(w).orR
+    io.exe_resps(w).bits  := Mux1H(fast_eu_sels(w), Seq(column_exe_units(w).io.iresp.bits) ++ shared_exe_units.filter(_.writesIrf).map(_.io.iresp.bits))
+    io.exe_resps(w).valid := fast_eu_sels(w).orR
 
-    assert (PopCount(eu_sels(w)) <= 1.U, "[exe] writeback crossbar collision on port " + w)
+    assert (PopCount(fast_eu_sels(w)) <= 1.U, "[exe] writeback crossbar collision on port " + w)
+  }
+
+  //----------------------------------------------------------------------------------------------------
+  // EU -> Slow (LL) Resp crossbar
+
+  val slow_eu_reqs = Transpose(VecInit(shared_exe_units.filter(_.writesLlIrf).map(eu =>
+    eu.io.ll_iresp.bits.uop.dst_col & Fill(coreWidth, eu.io.ll_iresp.valid)).asUInt))
+  val slow_eu_gnts = Transpose(VecInit(slow_eu_reqs.map(r => PriorityEncoderOH(r))))
+
+  for (w <- 0 until coreWidth) {
+    io.ll_resps(w).bits  := PriorityMux(slow_eu_reqs(w), shared_exe_units.filter(_.writesLlIrf).map(_.io.ll_iresp.bits))
+    io.ll_resps(w).valid := slow_eu_reqs(w).orR
+  }
+
+  for (eu <- shared_exe_units.filter(_.writesLlIrf)) {
+    eu.io.ll_iresp.ready := (slow_eu_gnts(i) & eu.io.ll_iresp.bits.uop.dst_col).orR
   }
 
   //----------------------------------------------------------------------------------------------------
