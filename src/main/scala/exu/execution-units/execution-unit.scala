@@ -213,8 +213,8 @@ class ALUExeUnit(
   (implicit p: Parameters)
   extends ExecutionUnit(
     readsIrf         = true,
-    writesIrf        = hasAlu || hasMem || hasBrUnit || hasMul || hasDiv || hasRocc || hasIfpu,
-    writesLlIrf      = hasMem || hasRocc,
+    writesIrf        = hasAlu || hasBrUnit || hasMul || hasCSR,
+    writesLlIrf      = hasMem || hasDiv || hasRocc,
     writesLlFrf      = (hasIfpu || hasMem) && p(tile.TileKey).core.fpu != None,
     numBypassStages  =
       if (hasAlu && hasMul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
@@ -368,7 +368,7 @@ class ALUExeUnit(
     div.io.req.bits.rs1_data   := io.req.bits.rs1_data
     div.io.req.bits.rs2_data   := io.req.bits.rs2_data
     div.io.brinfo              := io.brinfo
-    div.io.kill       := io.kill
+    div.io.kill                := io.kill
 
     // share write port with the pipelined units
     div.io.resp.ready := !(iresp_fu_units.map(_.io.resp.valid).reduce(_|_))
@@ -377,7 +377,7 @@ class ALUExeUnit(
     div_busy     := !div.io.req.ready ||
                     (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV))
 
-    iresp_fu_units += div
+    io.ll_iresp <> div.io.resp
   }
 
   // Mem Unit --------------------------
@@ -396,7 +396,7 @@ class ALUExeUnit(
 
     io.lsu_io.req := maddrcalc.io.resp
 
-    io.iresp <> io.lsu_io.iresp
+    io.ll_iresp <> io.lsu_io.iresp
     if (usingFPU) {
       io.ll_fresp <> io.lsu_io.fresp
     }
