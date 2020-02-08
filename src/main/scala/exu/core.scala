@@ -110,7 +110,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                            coreWidth * 2 + numFpWakeupPorts,
                            numFpWakeupPorts))
 
-  val wakeups          = Wire(Vec(coreWidth, Valid(UInt(ipregSz.W)))) // 'Slow' wakeups
+  val wakeups          = Wire(Vec(coreWidth*2, Valid(UInt(ipregSz.W)))) // 'Slow' wakeups
   wakeups := DontCare
 
   //***********************************
@@ -592,13 +592,23 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  // Generate 'slow' wakeup signals from writeback ports.
+  // Generate slow wakeup signals from writeback ports.
+  // TODO don't need this anymore with the separate long-latency ports
   for (w <- 0 until coreWidth) {
     val wbresp = exe_units.io.exe_resps(w)
     wakeups(w).bits  := wbresp.bits.uop.pdst
     wakeups(w).valid := (  wbresp.valid
                         && wbresp.bits.uop.rf_wen
                         && wbresp.bits.uop.dst_rtype === RT_FIX )
+  }
+
+  // Generate slow wakeup signals from long-latency writeback ports.
+  for (w <- 0 until coreWidth) {
+    val wbresp = exe_units.io.ll_resps(w)
+    wakeups(w+coreWidth).bits  := wbresp.bits.uop.pdst
+    wakeups(w+coreWidth).valid := (  wbresp.valid
+                                  && wbresp.bits.uop.rf_wen
+                                  && wbresp.bits.uop.dst_rtype === RT_FIX )
   }
 
   for ((renport, intport) <- rename_stage.io.wakeups zip wakeups) {

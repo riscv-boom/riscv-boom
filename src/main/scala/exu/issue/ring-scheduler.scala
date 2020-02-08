@@ -28,7 +28,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val dis_uops = Flipped(Vec(coreWidth, DecoupledIO(new MicroOp)))
     val iss_uops = Output(Vec(coreWidth, Valid(new MicroOp)))
 
-    val wakeups  = Input(Vec(coreWidth, Valid(UInt(ipregSz.W))))
+    val wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
     val ld_miss  = Input(Bool()) // TODO use this
 
     val div_busy = Input(Bool()) // TODO do fu_types instead? Does it make a difference in synth?

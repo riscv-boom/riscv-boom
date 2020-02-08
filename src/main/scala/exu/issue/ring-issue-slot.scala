@@ -37,7 +37,7 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
   val ldspec_miss   = Input(Bool())
 
-  val slow_wakeups  = Input(Vec(coreWidth, Valid(UInt(ipregSz.W))))
+  val slow_wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
   val fast_wakeup   = Input(Valid(UInt(ipregSz.W)))
 
   val in_uop        = Flipped(Valid(new MicroOp())) // Received from dispatch or another slot during compaction
@@ -142,7 +142,7 @@ class RingIssueSlot(implicit p: Parameters)
   // Perform slow wakeups
   // TODO can optimize this once column steering is implemented
   // Or, should we leave it like this to allow greater dispatching flexibility? TBD.
-  for (w <- 0 until coreWidth) {
+  for (w <- 0 until coreWidth*2) {
     when (io.slow_wakeups(w).valid &&
          (io.slow_wakeups(w).bits === next_uop.prs1)) {
       p1 := true.B

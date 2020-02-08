@@ -41,7 +41,7 @@ class RingRenameIO(implicit p: Parameters) extends BoomBundle
   val dis_ready = Input(Bool())
 
   // wakeup ports
-  val wakeups = Flipped(Vec(coreWidth, Valid(UInt(ipregSz.W))))
+  val wakeups = Flipped(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
 
   // commit stage
   val com_valids = Input(Vec(coreWidth, Bool()))
@@ -110,7 +110,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
   val busytable = Module(new RenameBusyTable(
     coreWidth,
     numIntPhysRegs,
-    coreWidth,
+    coreWidth*2,
     false,
     false))
 
