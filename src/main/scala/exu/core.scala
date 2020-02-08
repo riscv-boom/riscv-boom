@@ -90,6 +90,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     fp_pipeline.io.wb_pdsts  := DontCare
   }
 
+  val numLLPorts         = exe_units.count(_.writesLlIrf)
   val numFpWakeupPorts   = if (usingFPU) fp_pipeline.io.wakeups.length else 0
 
   val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
@@ -107,7 +108,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   val iregister_read   = Module(new RingRegisterRead)
   val rob              = Module(new Rob(
-                           coreWidth + numFpWakeupPorts,
+                           coreWidth + numLLPorts + numFpWakeupPorts,
                            numFpWakeupPorts))
 
   val wakeups          = Wire(Vec(coreWidth, Valid(UInt(ipregSz.W)))) // 'Slow' wakeups
