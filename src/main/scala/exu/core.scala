@@ -800,6 +800,32 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+w+").iresp")
   }
 
+  // Hook the LL writebacks up to the regfile
+  for (w <- 0 until coreWidth) {
+    val wbresp = exe_units.io.ll_resps(w)
+    val wbpdst = wbresp.bits.uop.pdst
+    val wbdata = wbresp.bits.data
+
+    def wbIsValid(rtype: UInt) =
+      wbresp.valid && wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype === rtype
+
+    iregfile.io.ll_write_ports(w).valid     := wbIsValid(RT_FIX)
+    iregfile.io.ll_write_ports(w).bits.addr := wbpdst
+    iregfile.io.ll_write_ports(w).bits.data := wbdata
+
+    assert (!wbIsValid(RT_FLT), "[fppipeline] An FP writeback is being attempted to the Int Regfile.")
+
+    assert (!(wbresp.valid &&
+      !wbresp.bits.uop.rf_wen &&
+      wbresp.bits.uop.dst_rtype === RT_FIX),
+      "[fppipeline] An Int writeback is being attempted with rf_wen disabled.")
+
+    assert (!(wbresp.valid &&
+      wbresp.bits.uop.rf_wen &&
+      wbresp.bits.uop.dst_rtype =/= RT_FIX),
+      "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+w+").iresp")
+  }
+
   if (usingFPU) {
     // Connect IFPU
     fp_pipeline.io.from_int  <> exe_units.ifpu_unit.io.ll_fresp
