@@ -24,6 +24,8 @@ import boom.common._
 import boom.util._
 import boom.ifu.{GetPCFromFtqIO}
 
+import FUConstants._
+
 class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BoomBundle {
@@ -34,6 +36,8 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
     val brinfo    = Input(new BrResolutionInfo)
     val kill      = Input(Bool())
+
+    val fu_avail  = Output(UInt(FUC_SZ.W))
 
     // TODO get rid of this output
     val bypass = Output(new BypassData(coreWidth, xLen))
@@ -46,9 +50,6 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     val br_unit    = Output(new BranchUnitResp)
     val get_ftq_pc = Flipped(new GetPCFromFtqIO)
     val status     = Input(new freechips.rocketchip.rocket.MStatus)
-
-    // only used by the div unit
-    val idiv_busy = Output(Bool())
 
     // only used by the CSR unit
     val csr_unit_resp = DecoupledIO(new FuncUnitResp(xLen))
@@ -257,6 +258,8 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   //----------------------------------------------------------------------------------------------------
   // Punch through misc unit I/O to core
 
+  io.fu_avail := exe_units.foldLeft(0.U(FUC_SZ.W))((fu,eu) => fu | eu.io.fu_types)
+
   // ALU bypasses
   io.bypass := DontCare
   for (w <- 0 until coreWidth) {
@@ -275,9 +278,6 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   io.br_unit := br_unit_io
   br_unit.io.get_ftq_pc <> io.get_ftq_pc
   br_unit.io.status := io.status
-
-  // Div unit
-  io.idiv_busy := idiv_busy
 
   // CSR unit
   io.csr_unit_resp <> csr_unit.io.iresp

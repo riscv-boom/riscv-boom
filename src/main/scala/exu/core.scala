@@ -629,15 +629,15 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     idiv_issued = idiv_issued || (iss_valids(w) && iss_uops(w).fu_code_is(FU_DIV))
   }
 
+  // Supress just-issued divides from issuing back-to-back, since it's an iterative divider.
+  // But it takes a cycle to get to the Exe stage, so it can't tell us it is busy yet.
+  scheduler.io.fu_avail := exe_units.io.fu_avail & ~(Fill(FUC_SZ, RegNext(idiv_issued)) & FU_DIV)
+
   // Send slow wakeups to scheduler
   scheduler.io.wakeups := wakeups
 
   // Load-hit Misspeculations
   scheduler.io.ld_miss := io.lsu.ld_miss
-
-  // Supress just-issued divides from issuing back-to-back, since it's an iterative divider.
-  // But it takes a cycle to get to the Exe stage, so it can't tell us it is busy yet.
-  scheduler.io.div_busy := RegNext(idiv_issued) || exe_units.io.idiv_busy
 
   scheduler.io.brinfo := br_unit.brinfo
   scheduler.io.kill   := rob.io.flush.valid

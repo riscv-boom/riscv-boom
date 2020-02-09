@@ -31,7 +31,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
     val ld_miss  = Input(Bool()) // TODO use this
 
-    val div_busy = Input(Bool()) // TODO do fu_types instead? Does it make a difference in synth?
+    val fu_avail = Input(UInt(FUC_SZ.W))
 
     val brinfo   = Input(new BrResolutionInfo)
     val kill     = Input(Bool())
@@ -53,6 +53,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
       slots(w)(i).brinfo := io.brinfo
       slots(w)(i).kill   := io.kill
+
+      slots(w)(i).fu_avail := io.fu_avail
     }
   }
 
