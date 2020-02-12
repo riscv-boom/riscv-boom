@@ -65,9 +65,10 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   val dis_uops_setup = Wire(Vec(coreWidth, new MicroOp))
   for (w <- 0 until coreWidth) {
     dis_uops_setup(w) := io.dis_uops(w).bits
-    dis_uops_setup(w).iw_p1_poisoned := false.B
-    dis_uops_setup(w).iw_p2_poisoned := false.B
     dis_uops_setup(w).iw_state := s_valid_1
+
+    dis_uops_setup(w).prs1_status := Mux(io.dis_uops(w).bits.prs1_busy, 0.U, 1.U)
+    dis_uops_setup(w).prs2_status := Mux(io.dis_uops(w).bits.prs2_busy, 0.U, 1.U)
 
     // For StoreAddrGen for Int, or AMOAddrGen, we go to addr gen state
     when ((io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype === RT_FIX) ||
@@ -76,7 +77,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
       // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here
     } .elsewhen (io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype =/= RT_FIX) {
       dis_uops_setup(w).lrs2_rtype := RT_X
-      dis_uops_setup(w).prs2_busy  := false.B
+      dis_uops_setup(w).prs2_status := 1.U
+      dis_uops_setup(w).prs2_busy   := false.B
     }
     dis_uops_setup(w).prs3_busy := false.B
   }
@@ -146,13 +148,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
   // Connect fast wakeups
   for (w <- 0 until coreWidth) {
-    val fast_wakeup = Wire(Valid(UInt(ipregSz.W)))
-    fast_wakeup.bits  := sel_uops(w).pdst
-    fast_wakeup.valid := arb_gnts(w) && sel_uops(w).writes_irf && sel_uops(w).fu_code(0)
-    // TODO currently only bypass ALU ops
-
     for (slot <- slots((w + 1) % coreWidth)) {
-      slot.fast_wakeup := fast_wakeup
+      slot.fast_wakeup := sel_uops(w).fast_wakeup(arb_gnts(w))
     }
   }
 
