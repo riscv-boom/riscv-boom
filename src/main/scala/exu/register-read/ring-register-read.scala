@@ -85,9 +85,9 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
   // read ports
 
   val prs1_addr_cols = Transpose(VecInit(io.iss_uops zip io.iss_valids map { case (u,v) =>
-                         u.op1_col & Fill(coreWidth, v && u.prs1_do_read) } ))
+                         u.prs1_col & Fill(coreWidth, v && u.prs1_reads_irf) } ))
   val prs2_addr_cols = Transpose(VecInit(io.iss_uops zip io.iss_valids map { case (u,v) =>
-                         u.op2_col & Fill(coreWidth, v && u.prs2_do_read) } ))
+                         u.prs2_col & Fill(coreWidth, v && u.prs2_reads_irf) } ))
 
   // Col -> Bank Address Crossbar
   for (w <- 0 until coreWidth) {

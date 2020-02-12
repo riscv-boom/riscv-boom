@@ -28,15 +28,15 @@ class RegisterReadArbiter(implicit p: Parameters) extends BoomModule
     val gnts = Output(Vec(coreWidth, Bool()))
   })
 
-  val prs1_bank_reqs = Transpose(VecInit((0 until coreWidth).map(w => io.uops(w).op1_col & Fill(coreWidth, io.reqs(w) && io.uops(w).prs1_do_read))))
-  val prs2_bank_reqs = Transpose(VecInit((0 until coreWidth).map(w => io.uops(w).op2_col & Fill(coreWidth, io.reqs(w) && io.uops(w).prs2_do_read))))
+  val prs1_bank_reqs = Transpose(VecInit((0 until coreWidth).map(w => io.uops(w).prs1_col & Fill(coreWidth, io.reqs(w) && io.uops(w).prs1_reads_irf))))
+  val prs2_bank_reqs = Transpose(VecInit((0 until coreWidth).map(w => io.uops(w).prs2_col & Fill(coreWidth, io.reqs(w) && io.uops(w).prs2_reads_irf))))
 
   val prs1_bank_gnts = Transpose(VecInit(prs1_bank_reqs.map(r => PriorityEncoderOH(r))))
   val prs2_bank_gnts = Transpose(VecInit(prs2_bank_reqs.map(r => PriorityEncoderOH(r))))
 
   for (w <- 0 until coreWidth) {
-    io.gnts(w) := (prs1_bank_gnts(w).orR || !io.uops(w).prs1_do_read && io.reqs(w)) &&
-                  (prs2_bank_gnts(w).orR || !io.uops(w).prs2_do_read && io.reqs(w))
+    io.gnts(w) := (prs1_bank_gnts(w).orR || !io.uops(w).prs1_reads_irf && io.reqs(w)) &&
+                  (prs2_bank_gnts(w).orR || !io.uops(w).prs2_reads_irf && io.reqs(w))
   }
 }
 

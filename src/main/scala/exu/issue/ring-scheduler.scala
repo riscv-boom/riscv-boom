@@ -90,13 +90,13 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     dis_uops(w) := dis_uops_setup
   }
 
-  dis_vals := Transpose(VecInit(io.dis_uops.map(uop => VecInit((uop.bits.dst_col & Fill(coreWidth, uop.valid)).asBools))))
+  dis_vals := Transpose(VecInit(io.dis_uops.map(uop => VecInit((uop.bits.pdst_col & Fill(coreWidth, uop.valid)).asBools))))
 
   val col_readys = Transpose(VecInit((0 until coreWidth).map(w =>
     VecInit((0 until columnDispatchWidth).map(k => PopCount(slots(w).map(_.valid)) + k.U < numSlotsPerColumn.U)).asUInt)))
 
   for (w <- 0 until coreWidth) {
-    io.dis_uops(w).ready := (io.dis_uops(w).bits.dst_col & col_readys(w)).orR
+    io.dis_uops(w).ready := (io.dis_uops(w).bits.pdst_col & col_readys(w)).orR
   }
 
   //----------------------------------------------------------------------------------------------------
@@ -148,7 +148,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   for (w <- 0 until coreWidth) {
     val fast_wakeup = Wire(Valid(UInt(ipregSz.W)))
     fast_wakeup.bits  := sel_uops(w).pdst
-    fast_wakeup.valid := arb_gnts(w) && sel_uops(w).writes_int_rf && sel_uops(w).fu_code(0)
+    fast_wakeup.valid := arb_gnts(w) && sel_uops(w).writes_irf && sel_uops(w).fu_code(0)
     // TODO currently only bypass ALU ops
 
     for (slot <- slots((w + 1) % coreWidth)) {

@@ -230,7 +230,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // EU -> Fast Resp crossbar
 
   val fast_eu_sels = Transpose(VecInit(Seq(VecInit(column_exe_units.map(_.io.iresp.valid)).asUInt) ++
-    shared_exe_units.filter(_.writesIrf).map(eu => eu.io.iresp.bits.uop.dst_col & Fill(coreWidth, eu.io.iresp.valid))))
+    shared_exe_units.filter(_.writesIrf).map(eu => eu.io.iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.iresp.valid))))
 
   for (w <- 0 until coreWidth) {
     io.exe_resps(w).bits  := Mux1H(fast_eu_sels(w), Seq(column_exe_units(w).io.iresp.bits) ++ shared_exe_units.filter(_.writesIrf).map(_.io.iresp.bits))
@@ -243,7 +243,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // EU -> Slow (LL) Resp crossbar
 
   val slow_eu_reqs = Transpose(VecInit(shared_exe_units.filter(_.writesLlIrf).map(eu =>
-    eu.io.ll_iresp.bits.uop.dst_col & Fill(coreWidth, eu.io.ll_iresp.valid))))
+    eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid))))
   val slow_eu_gnts = Transpose(VecInit(slow_eu_reqs.map(r => PriorityEncoderOH(r))))
 
   for (w <- 0 until coreWidth) {
@@ -252,7 +252,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   }
 
   for ((eu,gnt) <- shared_exe_units.filter(_.writesLlIrf) zip slow_eu_gnts) {
-    eu.io.ll_iresp.ready := (gnt & eu.io.ll_iresp.bits.uop.dst_col).orR
+    eu.io.ll_iresp.ready := (gnt & eu.io.ll_iresp.bits.uop.pdst_col).orR
   }
 
   //----------------------------------------------------------------------------------------------------

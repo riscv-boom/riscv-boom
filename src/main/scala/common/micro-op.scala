@@ -174,16 +174,16 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   }
 
   // Get the columns of the uop's physical registers
-  def dst_col   = UIntToOH(ColIdx(pdst))
-  def op1_col   = UIntToOH(ColIdx(prs1))
-  def op2_col   = UIntToOH(ColIdx(prs2))
+  def pdst_col  = UIntToOH(ColIdx(pdst))
+  def prs1_col  = UIntToOH(ColIdx(prs1))
+  def prs2_col  = UIntToOH(ColIdx(prs2))
   def stale_col = UIntToOH(ColIdx(stale_pdst))
 
-  def writes_int_rf = dst_rtype === RT_FIX && ldst_val
+  def writes_irf = dst_rtype === RT_FIX && ldst_val
 
   // Getters that help with arbitration during scheduling
-  def prs1_do_read   = lrs1_rtype === RT_FIX && !prs1_bypass && lrs1 =/= 0.U
-  def prs2_do_read   = lrs2_rtype === RT_FIX && !prs2_bypass && lrs2 =/= 0.U
+  def prs1_reads_irf = lrs1_rtype === RT_FIX && !prs1_bypass && lrs1 =/= 0.U
+  def prs2_reads_irf = lrs2_rtype === RT_FIX && !prs2_bypass && lrs2 =/= 0.U
   def shared_eu_code = eu_code(3,1)
   def exe_wb_latency = fu_code(3) << 2 | (fu_code(1) | fu_code(0))
 }
