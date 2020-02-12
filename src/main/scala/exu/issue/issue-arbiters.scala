@@ -68,8 +68,7 @@ class WritebackArbiter(implicit p: Parameters) extends BoomModule
     val fire = Input(Vec(coreWidth, Bool()))
   })
 
-  val maxLatency = 3
-  val wb_table = Reg(Vec(coreWidth, UInt(maxLatency.W)))
+  val wb_table = Reg(Vec(coreWidth, UInt(maxSchedWbLat.W)))
 
   for (w <- 0 until coreWidth) {
     val latency = io.uops(w).exe_wb_latency
