@@ -17,7 +17,7 @@ import chisel3.util._
 import freechips.rocketchip.config.Parameters
 
 import boom.bpu.BranchPredInfo
-import boom.exu.FUConstants
+import boom.exu.{FUConstants, FastWakeup}
 
 /**
  * Extension to BoomBundle to add a MicroOp
@@ -202,11 +202,25 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
   def writes_irf = dst_rtype === RT_FIX && ldst_val
 
-  // Getters that help with arbitration during scheduling
+  // Getters that help with scheduling
   def prs1_reads_irf = lrs1_rtype === RT_FIX && !prs1_bypass && lrs1 =/= 0.U
   def prs2_reads_irf = lrs2_rtype === RT_FIX && !prs2_bypass && lrs2 =/= 0.U
   def shared_eu_code = eu_code(3,1)
   def exe_wb_latency = fu_code(3) << 2 | (fu_code(1) | fu_code(0))
+  def exe_bp_latency = exe_wb_latency | fu_code(2) << 1     // Loads are bypassable but are not scheduled writebacks
+
+  // Generate the fast wakeup signal the uop emits upon being issued
+  def fast_wakeup(grant: Bool): Valid[FastWakeup] = {
+    val fwu = Wire(Valid(new FastWakeup))
+
+    fwu.bits.pdst   := pdst
+    fwu.bits.status := exe_bp_latency << 2
+    fwu.bits.alu    := fu_code(0)
+    fwu.bits.mem    := fu_code(2)
+    fwu.valid       := grant && writes_irf && bypassable    // TODO bypassable should be a subset of writes_irf
+
+    fwu
+  }
 }
 
 /**
