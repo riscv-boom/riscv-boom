@@ -20,6 +20,14 @@ import boom.common._
 import boom.util._
 import FUConstants._
 
+class FastWakeup extends BoomBundle
+{
+  val pdst   = UInt(ipregSz.W)
+  val status = UInt(operandStatusSz.W)
+  val alu    = Bool()
+  val mem    = Bool()
+}
+
 /**
  * IO bundle to interact with Issue slot
  *
@@ -34,17 +42,17 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
 
   val fu_avail      = Input(UInt(FUC_SZ.W))
 
-  val brinfo        = Input(new BrResolutionInfo())
+  val brinfo        = Input(new BrResolutionInfo)
   val kill          = Input(Bool()) // pipeline flush
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
   val ldspec_miss   = Input(Bool())
 
   val slow_wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
-  val fast_wakeup   = Input(Valid(UInt(ipregSz.W)))
+  val fast_wakeup   = Input(Valid(new FastWakeup))
 
-  val in_uop        = Flipped(Valid(new MicroOp())) // Received from dispatch or another slot during compaction
-  val out_uop       = Output(new MicroOp()) // The updated slot uop; will be shifted upwards in a collasping queue
-  val uop           = Output(new MicroOp()) // The current slot's uop. Sent down the pipeline when issued
+  val in_uop        = Flipped(Valid(new MicroOp)) // Received from dispatch or another slot during compaction
+  val out_uop       = Output(new MicroOp) // The updated slot uop; will be shifted upwards in a collasping queue
+  val uop           = Output(new MicroOp) // The current slot's uop. Sent down the pipeline when issued
 
   val debug = {
     val result = new Bundle {
@@ -54,14 +62,6 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
     }
     Output(result)
   }
-}
-
-class FastWakeup extends BoomBundle
-{
-  val pdst   = UInt(ipregSz.W)
-  val status = UInt(operandStatusSz.W)
-  val alu    = Bool()
-  val mem    = Bool()
 }
 
 /**
@@ -115,12 +115,13 @@ class RingIssueSlot(implicit p: Parameters)
   val next_lrs1_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
   val next_lrs2_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
 
-  val state = RegInit(s_invalid)
-  val p1    = RegInit(false.B)
-  val p2    = RegInit(false.B)
-
   val slot_uop = RegInit(NullMicroOp)
   val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, slot_uop)
+  val woke_uop = wakeup(next_uop, fast_wakeup, slow_wakeups)
+
+  val state = RegInit(s_invalid)
+  val p1    = slot_uop.prs1_ready
+  val p2    = slot_uop.prs2_ready
 
   //----------------------------------------------------------------------------------------------------
   // next slot state computation
@@ -169,52 +170,6 @@ class RingIssueSlot(implicit p: Parameters)
   when (io.in_uop.valid) {
     slot_uop := io.in_uop.bits
     assert (is_invalid || io.clear || io.kill, "trying to overwrite a valid issue slot.")
-  }
-
-  // Wakeup Compare Logic
-
-  when (io.in_uop.valid) {
-    p1 := !(io.in_uop.bits.prs1_busy)
-    p2 := !(io.in_uop.bits.prs2_busy)
-  }
-
-  // Perform slow wakeups
-  // TODO can optimize this once column steering is implemented
-  // Or, should we leave it like this to allow greater dispatching flexibility? TBD.
-  for (w <- 0 until coreWidth*2) {
-    when (io.slow_wakeups(w).valid &&
-         (io.slow_wakeups(w).bits === next_uop.prs1)) {
-      p1 := true.B
-    }
-    when (io.slow_wakeups(w).valid &&
-         (io.slow_wakeups(w).bits === next_uop.prs2)) {
-      p2 := true.B
-    }
-  }
-
-  // These should be false unless a fast wakeup hit during the previous cycle
-  slot_uop.prs1_bypass := false.B
-  slot_uop.prs2_bypass := false.B
-
-  // Can't currently issue two cycles after recieving a fast wakeup,
-  // as there is only 1 bypass path and the result still needs to reach the regfile.
-  when (next_uop.prs1_bypass) {
-    p1 := false.B
-  }
-  when (next_uop.prs2_bypass) {
-    p2 := false.B
-  }
-
-  // Perform fast wakeup
-  val fast_prs = next_uop.GetFastOperand
-  when (io.fast_wakeup.valid && fast_prs === io.fast_wakeup.bits) {
-    when (next_uop.fast_prs_sel) {
-      p2 := true.B
-      slot_uop.prs2_bypass := next_uop.prs2_busy
-    } .otherwise {
-      p1 := true.B
-      slot_uop.prs1_bypass := next_uop.prs1_busy
-    }
   }
 
   // Handle branch misspeculations
