@@ -47,11 +47,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // What is the next state of this uop in the issue window? useful
   // for the compacting queue.
   val iw_state         = UInt(2.W)
-  // Has operand 1 or 2 been waken speculatively by a load?
-  // Only integer operands are speculaively woken up,
-  // so we can ignore p3.
-  val iw_p1_poisoned   = Bool()
-  val iw_p2_poisoned   = Bool()
 
   val allocate_brtag   = Bool()                      // does this allocate a branch tag? (is branch or JR but not JAL)
   val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs a regular PC+4 inst?
@@ -95,16 +90,37 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val prs3             = UInt(maxPregSz.W)
   val stale_pdst       = UInt(maxPregSz.W)
 
-  val fast_prs_sel     = Bool() // Which prs was used to pick a dst column? Can receive a bypassed operand.
-                                // 0 = prs1, 1 = prs2
-  def GetFastOperand   = Mux(fast_prs_sel, prs2, prs1)
-
   val prs1_busy        = Bool()
   val prs2_busy        = Bool()
   val prs3_busy        = Bool()
 
-  val prs1_bypass      = Bool() // Was the uop immediately scheduled after prs1 matched a fast wakeup?
-  val prs2_bypass      = Bool() // Ditto
+  // Selectors for operands in the scheduler
+  val busy_operand_sel = Bool() // Which prs was used to pick a dst column? Can receive a bypassed operand.
+  def busy_operand     = Mux(busy_operand_sel, prs2, prs1)
+  def chained_operand  = Mux(busy_operand_sel, prs1, prs2)
+
+  // Status of operands in the execution pipeline
+  val prs1_status      = UInt(operandStatusSz.W)
+  val prs2_status      = UInt(operandStatusSz.W)
+
+  // Woken up by an alu operation
+  val prs1_can_bypass_alu = Bool()
+  val prs2_can_bypass_alu = Bool()
+
+  // Woken up by a load
+  val prs1_can_bypass_mem = Bool()
+  val prs2_can_bypass_mem = Bool()
+
+  // Bypass the operand from the ALU
+  def prs1_bypass_alu  = can_bypass_alu && prs1_status(2) && !busy_operand_sel
+  def prs2_bypass_alu  = can_bypass_alu && prs2_status(2) &&  busy_operand_sel
+
+  // Bypass the operand from the memory unit
+  def prs1_bypass_mem  = prs1_can_bypass_mem && prs1_status(1)
+  def prs2_bypass_mem  = prs2_can_bypass_mem && prs2_status(1)
+
+  // Might have to cancel issue if there was a load miss
+  def poisoned         = prs1_bypass_mem || prs2_bypass_mem
 
   val exception        = Bool()
   val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity

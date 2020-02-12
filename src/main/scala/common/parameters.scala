@@ -272,6 +272,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val brTagSz         = log2Ceil(maxBrCount)
 
   val maxSchedWbLat   = memLatency max imulLatency // Longest predictable irf wb latency should always be mem or imul
+  val operandStatusSz = maxSchedWbLat + 2          // Longest bypassable exu pipeline + writeback stage + regfile
 
   require (numIntPhysRegs >= (32 + coreWidth))
   require (numFpPhysRegs >= (32 + coreWidth))
