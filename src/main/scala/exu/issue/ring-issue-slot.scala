@@ -45,7 +45,7 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val brinfo        = Input(new BrResolutionInfo)
   val kill          = Input(Bool()) // pipeline flush
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
-  val ldspec_miss   = Input(Bool())
+  val ld_miss       = Input(Bool())
 
   val slow_wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
   val fast_wakeup   = Input(Valid(new FastWakeup))

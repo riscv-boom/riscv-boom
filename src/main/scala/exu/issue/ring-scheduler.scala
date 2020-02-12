@@ -29,7 +29,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val iss_uops = Output(Vec(coreWidth, Valid(new MicroOp)))
 
     val wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
-    val ld_miss  = Input(Bool()) // TODO use this
+    val ld_miss  = Input(UInt(coreWidth.W)) // Per-column load miss vector
 
     val fu_avail = Input(UInt(FUC_SZ.W))
 
@@ -49,7 +49,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   for (w <- 0 until coreWidth) {
     for (i <- 0 until numSlotsPerColumn) {
       slots(w)(i).slow_wakeups := io.wakeups
-      slots(w)(i).ldspec_miss  := io.ld_miss
+      slots(w)(i).ld_miss      := io.ld_miss((w - 1) % coreWidth)
 
       slots(w)(i).brinfo := io.brinfo
       slots(w)(i).kill   := io.kill
@@ -139,24 +139,26 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   //----------------------------------------------------------------------------------------------------
   // Grant, Fast Wakeup, and Issue
 
+  val do_issue = arb_gnts & ~RotateLeft(io.ld_miss)
+
   // Grant signals
   for (w <- 0 until coreWidth) {
     for (i <- 0 until numSlotsPerColumn) {
-      slots(w)(i).grant := iss_sels(w)(i) && arb_gnts(w)
+      slots(w)(i).grant := iss_sels(w)(i) && do_issue(w)
     }
   }
 
   // Connect fast wakeups
   for (w <- 0 until coreWidth) {
     for (slot <- slots((w + 1) % coreWidth)) {
-      slot.fast_wakeup := sel_uops(w).fast_wakeup(arb_gnts(w))
+      slot.fast_wakeup := sel_uops(w).fast_wakeup(do_issue(w))
     }
   }
 
   // Hookup issue output
   for (w <- 0 until coreWidth) {
     io.iss_uops(w).bits  := sel_uops(w)
-    io.iss_uops(w).valid := arb_gnts(w)
+    io.iss_uops(w).valid := do_issue(w)
   }
 
   //----------------------------------------------------------------------------------------------------
