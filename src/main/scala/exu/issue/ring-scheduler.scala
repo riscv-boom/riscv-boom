@@ -49,7 +49,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   for (w <- 0 until coreWidth) {
     for (i <- 0 until numSlotsPerColumn) {
       slots(w)(i).slow_wakeups := io.wakeups
-      slots(w)(i).ld_miss      := io.ld_miss((w - 1) % coreWidth)
+      slots(w)(i).ld_miss      := io.ld_miss((w - 1 + coreWidth) % coreWidth)
 
       slots(w)(i).brinfo := io.brinfo
       slots(w)(i).kill   := io.kill

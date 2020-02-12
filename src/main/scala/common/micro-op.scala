@@ -47,6 +47,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // What is the next state of this uop in the issue window? useful
   // for the compacting queue.
   val iw_state         = UInt(2.W)
+  val iw_p1_poisoned   = Bool()
+  val iw_p2_poisoned   = Bool()
 
   val allocate_brtag   = Bool()                      // does this allocate a branch tag? (is branch or JR but not JAL)
   val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs a regular PC+4 inst?
@@ -117,12 +119,15 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def prs2_ready       = (prs2_status & Mux(prs2_can_bypass_alu, 3.U, 7.U))(2,0).orR
 
   // Bypass the operand from the ALU
-  def prs1_bypass_alu  = can_bypass_alu && prs1_status(2) && !busy_operand_sel
-  def prs2_bypass_alu  = can_bypass_alu && prs2_status(2) &&  busy_operand_sel
+  def prs1_bypass_alu  = prs1_can_bypass_alu && prs1_status(2)
+  def prs2_bypass_alu  = prs2_can_bypass_alu && prs2_status(2)
 
   // Bypass the operand from the memory unit
   def prs1_bypass_mem  = prs1_can_bypass_mem && prs1_status(1)
   def prs2_bypass_mem  = prs2_can_bypass_mem && prs2_status(1)
+
+  def prs1_bypass      = prs1_status(2,1).orR
+  def prs2_bypass      = prs2_status(2,1).orR
 
   // Might have to cancel issue if there was a load miss
   def poisoned         = prs1_bypass_mem || prs2_bypass_mem
@@ -217,7 +222,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
     fwu.bits.status := exe_bp_latency << 2
     fwu.bits.alu    := fu_code(0)
     fwu.bits.mem    := fu_code(2)
-    fwu.valid       := grant && writes_irf && fu_code(0,3).orR  // This should work since non-forwardable loads are unique
+    fwu.valid       := grant && writes_irf && fu_code(3,0).orR  // This should work since non-forwardable loads are 'unique'
 
     fwu
   }

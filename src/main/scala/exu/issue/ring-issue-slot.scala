@@ -20,7 +20,7 @@ import boom.common._
 import boom.util._
 import FUConstants._
 
-class FastWakeup extends BoomBundle
+class FastWakeup(implicit p: Parameters) extends BoomBundle
 {
   val pdst   = UInt(ipregSz.W)
   val status = UInt(operandStatusSz.W)
@@ -77,17 +77,17 @@ class RingIssueSlot(implicit p: Parameters)
   // Helpers
 
   def wakeup(uop: MicroOp, fwu: Valid[FastWakeup], swu: Seq[Valid[UInt]]): MicroOp = {
-    wu_uop = Wire(new MicroOp)
+    val wu_uop = Wire(new MicroOp)
     wu_uop := uop
 
     val do_fast_wakeup = fwu.bits.pdst === uop.busy_operand && fwu.valid
 
     wu_uop.prs1_status := ( uop.prs1_status >> 1
                           | Mux(do_fast_wakeup && !uop.busy_operand_sel, fwu.bits.status, 0.U)
-                          | swu.foldLeft(0.U) ((wu,ss) => ss | Mux(wu.bits.pdst === uop.prs1 && wu.valid), 1.U, 0.U) )
+                          | swu.foldLeft(0.U) ((ss,wu) => ss | Mux(wu.bits === uop.prs1 && wu.valid, 1.U, 0.U)) )
     wu_uop.prs2_status := ( uop.prs2_status >> 1
                           | Mux(do_fast_wakeup &&  uop.busy_operand_sel, fwu.bits.status, 0.U)
-                          | swu.foldLeft(0.U) ((wu,ss) => ss | Mux(wu.bits.pdst === uop.prs2 && wu.valid), 1.U, 0.U) )
+                          | swu.foldLeft(0.U) ((ss,wu) => ss | Mux(wu.bits === uop.prs2 && wu.valid, 1.U, 0.U)) )
 
     wu_uop.prs1_can_bypass_alu := do_fast_wakeup && !uop.busy_operand_sel && fwu.bits.alu
     wu_uop.prs2_can_bypass_alu := do_fast_wakeup &&  uop.busy_operand_sel && fwu.bits.alu
@@ -117,7 +117,7 @@ class RingIssueSlot(implicit p: Parameters)
 
   val slot_uop = RegInit(NullMicroOp)
   val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, slot_uop)
-  val woke_uop = wakeup(next_uop, fast_wakeup, slow_wakeups)
+  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.slow_wakeups)
 
   val state = RegInit(s_invalid)
   val p1    = slot_uop.prs1_ready
@@ -186,8 +186,8 @@ class RingIssueSlot(implicit p: Parameters)
   }
 
   // Poison logic which can override the operand statuses of woke_uop
-  when (woke_uop.prs1_bypass_mem && io.ld_miss) slot_uop.prs1_status := 0.U
-  when (woke_uop.prs2_bypass_mem && io.ld_miss) slot_uop.prs2_status := 0.U
+  when (woke_uop.prs1_bypass_mem && io.ld_miss) { slot_uop.prs1_status := 0.U }
+  when (woke_uop.prs2_bypass_mem && io.ld_miss) { slot_uop.prs2_status := 0.U }
 
   //----------------------------------------------------------------------------------------------------
   // Request Logic
