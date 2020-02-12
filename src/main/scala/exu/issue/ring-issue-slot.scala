@@ -56,6 +56,14 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   }
 }
 
+class FastWakeup extends BoomBundle
+{
+  val pdst   = UInt(ipregSz.W)
+  val status = UInt(operandStatusSz.W)
+  val alu    = Bool()
+  val mem    = Bool()
+}
+
 /**
  * Single issue slot. Holds a uop within the issue queue
  *
@@ -65,6 +73,35 @@ class RingIssueSlot(implicit p: Parameters)
   extends BoomModule
   with IssueUnitConstants
 {
+  //----------------------------------------------------------------------------------------------------
+  // Helpers
+
+  def wakeup(uop: MicroOp, fwu: Valid[FastWakeup], swu: Seq[Valid[UInt]]): MicroOp = {
+    wu_uop = Wire(new MicroOp)
+    wu_uop := uop
+
+    val do_fast_wakeup = fwu.bits.pdst === uop.busy_operand && fwu.valid
+
+    wu_uop.prs1_status := ( uop.prs1_status >> 1
+                          | Mux(do_fast_wakeup && !uop.busy_operand_sel, fwu.bits.status, 0.U)
+                          | swu.foldLeft(0.U) ((wu,ss) => ss | Mux(wu.bits.pdst === uop.prs1 && wu.valid), 1.U, 0.U) )
+    wu_uop.prs2_status := ( uop.prs2_status >> 1
+                          | Mux(do_fast_wakeup &&  uop.busy_operand_sel, fwu.bits.status, 0.U)
+                          | swu.foldLeft(0.U) ((wu,ss) => ss | Mux(wu.bits.pdst === uop.prs2 && wu.valid), 1.U, 0.U) )
+
+    wu_uop.prs1_can_bypass_alu := do_fast_wakeup && !uop.busy_operand_sel && fwu.bits.alu
+    wu_uop.prs2_can_bypass_alu := do_fast_wakeup &&  uop.busy_operand_sel && fwu.bits.alu
+
+    wu_uop.prs1_can_bypass_mem := do_fast_wakeup && !uop.busy_operand_sel && fwu.bits.mem
+    wu_uop.prs2_can_bypass_mem := do_fast_wakeup &&  uop.busy_operand_sel && fwu.bits.mem
+
+    wu_uop
+  }
+
+
+  //----------------------------------------------------------------------------------------------------
+  // Signals
+
   val io = IO(new RingIssueSlotIO)
 
   // slot invalid?
@@ -85,7 +122,7 @@ class RingIssueSlot(implicit p: Parameters)
   val slot_uop = RegInit(NullMicroOp)
   val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, slot_uop)
 
-  //-----------------------------------------------------------------------------
+  //----------------------------------------------------------------------------------------------------
   // next slot state computation
   // compute the next state for THIS entry slot (in a collasping queue, the
   // current uop may get moved elsewhere, and a new uop can enter
@@ -100,7 +137,7 @@ class RingIssueSlot(implicit p: Parameters)
     state := next_state
   }
 
-  //-----------------------------------------------------------------------------
+  //----------------------------------------------------------------------------------------------------
   // "update" state
   // compute the next state for the micro-op in this slot. This micro-op may
   // be moved elsewhere, so the "next_state" travels with it.
@@ -193,7 +230,7 @@ class RingIssueSlot(implicit p: Parameters)
     slot_uop.br_mask := next_br_mask
   }
 
-  //-------------------------------------------------------------
+  //----------------------------------------------------------------------------------------------------
   // Request Logic
 
   val can_request = (io.fu_avail & slot_uop.fu_code).orR
@@ -206,7 +243,9 @@ class RingIssueSlot(implicit p: Parameters)
     io.request := false.B
   }
 
-  //assign outputs
+  //----------------------------------------------------------------------------------------------------
+  // Assign Outputs
+
   io.valid := is_valid
   io.uop := slot_uop
 
