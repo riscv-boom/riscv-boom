@@ -217,7 +217,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
     fwu.bits.status := exe_bp_latency << 2
     fwu.bits.alu    := fu_code(0)
     fwu.bits.mem    := fu_code(2)
-    fwu.valid       := grant && writes_irf && bypassable    // TODO bypassable should be a subset of writes_irf
+    fwu.valid       := grant && writes_irf && fu_code(0,3).orR  // This should work since non-forwardable loads are unique
 
     fwu
   }
