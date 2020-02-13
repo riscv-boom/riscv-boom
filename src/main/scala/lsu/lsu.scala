@@ -1335,9 +1335,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   }
 
   // TODO do this for an n-wide lsu
-  val spec_ld_hit = RegNext(io.core.spec_ld_wakeup.valid) &&
-    io.core.exe(0).iresp.valid && io.core.exe(0).iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop(0).ldq_idx)
-  io.core.ld_miss := Mux(spec_ld_hit, 0.U, RegNext(mem_incoming_uop(0).pdst_col))
+  val spec_ld_miss = RegNext(io.core.spec_ld_wakeup.valid) &&
+    !(io.core.exe(0).iresp.valid && io.core.exe(0).iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop(0).ldq_idx))
+  io.core.ld_miss := Mux(spec_ld_miss, RegNext(mem_incoming_uop(0).pdst_col), 0.U)
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
