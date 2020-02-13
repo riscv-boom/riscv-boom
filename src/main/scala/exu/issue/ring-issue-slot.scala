@@ -82,10 +82,10 @@ class RingIssueSlot(implicit p: Parameters)
 
     val do_fast_wakeup = fwu.bits.pdst === uop.busy_operand && fwu.valid
 
-    wu_uop.prs1_status := ( uop.prs1_status >> 1
+    wu_uop.prs1_status := ( uop.prs1_status >> 1 | uop.prs1_status & 1.U |
                           | Mux(do_fast_wakeup && !uop.busy_operand_sel, fwu.bits.status, 0.U)
                           | swu.foldLeft(0.U) ((ss,wu) => ss | Mux(wu.bits === uop.prs1 && wu.valid, 1.U, 0.U)) )
-    wu_uop.prs2_status := ( uop.prs2_status >> 1
+    wu_uop.prs2_status := ( uop.prs2_status >> 1 | uop.prs2_status & 1.U |
                           | Mux(do_fast_wakeup &&  uop.busy_operand_sel, fwu.bits.status, 0.U)
                           | swu.foldLeft(0.U) ((ss,wu) => ss | Mux(wu.bits === uop.prs2 && wu.valid, 1.U, 0.U)) )
 
