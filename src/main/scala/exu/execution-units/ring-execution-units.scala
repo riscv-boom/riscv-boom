@@ -159,6 +159,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   }
 
   // Generate memory access units. Only 1 supported for now
+  require (memWidth == 1)
   for (w <- 0 until memWidth) {
     val mem_unit = Module(new ALUExeUnit(
       hasAlu = false,
@@ -203,7 +204,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   val exe_uops   = Wire(Vec(coreWidth, new MicroOp))
   val rs1_data   = Wire(Vec(coreWidth, Bits(xLen.W)))
   val rs2_data   = Wire(Vec(coreWidth, Bits(xLen.W)))
-  val exe_reqs   = Wire(Vec(coreWidth, Valid(new ExeUnitReq(xLen))))
+  val exe_reqs   = Wire(Vec(coreWidth, Valid(new FuncUnitReq(xLen))))
 
   // uop registers
   for (w <- 0 until coreWidth) {
@@ -216,12 +217,13 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   for (w <- 0 until coreWidth) {
     val req = io.exe_reqs(w).bits
     val k = (coreWidth + w - 1) % coreWidth
+
     rs1_data(w) := RegNext(Mux(req.uop.prs1_bypass_alu, column_exe_units(k).io.bypass.data(0),
-                           Mux(req.uop.prs1_bypass_mem, mem_unit.io.ll_iresp.bits.data,
+                           Mux(req.uop.prs1_bypass_mem, mem_units(0).io.ll_iresp.bits.data,
                            Mux(req.uop.prs1_bypass    , io.exe_resps(k).bits.data,
                                                         req.rs1_data))))
     rs2_data(w) := RegNext(Mux(req.uop.prs2_bypass_alu, column_exe_units(k).io.bypass.data(0),
-                           Mux(req.uop.prs2_bypass_mem, mem_unit.io.ll_iresp.bits.data,
+                           Mux(req.uop.prs2_bypass_mem, mem_units(0).io.ll_iresp.bits.data,
                            Mux(req.uop.prs2_bypass    , io.exe_resps(k).bits.data,
                                                         req.rs2_data))))
   }
@@ -232,6 +234,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     exe_reqs(w).bits.uop      := exe_uops(w)
     exe_reqs(w).bits.rs1_data := rs1_data(w)
     exe_reqs(w).bits.rs2_data := rs2_data(w)
+    exe_reqs(w).bits.rs3_data := DontCare
   }
 
   //----------------------------------------------------------------------------------------------------
