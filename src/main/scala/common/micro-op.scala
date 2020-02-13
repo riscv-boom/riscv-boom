@@ -115,8 +115,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
   // Is the operand ready for issue? (present bit)
   // Very hard coded and unlikely to change substantially
-  def prs1_ready       = (prs1_status & Mux(prs1_can_bypass_alu, 3.U, 7.U))(2,0).orR
-  def prs2_ready       = (prs2_status & Mux(prs2_can_bypass_alu, 3.U, 7.U))(2,0).orR
+  def prs1_ready       = (prs1_status & Mux(prs1_can_bypass_alu, 7.U, 3.U))(2,0).orR
+  def prs2_ready       = (prs2_status & Mux(prs2_can_bypass_alu, 7.U, 3.U))(2,0).orR
 
   // Bypass the operand from the ALU
   def prs1_bypass_alu  = prs1_can_bypass_alu && prs1_status(2)
