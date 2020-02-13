@@ -30,7 +30,9 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
 
   val nWrBypassEntries = 2
   val io = IO( new Bundle {
-    val f0_req = Input(Valid(new BranchPredictionBankRequest))
+    val f1_req_valid = Input(Bool())
+    val f1_req_pc    = Input(UInt(vaddrBitsExtended.W))
+    val f1_req_ghist = Input(UInt(globalHistoryLength.W))
 
     val f3_resp = Output(Vec(bankWidth, Valid(new TageResp)))
 
@@ -83,26 +85,18 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
 
   val tageEntrySz = 1 + tagSz + 3
 
-  val (s0_hashed_idx, s0_tag) = compute_tag_and_hash(fetchIdx(io.f0_req.bits.pc), io.f0_req.bits.hist)
+  val (s1_hashed_idx, s1_tag) = compute_tag_and_hash(fetchIdx(io.f1_req_pc), io.f1_req_ghist)
 
   val hi_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
   val lo_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
   val table  = SyncReadMem(nRows, Vec(bankWidth, UInt(tageEntrySz.W)))
 
-  val s1_hashed_idx = RegNext(s0_hashed_idx)
-  val s1_tag        = RegNext(s0_tag)
 
-  val s1_req       = RegNext(io.f0_req)
-  val s1_req_rtage = VecInit(table.read(s0_hashed_idx, io.f0_req.valid).map(_.asTypeOf(new TageEntry)))
-  val s1_req_rhius = hi_us.read(s0_hashed_idx, io.f0_req.valid)
-  val s1_req_rlous = lo_us.read(s0_hashed_idx, io.f0_req.valid)
-  val s1_req_rhits = VecInit(s1_req_rtage.map(e => e.valid && e.tag === s1_tag && !doing_reset))
+  val s2_req_rtage = VecInit(table.read(s1_hashed_idx, io.f1_req_valid).map(_.asTypeOf(new TageEntry)))
+  val s2_req_rhius = hi_us.read(s1_hashed_idx, io.f1_req_valid)
+  val s2_req_rlous = lo_us.read(s1_hashed_idx, io.f1_req_valid)
+  val s2_req_rhits = VecInit(s2_req_rtage.map(e => e.valid && e.tag === s1_tag && !doing_reset))
 
-  val s2_req          = RegNext(s1_req)
-  val s2_req_rtage = RegNext(s1_req_rtage)
-  val s2_req_rhius = RegNext(s1_req_rhius)
-  val s2_req_rlous = RegNext(s1_req_rlous)
-  val s2_req_rhits = RegNext(s1_req_rhits)
   val s2_tag       = RegNext(s1_tag)
 
   for (w <- 0 until bankWidth) {
@@ -226,12 +220,15 @@ class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implici
   }
 
   val tables = params.tableInfo map {
-    case (n, l, s) => Module(new TageTable(n, s, l, params.uBitPeriod))
+    case (n, l, s) => {
+      val t = Module(new TageTable(n, s, l, params.uBitPeriod))
+      t.io.f1_req_valid := RegNext(io.f0_req.valid)
+      t.io.f1_req_pc    := RegNext(io.f0_req.bits.pc)
+      t.io.f1_req_ghist := RegNext(io.f0_req.bits.hist)
+      t
+    }
   }
 
-
-
-  tables.map(_.io.f0_req  := io.f0_req)
   val f3_resps = VecInit(tables.map(_.io.f3_resp))
 
   val s1_update_meta = s1_update.bits.meta.asTypeOf(new TageMeta)
