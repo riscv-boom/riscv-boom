@@ -307,7 +307,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val bpd = Module(new BranchPredictor)
   bpd.io.f3_fire := false.B
-  val ras = Reg(Vec(nRasEntries, UInt(vaddrBitsExtended.W)))
+  val ras = Module(new BoomRAS)
 
   val icache = outer.icache.module
   icache.io.hartid     := io.hartid
@@ -674,19 +674,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   f3_fetch_bundle.cfi_idx.valid := f3_redirects.reduce(_||_)
   f3_fetch_bundle.cfi_idx.bits  := PriorityEncoder(f3_redirects)
-
-  f3_fetch_bundle.ras_top := ras(f3_fetch_bundle.ghist.ras_idx)
+  ras.io.read_idx := f3_fetch_bundle.ghist.ras_idx
+  f3_fetch_bundle.ras_top := ras.io.read_addr
   // Redirect earlier stages only if the later stage
   // can consume this packet
-  val ras_write     = Reg(Bool())
-  val ras_write_pc  = Reg(UInt(vaddrBitsExtended.W))
-  val ras_write_idx = Reg(UInt(log2Ceil(nRasEntries).W))
 
   val f3_predicted_target = Mux(f3_redirects.reduce(_||_),
     Mux(f3_fetch_bundle.cfi_is_ret,
-      Mux(ras_write,
-        ras_write_pc,
-        f3_fetch_bundle.ras_top),
+      ras.io.read_addr,
       f3_targs(PriorityEncoder(f3_redirects))
     ),
     nextFetch(f3_fetch_bundle.pc)
@@ -705,18 +700,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   )
 
 
-  ras_write    := false.B
-  ras_write_pc := f3_aligned_pc + (f3_fetch_bundle.cfi_idx.bits << 1) + Mux(
-        f3_fetch_bundle.cfi_npc_plus4, 4.U, 2.U)
-  ras_write_idx := WrapInc(f3_fetch_bundle.ghist.ras_idx, nRasEntries)
-
-  when (ras_write) {
-    ras(ras_write_idx) := ras_write_pc
-  }
+  ras.io.write_valid := false.B
+  ras.io.write_addr  := f3_aligned_pc + (f3_fetch_bundle.cfi_idx.bits << 1) + Mux(
+    f3_fetch_bundle.cfi_npc_plus4, 4.U, 2.U)
+  ras.io.write_idx   := WrapInc(f3_fetch_bundle.ghist.ras_idx, nRasEntries)
 
   when (f3.io.deq.valid && f4_ready) {
     when (f3_fetch_bundle.cfi_is_call && f3_fetch_bundle.cfi_idx.valid) {
-      ras_write := true.B
+      ras.io.write_valid := true.B
     }
     when (f3_redirects.reduce(_||_)) {
       f3_prev_is_half := false.B
@@ -767,7 +758,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   bpd.io.update := ftq.io.bpdupdate
   when (ftq.io.ras_update) {
-    ras(ftq.io.ras_update_idx) := ftq.io.ras_update_pc
+    ras.io.write_valid := true.B
+    ras.io.write_idx   := ftq.io.ras_update_idx
+    ras.io.write_addr  := ftq.io.ras_update_pc
   }
 
 
