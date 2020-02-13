@@ -82,10 +82,12 @@ class RingIssueSlot(implicit p: Parameters)
 
     val do_fast_wakeup = fwu.bits.pdst === uop.busy_operand && fwu.valid
 
-    wu_uop.prs1_status := ( uop.prs1_status >> 1 | uop.prs1_status & 1.U |
+    wu_uop.prs1_status := ( uop.prs1_status >> 1
+                          | uop.prs1_status & 1.U
                           | Mux(do_fast_wakeup && !uop.busy_operand_sel, fwu.bits.status, 0.U)
                           | swu.foldLeft(0.U) ((ss,wu) => ss | Mux(wu.bits === uop.prs1 && wu.valid, 1.U, 0.U)) )
-    wu_uop.prs2_status := ( uop.prs2_status >> 1 | uop.prs2_status & 1.U |
+    wu_uop.prs2_status := ( uop.prs2_status >> 1
+                          | uop.prs2_status & 1.U
                           | Mux(do_fast_wakeup &&  uop.busy_operand_sel, fwu.bits.status, 0.U)
                           | swu.foldLeft(0.U) ((ss,wu) => ss | Mux(wu.bits === uop.prs2 && wu.valid, 1.U, 0.U)) )
 
@@ -167,8 +169,9 @@ class RingIssueSlot(implicit p: Parameters)
     }
   }
 
+  slot_uop := woke_uop
+
   when (io.in_uop.valid) {
-    slot_uop := io.in_uop.bits
     assert (is_invalid || io.clear || io.kill, "trying to overwrite a valid issue slot.")
   }
 
@@ -218,8 +221,6 @@ class RingIssueSlot(implicit p: Parameters)
   io.out_uop.lrs1_rtype := next_lrs1_rtype
   io.out_uop.lrs2_rtype := next_lrs2_rtype
   io.out_uop.br_mask    := next_br_mask
-  io.out_uop.prs1_busy  := !p1
-  io.out_uop.prs2_busy  := !p2
 
   when (state === s_valid_2) {
     when (p1 && p2) {
