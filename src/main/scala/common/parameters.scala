@@ -177,8 +177,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   val intToFpLatency = boomParams.intToFpLatency
 
-  val memLatency = 2
-  require (memLatency == 2, "L1 access latency is not configurable")
+  val memLatency = 3
+  require (memLatency == 3, "L1 access latency is not configurable")
 
   //************************************
   // Issue Units

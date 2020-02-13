@@ -211,8 +211,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def prs1_reads_irf = lrs1_rtype === RT_FIX && !prs1_bypass && lrs1 =/= 0.U
   def prs2_reads_irf = lrs2_rtype === RT_FIX && !prs2_bypass && lrs2 =/= 0.U
   def shared_eu_code = eu_code(3,1)
-  def exe_wb_latency = fu_code(3) << 2 | (fu_code(1) | fu_code(0))
-  def exe_bp_latency = exe_wb_latency | fu_code(2) << 1     // Loads are bypassable but are not scheduled writebacks
+  def exe_wb_latency = fu_code(3) << (imulLatency - 1) | (fu_code(1) | fu_code(0))
+  def exe_bp_latency = exe_wb_latency | fu_code(2) << (memLatency - 1) // Loads are bypassable but are not scheduled writebacks
 
   // Generate the fast wakeup signal the uop emits upon being issued
   def fast_wakeup(grant: Bool): Valid[FastWakeup] = {
