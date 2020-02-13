@@ -28,7 +28,7 @@ import freechips.rocketchip.tile
 import FUConstants._
 import boom.common._
 import boom.ifu.{GetPCFromFtqIO}
-import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue, BoomCoreStringPrefix}
+import boom.util._
 
 /**
  * Response from Execution Unit. Bundles a MicroOp with data
@@ -396,7 +396,14 @@ class ALUExeUnit(
 
     io.lsu_io.req := maddrcalc.io.resp
 
-    io.ll_iresp <> io.lsu_io.iresp
+    // Mem unit writeback pipeline register
+    val kill = io.kill || IsKilledByBranch(io.brinfo, io.lsu_io.iresp.bits.uop)
+    val resp_bits  = RegNext(io.lsu_io.iresp.bits)
+    resp_bits.uop := GetNewUopAndBrMask(io.lsu_io.iresp.bits.uop, io.brinfo)
+    val resp_valid = RegNext(io.lsu_io.iresp.valid && !kill)
+
+    io.ll_iresp.bits  := resp_bits
+    io.ll_iresp.valid := resp_valid
     if (usingFPU) {
       io.ll_fresp <> io.lsu_io.fresp
     }
