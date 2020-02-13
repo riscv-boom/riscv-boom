@@ -52,11 +52,6 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
   val rrd_valids       = Wire(Vec(coreWidth, Bool()))
   val rrd_uops         = Wire(Vec(coreWidth, new MicroOp))
 
-  val exe_reg_valids   = RegInit(VecInit(Seq.fill(coreWidth) { false.B }))
-  val exe_reg_uops     = Reg(Vec(coreWidth, new MicroOp))
-  val exe_reg_rs1_data = Reg(Vec(coreWidth, Bits(xLen.W)))
-  val exe_reg_rs2_data = Reg(Vec(coreWidth, Bits(xLen.W)))
-
   //-------------------------------------------------------------
   // hook up inputs
 
@@ -119,48 +114,13 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
     assert (PopCount(prs2_data_banks(w)) <= 1.U, "[rrd] prs2_data xbar collision on port " + w)
   }
 
-  // Setup exe uops
-  // TODO These registers and the bypassing logic should be moved to the new exu module
-  for (w <- 0 until coreWidth) {
-    val rrd_kill = io.kill || IsKilledByBranch(io.brinfo, rrd_uops(w))
-
-    exe_reg_valids(w) := !rrd_kill && rrd_valids(w)
-    // TODO use only the valids signal, don't require us to set nullUop
-    // why is it like this in the first place?
-    exe_reg_uops(w)   := Mux(rrd_kill, NullMicroOp, rrd_uops(w))
-
-    exe_reg_uops(w).br_mask := GetNewBrMask(io.brinfo, rrd_uops(w))
-  }
-
-  //-------------------------------------------------------------
-  //-------------------------------------------------------------
-  // BYPASS MUXES -----------------------------------------------
-
-  val bypassed_rs1_data = Wire(Vec(coreWidth, Bits(xLen.W)))
-  val bypassed_rs2_data = Wire(Vec(coreWidth, Bits(xLen.W)))
-
-  for (w <- 0 until coreWidth) {
-    bypassed_rs1_data(w) := Mux(rrd_uops(w).prs1_bypass, io.bypass.data(w), rrd_rs1_data(w))
-    bypassed_rs2_data(w) := Mux(rrd_uops(w).prs2_bypass, io.bypass.data(w), rrd_rs2_data(w))
-  }
-
-  //-------------------------------------------------------------
-  //-------------------------------------------------------------
-  // **** Execute Stage ****
-  //-------------------------------------------------------------
-  //-------------------------------------------------------------
-
-  for (w <- 0 until coreWidth) {
-    exe_reg_rs1_data(w) := bypassed_rs1_data(w)
-    exe_reg_rs2_data(w) := bypassed_rs2_data(w)
-  }
-
   //-------------------------------------------------------------
   // set outputs to execute pipelines
+
   for (w <- 0 until coreWidth) {
-    io.exe_reqs(w).valid    := exe_reg_valids(w)
-    io.exe_reqs(w).bits.uop := exe_reg_uops(w)
-    io.exe_reqs(w).bits.rs1_data := exe_reg_rs1_data(w)
-    io.exe_reqs(w).bits.rs2_data := exe_reg_rs2_data(w)
+    io.exe_reqs(w).valid    := rrd_valids(w)
+    io.exe_reqs(w).bits.uop := rrd_uops(w)
+    io.exe_reqs(w).bits.rs1_data := rrd_rs1_data(w)
+    io.exe_reqs(w).bits.rs2_data := rrd_rs2_data(w)
   }
 }

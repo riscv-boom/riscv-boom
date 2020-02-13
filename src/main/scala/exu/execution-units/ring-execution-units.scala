@@ -197,14 +197,52 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     + exeUnitsStr.toString)
 
   //----------------------------------------------------------------------------------------------------
+  // Pipeline Registers + Bypassing Logic
+
+  val exe_valids = Wire(Vec(coreWidth, Bool()))
+  val exe_uops   = Wire(Vec(coreWidth, new MicroOp))
+  val rs1_data   = Wire(Vec(coreWidth, Bits(xLen.W)))
+  val rs2_data   = Wire(Vec(coreWidth, Bits(xLen.W)))
+  val exe_reqs   = Wire(Vec(coreWidth, Valid(new ExeUnitReq(xLen))))
+
+  // uop registers
+  for (w <- 0 until coreWidth) {
+    val kill = io.kill || IsKilledByBranch(io.brinfo, io.exe_reqs(w).bits.uop)
+    exe_valids(w) := RegNext(io.exe_reqs(w).valid && !kill)
+    exe_uops(w)   := RegNext(GetNewUopAndBrMask(io.exe_reqs(w).bits.uop, io.brinfo))
+  }
+
+  // Operand data registers and bypassing
+  for (w <- 0 until coreWidth) {
+    val req = io.exe_reqs(w).bits
+    val k = (coreWidth + w - 1) % coreWidth
+    rs1_data(w) := RegNext(Mux(req.uop.prs1_bypass_alu, column_exe_units(k).io.bypass.data(0),
+                           Mux(req.uop.prs1_bypass_mem, mem_unit.io.ll_iresp.bits.data,
+                           Mux(req.uop.prs1_bypass    , io.exe_resps(k).bits.data,
+                                                        req.rs1_data))))
+    rs2_data(w) := RegNext(Mux(req.uop.prs2_bypass_alu, column_exe_units(k).io.bypass.data(0),
+                           Mux(req.uop.prs2_bypass_mem, mem_unit.io.ll_iresp.bits.data,
+                           Mux(req.uop.prs2_bypass    , io.exe_resps(k).bits.data,
+                                                        req.rs2_data))))
+  }
+
+  // Setup requests
+  for (w <- 0 until coreWidth) {
+    exe_reqs(w).valid         := exe_valids(w)
+    exe_reqs(w).bits.uop      := exe_uops(w)
+    exe_reqs(w).bits.rs1_data := rs1_data(w)
+    exe_reqs(w).bits.rs2_data := rs2_data(w)
+  }
+
+  //----------------------------------------------------------------------------------------------------
   // Req -> EU crossbar
 
   val xbarSize = shared_exe_units.length + 1
-  val col_sels = Transpose(VecInit(io.exe_reqs.map(req => req.bits.uop.eu_code & Fill(xbarSize, req.valid))))
+  val col_sels = Transpose(VecInit(exe_reqs.map(req => req.bits.uop.eu_code & Fill(xbarSize, req.valid))))
 
   // Hookup column units
   for (w <- 0 until coreWidth) {
-    column_exe_units(w).io.req.bits  := io.exe_reqs(w).bits
+    column_exe_units(w).io.req.bits  := exe_reqs(w).bits
     column_exe_units(w).io.req.valid := col_sels(0)(w)
 
     column_exe_units(w).io.brinfo := io.brinfo
@@ -215,7 +253,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
   // Hookup shared units
   for ((i,eu) <- (1 until xbarSize) zip shared_exe_units) {
-    eu.io.req.bits  := Mux1H(col_sels(i), io.exe_reqs.map(_.bits))
+    eu.io.req.bits  := Mux1H(col_sels(i), exe_reqs.map(_.bits))
     eu.io.req.valid := col_sels(i).orR
 
     assert (PopCount(col_sels(i)) <= 1.U, "[exe] shared unit request crossbar collision on port " + i)
