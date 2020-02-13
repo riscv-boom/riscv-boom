@@ -118,7 +118,7 @@ class RingIssueSlot(implicit p: Parameters)
   val next_lrs2_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
 
   val slot_uop = RegInit(NullMicroOp)
-  val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, slot_uop)
+  val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, io.out_uop)
   val woke_uop = wakeup(next_uop, io.fast_wakeup, io.slow_wakeups)
 
   val state = RegInit(s_invalid)
@@ -159,12 +159,9 @@ class RingIssueSlot(implicit p: Parameters)
   } .elsewhen (io.grant && (state === s_valid_2)) {
     next_state := s_valid_1
     when (p1) {
-      slot_uop.uopc := uopSTD
       next_uopc := uopSTD
-      slot_uop.lrs1_rtype := RT_X
       next_lrs1_rtype := RT_X
     } .otherwise {
-      slot_uop.lrs2_rtype := RT_X
       next_lrs2_rtype := RT_X
     }
   }
