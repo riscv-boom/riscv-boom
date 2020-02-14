@@ -27,7 +27,7 @@ class RingRegisterReadIO
   val iss_valids = Input(Vec(coreWidth, Bool()))
 
   // interface with register file's read ports
-  val rf_read_ports = Flipped(Vec(coreWidth, new BankReadPort(ipregSz, xLen)))
+  val rf_read_ports = Flipped(Vec(coreWidth, new BankReadPort(log2Ceil(numIntPhysRegs/coreWidth), xLen)))
 
   val bypass = Input(new BypassData(coreWidth, xLen))
 
@@ -86,8 +86,8 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
 
   // Col -> Bank Address Crossbar
   for (w <- 0 until coreWidth) {
-    io.rf_read_ports(w).prs1_addr := Mux1H(prs1_addr_cols(w), io.iss_uops.map(_.prs1))
-    io.rf_read_ports(w).prs2_addr := Mux1H(prs2_addr_cols(w), io.iss_uops.map(_.prs2))
+    io.rf_read_ports(w).prs1_addr := Mux1H(prs1_addr_cols(w), io.iss_uops.map(_.prs1_spec))
+    io.rf_read_ports(w).prs2_addr := Mux1H(prs2_addr_cols(w), io.iss_uops.map(_.prs2_spec))
 
     assert (PopCount(prs1_addr_cols(w)) <= 1.U, "[rrd] prs1_addr xbar collision on port " + w)
     assert (PopCount(prs2_addr_cols(w)) <= 1.U, "[rrd] prs2_addr xbar collision on port " + w)

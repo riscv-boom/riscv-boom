@@ -205,6 +205,12 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def prs2_col  = UIntToOH(ColIdx(prs2))
   def stale_col = UIntToOH(ColIdx(stale_pdst))
 
+  // Get the specifiers of the uop's physical registers with in a column
+  def pdst_spec  = ColSpec(pdst)
+  def prs1_spec  = ColSpec(prs1)
+  def prs2_spec  = ColSpec(prs2)
+  def stale_spec = ColSpec(stale_pdst)
+
   def writes_irf = dst_rtype === RT_FIX && ldst_val
 
   // Getters that help with scheduling

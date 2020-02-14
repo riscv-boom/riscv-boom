@@ -786,7 +786,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Hook the writebacks up to the regfile
   for (w <- 0 until coreWidth) {
     val wbresp = exe_units.io.exe_resps(w)
-    val wbpdst = wbresp.bits.uop.pdst
+    val wbpdst = wbresp.bits.uop.pdst_spec
     val wbdata = wbresp.bits.data
 
     def wbIsValid(rtype: UInt) =
@@ -813,7 +813,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Hook the LL writebacks up to the regfile
   for (w <- 0 until coreWidth) {
     val wbresp = exe_units.io.ll_resps(w)
-    val wbpdst = wbresp.bits.uop.pdst
+    val wbpdst = wbresp.bits.uop.pdst_spec
     val wbdata = wbresp.bits.data
 
     def wbIsValid(rtype: UInt) =

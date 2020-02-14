@@ -64,10 +64,14 @@ abstract class BankedRegisterFile(
   registerWidth: Int)
   (implicit p: Parameters) extends BoomModule
 {
+  val numRegsPerBank = numRegisters / coreWidth
+  val bankAddrSz = log2Ceil(numRegsPerBank)
+  require (numRegisters % coreWidth == 0)
+
   val io = IO(new BoomBundle {
-    val read_ports     = Vec(coreWidth, new BankReadPort(maxPregSz, registerWidth))
-    val write_ports    = Flipped(Vec(coreWidth, Valid(new BankWritePort(maxPregSz, registerWidth))))
-    val ll_write_ports = Flipped(Vec(coreWidth, Valid(new BankWritePort(maxPregSz, registerWidth))))
+    val read_ports     = Vec(coreWidth, new BankReadPort(bankAddrSz, registerWidth))
+    val write_ports    = Flipped(Vec(coreWidth, Valid(new BankWritePort(bankAddrSz, registerWidth))))
+    val ll_write_ports = Flipped(Vec(coreWidth, Valid(new BankWritePort(bankAddrSz, registerWidth))))
   })
 
   private val rf_cost = coreWidth * (2 + 1) * (2 + 1*2) // TODO Does this estimate even make much sense?
@@ -90,9 +94,6 @@ class BankedRegisterFileSynthesizable(
    extends BankedRegisterFile(numRegisters, registerWidth)
 {
   // --------------------------------------------------------------
-
-  val numRegsPerBank = numRegisters / coreWidth
-  require (numRegisters % coreWidth == 0)
 
   val regfile = Seq.fill(coreWidth)( Mem(numRegsPerBank, UInt(registerWidth.W)) )
 
