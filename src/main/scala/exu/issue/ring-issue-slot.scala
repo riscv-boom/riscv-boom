@@ -186,8 +186,8 @@ class RingIssueSlot(implicit p: Parameters)
   }
 
   // Poison logic which can override the operand statuses of woke_uop
-  when (woke_uop.prs1_bypass_mem && io.ld_miss) { slot_uop.prs1_status := 0.U }
-  when (woke_uop.prs2_bypass_mem && io.ld_miss) { slot_uop.prs2_status := 0.U }
+  when (next_uop.prs1_bypass_mem && io.ld_miss) { slot_uop.prs1_status := 0.U }
+  when (next_uop.prs2_bypass_mem && io.ld_miss) { slot_uop.prs2_status := 0.U }
 
   //----------------------------------------------------------------------------------------------------
   // Request Logic
