@@ -199,6 +199,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   //************************************
   // Branch Prediction
   val globalHistoryLength = 64
+  val localHistoryLength = 32
   val bpdMaxMetaLength = 120
 
   val nRasEntries = 32
