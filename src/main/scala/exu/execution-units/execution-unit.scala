@@ -370,9 +370,6 @@ class ALUExeUnit(
     div.io.brinfo              := io.brinfo
     div.io.kill                := io.kill
 
-    // share write port with the pipelined units
-    div.io.resp.ready := !(iresp_fu_units.map(_.io.resp.valid).reduce(_|_))
-
     div_resp_val := div.io.resp.valid
     div_busy     := !div.io.req.ready ||
                     (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV))
