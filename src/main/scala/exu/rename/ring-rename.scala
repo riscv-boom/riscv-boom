@@ -102,10 +102,9 @@ class RingRename(implicit p: Parameters) extends BoomModule
     false,
     false))
   val freelists = Seq.fill(coreWidth) {
-    Module(new RenameFreeList(
+    Module(new RingFreeList(
       coreWidth,
-      numIntPhysRegs / coreWidth,
-      false))
+      numIntPhysRegs / coreWidth))
   }
   val busytable = Module(new RenameBusyTable(
     coreWidth,
@@ -249,7 +248,6 @@ class RingRename(implicit p: Parameters) extends BoomModule
     }
     freelists(c).io.ren_br_tags    := ren2_br_tags
     freelists(c).io.brinfo         := io.brinfo
-    freelists(c).io.pipeline_empty := io.debug_rob_empty
   }
 
   // Freelist outputs.
@@ -260,6 +258,10 @@ class RingRename(implicit p: Parameters) extends BoomModule
 
   assert (ren2_alloc_reqs zip ren2_uops map {case (r,u) => !r || u.pdst =/= 0.U} reduce (_&&_),
            "[rename-stage] A uop is trying to allocate the zero physical register.")
+
+  assert (!io.debug_rob_empty ||
+          freelists.foldLeft(0.U) ((c,f) => c + PopCount(f.io.debug_freelist)) >= (numIntPhysRegs - 32).U,
+          "[freelist] Leaking physical registers.") 
 
   //----------------------------------------------------------------------------------------------------
   // Outputs
