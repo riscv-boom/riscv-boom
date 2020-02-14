@@ -150,10 +150,10 @@ class WithRationalBoomTiles extends Config((site, here, up) => {
 /**
  * N-wide Ring-BOOM.
  */
-class WithRingBooms(n: Int) extends Config((site, here, up) => {
+class WithRingBooms(n: Int, f: Int) extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
-      fetchWidth = (n+1)/2 * 4,
+      fetchWidth = f,
       useCompressed = true,
       decodeWidth = n,
       numRobEntries = 25*n,
@@ -165,7 +165,7 @@ class WithRingBooms(n: Int) extends Config((site, here, up) => {
       numStqEntries = 4*n,
       maxBrCount = 4*n,
       numFetchBufferEntries = 8*n,
-      ftq = FtqParameters(nEntries=16),
+      ftq = FtqParameters(nEntries=50*n/f),
       btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=n, nRAS=16, tagSz=20),
       bpdBaseOnly = None,
       gshare = Some(GShareParameters(historyLength=23, numSets=4096)),
@@ -175,9 +175,9 @@ class WithRingBooms(n: Int) extends Config((site, here, up) => {
       usingFPU = false),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                nSets=64, nWays=2*n, nMSHRs=n, nTLBEntries=16)),
-    icache = Some(ICacheParams(fetchBytes = 2*4, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=2*n, prefetch=true))
+    icache = Some(ICacheParams(fetchBytes = 2*f, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=2*n, prefetch=true))
   )}
-  case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
+  case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 2*f)
   case XLen => 64
   case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
 })
