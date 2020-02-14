@@ -91,11 +91,11 @@ class RingIssueSlot(implicit p: Parameters)
                           | Mux(do_fast_wakeup &&  uop.busy_operand_sel, fwu.bits.status, 0.U)
                           | swu.foldLeft(0.U) ((ss,wu) => ss | Mux(wu.bits === uop.prs2 && wu.valid, 1.U, 0.U)) )
 
-    wu_uop.prs1_can_bypass_alu := do_fast_wakeup && !uop.busy_operand_sel && fwu.bits.alu
-    wu_uop.prs2_can_bypass_alu := do_fast_wakeup &&  uop.busy_operand_sel && fwu.bits.alu
+    wu_uop.prs1_can_bypass_alu := uop.prs1_can_bypass_alu || do_fast_wakeup && !uop.busy_operand_sel && fwu.bits.alu
+    wu_uop.prs2_can_bypass_alu := uop.prs2_can_bypass_alu || do_fast_wakeup &&  uop.busy_operand_sel && fwu.bits.alu
 
-    wu_uop.prs1_can_bypass_mem := do_fast_wakeup && !uop.busy_operand_sel && fwu.bits.mem
-    wu_uop.prs2_can_bypass_mem := do_fast_wakeup &&  uop.busy_operand_sel && fwu.bits.mem
+    wu_uop.prs1_can_bypass_mem := uop.prs1_can_bypass_mem || do_fast_wakeup && !uop.busy_operand_sel && fwu.bits.mem
+    wu_uop.prs2_can_bypass_mem := uop.prs2_can_bypass_mem || do_fast_wakeup &&  uop.busy_operand_sel && fwu.bits.mem
 
     wu_uop
   }
