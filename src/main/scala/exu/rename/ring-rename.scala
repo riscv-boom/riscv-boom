@@ -246,17 +246,17 @@ class RingRename(implicit p: Parameters) extends BoomModule
       freelists(c).io.dealloc_pregs(w).valid := io.com_uops(w).stale_col(c) && com_valids(w) || io.com_uops(w).pdst_col(c) && rbk_valids(w)
       freelists(c).io.dealloc_pregs(w).bits  := Mux(io.rollback, io.com_uops(w).pdst, io.com_uops(w).stale_pdst)
     }
-    freelists(c).io.ren_br_tags    := ren2_br_tags
-    freelists(c).io.brinfo         := io.brinfo
+    freelists(c).io.ren_br_tags := ren2_br_tags
+    freelists(c).io.brinfo      := io.brinfo
   }
 
   // Freelist outputs.
   for ((uop, w) <- ren2_uops.zipWithIndex) {
     val preg = Mux1H(col_gnts(w), freelists.map(_.io.alloc_pregs(w).bits))
-    uop.pdst := Mux(uop.ldst =/= 0.U, Cat(OHToUInt(col_gnts(w)), preg), 0.U)
+    uop.pdst := Cat(OHToUInt(col_gnts(w)), Mux(uop.ldst =/= 0.U, preg, 0.U))
   }
 
-  assert (ren2_alloc_reqs zip ren2_uops map {case (r,u) => !r || u.pdst =/= 0.U} reduce (_&&_),
+  assert (ren2_alloc_reqs zip ren2_uops map {case (r,u) => !r || u.pdst_spec =/= 0.U} reduce (_&&_),
            "[rename-stage] A uop is trying to allocate the zero physical register.")
 
   assert (!io.debug_rob_empty ||
