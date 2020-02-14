@@ -123,6 +123,9 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle
   val uops       = Vec(retireWidth, new MicroOp())
   val fflags     = Valid(UInt(5.W))
 
+  // These come a cycle later
+  val debug_insts = Vec(retireWidth, UInt(32.W))
+
   // Perform rollback of rename state (in conjuction with commit.uops).
   val rbk_valids = Vec(retireWidth, Bool())
   val rollback   = Bool()
@@ -231,6 +234,9 @@ class Rob(
   val rob_pnr_lsb  = RegInit(0.U((1 max log2Ceil(coreWidth)).W))
   val rob_pnr_idx  = if (coreWidth == 1) rob_pnr  else Cat(rob_pnr , rob_pnr_lsb)
 
+  val com_idx = Mux(rob_state === s_rollback, rob_tail, rob_head)
+
+
   val maybe_full   = RegInit(false.B)
   val full         = Wire(Bool())
   val empty        = Wire(Bool())
@@ -288,6 +294,13 @@ class Rob(
   // Contains all information the PNR needs to find the oldest instruction which can't be safely speculated past.
   val rob_unsafe_masked = WireInit(VecInit(Seq.fill(numRobRows << log2Ceil(coreWidth)){false.B}))
 
+  // Used for trace port, for debug purposes only
+  val rob_debug_inst_mem   = SyncReadMem(numRobRows, Vec(coreWidth, UInt(32.W)))
+  val rob_debug_inst_wmask = WireInit(VecInit(0.U(coreWidth.W).asBools))
+  val rob_debug_inst_wdata = Wire(Vec(coreWidth, UInt(32.W)))
+  rob_debug_inst_mem.write(rob_tail, rob_debug_inst_wdata, rob_debug_inst_wmask)
+  val rob_debug_inst_rdata = rob_debug_inst_mem.read(rob_head, will_commit.reduce(_||_))
+
   for (w <- 0 until coreWidth) {
     def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
 
@@ -303,6 +316,9 @@ class Rob(
 
     //-----------------------------------------------
     // Dispatch: Add Entry to ROB
+
+    rob_debug_inst_wmask(w) := io.enq_valids(w)
+    rob_debug_inst_wdata(w) := io.enq_uops(w).debug_inst
 
     when (io.enq_valids(w)) {
       rob_val(rob_tail)       := true.B
@@ -384,16 +400,12 @@ class Rob(
     // Can this instruction commit? (the check for exceptions/rob_state happens later).
     can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
 
-    val com_idx = Wire(UInt())
-    com_idx := rob_head
-    when (rob_state === s_rollback) {
-      com_idx := rob_tail
-    }
 
     // use the same "com_uop" for both rollback AND commit
     // Perform Commit
     io.commit.valids(w) := will_commit(w)
     io.commit.uops(w)   := rob_uop(com_idx)
+    io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
 
     // We unbusy branches in b1, but its easier to mark the taken/provider src in b2,
     // when the branch might be committing

@@ -13,7 +13,6 @@ package boom.ifu
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.dontTouch
 import chisel3.core.{withReset}
 import chisel3.internal.sourceinfo.{SourceInfo}
 
@@ -25,7 +24,6 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
 import freechips.rocketchip.util.property._
-import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{ICacheLogicalTreeNode}
 
 import boom.common._
 import boom.exu.{CommitExceptionSignals, BranchDecode, BrUpdateInfo}
@@ -244,6 +242,8 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
 
   // 1 for xcpt/jalr/auipc/flush
   val get_pc            = Flipped(Vec(2, new GetPCFromFtqIO()))
+  val debug_ftq_idx     = Output(Vec(coreWidth, UInt(log2Ceil(ftqSz).W)))
+  val debug_fetch_pc    = Input(Vec(coreWidth, UInt(vaddrBitsExtended.W)))
 
   // Breakpoint info
   val status            = Output(new MStatus)
@@ -808,6 +808,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     ftq.io.redirect.bits  := io.cpu.redirect_ftq_idx
   }
 
+  ftq.io.debug_ftq_idx := io.cpu.debug_ftq_idx
+  io.cpu.debug_fetch_pc := ftq.io.debug_fetch_pc
 
 
   override def toString: String =

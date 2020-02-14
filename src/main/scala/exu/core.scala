@@ -32,7 +32,6 @@ import java.nio.file.{Paths}
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.dontTouch
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
@@ -794,9 +793,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       // Fast Wakeup (uses just-issued uops that have known latencies)
       fast_wakeup.bits.uop := iss_uops(i)
       fast_wakeup.valid    := iss_valids(i) &&
-                                iss_uops(i).bypassable &&
-                                iss_uops(i).dst_rtype === RT_FIX &&
-                                iss_uops(i).ldst_val
+                              iss_uops(i).bypassable &&
+                              iss_uops(i).dst_rtype === RT_FIX &&
+                              iss_uops(i).ldst_val &&
+                              !(io.lsu.ld_miss && (iss_uops(i).iw_p1_poisoned || iss_uops(i).iw_p2_poisoned))
 
       // Slow Wakeup (uses write-port to register file)
       slow_wakeup.bits.uop := resp.bits.uop
@@ -834,11 +834,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
 
   for ((renport, intport) <- rename_stage.io.wakeups zip int_ren_wakeups) {
-    // Stop wakeup for bypassable children of spec-loads trying to issue during a ldMiss.
-    renport.valid :=
-       intport.valid &&
-       !(io.lsu.ld_miss && (intport.bits.uop.iw_p1_poisoned || intport.bits.uop.iw_p2_poisoned))
-    renport.bits := intport.bits
+    renport <> intport
   }
   if (usingFPU) {
     for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
@@ -1429,7 +1425,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         val mmioStart = "0x" + f"${bootromParams.address + bootromParams.size}%X"
         val mmioEnd = "0x" + f"${extMemParams.master.base}%X"
         val plicBase = "0x" + f"${plicParams.baseAddress}%X"
-        val plicSize = "0x" + f"${PLICConsts.size}%X"
+        val plicSize = "0x" + f"${PLICConsts.size(plicParams.maxHarts)}%X"
         val clintBase = "0x" + f"${clintParams.baseAddress}%X"
         val clintSize = "0x" + f"${CLINTConsts.size}%X"
         val memSize = "0x" + f"${extMemParams.master.size}%X"
@@ -1518,26 +1514,52 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     for (w <- 0 until coreWidth) {
        exe_units.rocc_unit.io.rocc.dis_rocc_vals(w) := (
          dis_fire(w) &&
-         dis_uops(w).uopc === uopROCC)
+         dis_uops(w).uopc === uopROCC &&
+         !dis_uops(w).exception
+       )
     }
   }
 
   if (p(BoomTilesKey)(0).trace) {
     for (w <- 0 until coreWidth) {
-      io.trace(w).valid      := rob.io.commit.valids(w)
-      io.trace(w).iaddr      := Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen)
-      io.trace(w).insn       := rob.io.commit.uops(w).debug_inst
+      io.trace(w).clock      := clock
+      io.trace(w).reset      := reset
+
+      // Delay the trace so we have a cycle to pull PCs out of the FTQ
+      io.trace(w).valid      := RegNext(rob.io.commit.valids(w))
+
+      // Recalculate the PC
+      io.ifu.debug_ftq_idx(w) := rob.io.commit.uops(w).ftq_idx
+      io.trace(w).iaddr      := RegNext(Sext(AlignPCToBoundary(io.ifu.debug_fetch_pc(w), icBlockBytes)
+                                      + rob.io.commit.uops(w).pc_lob
+                                      - Mux(rob.io.commit.uops(w).edge_inst, 2.U, 0.U), xLen))
+
+      // use debug_insts instead of uop.debug_inst to use the rob's debug_inst_mem
+      io.trace(w).insn       := rob.io.commit.debug_insts(w)
+
+      // Comment out this assert because it blows up FPGA synth-asserts
+      // This tests correctedness of the debug_inst mem
+      // when (RegNext(rob.io.commit.valids(w))) {
+      //   assert(rob.io.commit.debug_insts(w) === RegNext(rob.io.commit.uops(w).debug_inst))
+      // }
+      // This tests correctedness of recovering pcs through ftq debug ports
+      // when (RegNext(rob.io.commit.valids(w))) {
+      //   assert(Sext(io.trace(w).iaddr, xLen) ===
+      //     RegNext(Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen)))
+      // }
+
       // These csr signals do not exactly match up with the ROB commit signals.
-      io.trace(w).priv       := csr.io.status.prv
+      io.trace(w).priv       := RegNext(csr.io.status.prv)
       // Can determine if it is an interrupt or not based on the MSB of the cause
-      io.trace(w).exception  := rob.io.com_xcpt.valid && !rob.io.com_xcpt.bits.cause(xLen - 1)
-      io.trace(w).interrupt  := rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.cause(xLen - 1)
-      io.trace(w).cause      := rob.io.com_xcpt.bits.cause
-      io.trace(w).tval       := csr.io.tval
+      io.trace(w).exception  := RegNext(rob.io.com_xcpt.valid && !rob.io.com_xcpt.bits.cause(xLen - 1))
+      io.trace(w).interrupt  := RegNext(rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.cause(xLen - 1))
+      io.trace(w).cause      := RegNext(rob.io.com_xcpt.bits.cause)
+      io.trace(w).tval       := RegNext(csr.io.tval)
     }
     dontTouch(io.trace)
   } else {
     io.trace := DontCare
     io.trace map (t => t.valid := false.B)
+    io.ifu.debug_ftq_idx := DontCare
   }
 }

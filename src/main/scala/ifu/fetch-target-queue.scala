@@ -19,8 +19,6 @@ package boom.ifu
 import chisel3._
 import chisel3.util._
 
-import chisel3.experimental.{dontTouch}
-
 import freechips.rocketchip.config.{Parameters}
 import freechips.rocketchip.util.{Str}
 
@@ -86,6 +84,7 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle
 
   val pc        = Output(UInt(vaddrBitsExtended.W))
   val com_pc    = Output(UInt(vaddrBitsExtended.W))
+
   // the next_pc may not be valid (stalled or still being fetched)
   val next_val  = Output(Bool())
   val next_pc   = Output(UInt(vaddrBitsExtended.W))
@@ -114,6 +113,12 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
 
     // Give PC info to BranchUnit.
     val get_ftq_pc = Vec(2, new GetPCFromFtqIO())
+
+
+    // Used to regenerate PC for trace port stuff in FireSim
+    // Don't tape this out, this blows up the FTQ
+    val debug_ftq_idx  = Input(Vec(coreWidth, UInt(log2Ceil(ftqSz).W)))
+    val debug_fetch_pc = Output(Vec(coreWidth, UInt(vaddrBitsExtended.W)))
 
     val redirect = Input(Valid(UInt(idx_sz.W)))
 
@@ -282,6 +287,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     enq_ptr    := WrapInc(io.redirect.bits, num_entries)
   }
 
+
   when (io.brupdate.b2.mispredict) {
     val ftq_idx = io.brupdate.b2.uop.ftq_idx
     val entry = ram(ftq_idx)
@@ -319,5 +325,9 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     io.get_ftq_pc(i).next_pc   := RegNext(next_pc)
     io.get_ftq_pc(i).next_val  := RegNext(next_idx =/= enq_ptr || next_is_enq)
     io.get_ftq_pc(i).com_pc    := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))
+  }
+
+  for (w <- 0 until coreWidth) {
+    io.debug_fetch_pc(w) := RegNext(pcs(io.debug_ftq_idx(w)))
   }
 }
