@@ -2,7 +2,6 @@ package boom.ifu
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.dontTouch
 import chisel3.internal.sourceinfo.{SourceInfo}
 
 
