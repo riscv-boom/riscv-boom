@@ -1327,17 +1327,13 @@ class BoomCore(implicit p: Parameters) extends BoomModule
           Mux(uop.is_rvc, Cat(0.U(16.W), uop.debug_inst(15,0)), uop.debug_inst)
         }
 
-        def getWdata(uop: MicroOp): UInt = {
-          Mux((uop.dst_rtype === RT_FIX && uop.ldst =/= 0.U) || (uop.dst_rtype === RT_FLT), 0.U/* TODO uop.debug_wdata*/, 0.U(xLen.W))
-        }
-
         dromajo.io.clock := clock
         dromajo.io.reset := reset
         dromajo.io.valid := rob.io.commit.valids.asUInt
         dromajo.io.hartid := io.hartid
         dromajo.io.pc     := Cat(rob.io.commit.uops.reverse.map(uop => Sext(uop.debug_pc(vaddrBits-1,0), xLen)))
         dromajo.io.inst   := Cat(rob.io.commit.uops.reverse.map(uop => getInst(uop)))
-        dromajo.io.wdata  := Cat(rob.io.commit.uops.reverse.map(uop => getWdata(uop)))
+        dromajo.io.wdata  := Cat(rob.io.commit.wdata.reverse)
         dromajo.io.mstatus := 0.U // Currently not used in Dromajo
         dromajo.io.check   := ((1 << coreWidth) - 1).U
         dromajo.io.int_xcpt := rob.io.com_xcpt.valid
