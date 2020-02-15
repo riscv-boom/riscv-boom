@@ -191,9 +191,6 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   })
 
   val banked_predictors = Seq.fill(nBanks) { Module(new ComposedBranchPredictorBank) }
-  for (b <- 0 until nBanks) {
-    dontTouch(banked_predictors(b).io)
-  }
 
   if (nBanks == 1) {
     banked_predictors(0).io.f0_req.bits.hist  := io.f0_req.bits.ghist.histories(0)
@@ -300,11 +297,6 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   io.resp.f1.meta := DontCare
   io.resp.f2.meta := DontCare
 
-  dontTouch(io.f0_req)
-  dontTouch(io.resp.f1)
-  dontTouch(io.resp.f2)
-  dontTouch(io.resp.f3)
-  dontTouch(io.update)
 
   for (i <- 0 until nBanks) {
     banked_predictors(i).io.update.bits.is_mispredict_update := io.update.bits.is_mispredict_update

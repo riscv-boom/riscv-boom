@@ -644,9 +644,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       val upper_mask = Wire(UInt((2*fetchWidth).W))
       lower_mask := UIntToOH(i.U)
       upper_mask := UIntToOH(offset_from_aligned_pc(log2Ceil(fetchBytes)+1,1)) << Mux(f3_is_last_bank_in_block, bankWidth.U, 0.U)
-      dontTouch(lower_mask)
-      dontTouch(upper_mask)
-      dontTouch(offset_from_aligned_pc)
+
       f3_fetch_bundle.sfbs(i) := (
         f3_mask(i) &&
         bpd_decoder.io.sfb_offset.valid &&

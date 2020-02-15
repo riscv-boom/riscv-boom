@@ -163,7 +163,6 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
       entries(reset_idx) := (0.U).asTypeOf(new LoopEntry) 
    }
 
-    dontTouch(entries)
   }
 
 
