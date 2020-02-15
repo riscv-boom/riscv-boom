@@ -1451,7 +1451,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         }
 
         def getWdata(uop: MicroOp): UInt = {
-          Mux((uop.dst_rtype === RT_FIX && uop.ldst =/= 0.U) || (uop.dst_rtype === RT_FLT), uop.debug_wdata, 0.U(xLen.W))
+          Mux((uop.dst_rtype === RT_FIX && uop.ldst =/= 0.U) || (uop.dst_rtype === RT_FLT), 0.U/* TODO uop.debug_wdata*/, 0.U(xLen.W))
         }
 
         dromajo.io.clock := clock
