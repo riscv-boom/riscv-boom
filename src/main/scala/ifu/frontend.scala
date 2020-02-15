@@ -142,9 +142,12 @@ trait HasBoomFrontendParameters extends HasL1ICacheParameters
 
   // Which bank is the address pointing to?
   def bank(addr: UInt) = if (nBanks == 2) addr(log2Ceil(bankBytes)) else 0.U
+  def isLastBankInBlock(addr: UInt) = {
+    (nBanks == 2).B && addr(blockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
+  }
   def mayNotBeDualBanked(addr: UInt) = {
     require(nBanks == 2)
-    addr(blockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
+    isLastBankInBlock(addr)
   }
 
   def blockAlign(addr: UInt) = ~(~addr | (cacheParams.blockBytes-1).U)
@@ -197,6 +200,14 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
   val edge_inst     = Vec(nBanks, Bool()) // True if 1st instruction in this bundle is pc - 2
   val insts         = Vec(fetchWidth, Bits(32.W))
   val exp_insts     = Vec(fetchWidth, Bits(32.W))
+
+  // Information for sfb folding
+  // NOTE: This IS NOT equivalent to uop.pc_lob, that gets calculated in the FB
+  val sfbs                 = Vec(fetchWidth, Bool())
+  val sfb_masks            = Vec(fetchWidth, UInt((2*fetchWidth).W))
+  val sfb_dests            = Vec(fetchWidth, UInt((1+log2Ceil(fetchBytes)).W))
+  val shadowable_mask      = Vec(fetchWidth, Bool())
+  val shadowed_mask        = Vec(fetchWidth, Bool())
 
   val cfi_idx       = Valid(UInt(log2Ceil(fetchWidth).W))
   val cfi_type      = UInt(CFI_SZ.W)
@@ -528,11 +539,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3_bank_mask    = bankMask(f3_imemresp.pc)
   val f3_data         = f3_imemresp.data
   val f3_aligned_pc   = bankAlign(f3_imemresp.pc)
-  val f3_pcs          = Wire(Vec(fetchWidth, UInt(vaddrBitsExtended.W)))
+  val f3_is_last_bank_in_block = isLastBankInBlock(f3_aligned_pc)
   val f3_is_rvc       = Wire(Vec(fetchWidth, Bool()))
   val f3_redirects    = Wire(Vec(fetchWidth, Bool()))
   val f3_targs        = Wire(Vec(fetchWidth, UInt(vaddrBitsExtended.W)))
   val f3_cfi_types    = Wire(Vec(fetchWidth, UInt(CFI_SZ.W)))
+  val f3_shadowed_mask = Wire(Vec(fetchWidth, Bool()))
   val f3_fetch_bundle = Wire(new FetchBundle)
   val f3_mask         = Wire(Vec(fetchWidth, Bool()))
   val f3_br_mask      = Wire(Vec(fetchWidth, Bool()))
@@ -547,6 +559,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae.inst
   f3_fetch_bundle.fsrc := f3_imemresp.fsrc
   f3_fetch_bundle.tsrc := f3_imemresp.tsrc
+  f3_fetch_bundle.shadowed_mask := f3_shadowed_mask
 
   // Tracks trailing 16b of previous fetch packet
   val f3_prev_half    = Reg(UInt(16.W))
@@ -597,7 +610,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       val pc = ((f3_aligned_pc
         + (i << log2Ceil(coreInstBytes)).U
         - Mux(bank_prev_is_half && (w == 0).B, 2.U, 0.U)))
-      f3_pcs   (i) := pc
       f3_is_rvc(i) := isRVC(inst)
 
       val exp_inst = ExpandRVC(inst)
@@ -623,6 +635,26 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       } else {
         !f3_is_rvc(i)
       })
+      val offset_from_aligned_pc = (
+        (i << 1).U((log2Ceil(icBlockBytes)+1).W) +
+        bpd_decoder.io.sfb_offset.bits -
+        Mux(bank_prev_is_half && (w == 0).B, 2.U, 0.U)
+      )
+      val lower_mask = Wire(UInt((2*fetchWidth).W))
+      val upper_mask = Wire(UInt((2*fetchWidth).W))
+      lower_mask := UIntToOH(i.U)
+      upper_mask := UIntToOH(offset_from_aligned_pc(log2Ceil(fetchBytes)+1,1)) << Mux(f3_is_last_bank_in_block, bankWidth.U, 0.U)
+      dontTouch(lower_mask)
+      dontTouch(upper_mask)
+      dontTouch(offset_from_aligned_pc)
+      f3_fetch_bundle.sfbs(i) := (
+        f3_mask(i) &&
+        bpd_decoder.io.sfb_offset.valid &&
+        (offset_from_aligned_pc <= Mux(f3_is_last_bank_in_block, (fetchBytes+bankBytes).U,(2*fetchBytes).U))
+      )
+      f3_fetch_bundle.sfb_masks(i)       := ~MaskLower(lower_mask) & ~MaskUpper(upper_mask)
+      f3_fetch_bundle.shadowable_mask(i) := bpd_decoder.io.shadowable && f3_mask(i)
+      f3_fetch_bundle.sfb_dests(i)       := offset_from_aligned_pc
 
       // Redirect if
       //  1) its a JAL/JALR (unconditional)
@@ -742,17 +774,67 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val fb  = Module(new FetchBuffer)
   val ftq = Module(new FetchTargetQueue)
 
+  // When we mispredict, we need to repair 
+
+  // Deal with sfbs
+  val f4_shadowable_masks = VecInit((0 until fetchWidth) map { i =>
+     f4.io.deq.bits.shadowable_mask.asUInt |
+    ~f4.io.deq.bits.mask |
+    ~f4.io.deq.bits.sfb_masks(i)(fetchWidth-1,0)
+  })
+  val f3_shadowable_masks = VecInit((0 until fetchWidth) map { i =>
+    Mux(f4.io.enq.valid, f4.io.enq.bits.shadowable_mask.asUInt, 0.U) |
+    Mux(f4.io.enq.valid, ~f4.io.enq.bits.mask, 0.U) |
+    ~f4.io.deq.bits.sfb_masks(i)(2*fetchWidth-1,fetchWidth)
+  })
+  val f4_sfbs = VecInit((0 until fetchWidth) map { i =>
+    enableSFBOpt.B &&
+    ((~f4_shadowable_masks(i) === 0.U) &&
+     (~f3_shadowable_masks(i) === 0.U) &&
+     f4.io.deq.bits.sfbs(i) &&
+     !(f4.io.deq.bits.cfi_idx.valid && f4.io.deq.bits.cfi_idx.bits === i.U) &&
+      Mux(f4.io.deq.bits.sfb_dests(i) === 0.U,
+        !bank_prev_is_half,
+      Mux(f4.io.deq.bits.sfb_dests(i) === fetchBytes.U,
+        !f4.io.deq.bits.end_half.valid,
+        true.B)
+      )
+
+     )
+  })
+  val f4_sfb_valid = f4_sfbs.reduce(_||_) && f4.io.deq.valid
+  val f4_sfb_idx   = PriorityEncoder(f4_sfbs)
+  val f4_sfb_mask  = f4.io.deq.bits.sfb_masks(f4_sfb_idx)
+  // If we have a SFB, wait for next fetch to be available in f3
+  val f4_delay     = (
+    f4.io.deq.bits.sfbs.reduce(_||_) &&
+    !f4.io.deq.bits.cfi_idx.valid &&
+    !f4.io.enq.valid &&
+    !f4.io.deq.bits.xcpt_pf_if &&
+    !f4.io.deq.bits.xcpt_ae_if
+  )
+  when (f4_sfb_valid) {
+    f3_shadowed_mask := f4_sfb_mask(2*fetchWidth-1,fetchWidth).asBools
+  } .otherwise {
+    f3_shadowed_mask := VecInit(0.U(fetchWidth.W).asBools)
+  }
 
   f4_ready := f4.io.enq.ready
   f4.io.enq.valid := f3.io.deq.valid && !f3_clear
   f4.io.enq.bits  := f3_fetch_bundle
-  f4.io.deq.ready := fb.io.enq.ready && ftq.io.enq.ready
+  f4.io.deq.ready := fb.io.enq.ready && ftq.io.enq.ready && !f4_delay
 
-  fb.io.enq.valid := f4.io.deq.valid && ftq.io.enq.ready
+  fb.io.enq.valid := f4.io.deq.valid && ftq.io.enq.ready && !f4_delay
   fb.io.enq.bits  := f4.io.deq.bits
   fb.io.enq.bits.ftq_idx := ftq.io.enq_idx
+  fb.io.enq.bits.sfbs    := Mux(f4_sfb_valid, UIntToOH(f4_sfb_idx), 0.U(fetchWidth.W)).asBools
+  fb.io.enq.bits.shadowed_mask := (
+    Mux(f4_sfb_valid, f4_sfb_mask(fetchWidth-1,0), 0.U(fetchWidth.W)) |
+    f4.io.deq.bits.shadowed_mask.asUInt
+  ).asBools
 
-  ftq.io.enq.valid          := f4.io.deq.valid && fb.io.enq.ready
+
+  ftq.io.enq.valid          := f4.io.deq.valid && fb.io.enq.ready && !f4_delay
   ftq.io.enq.bits           := f4.io.deq.bits
 
 

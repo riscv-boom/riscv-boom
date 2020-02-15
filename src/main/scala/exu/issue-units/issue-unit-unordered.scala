@@ -39,10 +39,6 @@ class IssueUnitStatic(
   for (i <- 0 until numIssueSlots) {
     issue_slots(i).in_uop.valid := entry_wen_oh(i).orR
     issue_slots(i).in_uop.bits  := Mux1H(entry_wen_oh(i), dis_uops)
-    issue_slots(i).wakeup_ports := io.wakeup_ports
-    issue_slots(i).ldspec_dst   := io.spec_ld_wakeup
-    issue_slots(i).brupdate       := io.brupdate
-    issue_slots(i).kill         := io.flush_pipeline
     issue_slots(i).clear        := false.B
   }
 

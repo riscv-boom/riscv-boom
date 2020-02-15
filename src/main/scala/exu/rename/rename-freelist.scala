@@ -20,7 +20,7 @@ import freechips.rocketchip.config.Parameters
 class RenameFreeList(
   val plWidth: Int,
   val numPregs: Int,
-  val float: Boolean)
+  val numLregs: Int)
   (implicit p: Parameters) extends BoomModule
 {
   private val pregSz = log2Ceil(numPregs)
@@ -91,7 +91,6 @@ class RenameFreeList(
   io.debug.freelist := free_list | io.alloc_pregs.map(p => UIntToOH(p.bits) & Fill(n,p.valid)).reduce(_|_)
   io.debug.isprlist := 0.U  // TODO track commit free list.
 
-  val numLregs = if(float) 32 else 31
   assert (!(io.debug.freelist & dealloc_mask).orR, "[freelist] Returning a free physical register.")
   assert (!io.debug.pipeline_empty || PopCount(io.debug.freelist) >= (numPregs - numLregs - 1).U,
     "[freelist] Leaking physical registers.")

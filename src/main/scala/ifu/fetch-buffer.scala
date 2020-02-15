@@ -100,6 +100,8 @@ class FetchBuffer(implicit p: Parameters) extends BoomModule
       in_uops(i).debug_pc       := pc
       in_uops(i).pc_lob         := pc
 
+      in_uops(i).is_sfb         := io.enq.bits.sfbs(i) || io.enq.bits.shadowed_mask(i)
+
       if (w == 0) {
         when (io.enq.bits.edge_inst(b)) {
           in_uops(i).debug_pc  := bankAlign(io.enq.bits.pc) + (b * bankBytes).U - 2.U

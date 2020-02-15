@@ -119,9 +119,10 @@ class RobIo(
  */
 class CommitSignals(implicit p: Parameters) extends BoomBundle
 {
-  val valids     = Vec(retireWidth, Bool())
-  val uops       = Vec(retireWidth, new MicroOp())
-  val fflags     = Valid(UInt(5.W))
+  val valids      = Vec(retireWidth, Bool()) // These instructions may not correspond to an architecturally executed insn
+  val arch_valids = Vec(retireWidth, Bool())
+  val uops        = Vec(retireWidth, new MicroOp())
+  val fflags      = Valid(UInt(5.W))
 
   // These come a cycle later
   val debug_insts = Vec(retireWidth, UInt(32.W))
@@ -306,10 +307,11 @@ class Rob(
 
     // one bank
     val rob_val       = RegInit(VecInit(Seq.fill(numRobRows){false.B}))
-    val rob_bsy       = Mem(numRobRows, Bool())
+    val rob_bsy       = Reg(Vec(numRobRows, Bool()))
     val rob_unsafe    = Mem(numRobRows, Bool())
     val rob_uop       = Reg(Vec(numRobRows, new MicroOp()))
     val rob_exception = Mem(numRobRows, Bool())
+    val rob_predicated = Reg(Vec(numRobRows, Bool())) // Was this instruction predicated out?
     val rob_fflags    = Mem(numRobRows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
 
     val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
@@ -327,6 +329,7 @@ class Rob(
       rob_unsafe(rob_tail)    := io.enq_uops(w).unsafe
       rob_uop(rob_tail)       := io.enq_uops(w)
       rob_exception(rob_tail) := io.enq_uops(w).exception
+      rob_predicated(rob_tail)   := false.B
       rob_fflags(rob_tail)    := 0.U
 
       assert (rob_val(rob_tail) === false.B, "[rob] overwriting a valid entry.")
@@ -345,6 +348,7 @@ class Rob(
       when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx))) {
         rob_bsy(row_idx)      := false.B
         rob_unsafe(row_idx)   := false.B
+        rob_predicated(row_idx)  := wb_resp.bits.predicated
       }
       // TODO check that fflags aren't overwritten
       // TODO check that the wb is to a valid ROB entry, give it a time stamp
@@ -404,6 +408,7 @@ class Rob(
     // use the same "com_uop" for both rollback AND commit
     // Perform Commit
     io.commit.valids(w) := will_commit(w)
+    io.commit.arch_valids(w) := will_commit(w) && !rob_predicated(com_idx)
     io.commit.uops(w)   := rob_uop(com_idx)
     io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
 

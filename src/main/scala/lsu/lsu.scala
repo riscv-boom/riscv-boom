@@ -131,7 +131,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val fence_dmem   = Input(Bool())
 
   // Speculatively tell the IQs that we'll get load data back next cycle
-  val spec_ld_wakeup = Output(Valid(UInt(maxPregSz.W)))
+  val spec_ld_wakeup = Output(Vec(memWidth, Valid(UInt(maxPregSz.W))))
   // Tell the IQs that the load we speculated last cycle was misspeculated
   val ld_miss      = Output(Bool())
 
@@ -1196,13 +1196,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.core.lxcpt.bits  := r_xcpt
 
   // Task 4: Speculatively wakeup loads 1 cycle before they come back
-  io.core.spec_ld_wakeup.valid := enableFastLoadUse.B          &&
-                                  fired_load_incoming(0)       &&
-                                  !mem_incoming_uop(0).fp_val  &&
-                                  mem_incoming_uop(0).pdst =/= 0.U
-  io.core.spec_ld_wakeup.bits  := mem_incoming_uop(0).pdst
-  // TODO: Do this on retry? Wakeup?
-
+  for (w <- 0 until memWidth) {
+    io.core.spec_ld_wakeup(w).valid := enableFastLoadUse.B          &&
+                                       fired_load_incoming(w)       &&
+                                       !mem_incoming_uop(w).fp_val  &&
+                                       mem_incoming_uop(w).pdst =/= 0.U
+    io.core.spec_ld_wakeup(w).bits  := mem_incoming_uop(w).pdst
+  }
 
 
   //-------------------------------------------------------------
@@ -1338,11 +1338,17 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   }
 
   // Initially assume the speculative load wakeup failed
-  io.core.ld_miss         := RegNext(io.core.spec_ld_wakeup.valid)
-  when (io.core.exe(0).iresp.valid && io.core.exe(0).iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop(0).ldq_idx)) {
-    // We correcty speculated last cycle, so we don't send miss signal
+  io.core.ld_miss         := RegNext(io.core.spec_ld_wakeup.map(_.valid).reduce(_||_))
+  val spec_ld_succeed = widthMap(w =>
+    !RegNext(io.core.spec_ld_wakeup(w).valid) ||
+    (io.core.exe(w).iresp.valid &&
+      io.core.exe(w).iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop(w).ldq_idx)
+    )
+  ).reduce(_&&_)
+  when (spec_ld_succeed) {
     io.core.ld_miss := false.B
   }
+
 
   //-------------------------------------------------------------
   // Kill speculated entries on branch mispredict

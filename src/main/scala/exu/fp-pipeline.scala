@@ -76,6 +76,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
                          exe_units.numFrfReadPorts,
                          exe_units.withFilter(_.readsFrf).map(x => 3),
                          0, // No bypass for FP
+                         0,
                          fLen+1))
 
   require (exe_units.count(_.readsFrf) == issue_unit.issueWidth)
@@ -91,8 +92,10 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   issue_unit.io.brupdate := io.brupdate
   issue_unit.io.flush_pipeline := io.flush_pipeline
   // Don't support ld-hit speculation to FP window.
-  issue_unit.io.spec_ld_wakeup.valid := false.B
-  issue_unit.io.spec_ld_wakeup.bits := 0.U
+  for (w <- 0 until memWidth) {
+    issue_unit.io.spec_ld_wakeup(w).valid := false.B
+    issue_unit.io.spec_ld_wakeup(w).bits := 0.U
+  }
   issue_unit.io.ld_miss := false.B
 
   require (exe_units.numTotalBypassPorts == 0)
@@ -131,6 +134,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     issue_wakeup.bits.pdst  := writeback.bits.uop.pdst
     issue_wakeup.bits.poisoned := false.B
   }
+  issue_unit.io.pred_wakeup_port.valid := false.B
+  issue_unit.io.pred_wakeup_port.bits := DontCare
 
   //-------------------------------------------------------------
   // **** Register Read Stage ****
@@ -138,6 +143,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   // Register Read <- Issue (rrd <- iss)
   fregister_read.io.rf_read_ports <> fregfile.io.read_ports
+  fregister_read.io.prf_read_ports map { port => port.data := false.B }
 
   fregister_read.io.iss_valids <> iss_valids
   fregister_read.io.iss_uops := iss_uops
@@ -225,6 +231,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   w_cnt = 1
   for (i <- 1 until memWidth) {
     io.wakeups(w_cnt) := io.ll_wports(i)
+    io.wakeups(w_cnt).bits.data := recode(io.ll_wports(i).bits.data,
+      io.ll_wports(i).bits.uop.mem_size =/= 2.U)
     w_cnt += 1
   }
   for (eu <- exe_units) {

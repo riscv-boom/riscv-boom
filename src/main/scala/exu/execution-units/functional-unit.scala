@@ -92,6 +92,7 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   val rs1_data = UInt(dataWidth.W)
   val rs2_data = UInt(dataWidth.W)
   val rs3_data = UInt(dataWidth.W) // only used for FMA units
+  val pred_data = Bool()
 
   val kill = Bool() // kill everything
 }
@@ -104,26 +105,12 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 class FuncUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   with HasBoomUOP
 {
+  val predicated = Bool() // Was this response from a predicated-off instruction
   val data = UInt(dataWidth.W)
   val fflags = new ValidIO(new FFlagsResp)
   val addr = UInt((vaddrBits+1).W) // only for maddr -> LSU
   val mxcpt = new ValidIO(UInt((freechips.rocketchip.rocket.Causes.all.max+2).W)) //only for maddr->LSU
   val sfence = Valid(new freechips.rocketchip.rocket.SFenceReq) // only for mcalc
-}
-
-/**
- * Bundle for bypass data signals from the functional unit
- *
- * @param numBypassPorts amount of ports to bypass data in a single stage
- * @param dataWidth size of data in the functional unit
- */
-class BypassData(val numBypassPorts: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
-{
-  val valid = Vec(numBypassPorts, Bool())
-  val uop   = Vec(numBypassPorts, new MicroOp())
-  val data  = Vec(numBypassPorts, UInt(dataWidth.W))
-
-  def getNumPorts: Int = numBypassPorts
 }
 
 /**
@@ -185,7 +172,7 @@ abstract class FunctionalUnit(
 
     val brupdate = Input(new BrUpdateInfo())
 
-    val bypass = Output(new BypassData(numBypassStages, dataWidth))
+    val bypass = Output(Vec(numBypassStages, Valid(new ExeUnitResp(dataWidth))))
 
     // only used by the fpu unit
     val fcsr_rm = if (needsFcsr) Input(UInt(tile.FPConstants.RM_SZ.W)) else null
@@ -251,22 +238,23 @@ abstract class PipelinedFunctionalUnit(
       r_uops(i).br_mask := GetNewBrMask(io.brupdate, r_uops(i-1))
 
       if (numBypassStages > 0) {
-        io.bypass.uop(i-1) := r_uops(i-1)
+        io.bypass(i-1).bits.uop := r_uops(i-1)
       }
     }
 
     // handle outgoing (branch could still kill it)
     // consumer must also check for pipeline flushes (kills)
     io.resp.valid    := r_valids(numStages-1) && !IsKilledByBranch(io.brupdate, r_uops(numStages-1))
+    io.resp.bits.predicated := false.B
     io.resp.bits.uop := r_uops(numStages-1)
     io.resp.bits.uop.br_mask := GetNewBrMask(io.brupdate, r_uops(numStages-1))
 
     // bypassing (TODO allow bypass vector to have a different size from numStages)
     if (numBypassStages > 0 && earliestBypassStage == 0) {
-      io.bypass.uop(0) := io.req.bits.uop
+      io.bypass(0).bits.uop := io.req.bits.uop
 
       for (i <- 1 until numBypassStages) {
-        io.bypass.uop(i) := r_uops(i-1)
+        io.bypass(i).bits.uop := r_uops(i-1)
       }
     }
   } else {
@@ -276,6 +264,7 @@ abstract class PipelinedFunctionalUnit(
     // valid doesn't check kill signals, let consumer deal with it.
     // The LSU already handles it and this hurts critical path.
     io.resp.valid    := io.req.valid && !IsKilledByBranch(io.brupdate, io.req.bits.uop)
+    io.resp.bits.predicated := false.B
     io.resp.bits.uop := io.req.bits.uop
     io.resp.bits.uop.br_mask := GetNewBrMask(io.brupdate, io.req.bits.uop)
   }
@@ -368,7 +357,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   // "mispredict" means that a branch has been resolved and it must be killed
   val mispredict = WireInit(false.B)
 
-  val is_br          = io.req.valid && !killed && uop.is_br
+  val is_br          = io.req.valid && !killed && uop.is_br && !uop.is_sfb
   val is_jal         = io.req.valid && !killed && uop.is_jal
   val is_jalr        = io.req.valid && !killed && uop.is_jalr
 
@@ -434,7 +423,6 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   brinfo.target_offset := target_offset
 
 
-
   io.brinfo := brinfo
 
 
@@ -448,23 +436,29 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
 
   val r_val  = RegInit(VecInit(Seq.fill(numStages) { false.B }))
   val r_data = Reg(Vec(numStages, UInt(xLen.W)))
+  val r_pred = Reg(Vec(numStages, Bool()))
+  val alu_out = Mux(io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data,
+    Mux(io.req.bits.uop.ldst_is_rs1, io.req.bits.rs1_data, io.req.bits.rs2_data),
+    alu.io.out)
   r_val (0) := io.req.valid
-  r_data(0) := alu.io.out
+  r_data(0) := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
+  r_pred(0) := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data
   for (i <- 1 until numStages) {
     r_val(i)  := r_val(i-1)
     r_data(i) := r_data(i-1)
+    r_pred(i) := r_pred(i-1)
   }
   io.resp.bits.data := r_data(numStages-1)
-
+  io.resp.bits.predicated := r_pred(numStages-1)
   // Bypass
   // for the ALU, we can bypass same cycle as compute
   require (numStages >= 1)
   require (numBypassStages >= 1)
-  io.bypass.valid(0) := io.req.valid
-  io.bypass.data (0) := alu.io.out
+  io.bypass(0).valid := io.req.valid
+  io.bypass(0).bits.data := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
   for (i <- 1 until numStages) {
-    io.bypass.valid(i) := r_val(i-1)
-    io.bypass.data (i) := r_data(i-1)
+    io.bypass(i).valid := r_val(i-1)
+    io.bypass(i).bits.data := r_data(i-1)
   }
 
   // Exceptions

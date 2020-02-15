@@ -125,10 +125,7 @@ class RegisterFileSynthesizable(
   val read_addrs = io.read_ports.map(p => RegNext(p.addr))
 
   for (i <- 0 until numReadPorts) {
-    read_data(i) :=
-      Mux(read_addrs(i) === 0.U,
-        0.U,
-        regfile(read_addrs(i)))
+    read_data(i) := regfile(read_addrs(i))
   }
 
   // --------------------------------------------------------------
@@ -146,7 +143,6 @@ class RegisterFileSynthesizable(
 
     for (i <- 0 until numReadPorts) {
       val bypass_ens = bypassable_wports.map(x => x.valid &&
-        x.bits.addr =/= 0.U &&
         x.bits.addr === read_addrs(i))
 
       val bypass_data = Mux1H(VecInit(bypass_ens), VecInit(bypassable_wports.map(_.bits.data)))
@@ -163,7 +159,7 @@ class RegisterFileSynthesizable(
   // Write ports.
 
   for (wport <- io.write_ports) {
-    when (wport.valid && (wport.bits.addr =/= 0.U)) {
+    when (wport.valid) {
       regfile(wport.bits.addr) := wport.bits.data
     }
   }

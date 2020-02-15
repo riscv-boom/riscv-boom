@@ -73,11 +73,6 @@ class IssueUnitCollapsing(
         issue_slots(i).in_uop.bits  := uops(i+j)
       }
     }
-    issue_slots(i).wakeup_ports := io.wakeup_ports
-    issue_slots(i).ldspec_dst   := io.spec_ld_wakeup
-    issue_slots(i).ldspec_miss  := io.ld_miss
-    issue_slots(i).brupdate       := io.brupdate
-    issue_slots(i).kill         := io.flush_pipeline
     issue_slots(i).clear        := shamts_oh(i) =/= 0.U
   }
 
