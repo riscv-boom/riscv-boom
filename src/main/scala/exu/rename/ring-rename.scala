@@ -106,12 +106,10 @@ class RingRename(implicit p: Parameters) extends BoomModule
       coreWidth,
       numIntPhysRegs / coreWidth))
   }
-  val busytable = Module(new RenameBusyTable(
+  val busytable = Module(new RingBusyTable(
     coreWidth,
     numIntPhysRegs,
-    coreWidth*2,
-    false,
-    false))
+    coreWidth*2))
 
   //----------------------------------------------------------------------------------------------------
   // Pipeline State & Wires
