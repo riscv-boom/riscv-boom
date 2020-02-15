@@ -91,12 +91,12 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
   val table  = SyncReadMem(nRows, Vec(bankWidth, UInt(tageEntrySz.W)))
 
 
+  val s2_tag       = RegNext(s1_tag)
+
   val s2_req_rtage = VecInit(table.read(s1_hashed_idx, io.f1_req_valid).map(_.asTypeOf(new TageEntry)))
   val s2_req_rhius = hi_us.read(s1_hashed_idx, io.f1_req_valid)
   val s2_req_rlous = lo_us.read(s1_hashed_idx, io.f1_req_valid)
-  val s2_req_rhits = VecInit(s2_req_rtage.map(e => e.valid && e.tag === s1_tag && !doing_reset))
-
-  val s2_tag       = RegNext(s1_tag)
+  val s2_req_rhits = VecInit(s2_req_rtage.map(e => e.valid && e.tag === s2_tag && !doing_reset))
 
   for (w <- 0 until bankWidth) {
     // This bit indicates the TAGE table matched here
