@@ -59,7 +59,7 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
   for (w <- 0 until coreWidth) {
     val supportedUnits = new SupportedFuncUnits(
                            alu  = true ,
-                           bru  = true ,
+                           jmp  = true ,
                            mem  = true ,
                            muld = true ,
                            fpu  = false,
