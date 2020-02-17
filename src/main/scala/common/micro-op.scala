@@ -16,7 +16,7 @@ import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
 
-import boom.exu.FUConstants
+import boom.exu.{FUConstants,FastWakeup}
 
 /**
  * Extension to BoomBundle to add a MicroOp

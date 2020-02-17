@@ -480,8 +480,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Jump Unit Requests
   val iss_jmp = iss_uops zip iss_valids map { case (u,v) => u.fu_code === FU_JMP && v }
-  bru_pc_req.valid := RegNext(iss_jmp.reduce(_||_))
-  bru_pc_req.bits  := RegNext(Mux1H(iss_jmp, iss_uops.map(_.ftq_idx)))
+  jmp_pc_req.valid                 := RegNext(iss_jmp.reduce(_||_))
+  jmp_pc_req.bits                  := RegNext(Mux1H(iss_jmp, iss_uops.map(_.ftq_idx)))
   exe_units.io.get_ftq_pc.pc       := RegNext(io.ifu.get_pc(0).pc)
   exe_units.io.get_ftq_pc.entry    := RegNext(io.ifu.get_pc(0).entry)
   exe_units.io.get_ftq_pc.com_pc   := DontCare
@@ -857,8 +857,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   exe_units.io.exe_reqs <> iregister_read.io.exe_reqs
 
-  exe_units.io.brinfo := br_unit.brinfo
-  exe_units.io.kill   := RegNext(rob.io.flush.valid)
+  exe_units.io.brupdate := brupdate
+  exe_units.io.kill     := RegNext(rob.io.flush.valid)
 
   bypasses := exe_units.io.bypass
 

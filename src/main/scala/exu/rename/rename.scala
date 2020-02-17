@@ -258,7 +258,6 @@ class RenameStage(
   freelist.io.ren_br_tags := ren2_br_tags
   freelist.io.brupdate := io.brupdate
   freelist.io.pipeline_empty := io.debug_rob_empty
-  freelist.io.debug.pipeline_empty := io.debug_rob_empty
 
   assert (ren2_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
            "[rename-stage] A uop is trying to allocate the zero physical register.")

@@ -110,11 +110,6 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     exe_units.filter(_.hasMem)
   }
 
-  def jmp_unit = {
-    require (exe_units.count(_.hasJmpUnit) == 1)
-    exe_units.find(_.hasJmpUnit).get
-  }
-
   def csr_unit = {
     require (exe_units.count(_.hasCSR) == 1)
     exe_units.find(_.hasCSR).get
@@ -132,23 +127,10 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     exe_units.find(_.hasFpiu).get
   }
 
-  def jmp_unit_io = {
-    require (exe_units.count(_.hasJmpUnit) == 1)
-    (exe_units.find(_.hasJmpUnit).get).io.jmp_unit
-  }
-
-  def jmp_unit_idx = {
-    exe_units.indexWhere(_.hasJmpUnit)
-  }
-
   def rocc_unit = {
     require (usingRoCC)
     require (exe_units.count(_.hasRocc) == 1)
     exe_units.find(_.hasRocc).get
-  }
-
-  def idiv_busy = {
-    !exe_units.find(_.hasDiv).get.io.fu_types(4)
   }
 
   //----------------------------------------------------------------------------------------------------
@@ -172,10 +154,10 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     shared_exe_units += mem_unit
   }
 
-  // Branch unit
-  val br_exe_unit = Module(new ALUExeUnit(hasBrUnit = true))
-  br_exe_unit.suggestName("jmp_unit")
-  shared_exe_units += br_exe_unit
+  // Jump unit
+  val jmp_unit = Module(new ALUExeUnit(hasJmp = true))
+  jmp_unit.suggestName("jmp_unit")
+  shared_exe_units += jmp_unit
 
   // Put remaining functional units in a shared execution unit
   val misc_unit = Module(new ALUExeUnit(hasMul  = true,

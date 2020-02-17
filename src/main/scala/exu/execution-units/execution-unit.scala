@@ -67,7 +67,7 @@ class FFlagsResp(implicit p: Parameters) extends BoomBundle
  * @param bypassable is the exe unit able to be bypassed
  * @param hasMem does the exe unit have a MemAddrCalcUnit
  * @param hasCSR does the exe unit write to the CSRFile
- * @param hasBrUnit does the exe unit have a branch unit
+ * @param hasJmp does the exe unit have a jump unit
  * @param hasAlu does the exe unit have a alu
  * @param hasFpu does the exe unit have a fpu
  * @param hasMul does the exe unit have a multiplier
@@ -89,7 +89,7 @@ abstract class ExecutionUnit(
   val alwaysBypassable : Boolean       = false,
   val hasMem           : Boolean       = false,
   val hasCSR           : Boolean       = false,
-  val hasJmpUnit       : Boolean       = false,
+  val hasJmp       : Boolean       = false,
   val hasAlu           : Boolean       = false,
   val hasFpu           : Boolean       = false,
   val hasMul           : Boolean       = false,
@@ -121,7 +121,7 @@ abstract class ExecutionUnit(
 
     // only used by the branch unit
     val brinfo     = if (hasAlu) Output(new BrResolutionInfo()) else null
-    val get_ftq_pc = if (hasJmpUnit) Flipped(new GetPCFromFtqIO()) else null
+    val get_ftq_pc = if (hasJmp) Flipped(new GetPCFromFtqIO()) else null
     val status     = Input(new freechips.rocketchip.rocket.MStatus())
 
     // only used by the fpu unit
@@ -143,7 +143,7 @@ abstract class ExecutionUnit(
   // TODO add "number of fflag ports", so we can properly account for FPU+Mem combinations
   def hasFFlags     : Boolean = hasFpu || hasFdiv
 
-  require ((hasFpu || hasFdiv) ^ (hasAlu || hasMem || hasBrUnit || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
+  require ((hasFpu || hasFdiv) ^ (hasAlu || hasMem || hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
   def hasFcsr = hasIfpu || hasFpu || hasFdiv
 
@@ -153,7 +153,7 @@ abstract class ExecutionUnit(
   def supportedFuncUnits = {
     new SupportedFuncUnits(
       alu = hasAlu,
-      jmp = hasJmpUnit,
+      jmp = hasJmp,
       mem = hasMem,
       muld = hasMul || hasDiv,
       fpu = hasFpu,
@@ -167,7 +167,7 @@ abstract class ExecutionUnit(
  * ALU execution unit that can have a branch, alu, mul, div, int to FP,
  * and memory unit.
  *
- * @param hasBrUnit does the exe unit have a branch unit
+ * @param hasJmp does the exe unit have a jump unit
  * @param hasCSR does the exe unit write to the CSRFile
  * @param hasAlu does the exe unit have a alu
  * @param hasMul does the exe unit have a multiplier
@@ -176,7 +176,7 @@ abstract class ExecutionUnit(
  * @param hasMem does the exe unit have a MemAddrCalcUnit
  */
 class ALUExeUnit(
-  hasJmpUnit     : Boolean = false,
+  hasJmp     : Boolean = false,
   hasCSR         : Boolean = false,
   hasAlu         : Boolean = true,
   hasMul         : Boolean = false,
@@ -187,7 +187,7 @@ class ALUExeUnit(
   (implicit p: Parameters)
   extends ExecutionUnit(
     readsIrf         = true,
-    writesIrf        = hasAlu || hasBrUnit || hasMul || hasCSR,
+    writesIrf        = hasAlu || hasJmp || hasMul || hasCSR,
     writesLlIrf      = hasMem || hasDiv || hasRocc,
     writesLlFrf      = (hasIfpu || hasMem) && p(tile.TileKey).core.fpu != None,
     numBypassStages  =
@@ -195,9 +195,9 @@ class ALUExeUnit(
       else if (hasAlu) 1 else 0,
     dataWidth        = p(tile.XLen) + 1,
     bypassable       = hasAlu,
-    alwaysBypassable = hasAlu && !(hasMem || hasJmpUnit || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
+    alwaysBypassable = hasAlu && !(hasMem || hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     hasCSR           = hasCSR,
-    hasJmpUnit       = hasJmpUnit,
+    hasJmp       = hasJmp,
     hasAlu           = hasAlu,
     hasMul           = hasMul,
     hasDiv           = hasDiv,
@@ -235,14 +235,14 @@ class ALUExeUnit(
                  Mux(hasMul.B, FU_MUL, 0.U) |
                  Mux(!div_busy && hasDiv.B, FU_DIV, 0.U) |
                  Mux(hasCSR.B, FU_CSR, 0.U) |
-                 Mux(hasJmpUnit.B, FU_JMP, 0.U) |
+                 Mux(hasJmp.B, FU_JMP, 0.U) |
                  Mux(!ifpu_busy && hasIfpu.B, FU_I2F, 0.U) |
                  Mux(hasMem.B, FU_MEM, 0.U)
 
   // ALU Unit -------------------------------
   var alu: ALUUnit = null
   if (hasAlu) {
-    alu = Module(new ALUUnit(isJmpUnit = hasJmpUnit,
+    alu = Module(new ALUUnit(isJmpUnit = hasJmp,
                              numStages = numBypassStages,
                              dataWidth = xLen))
     alu.io.req.valid := (
@@ -267,7 +267,7 @@ class ALUExeUnit(
 
     // branch unit is embedded inside the ALU
     io.brinfo := alu.io.brinfo
-    if (hasJmpUnit) {
+    if (hasJmp) {
       alu.io.get_ftq_pc <> io.get_ftq_pc
     }
   }
@@ -366,9 +366,9 @@ class ALUExeUnit(
     io.lsu_io.req := maddrcalc.io.resp
 
     // Mem unit writeback pipeline register
-    val kill = io.kill || IsKilledByBranch(io.brinfo, io.lsu_io.iresp.bits.uop)
+    val kill = io.kill || IsKilledByBranch(io.brupdate, io.lsu_io.iresp.bits.uop)
     val resp_bits  = RegNext(io.lsu_io.iresp.bits)
-    resp_bits.uop := GetNewUopAndBrMask(io.lsu_io.iresp.bits.uop, io.brinfo)
+    resp_bits.uop := GetNewUopAndBrMask(io.lsu_io.iresp.bits.uop, io.brupdate)
     val resp_valid = RegNext(io.lsu_io.iresp.valid && !kill)
 
     io.ll_iresp.bits  := resp_bits
