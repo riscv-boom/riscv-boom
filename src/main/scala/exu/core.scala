@@ -482,7 +482,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val iss_jmp = iss_uops zip iss_valids map { case (u,v) => u.fu_code === FU_JMP && v }
   bru_pc_req.valid := RegNext(iss_jmp.reduce(_||_))
   bru_pc_req.bits  := RegNext(Mux1H(iss_jmp, iss_uops.map(_.ftq_idx)))
-  exe_units.io.get_ftq_pc.pc       := RegNext(io.ifu.get_pc(0).fetch_pc)
+  exe_units.io.get_ftq_pc.pc       := RegNext(io.ifu.get_pc(0).pc)
   exe_units.io.get_ftq_pc.entry    := RegNext(io.ifu.get_pc(0).entry)
   exe_units.io.get_ftq_pc.com_pc   := DontCare
   exe_units.io.get_ftq_pc.next_val := RegNext(io.ifu.get_pc(0).next_val)
@@ -492,7 +492,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val xcpt_idx = PriorityEncoder(dec_xcpts)
   xcpt_pc_req.valid    := dec_xcpts.reduce(_||_)
   xcpt_pc_req.bits     := dec_uops(xcpt_idx).ftq_idx
-  //rob.io.xcpt_fetch_pc := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
   rob.io.xcpt_fetch_pc := io.ifu.get_pc(0).pc
 
   flush_pc_req.valid   := rob.io.flush.valid

@@ -111,10 +111,10 @@ abstract class ExecutionUnit(
     val ll_iresp = if (writesLlIrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
     val ll_fresp = if (writesLlFrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
 
-
     val bypass   = Output(new BypassData(numBypassStages, dataWidth))
-    val brupdate = Input(new BrUpdateInfo())
 
+    val brupdate = Input(new BrUpdateInfo)
+    val kill     = Input(Bool())
 
     // only used by the rocc unit
     val rocc = if (hasRocc) new RoCCShimCoreIO else null
