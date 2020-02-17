@@ -92,8 +92,6 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   val rs1_data = UInt(dataWidth.W)
   val rs2_data = UInt(dataWidth.W)
   val rs3_data = UInt(dataWidth.W) // only used for FMA units
-
-  val kill = Bool() // kill everything
 }
 
 /**

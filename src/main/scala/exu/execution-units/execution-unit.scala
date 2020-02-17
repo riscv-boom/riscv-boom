@@ -122,7 +122,7 @@ abstract class ExecutionUnit(
     // only used by the branch unit
     val brinfo     = if (hasAlu) Output(new BrResolutionInfo()) else null
     val get_ftq_pc = if (hasJmp) Flipped(new GetPCFromFtqIO()) else null
-    val status     = Input(new freechips.rocketchip.rocket.MStatus())
+    val status     = if (hasMem || hasRocc) Input(new freechips.rocketchip.rocket.MStatus()) else null
 
     // only used by the fpu unit
     val fcsr_rm = if (hasFcsr) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
@@ -357,6 +357,7 @@ class ALUExeUnit(
     maddrcalc.io.req        <> io.req
     maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
     maddrcalc.io.brupdate   := io.brupdate
+    maddrcalc.io.kill       := io.kill
     maddrcalc.io.status     := io.status
     maddrcalc.io.bp         := io.bp
     maddrcalc.io.resp.ready := DontCare

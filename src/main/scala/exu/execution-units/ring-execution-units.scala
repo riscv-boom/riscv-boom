@@ -230,11 +230,11 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
   // Hookup column units
   for (w <- 0 until coreWidth) {
-    column_exe_units(w).io.req.bits  := exe_reqs(w).bits
-    column_exe_units(w).io.req.valid := col_sels(0)(w)
+    column_exe_units(w).io.req.bits    := exe_reqs(w).bits
+    column_exe_units(w).io.req.valid   := col_sels(0)(w)
 
-    column_exe_units(w).io.brupdate := io.brupdate
-    column_exe_units(w).io.kill   := io.kill
+    column_exe_units(w).io.brupdate    := io.brupdate
+    column_exe_units(w).io.kill        := io.kill
 
     column_exe_units(w).io.iresp.ready := DontCare
   }
@@ -305,10 +305,9 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     mem_unit.io.com_exception := io.com_exception
   }
 
-  // Branch unit
+  // Jump unit
   io.jmp_brinfo := jmp_unit.io.brinfo
   jmp_unit.io.get_ftq_pc <> io.get_ftq_pc
-  jmp_unit.io.status := io.status
 
   // CSR unit
   io.csr_unit_resp <> csr_unit.io.iresp
