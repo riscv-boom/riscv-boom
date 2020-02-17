@@ -30,8 +30,6 @@ trait BOOMDebugConstants
 
   val DROMAJO_COSIM_ENABLE = false // enable dromajo cosim
 
-  val DROMAJO_COSIM_ENABLE = false // enable dromajo cosim
-
   // When enabling DEBUG_PRINTF, the vertical whitespace can be padded out
   // such that viewing the *.out file in vim can line up veritically to
   // enable ctrl+f/ctrl+b to advance the *.out file one cycle without
