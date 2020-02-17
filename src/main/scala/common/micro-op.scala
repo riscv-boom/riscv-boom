@@ -40,7 +40,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val debug_pc         = UInt(coreMaxAddrBits.W)
   val iq_type          = UInt(IQT_SZ.W)        // which issue unit do we use?
   val fu_code          = UInt(FUConstants.FUC_SZ.W) // which functional unit do we use?
-  val eu_code          = UInt(4.W) // Just hard-code this for now
   val ctrl             = new CtrlSignals
 
   // What is the next state of this uop in the issue window? useful
@@ -207,6 +206,14 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // Getters that help with scheduling
   def prs1_reads_irf = lrs1_rtype === RT_FIX && !prs1_bypass && lrs1 =/= 0.U
   def prs2_reads_irf = lrs2_rtype === RT_FIX && !prs2_bypass && lrs2 =/= 0.U
+  def eu_code        = {	// Hard code this for now
+	val fu = fu_code
+	VecInit(fu(0),                  // ALU
+			fu(2),                  // MEM
+			fu(1),                  // BRU
+			fu(3) || fu(4) || fu(5) // MUL || DIV || CSR
+			).asUInt
+  }
   def shared_eu_code = eu_code(3,1)
   def exe_wb_latency = fu_code(3) << (imulLatency - 1) | (fu_code(1) | fu_code(0))
   def exe_bp_latency = exe_wb_latency | fu_code(2) << (memLatency - 1) // Loads are bypassable but are not scheduled writebacks
