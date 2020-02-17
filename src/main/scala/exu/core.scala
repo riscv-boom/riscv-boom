@@ -1,4 +1,3 @@
-Mn
 //******************************************************************************
 // Copyright (c) 2015 - 2019, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
@@ -140,17 +139,17 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // brindices contains indices to reset pointers for allocated structures
   //           brindices is delayed a cycle
   val brupdate  = Wire(new BrUpdateInfo)
-  val b1    = Wire(new BrUpdateMasks)
-  val b2    = Reg(new BrResolutionInfo)
+  val b1        = Wire(new BrUpdateMasks)
+  val b2        = Reg(new BrResolutionInfo)
 
   brupdate.b1 := b1
   brupdate.b2 := b2
 
   val jmpunit_idx = exe_units.jmp_unit_idx
 
-  for ((b, a) <- brinfos zip exe_units.alu_units) {
-    b := a.io.brinfo
-    b.valid := a.io.brinfo.valid && !rob.io.flush.valid
+  for (w <- 0 until coreWidth) {
+    brinfos(w)       := exe_units.io.brinfos(w)
+    brinfos(w).valid := exe_units.io.brinfos(w).valid && !rob.io.flush.valid
   }
   b1.resolve_mask := brinfos.map(x => x.valid << x.uop.br_tag).reduce(_|_)
   b1.mispredict_mask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.br_tag).reduce(_|_)

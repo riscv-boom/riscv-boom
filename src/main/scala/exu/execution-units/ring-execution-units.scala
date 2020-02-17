@@ -39,6 +39,9 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
     val fu_avail  = Output(UInt(FUC_SZ.W))
 
+    // ALU branch resolution info
+    val brinfos = Output(Vec(coreWidth, new BrResolutionInfo))
+
     // TODO get rid of this output
     val bypass = Output(new BypassData(coreWidth, xLen))
 
@@ -300,6 +303,11 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // Punch through misc unit I/O to core
 
   io.fu_avail := exe_units.foldLeft(0.U(FUC_SZ.W))((fu,eu) => fu | eu.io.fu_types)
+
+  // Brinfo
+  for (w <- 0 until coreWidth) {
+    io.brinfos(w) := column_exe_units(w).io.brinfo
+  }
 
   // ALU bypasses
   io.bypass := DontCare
