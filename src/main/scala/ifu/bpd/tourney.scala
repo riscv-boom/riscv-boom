@@ -40,8 +40,8 @@ class TourneyBranchPredictorBank(params: BoomTourneyBPDParams = BoomTourneyBPDPa
   class TourneyMeta extends Bundle {
     val ctrs   = Vec(bankWidth, UInt(2.W))
   }
-  val s2_meta = Wire(new TourneyMeta)
-  override val metaSz = s2_meta.asUInt.getWidth
+  val s3_meta = Wire(new TourneyMeta)
+  override val metaSz = s3_meta.asUInt.getWidth
 
   val doing_reset = RegInit(true.B)
   val reset_idx = RegInit(0.U(log2Ceil(nSets).W))
@@ -50,20 +50,17 @@ class TourneyBranchPredictorBank(params: BoomTourneyBPDParams = BoomTourneyBPDPa
 
   val data = Seq.fill(bankWidth) { SyncReadMem(nSets, UInt(2.W)) }
 
-  val f0_req_idx = compute_folded_hist(io.f0_req.bits.hist, log2Ceil(nSets)) ^ s0_req_idx
-  val s2_req_rdata = RegNext(VecInit(data.map(_.read(f0_req_idx, io.f0_req.valid))))
-  val s2_resp = Wire(Vec(bankWidth, Bool()))
+  val f1_req_idx = compute_folded_hist(RegNext(io.f0_req.bits.hist), log2Ceil(nSets)) ^ s1_req_idx
+  val s3_req_rdata = RegNext(VecInit(data.map(_.read(f1_req_idx, s1_req.valid))))
+  val s3_resp = Wire(Vec(bankWidth, Bool()))
 
   for (w <- 0 until bankWidth) {
-    s2_resp(w) := Mux(s2_req_rdata(w)(1) && !doing_reset, io.resp_in(1).f2(w).taken, io.resp_in(0).f2(w).taken)
-    s2_meta.ctrs(w) := s2_req_rdata(w)
-    // s2_meta.preds(0) := io.resp_in(0).f2(w).taken
-    // s2_meta.preds(1) := io.resp_in(1).f2(w).taken
+    s3_resp(w) := Mux(s3_req_rdata(w)(1), io.resp_in(1).f3(w).taken, io.resp_in(0).f3(w).taken)  && !doing_reset
+    s3_meta.ctrs(w) := s3_req_rdata(w)
 
-    io.resp.f2(w).taken := s2_resp(w)
-    io.resp.f3(w).taken := RegNext(s2_resp(w))
+    io.resp.f3(w).taken := s3_resp(w)
   }
-  io.f3_meta := RegNext(s2_meta.asUInt)
+  io.f3_meta := s3_meta.asUInt
 
   val s1_update_wdata = Wire(Vec(bankWidth, UInt(2.W)))
   val s1_update_wmask = Wire(Vec(bankWidth, Bool()))
