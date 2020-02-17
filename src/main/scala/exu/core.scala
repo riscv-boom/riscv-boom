@@ -132,7 +132,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Dealing with branch resolutions
 
   // The individual branch resolutions from each ALU
-  val brinfos = Reg(Vec(coreWidth, new BrResolutionInfo()))
+  val brinfos = Reg(Vec(coreWidth+1, new BrResolutionInfo))
 
   // "Merged" branch update info from all ALUs
   // brmask contains masks for rapidly clearing mispredicted instructions
@@ -145,12 +145,13 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   brupdate.b1 := b1
   brupdate.b2 := b2
 
-  val jmpunit_idx = exe_units.jmp_unit_idx
-
   for (w <- 0 until coreWidth) {
     brinfos(w)       := exe_units.io.brinfos(w)
     brinfos(w).valid := exe_units.io.brinfos(w).valid && !rob.io.flush.valid
   }
+  brinfos(coreWidth)       := exe_units.io.jmp_brinfo
+  brinfos(coreWidth).valid := exe_units.io.jmp_brinfo.valid && !rob.io.flush.valid
+
   b1.resolve_mask := brinfos.map(x => x.valid << x.uop.br_tag).reduce(_|_)
   b1.mispredict_mask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.br_tag).reduce(_|_)
 
@@ -170,7 +171,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   b2.taken       := oldest_mispredict.taken
   b2.pc_sel      := oldest_mispredict.pc_sel
   b2.uop         := UpdateBrMask(brupdate, oldest_mispredict.uop)
-  b2.jalr_target := RegNext(exe_units(jmpunit_idx).io.brinfo.jalr_target)
+  b2.jalr_target := RegNext(exe_units.io.jmp_brinfo.jalr_target)
   b2.target_offset := oldest_mispredict.target_offset
 
   val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftq_idx

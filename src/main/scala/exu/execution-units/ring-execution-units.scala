@@ -50,7 +50,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     val bp     = Input(Vec(nBreakpoints, new BP))
 
     // only used by the branch unit
-    val br_unit    = Output(new BranchUnitResp)
+    val jmp_brinfo = Output(new BrResolutionInfo)
     val get_ftq_pc = Flipped(new GetPCFromFtqIO)
     val status     = Input(new freechips.rocketchip.rocket.MStatus)
 
@@ -110,9 +110,9 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     exe_units.filter(_.hasMem)
   }
 
-  def br_unit = {
-    require (exe_units.count(_.hasBrUnit) == 1)
-    exe_units.find(_.hasBrUnit).get
+  def jmp_unit = {
+    require (exe_units.count(_.hasJmpUnit) == 1)
+    exe_units.find(_.hasJmpUnit).get
   }
 
   def csr_unit = {
@@ -132,13 +132,13 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     exe_units.find(_.hasFpiu).get
   }
 
-  def br_unit_io = {
-    require (exe_units.count(_.hasBrUnit) == 1)
-    (exe_units.find(_.hasBrUnit).get).io.br_unit
+  def jmp_unit_io = {
+    require (exe_units.count(_.hasJmpUnit) == 1)
+    (exe_units.find(_.hasJmpUnit).get).io.jmp_unit
   }
 
-  def br_unit_idx = {
-    exe_units.indexWhere(_.hasBrUnit)
+  def jmp_unit_idx = {
+    exe_units.indexWhere(_.hasJmpUnit)
   }
 
   def rocc_unit = {
@@ -174,7 +174,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
   // Branch unit
   val br_exe_unit = Module(new ALUExeUnit(hasBrUnit = true))
-  br_exe_unit.suggestName("br_unit")
+  br_exe_unit.suggestName("jmp_unit")
   shared_exe_units += br_exe_unit
 
   // Put remaining functional units in a shared execution unit
@@ -324,9 +324,9 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   }
 
   // Branch unit
-  io.br_unit := br_unit_io
-  br_unit.io.get_ftq_pc <> io.get_ftq_pc
-  br_unit.io.status := io.status
+  io.jmp_brinfo := jmp_unit.io.brinfo
+  jmp_unit.io.get_ftq_pc <> io.get_ftq_pc
+  jmp_unit.io.status := io.status
 
   // CSR unit
   io.csr_unit_resp <> csr_unit.io.iresp
