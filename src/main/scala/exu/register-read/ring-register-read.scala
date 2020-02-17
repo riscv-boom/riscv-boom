@@ -34,8 +34,8 @@ class RingRegisterReadIO
   // send micro-ops to the execution pipelines
   val exe_reqs = Vec(coreWidth, new DecoupledIO(new FuncUnitReq(xLen)))
 
-  val kill   = Input(Bool())
-  val brinfo = Input(new BrResolutionInfo)
+  val kill     = Input(Bool())
+  val brupdate= Input(new BrUpdateInfo)
 }
 
 /**
@@ -72,8 +72,8 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
     rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
 
     rrd_valids(w) := RegNext(rrd_decode_unit.io.rrd_valid &&
-                     !IsKilledByBranch(io.brinfo, rrd_decode_unit.io.rrd_uop) && !io.kill)
-    rrd_uops(w)   := RegNext(GetNewUopAndBrMask(rrd_decode_unit.io.rrd_uop, io.brinfo))
+                     !IsKilledByBranch(io.brupdate, rrd_decode_unit.io.rrd_uop) && !io.kill)
+    rrd_uops(w)   := RegNext(GetNewUopAndBrMask(rrd_decode_unit.io.rrd_uop, io.brupdate))
   }
 
   //-------------------------------------------------------------

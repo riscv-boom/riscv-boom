@@ -42,7 +42,7 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
 
   val fu_avail      = Input(UInt(FUC_SZ.W))
 
-  val brinfo        = Input(new BrResolutionInfo)
+  val brupdate      = Input(new BrUpdateInfo)
   val kill          = Input(Bool()) // pipeline flush
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
   val ld_miss       = Input(Bool())
@@ -173,11 +173,11 @@ class RingIssueSlot(implicit p: Parameters)
   }
 
   // Handle branch misspeculations
-  val next_br_mask = GetNewBrMask(io.brinfo, slot_uop)
+  val next_br_mask = GetNewBrMask(io.brupdate, slot_uop)
 
   // was this micro-op killed by a branch? if yes, we can't let it be valid if
   // we compact it into an other entry
-  when (IsKilledByBranch(io.brinfo, slot_uop)) {
+  when (IsKilledByBranch(io.brupdate, slot_uop)) {
     next_state := s_invalid
   }
 

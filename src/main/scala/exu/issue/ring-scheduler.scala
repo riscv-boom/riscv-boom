@@ -33,7 +33,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
     val fu_avail = Input(UInt(FUC_SZ.W))
 
-    val brinfo   = Input(new BrResolutionInfo)
+    val brupdate = Input(new BrUpdateInfo)
     val kill     = Input(Bool())
   })
 
@@ -51,8 +51,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
       slots(w)(i).slow_wakeups := io.wakeups
       slots(w)(i).ld_miss      := io.ld_miss((w - 1 + coreWidth) % coreWidth)
 
-      slots(w)(i).brinfo := io.brinfo
-      slots(w)(i).kill   := io.kill
+      slots(w)(i).brupdate := io.brupdate
+      slots(w)(i).kill     := io.kill
 
       slots(w)(i).fu_avail := io.fu_avail
     }

@@ -34,8 +34,8 @@ class RingRenameIO(implicit p: Parameters) extends BoomBundle
   val ren2_uops = Output(Vec(coreWidth, new MicroOp))
 
   // branch resolution (execute)
-  val brinfo = Input(new BrResolutionInfo())
-  val kill = Input(Bool())
+  val brupdate  = Input(new BrUpdateInfo)
+  val kill      = Input(Bool())
 
   val dis_fire  = Input(Vec(coreWidth, Bool()))
   val dis_ready = Input(Bool())
@@ -166,7 +166,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
   maptable.io.map_reqs    := map_reqs
   maptable.io.remap_reqs  := remap_reqs
   maptable.io.ren_br_tags := ren2_br_tags
-  maptable.io.brinfo      := io.brinfo
+  maptable.io.brupdate    := io.brupdate
   maptable.io.rollback    := io.rollback
 
   // Maptable outputs.
@@ -198,7 +198,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
       next_uop := r_uop
     }
 
-    r_uop := GetNewUopAndBrMask(BypassAllocations(next_uop, ren2_uops, ren2_alloc_reqs), io.brinfo)
+    r_uop := GetNewUopAndBrMask(BypassAllocations(next_uop, ren2_uops, ren2_alloc_reqs), io.brupdate)
 
     ren2_valids(w) := r_valid
     ren2_uops(w)   := r_uop
@@ -245,7 +245,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
       freelists(c).io.dealloc_pregs(w).bits  := Mux(io.rollback, io.com_uops(w).pdst, io.com_uops(w).stale_pdst)
     }
     freelists(c).io.ren_br_tags := ren2_br_tags
-    freelists(c).io.brinfo      := io.brinfo
+    freelists(c).io.brupdate    := io.brupdate
   }
 
   // Freelist outputs.
@@ -276,7 +276,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
     if (w > 0) bypassed_uop := BypassAllocations(ren2_uops(w), ren2_uops.slice(0,w), ren2_alloc_reqs.slice(0,w))
     else       bypassed_uop := ren2_uops(w)
 
-    io.ren2_uops(w) := GetNewUopAndBrMask(bypassed_uop, io.brinfo)
+    io.ren2_uops(w) := GetNewUopAndBrMask(bypassed_uop, io.brupdate)
 
     // Need to know which prs was used to decide on a column. A bit of a hack.
     io.ren2_uops(w).busy_operand_sel := bypassed_uop.prs2_busy

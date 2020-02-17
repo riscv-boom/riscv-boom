@@ -34,7 +34,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     val exe_resps = Output(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
     val ll_resps  = Output(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
 
-    val brinfo    = Input(new BrResolutionInfo)
+    val brupdate  = Input(new BrUpdateInfo)
     val kill      = Input(Bool())
 
     val fu_avail  = Output(UInt(FUC_SZ.W))
@@ -211,9 +211,9 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
   // uop registers
   for (w <- 0 until coreWidth) {
-    val kill = io.kill || IsKilledByBranch(io.brinfo, io.exe_reqs(w).bits.uop)
+    val kill = io.kill || IsKilledByBranch(io.brupdate, io.exe_reqs(w).bits.uop)
     exe_valids(w) := RegNext(io.exe_reqs(w).valid && !kill)
-    exe_uops(w)   := RegNext(GetNewUopAndBrMask(io.exe_reqs(w).bits.uop, io.brinfo))
+    exe_uops(w)   := RegNext(GetNewUopAndBrMask(io.exe_reqs(w).bits.uop, io.brupdate))
   }
 
   // Operand data registers and bypassing
@@ -251,7 +251,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     column_exe_units(w).io.req.bits  := exe_reqs(w).bits
     column_exe_units(w).io.req.valid := col_sels(0)(w)
 
-    column_exe_units(w).io.brinfo := io.brinfo
+    column_exe_units(w).io.brupdate := io.brupdate
     column_exe_units(w).io.kill   := io.kill
 
     column_exe_units(w).io.iresp.ready := DontCare
@@ -264,7 +264,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
     assert (PopCount(col_sels(i)) <= 1.U, "[exe] shared unit request crossbar collision on port " + i)
 
-    eu.io.brinfo := io.brinfo
+    eu.io.brupdate := io.brupdate
     eu.io.kill   := io.kill
 
     if (eu.writesIrf) eu.io.iresp.ready := DontCare
