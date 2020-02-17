@@ -16,7 +16,6 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 
 import boom.ifu._
-import boom.bpu._
 import boom.exu._
 import boom.lsu._
 
@@ -203,12 +202,6 @@ class WithSmallBooms extends Config((site, here, up) => {
       maxBrCount = 4,
       numFetchBufferEntries = 8,
       ftq = FtqParameters(nEntries=16),
-      btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=64, nWays=2,
-                              nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
-      bpdBaseOnly = None,
-      gshare = Some(GShareParameters(historyLength=11, numSets=2048)),
-      tage = None,
-      bpdRandom = None,
       nPerfCounters = 2,
       fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits,
@@ -241,12 +234,6 @@ class WithMediumBooms extends Config((site, here, up) => {
       maxBrCount = 8,
       numFetchBufferEntries = 16,
       ftq = FtqParameters(nEntries=32),
-      btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=64, nWays=2,
-                              nRAS=8, tagSz=20, bypassCalls=false, rasCheckForEmpty=false),
-      bpdBaseOnly = None,
-      gshare = Some(GShareParameters(historyLength=23, numSets=4096)),
-      tage = None,
-      bpdRandom = None,
       nPerfCounters = 6,
       fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBits,
@@ -281,11 +268,6 @@ class WithLargeBooms extends Config((site, here, up) => {
       maxBrCount = 12,
       numFetchBufferEntries = 24,
       ftq = FtqParameters(nEntries=32),
-      btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=20),
-      bpdBaseOnly = None,
-      gshare = Some(GShareParameters(historyLength=23, numSets=4096)),
-      tage = None,
-      bpdRandom = None,
       fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                nSets=64, nWays=8, nMSHRs=4, nTLBEntries=16)),
@@ -320,11 +302,6 @@ class WithMegaBooms extends Config((site, here, up) => {
       enablePrefetching=true,
       numDCacheBanks=2,
       ftq = FtqParameters(nEntries=32),
-      btb = BoomBTBParameters(btbsa=true, densebtb=false, nSets=512, nWays=4, nRAS=16, tagSz=20),
-      bpdBaseOnly = None,
-      gshare = Some(GShareParameters(historyLength=23, numSets=4096)),
-      tage = None,
-      bpdRandom = None,
       fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                nSets=64, nWays=8, nMSHRs=8, nTLBEntries=32)),

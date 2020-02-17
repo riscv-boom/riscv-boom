@@ -16,7 +16,6 @@ import freechips.rocketchip.config.{Parameters, Field}
 import freechips.rocketchip.devices.tilelink.{BootROMParams, CLINTParams, PLICParams}
 
 import boom.ifu._
-import boom.bpu._
 import boom.exu._
 import boom.lsu._
 
@@ -43,19 +42,8 @@ case class BoomCoreParams(
   enableFastLoadUse: Boolean = true,
   enableCommitMapTable: Boolean = false,
   enableFastPNR: Boolean = false,
-  enableBTBContainsBranches: Boolean = true,
-  enableBranchPredictor: Boolean = true,
-  enableBTB: Boolean = true,
-  enableBpdUModeOnly: Boolean = false,
-  enableBpdUSModeHistory: Boolean = false,
   useAtomicsOnlyForIO: Boolean = false,
   ftq: FtqParameters = FtqParameters(),
-  btb: BoomBTBParameters = BoomBTBParameters(),
-  bim: BimParameters = BimParameters(),
-  tage: Option[TageParameters] = None,
-  gshare: Option[GShareParameters] = None,
-  bpdBaseOnly: Option[BaseOnlyParameters] = None,
-  bpdRandom: Option[RandomBpdParameters] = None,
   intToFpLatency: Int = 2,
   imulLatency: Int = 3,
   nPerfCounters: Int = 0,
@@ -213,42 +201,16 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   //************************************
   // Branch Prediction
+  val globalHistoryLength = 64
+  val bpdMaxMetaLength = 80
 
-  val enableBTB = boomParams.enableBTB
-  val enableBTBContainsBranches = boomParams.enableBTBContainsBranches
+  val nRasEntries = 32
 
-  val enableBranchPredictor = boomParams.enableBranchPredictor
-
-  val enableBpdUmodeOnly = boomParams.enableBpdUModeOnly
-  val enableBpdUshistory = boomParams.enableBpdUSModeHistory
-  // What is the maximum length of global history tracked?
-  var globalHistoryLength = 0
-  // What is the physical length of the VeryLongHistoryRegister? This must be
-  // able to handle the GHIST_LENGTH as well as being able hold all speculative
-  // updates well beyond the GHIST_LENGTH (i.e., +ROB_SZ and other buffering).
-  var bpdInfoSize = 0
-
-  val tageBpuParams = boomParams.tage
-  val gshareBpuParams = boomParams.gshare
-  val baseOnlyBpuParams = boomParams.bpdBaseOnly
-  val randomBpuParams = boomParams.bpdRandom
-
-  if (!enableBranchPredictor) {
-    bpdInfoSize = 1
-    globalHistoryLength = 1
-  } else if (baseOnlyBpuParams.isDefined && baseOnlyBpuParams.get.enabled) {
-    globalHistoryLength = 8
-    bpdInfoSize = BaseOnlyBrPredictor.GetRespInfoSize()
-  } else if (gshareBpuParams.isDefined && gshareBpuParams.get.enabled) {
-    globalHistoryLength = gshareBpuParams.get.historyLength
-    bpdInfoSize = GShareBrPredictor.GetRespInfoSize(globalHistoryLength)
-  } else if (tageBpuParams.isDefined && tageBpuParams.get.enabled) {
-    globalHistoryLength = tageBpuParams.get.historyLengths.max
-    bpdInfoSize = TageBrPredictor.GetRespInfoSize(p)
-  } else if (randomBpuParams.isDefined && randomBpuParams.get.enabled) {
-    globalHistoryLength = 1
-    bpdInfoSize = RandomBrPredictor.GetRespInfoSize()
-  }
+  val tageNTables = 6
+  val tageNSets = Seq(128, 128, 256, 256, 128, 128)
+  val tageHistoryLength = Seq(2, 4, 8, 16, 32, 64)
+  val tageTagSz = Seq(7, 7, 8, 8, 9, 9)
+  val tageUBitPeriod = 2048
 
   //************************************
   // Extra Knobs and Features

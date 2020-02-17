@@ -22,7 +22,6 @@ import chisel3.util._
 import freechips.rocketchip.config.{Parameters}
 import freechips.rocketchip.util.{Str}
 
-import boom.bpu._
 import boom.common._
 import boom.exu._
 import boom.util._
@@ -40,28 +39,37 @@ case class FtqParameters(
  * Bundle to add to the FTQ RAM and to be used as the pass in IO
  */
 class FTQBundle(implicit p: Parameters) extends BoomBundle
+  with HasBoomFrontendParameters
 {
-  val fetch_pc = UInt(vaddrBitsExtended.W) // TODO compress out high-order bits
-  val history = UInt(globalHistoryLength.W)
-  val bim_info = new BimStorage
-  val bpd_info = UInt(bpdInfoSize.W)
-}
+  // // TODO compress out high-order bits
+  // val fetch_pc  = UInt(vaddrBitsExtended.W)
+  // IDX of instruction that was predicted taken, if any
+  val cfi_idx   = Valid(UInt(log2Ceil(fetchWidth).W))
+  // Was the CFI in this bundle found to be taken? or not
+  val cfi_taken = Bool()
+  // Was this CFI mispredicted by the branch prediction pipeline?
+  val cfi_mispredicted = Bool()
+  // What type of CFI was taken out of this bundle
+  val cfi_type = Bool()
+  // mask of branches which were visible in this fetch bundle
+  val br_mask   = UInt(fetchWidth.W)
+  // This CFI is likely a CALL
+  val cfi_is_call   = Bool()
+  // This CFI is likely a RET
+  val cfi_is_ret    = Bool()
+  // Is the NPC after the CFI +4 or +2
+  val cfi_npc_plus4 = Bool()
+  // What was the top of the RAS that this bundle saw?
+  val ras_top = UInt(vaddrBitsExtended.W)
 
-/**
- * Initially, store a random branch entry for BIM (set cfi_type==branch).
- * If a branch is resolved that matches the stored BIM entry, set "executed" to high.
- * Otherwise, if a branch is resolved and mispredicted, track the oldest
- * mispredicted cfi instruction for a given fetch entry.
- */
-class CfiMissInfo(implicit p: Parameters) extends BoomBundle
-{
-  val executed = Bool()      // Was the branch stored here for the BIM executed?
-                             // Check the cfi_idx matches and cfi_type == branch.
-                             // Is DontCare if a misprediction occurred.
-  val mispredicted = Bool()  // Was a branch or jump mispredicted in this fetch group?
-  val taken = Bool()         // If a branch, was it taken?
-  val cfi_idx = UInt(log2Ceil(fetchWidth).W) // which instruction in fetch group?
-  val cfi_type = UInt(CFI_SZ.W) // What kind of instruction is stored here?
+  // What global history should be used to query this fetch bundle
+  val ghist = new GlobalHistory
+
+  // Which bank did this start from?
+  val start_bank = UInt(1.W)
+
+  // // Metadata for the branch predictor
+  // val bpd_meta = Vec(nBanks, UInt(bpdMaxMetaLength.W))
 }
 
 /**
@@ -70,11 +78,15 @@ class CfiMissInfo(implicit p: Parameters) extends BoomBundle
  */
 class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle
 {
-  val ftq_idx  = Input(UInt(log2Ceil(ftqSz).W))
-  val fetch_pc = Output(UInt(vaddrBitsExtended.W))
+  val ftq_idx   = Input(UInt(log2Ceil(ftqSz).W))
+
+  val entry     = Output(new FTQBundle)
+
+  val pc        = Output(UInt(vaddrBitsExtended.W))
+  val com_pc    = Output(UInt(vaddrBitsExtended.W))
   // the next_pc may not be valid (stalled or still being fetched)
-  val next_val = Output(Bool())
-  val next_pc  = Output(UInt(vaddrBitsExtended.W))
+  val next_val  = Output(Bool())
+  val next_pc   = Output(UInt(vaddrBitsExtended.W))
 }
 
 /**
@@ -85,283 +97,188 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle
  */
 class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
+  with HasBoomFrontendParameters
 {
   private val idx_sz = log2Ceil(num_entries)
 
   val io = IO(new BoomBundle {
     // Enqueue one entry for every fetch cycle.
-    val enq = Flipped(Decoupled(new FTQBundle()))
+    val enq = Flipped(Decoupled(new FetchBundle()))
     // Pass to FetchBuffer (newly fetched instructions).
     val enq_idx = Output(UInt(idx_sz.W))
     // ROB tells us the youngest committed ftq_idx to remove from FTQ.
     val deq = Flipped(Valid(UInt(idx_sz.W)))
 
     // Give PC info to BranchUnit.
-    val get_ftq_pc = new GetPCFromFtqIO()
+    val get_ftq_pc = Vec(2, new GetPCFromFtqIO())
 
-    // Restore predictor history on a branch mispredict or pipeline flush.
-    val restore_history = Valid(new RestoreHistory)
+    val redirect = Input(Valid(UInt(idx_sz.W)))
 
-    // on any sort misprediction or rob flush, reset the enq_ptr, make a PC redirect request.
-    val flush = Flipped(Valid(new CommitExceptionSignals()))
-    // Redirect the frontend as we see fit (due to ROB/flush interactions).
-    val take_pc = Valid(new PCReq())
+    val brupdate = Input(new BrUpdateInfo)
 
-    // Tell the CSRFile what the fetch-pc at the FTQ's Commit Head is.
-    // Still need the low-order bits of the PC from the ROB to know the true Commit PC.
-    val com_ftq_idx = Input(UInt(log2Ceil(ftqSz).W))
-    val com_fetch_pc = Output(UInt(vaddrBitsExtended.W))
+    val bpdupdate = Output(Valid(new BranchPredictionUpdate))
 
-    val bim_update = Valid(new BimUpdate)
-    val bpd_update = Valid(new BpdUpdate)
+    val ras_update = Output(Bool())
+    val ras_update_idx = Output(UInt(log2Ceil(nRasEntries).W))
+    val ras_update_pc  = Output(UInt(vaddrBitsExtended.W))
 
-    // BranchResolutionUnit tells us the outcome of branches/jumps.
-    val brinfo = Input(new BrResolutionInfo())
   })
+  val bpd_ptr    = RegInit(0.U(idx_sz.W))
+  val deq_ptr    = RegInit(0.U(idx_sz.W))
+  val enq_ptr    = RegInit(1.U(idx_sz.W))
 
-  val deq_ptr = Counter(num_entries)
-  val enq_ptr = Counter(num_entries)
-  val maybe_full = RegInit(false.B)
-  val ptr_match = enq_ptr.value === deq_ptr.value
-  val empty = ptr_match && !maybe_full
-  val full = ptr_match && maybe_full
+  val full = ((WrapInc(WrapInc(enq_ptr, num_entries), num_entries) === bpd_ptr) ||
+              (WrapInc(enq_ptr, num_entries) === bpd_ptr))
 
-  // What is the current commit point of the processor? Dequeue entries until deq_ptr matches commit_ptr.
-  val commit_ptr = RegInit(0.asUInt(log2Ceil(num_entries).W))
 
-  val ram = Mem(num_entries, new FTQBundle())
-  ram.suggestName("ftq_bundle_ram")
-  val cfi_info = Reg(Vec(num_entries, new CfiMissInfo()))
+  val pcs      = Reg(Vec(num_entries, UInt(vaddrBitsExtended.W)))
+  val bpd_meta = SyncReadMem(num_entries, Vec(nBanks, UInt(bpdMaxMetaLength.W)))
+  val ram      = Reg(Vec(num_entries, new FTQBundle))
 
-  private def initCfiInfo(br_seen: Bool, cfi_idx: UInt): CfiMissInfo = {
-    val b = Wire(new CfiMissInfo())
-    b.executed := false.B
-    b.mispredicted := false.B
-    b.taken := false.B
-    b.cfi_idx := cfi_idx
-    b.cfi_type := Mux(br_seen, CFI_BR, CFI_X)
-    b
-  }
+  val do_enq = io.enq.fire()
 
-  //-------------------------------------------------------------
-  // **** Pointer Arithmetic and Enqueueing of Data ****
-  //-------------------------------------------------------------
 
-  private val do_enq = WireInit(io.enq.fire())
-  private val do_deq = WireInit(deq_ptr.value =/= commit_ptr)
+  // This register lets us initialize the ghist to 0
+  val start_from_empty_ghist = RegInit(true.B)
 
   when (do_enq) {
-    ram(enq_ptr.value) := io.enq.bits
-    cfi_info(enq_ptr.value) := initCfiInfo(io.enq.bits.bim_info.br_seen, io.enq.bits.bim_info.cfi_idx)
-    enq_ptr.inc()
-  }
+    start_from_empty_ghist := false.B
 
-  when (do_deq) {
-    deq_ptr.inc()
-  }
+    pcs(enq_ptr)           := io.enq.bits.pc
 
-  when (do_enq =/= do_deq) {
-    maybe_full := do_enq
+    ram(enq_ptr).cfi_idx   := io.enq.bits.cfi_idx
+    // Initially, if we see a CFI, it is assumed to be taken.
+    // Branch resolutions may change this
+    ram(enq_ptr).cfi_taken   := io.enq.bits.cfi_idx.valid
+    ram(enq_ptr).cfi_mispredicted := false.B
+    ram(enq_ptr).cfi_type    := io.enq.bits.cfi_type
+    ram(enq_ptr).cfi_is_call := io.enq.bits.cfi_is_call
+    ram(enq_ptr).cfi_is_ret  := io.enq.bits.cfi_is_ret
+    ram(enq_ptr).cfi_npc_plus4 := io.enq.bits.cfi_npc_plus4
+    ram(enq_ptr).ras_top     := io.enq.bits.ras_top
+    ram(enq_ptr).br_mask     := io.enq.bits.br_mask & io.enq.bits.mask
+    ram(enq_ptr).start_bank  := bank(io.enq.bits.pc)
+    val prev_idx = WrapDec(enq_ptr, num_entries)
+    val prev_entry = ram(prev_idx)
+    ram(enq_ptr).ghist := Mux(start_from_empty_ghist,
+      (0.U).asTypeOf(new GlobalHistory),
+      Mux(io.enq.bits.ghist.current_saw_branch_not_taken,
+        io.enq.bits.ghist,
+        prev_entry.ghist.update(
+          prev_entry.br_mask,
+          prev_entry.cfi_taken,
+          prev_entry.br_mask(prev_entry.cfi_idx.bits),
+          prev_entry.cfi_idx.bits,
+          prev_entry.cfi_idx.valid,
+          pcs(prev_idx),
+          prev_entry.cfi_is_call,
+          prev_entry.cfi_is_ret
+        )
+      )
+    )
+
+    bpd_meta.write(enq_ptr, io.enq.bits.bpd_meta)
+
+    enq_ptr := WrapInc(enq_ptr, num_entries)
   }
 
   io.enq.ready := !full
-  io.enq_idx := enq_ptr.value
+  io.enq_idx := enq_ptr
 
-  when (io.deq.valid || io.flush.valid) {
-    assert (!(io.deq.valid && io.flush.valid && io.deq.bits =/= io.flush.bits.ftq_idx),
-      "FTQ received conflicting flush and deq on same cycle")
-    commit_ptr := Mux(io.flush.valid, io.flush.bits.ftq_idx, io.deq.bits)
+  io.bpdupdate.valid := false.B
+  io.bpdupdate.bits  := DontCare
+
+  when (io.deq.valid) {
+    deq_ptr := io.deq.bits
+  }
+
+  // This register avoids a spurious bpd update on the first fetch packet
+  val first_empty = RegInit(true.B)
+
+  // We can update the branch predictors when we know the target of the
+  // CFI in this fetch bundle
+
+  val bpdupdate = Wire(Valid(new BranchPredictionUpdate))
+  bpdupdate.valid := false.B
+  bpdupdate.bits  := DontCare
+  val ras_update = WireInit(false.B)
+  val ras_update_pc = WireInit(0.U(vaddrBitsExtended.W))
+  val ras_update_idx = WireInit(0.U(log2Ceil(nRasEntries).W))
+  io.ras_update     := RegNext(ras_update)
+  io.ras_update_pc  := RegNext(ras_update_pc)
+  io.ras_update_idx := RegNext(ras_update_idx)
+  when (bpd_ptr =/= deq_ptr && enq_ptr =/= WrapInc(bpd_ptr, num_entries)) {
+
+    val entry = ram(bpd_ptr)
+    val cfi_idx = entry.cfi_idx.bits
+
+    // TODO: We should try to commit branch prediction updates earlier
+    bpdupdate.valid              := !first_empty && (entry.cfi_idx.valid || entry.br_mask =/= 0.U)
+    bpdupdate.bits.pc            := pcs(bpd_ptr)
+
+    bpdupdate.bits.br_mask       := Mux(entry.cfi_idx.valid,
+      MaskLower(UIntToOH(cfi_idx)) & entry.br_mask, entry.br_mask)
+    bpdupdate.bits.cfi_idx.valid    := entry.cfi_idx.valid
+    bpdupdate.bits.cfi_idx.bits     := entry.cfi_idx.bits
+    bpdupdate.bits.cfi_mispredicted := entry.cfi_mispredicted
+    bpdupdate.bits.cfi_taken        := entry.cfi_taken
+    bpdupdate.bits.target           := pcs(WrapInc(bpd_ptr, num_entries))
+    bpdupdate.bits.cfi_is_br        := entry.br_mask(cfi_idx)
+    bpdupdate.bits.cfi_is_jal       := entry.cfi_type === CFI_JAL || entry.cfi_type === CFI_JALR
+    bpdupdate.bits.ghist            := entry.ghist
+
+    // ras_update     := entry.cfi_is_call
+    // ras_update_pc  := bankAlign(pcs(bpd_ptr)) + (entry.cfi_idx.bits << 1) + Mux(entry.cfi_npc_plus4, 4.U, 2.U)
+    // ras_update_idx := WrapInc(entry.ghist.ras_idx, nRasEntries)
+
+    bpd_ptr := WrapInc(bpd_ptr, num_entries)
+
+    first_empty := false.B
+  }
+  io.bpdupdate           := RegNext(bpdupdate)
+  io.bpdupdate.bits.meta := bpd_meta.read(bpd_ptr)
+
+
+  when (io.redirect.valid) {
+    enq_ptr    := WrapInc(io.redirect.bits, num_entries)
+  }
+
+  when (io.brupdate.b2.mispredict) {
+    val ftq_idx = io.brupdate.b2.uop.ftq_idx
+    val entry = ram(ftq_idx)
+    val new_cfi_idx = (io.brupdate.b2.uop.pc_lob ^
+      Mux(entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
+
+    ram(ftq_idx).cfi_idx.valid    := true.B
+    ram(ftq_idx).cfi_idx.bits     := new_cfi_idx
+    ram(ftq_idx).cfi_mispredicted := true.B
+    ram(ftq_idx).cfi_taken        := io.brupdate.b2.taken
+    ram(ftq_idx).cfi_is_call      := entry.cfi_is_call && entry.cfi_idx.bits === new_cfi_idx
+    ram(ftq_idx).cfi_is_ret       := entry.cfi_is_ret  && entry.cfi_idx.bits === new_cfi_idx
+
+  }
+  when (io.redirect.valid || io.brupdate.b2.mispredict) {
+    val entry = ram(Mux(io.redirect.valid, io.redirect.bits, io.brupdate.b2.uop.ftq_idx))
+    ras_update     := true.B
+    ras_update_pc  := entry.ras_top
+    ras_update_idx := entry.ghist.ras_idx
   }
 
   //-------------------------------------------------------------
-  // **** Handle Mispredictions/Flush ****
+  // **** Core Read PCs ****
   //-------------------------------------------------------------
 
-  when ((io.brinfo.valid && io.brinfo.mispredict) || io.flush.valid) {
-    // Flush signal is sent out at commit, so that should override
-    // earlier branch mispredict signals.
-    val new_ptr = WrapInc(Mux(io.flush.valid,
-                            io.flush.bits.ftq_idx,
-                            io.brinfo.ftq_idx),
-                          num_entries)
-    enq_ptr.value := new_ptr
-    // If ptr is adjusted, we deleted entries and thus can't be full.
-    maybe_full := (enq_ptr.value === new_ptr)
+  for (i <- 0 until 2) {
+    val idx = io.get_ftq_pc(i).ftq_idx
+    val next_idx = WrapInc(idx, num_entries)
+    val next_is_enq = (next_idx === enq_ptr) && io.enq.fire()
+    val next_pc = Mux(next_is_enq, io.enq.bits.pc, pcs(next_idx))
+    val get_entry = ram(idx)
+    val next_entry = ram(next_idx)
+    io.get_ftq_pc(i).entry     := RegNext(get_entry)
+    io.get_ftq_pc(i).pc        := RegNext(pcs(idx))
+    io.get_ftq_pc(i).next_pc   := RegNext(next_pc)
+    io.get_ftq_pc(i).next_val  := RegNext(next_idx =/= enq_ptr || next_is_enq)
+    io.get_ftq_pc(i).com_pc    := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))
   }
-
-  when (io.brinfo.valid) {
-    val prev_executed       = cfi_info(io.brinfo.ftq_idx).executed
-    val prev_mispredicted   = cfi_info(io.brinfo.ftq_idx).mispredicted
-    val prev_cfi_idx        = cfi_info(io.brinfo.ftq_idx).cfi_idx
-    val new_cfi_idx         = io.brinfo.cfi_idx
-
-    when ((io.brinfo.mispredict && !prev_mispredicted) ||
-          (io.brinfo.mispredict && (new_cfi_idx < prev_cfi_idx))) {
-      // Overwrite if a misprediction occurs and is older than previous misprediction, if any.
-      cfi_info(io.brinfo.ftq_idx).mispredicted := true.B
-      cfi_info(io.brinfo.ftq_idx).taken := io.brinfo.taken
-      cfi_info(io.brinfo.ftq_idx).cfi_idx := new_cfi_idx
-      cfi_info(io.brinfo.ftq_idx).cfi_type := io.brinfo.cfi_type
-    } .elsewhen (!prev_mispredicted && (new_cfi_idx === prev_cfi_idx)) {
-      cfi_info(io.brinfo.ftq_idx).executed := true.B
-      cfi_info(io.brinfo.ftq_idx).taken := io.brinfo.taken
-    }
-  }
-
-  //-------------------------------------------------------------
-  // **** Commit Data Read ****
-  //-------------------------------------------------------------
-
-  if (DEBUG_PRINTF) {
-    printf("FTQ:\n")
-  }
-
-  // Dequeue entry (it's been committed) and update predictors.
-  when (do_deq) {
-    val com_data = ram(deq_ptr.value)
-    val miss_data = cfi_info(deq_ptr.value)
-    val com_cntr = com_data.bim_info.value
-    val com_taken = miss_data.taken
-    val saturated = (com_cntr === 0.U && !com_taken) || (com_cntr === 3.U && com_taken)
-
-    io.bim_update.valid :=
-      miss_data.cfi_type === CFI_BR &&
-      (miss_data.mispredicted) ||
-      (!miss_data.mispredicted && miss_data.executed && !saturated)
-
-    io.bim_update.bits.entry_idx    := com_data.bim_info.entry_idx
-    io.bim_update.bits.cntr_value   := com_cntr
-    io.bim_update.bits.cfi_idx      := miss_data.cfi_idx
-    io.bim_update.bits.taken        := miss_data.taken
-    io.bim_update.bits.mispredicted := miss_data.mispredicted
-
-    io.bpd_update.valid              := true.B
-    io.bpd_update.bits.mispredict    := miss_data.mispredicted
-    io.bpd_update.bits.taken         := miss_data.taken
-    io.bpd_update.bits.miss_cfi_idx  := miss_data.cfi_idx
-    io.bpd_update.bits.fetch_pc      := com_data.fetch_pc
-    io.bpd_update.bits.history       := com_data.history
-    io.bpd_update.bits.info          := com_data.bpd_info
-
-    if (DEBUG_PRINTF) {
-      val cfiTypeStrs = CfiTypeToChars(miss_data.cfi_type)
-      printf("    Dequeue: Ptr:%d FPC:0x%x Hist:0x%x BIM:(Idx:(%d=%x) V:%c Mispred:%c Taken:%c CfiIdx:%d CntVal:%d CfiType:%c%c%c%c\n",
-        deq_ptr.value,
-        com_data.fetch_pc,
-        com_data.history,
-        io.bim_update.bits.entry_idx,
-        io.bim_update.bits.entry_idx,
-        BoolToChar(io.bim_update.valid, 'V'),
-        BoolToChar(io.bim_update.bits.mispredicted, 'M'),
-        BoolToChar(io.bim_update.bits.taken, 'T'),
-        io.bim_update.bits.cfi_idx,
-        io.bim_update.bits.cntr_value,
-        cfiTypeStrs(0),
-        cfiTypeStrs(1),
-        cfiTypeStrs(2),
-        cfiTypeStrs(3))
-    }
-  } .otherwise {
-    if (DEBUG_PRINTF) printf("    No dequeue\n")
-    io.bim_update.valid := false.B
-    io.bpd_update.valid := false.B
-    io.bim_update.bits := DontCare
-    io.bpd_update.bits := DontCare
-  }
-
-  //-------------------------------------------------------------
-  // **** Restore Predictor History ****
-  //-------------------------------------------------------------
-
-  io.restore_history.valid := (io.brinfo.valid && io.brinfo.mispredict) || io.flush.valid
-  io.restore_history.bits.history := 0.U
-  io.restore_history.bits.taken := io.brinfo.valid && io.brinfo.taken
-
-  when (io.restore_history.valid) {
-    val ridx = Mux(io.flush.valid, io.flush.bits.ftq_idx, io.brinfo.ftq_idx)
-    io.restore_history.bits.history := ram(ridx).history
-  }
-
-  //-------------------------------------------------------------
-  // **** BranchResolutionUnit Read ****
-  //-------------------------------------------------------------
-
-  // Send current-PC/next-PC info to the BranchResolutionUnit.
-  // TODO only perform the read when a branch instruction requests it.
-  val curr_idx = io.get_ftq_pc.ftq_idx
-  io.get_ftq_pc.fetch_pc := ram(curr_idx).fetch_pc
-  io.get_ftq_pc.next_pc := ram(WrapInc(curr_idx, num_entries)).fetch_pc
-  io.get_ftq_pc.next_val := WrapInc(curr_idx, num_entries) =/= enq_ptr.value
-
-  //-------------------------------------------------------------
-  // **** Handle Flush/Pipeline Redirections ****
-  //-------------------------------------------------------------
-
-  val com_pc = Wire(UInt())
-  val com_pc_next = Wire(UInt())
-
-  io.take_pc.valid := io.flush.valid && !FlushTypes.useCsrEvec(io.flush.bits.flush_typ)
-  io.take_pc.bits.addr := Mux(FlushTypes.useSamePC(io.flush.bits.flush_typ), com_pc, com_pc_next)
-
-  // TODO CLEANUP this is wonky: the exception occurs 1 cycle faster than flushing,
-  io.com_fetch_pc := ram(io.com_ftq_idx).fetch_pc
-  com_pc := (RegNext(AlignPCToBoundary(io.com_fetch_pc, icBlockBytes))
-            + io.flush.bits.pc_lob
-            - Mux(io.flush.bits.edge_inst, 2.U, 0.U))
-  com_pc_next := com_pc + Mux(io.flush.bits.is_rvc, 2.U, 4.U)
-
-  assert (!(io.flush.valid && RegNext(io.com_ftq_idx) =/= io.flush.bits.ftq_idx),
-    "[ftq] this code depends on this assumption")
-
-  //-------------------------------------------------------------
-  // **** Printfs ****
-  //-------------------------------------------------------------
-
-  if (DEBUG_PRINTF && DEBUG_PRINTF_FTQ) {
-    printf("    Enq:(V:%c Rdy:%c Idx:%d) Commit:(V:%c Idx:%d) BRInfo:(V&Mispred:%c Idx:%d) Enq,Cmt,DeqPtrs:(%d %d %d)\n",
-      BoolToChar(io.enq.valid, 'V'),
-      BoolToChar(io.enq.ready, 'R'),
-      io.enq_idx,
-      BoolToChar(io.deq.valid, 'C'),
-      io.deq.bits,
-      BoolToChar(io.brinfo.valid && io.brinfo.mispredict, 'M'),
-      io.brinfo.ftq_idx,
-      enq_ptr.value,
-      commit_ptr,
-      deq_ptr.value)
-
-    printf("    ")
-    val w = 1
-    for (
-      i <- 0 until (num_entries/w);
-      j <- 0 until w
-    ) {
-      val idx = i+j*(num_entries/w)
-      val cfiTypeStrs = CfiTypeToChars(cfi_info(idx).cfi_type)
-      printf("[Entry:%d Enq,Cmt,DeqPtr:(%c %c %c) PC:0x%x Hist:0x%x " +
-        "CFI:(Exec,Mispred,Taken:(%c %c %c) Type:%c%c%c%c Idx:%d) BIM:(Idx:%d Val:0x%x)] ",
-        idx.asUInt(width=5.W),
-        BoolToChar(enq_ptr.value === idx.U, 'E', ' '),
-        BoolToChar(   commit_ptr === idx.U, 'C', ' '),
-        BoolToChar(deq_ptr.value === idx.U, 'D', ' '),
-        ram(idx).fetch_pc(31,0),
-        ram(idx).history,
-        BoolToChar(    cfi_info(idx).executed, 'E', ' '),
-        BoolToChar(cfi_info(idx).mispredicted, 'V', ' '),
-        BoolToChar(       cfi_info(idx).taken, 'T', ' '),
-        cfiTypeStrs(0),
-        cfiTypeStrs(1),
-        cfiTypeStrs(2),
-        cfiTypeStrs(3),
-        cfi_info(idx).cfi_idx,
-        ram(idx).bim_info.entry_idx,
-        ram(idx).bim_info.value)
-      if (j == w-1) printf("\n    ")
-    }
-    printf("\n")
-  }
-
-  // force to show up in the waveform
-  val debug_deq_ptr = deq_ptr.value
-  dontTouch(debug_deq_ptr)
 }

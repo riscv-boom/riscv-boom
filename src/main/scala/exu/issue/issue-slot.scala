@@ -37,7 +37,7 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
   val request_hp    = Output(Bool())
   val grant         = Input(Bool())
 
-  val brinfo        = Input(new BrResolutionInfo())
+  val brupdate        = Input(new BrUpdateInfo())
   val kill          = Input(Bool()) // pipeline flush
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
   val ldspec_miss   = Input(Bool()) // Previous cycle's speculative load wakeup was mispredicted.
@@ -207,11 +207,11 @@ class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
   }
 
   // Handle branch misspeculations
-  val next_br_mask = GetNewBrMask(io.brinfo, slot_uop)
+  val next_br_mask = GetNewBrMask(io.brupdate, slot_uop)
 
   // was this micro-op killed by a branch? if yes, we can't let it be valid if
   // we compact it into an other entry
-  when (IsKilledByBranch(io.brinfo, slot_uop)) {
+  when (IsKilledByBranch(io.brupdate, slot_uop)) {
     next_state := s_invalid
   }
 
@@ -222,7 +222,7 @@ class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
   //-------------------------------------------------------------
   // Request Logic
   io.request := is_valid && p1 && p2 && p3 && !io.kill
-  val high_priority = slot_uop.is_br_or_jmp
+  val high_priority = slot_uop.is_br || slot_uop.is_jal || slot_uop.is_jalr
   io.request_hp := io.request && high_priority
 
   when (state === s_valid_1) {

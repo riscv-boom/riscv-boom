@@ -81,7 +81,7 @@ class IssueUnitIO(
   // tell the issue unit what each execution pipeline has in terms of functional units
   val fu_types         = Input(Vec(issueWidth, Bits(width=FUC_SZ.W)))
 
-  val brinfo           = Input(new BrResolutionInfo())
+  val brupdate           = Input(new BrUpdateInfo())
   val flush_pipeline   = Input(Bool())
   val ld_miss          = Input(Bool())
 

@@ -39,7 +39,7 @@ class FetchBufferResp(implicit p: Parameters) extends BoomBundle
  */
 class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
-  with HasL1ICacheBankedParameters
+  with HasBoomFrontendParameters
 {
   val io = IO(new BoomBundle {
     val enq = Flipped(Decoupled(new FetchBundle()))
@@ -47,10 +47,6 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
 
     // Was the pipeline redirected? Clear/reset the fetchbuffer.
     val clear = Input(Bool())
-
-    // Breakpoint info
-    val status = Input(new MStatus)
-    val bp = Input(Vec(nBreakpoints, new BP))
   })
 
   require (numEntries > fetchWidth)
@@ -91,42 +87,38 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   val in_uops = Wire(Vec(fetchWidth, new MicroOp()))
 
   // Step 1: Convert FetchPacket into a vector of MicroOps.
-  for (i <- 0 until fetchWidth) {
-    val pc = (alignToFetchBoundary(io.enq.bits.pc) + (i << log2Ceil(coreInstBytes)).U)
-    val bkptu = Module(new BreakpointUnit(nBreakpoints))
-    bkptu.io.status := io.status
-    bkptu.io.bp     := io.bp
-    bkptu.io.pc     := pc
-    bkptu.io.ea     := DontCare
+  for (b <- 0 until nBanks) {
+    for (w <- 0 until bankWidth) {
+      val i = (b * bankWidth) + w
 
-    in_uops(i)                := DontCare
-    in_mask(i)                := io.enq.valid && io.enq.bits.mask(i)
-    in_uops(i).edge_inst      := false.B
-    in_uops(i).debug_pc       := pc
-    in_uops(i).pc_lob         := pc // LHS width will cut off high-order bits.
-    in_uops(i).cfi_idx        := i.U
-    if (i == 0) {
-      when (io.enq.bits.edge_inst) {
-        assert(usingCompressed.B)
-        in_uops(i).debug_pc := alignToFetchBoundary(io.enq.bits.pc) - 2.U
-        in_uops(i).pc_lob   := alignToFetchBoundary(io.enq.bits.pc)
-        in_uops(i).edge_inst:= true.B
+      val pc = (bankAlign(io.enq.bits.pc) + (i << 1).U)
+
+      in_uops(i)                := DontCare
+      in_mask(i)                := io.enq.valid && io.enq.bits.mask(i)
+      in_uops(i).edge_inst      := false.B
+      in_uops(i).debug_pc       := pc
+      in_uops(i).pc_lob         := pc
+
+      if (w == 0) {
+        when (io.enq.bits.edge_inst(b)) {
+          in_uops(i).debug_pc  := bankAlign(io.enq.bits.pc) + (b * bankBytes).U - 2.U
+          in_uops(i).pc_lob    := bankAlign(io.enq.bits.pc) + (b * bankBytes).U
+          in_uops(i).edge_inst := true.B
+        }
       }
+      in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
+      in_uops(i).inst           := io.enq.bits.exp_insts(i)
+      in_uops(i).debug_inst     := io.enq.bits.insts(i)
+      in_uops(i).is_rvc         := io.enq.bits.insts(i)(1,0) =/= 3.U
+      in_uops(i).taken          := io.enq.bits.cfi_idx.bits === i.U && io.enq.bits.cfi_idx.valid
+
+      in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
+      in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
+      in_uops(i).bp_debug_if    := io.enq.bits.bp_debug_if_oh(i)
+      in_uops(i).bp_xcpt_if     := io.enq.bits.bp_xcpt_if_oh(i)
+
+      in_uops(i).debug_fsrc     := io.enq.bits.fsrc
     }
-    in_uops(i).ftq_idx        := io.enq.bits.ftq_idx
-    in_uops(i).inst           := io.enq.bits.exp_insts(i)
-    in_uops(i).debug_inst     := io.enq.bits.insts(i)
-    in_uops(i).is_rvc         := io.enq.bits.insts(i)(1,0) =/= 3.U && usingCompressed.B
-
-    in_uops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
-    in_uops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
-    in_uops(i).replay_if      := io.enq.bits.replay_if
-    in_uops(i).xcpt_ma_if     := io.enq.bits.xcpt_ma_if_oh(i)
-    in_uops(i).bp_debug_if    := bkptu.io.debug_if
-    in_uops(i).bp_xcpt_if     := bkptu.io.xcpt_if
-
-    in_uops(i).br_prediction  := io.enq.bits.bpu_info(i)
-    in_uops(i).debug_events   := io.enq.bits.debug_events(i)
   }
 
   // Step 2. Generate one-hot write indices.
@@ -210,7 +202,7 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
     // TODO a problem if we don't check the f3_valid?
     printf("    Fetch3: Enq:(V:%c Msk:0x%x PC:0x%x) Clear:%c\n",
       BoolToChar(io.enq.valid, 'V'),
-      io.enq.bits.mask,
+      io.enq.bits.mask.asUInt,
       io.enq.bits.pc,
       BoolToChar(io.clear, 'C'))
 
