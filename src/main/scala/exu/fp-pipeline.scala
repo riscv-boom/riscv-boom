@@ -59,7 +59,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   // construct all of the modules
 
   val exe_units      = new boom.exu.ExecutionUnits(fpu=true)
-  val issue_unit     = Module(new IssueUnitCollapsing(
+  val issue_unit     = Module(new IssueQueue(
                          issueParams.find(_.iqType == IQT_FP.litValue).get,
                          numWakeupPorts))
   issue_unit.suggestName("fp_issue_unit")
@@ -87,7 +87,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   val iss_valids = Wire(Vec(exe_units.numFrfReaders, Bool()))
   val iss_uops   = Wire(Vec(exe_units.numFrfReaders, new MicroOp()))
 
-  issue_unit.io.tsc_reg := io.debug_tsc_reg
   issue_unit.io.brupdate := io.brupdate
   issue_unit.io.flush_pipeline := io.flush_pipeline
   // Don't support ld-hit speculation to FP window.
@@ -256,7 +255,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   // flush on exceptions, miniexeptions, and after some special instructions
 
   for (w <- 0 until exe_units.length) {
-    exe_units(w).io.req.bits.kill := io.flush_pipeline
+    exe_units(w).io.kill := io.flush_pipeline
   }
 
   override def toString: String =

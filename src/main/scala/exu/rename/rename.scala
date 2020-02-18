@@ -40,6 +40,8 @@ class RenameStageIO(
   val numWbPorts: Int)
   (implicit p: Parameters) extends BoomBundle
 {
+  val pregSz = log2Ceil(numPhysRegs)
+
   val ren_stalls = Output(Vec(plWidth, Bool()))
 
   val kill = Input(Bool())
@@ -58,7 +60,7 @@ class RenameStageIO(
   val dis_ready = Input(Bool())
 
   // wakeup ports
-  val wakeups = Flipped(Vec(numWbPorts, Valid(new ExeUnitResp(xLen))))
+  val wakeups = Flipped(Vec(numWbPorts, Valid(UInt(pregSz.W))))
 
   // commit stage
   val com_valids = Input(Vec(plWidth, Bool()))
@@ -67,17 +69,6 @@ class RenameStageIO(
   val rollback = Input(Bool())
 
   val debug_rob_empty = Input(Bool())
-  val debug = Output(new DebugRenameStageIO(numPhysRegs))
-}
-
-/**
- * IO bundle to debug the rename stage
- */
-class DebugRenameStageIO(val numPhysRegs: Int)(implicit p: Parameters) extends BoomBundle
-{
-  val freelist  = Bits(numPhysRegs.W)
-  val isprlist  = Bits(numPhysRegs.W)
-  val busytable = UInt(numPhysRegs.W)
 }
 
 /**
@@ -266,7 +257,7 @@ class RenameStage(
     {case (d,c) => d.bits := Mux(io.rollback, c.pdst, c.stale_pdst)}
   freelist.io.ren_br_tags := ren2_br_tags
   freelist.io.brupdate := io.brupdate
-  freelist.io.debug.pipeline_empty := io.debug_rob_empty
+  freelist.io.pipeline_empty := io.debug_rob_empty
 
   assert (ren2_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
            "[rename-stage] A uop is trying to allocate the zero physical register.")
@@ -283,10 +274,7 @@ class RenameStage(
   busytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
   busytable.io.rebusy_reqs := ren2_alloc_reqs
   busytable.io.wb_valids := io.wakeups.map(_.valid)
-  busytable.io.wb_pdsts := io.wakeups.map(_.bits.uop.pdst)
-
-  assert (!(io.wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= rtype).reduce(_||_)),
-   "[rename] Wakeup has wrong rtype.")
+  busytable.io.wb_pdsts := io.wakeups.map(_.bits)
 
   for ((uop, w) <- ren2_uops.zipWithIndex) {
     val busy = busytable.io.busy_resps(w)
@@ -317,11 +305,4 @@ class RenameStage(
 
     io.ren2_uops(w) := GetNewUopAndBrMask(bypassed_uop, io.brupdate)
   }
-
-  //-------------------------------------------------------------
-  // Debug signals
-
-  io.debug.freelist  := freelist.io.debug.freelist
-  io.debug.isprlist  := freelist.io.debug.isprlist
-  io.debug.busytable := busytable.io.debug.busytable
 }

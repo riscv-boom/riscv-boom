@@ -1,11 +1,11 @@
 //******************************************************************************
-// Copyright (c) 2015 - 2019, The Regents of the University of California (Regents).
+// Copyright (c) 2015 - 2020, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
-// Rename FreeList
+// Ring FreeList
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 
@@ -17,10 +17,9 @@ import boom.common._
 import boom.util._
 import freechips.rocketchip.config.Parameters
 
-class RenameFreeList(
+class RingFreeList(
   val plWidth: Int,
-  val numPregs: Int,
-  val float: Boolean)
+  val numPregs: Int)
   (implicit p: Parameters) extends BoomModule
 {
   private val pregSz = log2Ceil(numPregs)
@@ -41,7 +40,7 @@ class RenameFreeList(
     val brupdate       = Input(new BrUpdateInfo)
 
     // Used to check for physical register leaks.
-    val pipeline_empty = Input(Bool())
+    val debug_freelist = Output(UInt(numPregs.W))
   })
   // The free list register array and its branch allocation lists.
   val free_list = RegInit(UInt(numPregs.W), ~(1.U(numPregs.W)))
@@ -86,10 +85,7 @@ class RenameFreeList(
   }
 
   // Get the complete freelist as a bit vector (include pipelined selections).
-  val debug_freelist = free_list | io.alloc_pregs.map(p => UIntToOH(p.bits) & Fill(n,p.valid)).reduce(_|_)
+  io.debug_freelist := free_list | io.alloc_pregs.map(p => UIntToOH(p.bits) & Fill(n,p.valid)).reduce(_|_)
 
-  val numLregs = if(float) 32 else 31
-  assert (!(debug_freelist & dealloc_mask).orR, "[freelist] Returning a free physical register.")
-  assert (!io.pipeline_empty || PopCount(debug_freelist) >= (numPregs - numLregs - 1).U,
-    "[freelist] Leaking physical registers.")
+  assert (!(io.debug_freelist & dealloc_mask).orR, "[freelist] Returning a free physical register.")
 }

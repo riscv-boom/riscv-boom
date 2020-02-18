@@ -165,6 +165,9 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   val intToFpLatency = boomParams.intToFpLatency
 
+  val memLatency = 3
+  require (memLatency == 3, "L1 access latency is not configurable")
+
   //************************************
   // Issue Units
 
@@ -173,14 +176,14 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   // currently, only support one of each.
   require (issueParams.count(_.iqType == IQT_FP.litValue) == 1 || !usingFPU)
-  require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1)
+  //require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1)
   require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
 
   val intIssueParam = issueParams.find(_.iqType == IQT_INT.litValue).get
-  val memIssueParam = issueParams.find(_.iqType == IQT_MEM.litValue).get
+  //val memIssueParam = issueParams.find(_.iqType == IQT_MEM.litValue).get
 
   val intWidth = intIssueParam.issueWidth
-  val memWidth = memIssueParam.issueWidth
+  val memWidth = 1 // TODO
 
   issueParams.map(x => require(x.dispatchWidth <= coreWidth && x.dispatchWidth > 0))
 
@@ -222,13 +225,16 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   // the f-registers are mapped into the space above the x-registers
   val logicalRegCount = if (usingFPU) 64 else 32
   val lregSz          = log2Ceil(logicalRegCount)
-  val ipregSz         = log2Ceil(numIntPhysRegs)
+  val ipregSz         = log2Ceil(coreWidth) + log2Ceil(numIntPhysRegs/coreWidth)
   val fpregSz         = log2Ceil(numFpPhysRegs)
   val maxPregSz       = ipregSz max fpregSz
   val ldqAddrSz       = log2Ceil(numLdqEntries)
   val stqAddrSz       = log2Ceil(numStqEntries)
   val lsuAddrSz       = ldqAddrSz max stqAddrSz
   val brTagSz         = log2Ceil(maxBrCount)
+
+  val maxSchedWbLat   = memLatency max imulLatency // Longest predictable irf wb latency should always be mem or imul
+  val operandStatusSz = maxSchedWbLat + 2          // Longest bypassable exu pipeline + writeback stage + regfile
 
   require (numIntPhysRegs >= (32 + coreWidth))
   require (numFpPhysRegs >= (32 + coreWidth))

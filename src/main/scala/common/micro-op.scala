@@ -16,7 +16,7 @@ import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
 
-import boom.exu.FUConstants
+import boom.exu.{FUConstants,FastWakeup}
 
 /**
  * Extension to BoomBundle to add a MicroOp
@@ -45,9 +45,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // What is the next state of this uop in the issue window? useful
   // for the compacting queue.
   val iw_state         = UInt(2.W)
-  // Has operand 1 or 2 been waken speculatively by a load?
-  // Only integer operands are speculaively woken up,
-  // so we can ignore p3.
   val iw_p1_poisoned   = Bool()
   val iw_p2_poisoned   = Bool()
 
@@ -82,11 +79,48 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val prs1             = UInt(maxPregSz.W)
   val prs2             = UInt(maxPregSz.W)
   val prs3             = UInt(maxPregSz.W)
+  val stale_pdst       = UInt(maxPregSz.W)
 
   val prs1_busy        = Bool()
   val prs2_busy        = Bool()
   val prs3_busy        = Bool()
-  val stale_pdst       = UInt(maxPregSz.W)
+
+  // Selectors for operands in the scheduler
+  val busy_operand_sel = Bool() // Which prs was used to pick a dst column? Can receive a bypassed operand.
+  def busy_operand     = Mux(busy_operand_sel, prs2, prs1)
+  def chained_operand  = Mux(busy_operand_sel, prs1, prs2)
+
+  // Status of operands in the execution pipeline
+  val prs1_status      = UInt(operandStatusSz.W)
+  val prs2_status      = UInt(operandStatusSz.W)
+
+  // Woken up by an alu operation
+  val prs1_can_bypass_alu = Bool()
+  val prs2_can_bypass_alu = Bool()
+
+  // Woken up by a load
+  val prs1_can_bypass_mem = Bool()
+  val prs2_can_bypass_mem = Bool()
+
+  // Is the operand ready for issue? (present bit)
+  // Very hard coded and unlikely to change substantially
+  def prs1_ready       = (prs1_status & Mux(prs1_can_bypass_alu, 7.U, 3.U))(2,0).orR
+  def prs2_ready       = (prs2_status & Mux(prs2_can_bypass_alu, 7.U, 3.U))(2,0).orR
+
+  // Bypass the operand from the ALU
+  def prs1_bypass_alu  = prs1_can_bypass_alu && prs1_status(2)
+  def prs2_bypass_alu  = prs2_can_bypass_alu && prs2_status(2)
+
+  // Bypass the operand from the memory unit
+  def prs1_bypass_mem  = prs1_can_bypass_mem && prs1_status(1)
+  def prs2_bypass_mem  = prs2_can_bypass_mem && prs2_status(1)
+
+  def prs1_bypass      = prs1_status(2,1).orR
+  def prs2_bypass      = prs2_status(2,1).orR
+
+  // Might have to cancel issue if there was a load miss
+  def poisoned         = prs1_bypass_mem || prs2_bypass_mem
+
   val exception        = Bool()
   val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity
   val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, csr, etc...)
@@ -140,6 +174,62 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def unsafe           = uses_ldq || (uses_stq && !is_fence) || is_br || is_jalr
 
   def fu_code_is(_fu: UInt) = (fu_code & _fu) =/= 0.U
+
+  // In which column does a physical register reside?
+  def ColIdx(in: UInt) = {
+    val pregSz = in.getWidth
+    val colSz = log2Ceil(coreWidth)
+    in(pregSz-1, pregSz-colSz)
+  }
+
+  // Physical register's specifier within a column.
+  def ColSpec(in: UInt) = {
+    val pregSz = in.getWidth
+    val colSz = log2Ceil(coreWidth)
+    in(pregSz-colSz-1, 0)
+  }
+
+  // Get the columns of the uop's physical registers
+  def pdst_col  = UIntToOH(ColIdx(pdst))
+  def prs1_col  = UIntToOH(ColIdx(prs1))
+  def prs2_col  = UIntToOH(ColIdx(prs2))
+  def stale_col = UIntToOH(ColIdx(stale_pdst))
+
+  // Get the specifiers of the uop's physical registers with in a column
+  def pdst_spec  = ColSpec(pdst)
+  def prs1_spec  = ColSpec(prs1)
+  def prs2_spec  = ColSpec(prs2)
+  def stale_spec = ColSpec(stale_pdst)
+
+  def writes_irf = dst_rtype === RT_FIX && ldst_val
+
+  // Getters that help with scheduling
+  def prs1_reads_irf = lrs1_rtype === RT_FIX && !prs1_bypass && lrs1 =/= 0.U
+  def prs2_reads_irf = lrs2_rtype === RT_FIX && !prs2_bypass && lrs2 =/= 0.U
+  def eu_code        = {	// Hard code this for now
+	val fu = fu_code
+	VecInit(fu(0),                  // ALU
+			fu(2),                  // MEM
+			fu(1),                  // BRU
+			fu(3) || fu(4) || fu(5) // MUL || DIV || CSR
+			).asUInt
+  }
+  def shared_eu_code = eu_code(3,1)
+  def exe_wb_latency = fu_code(3) << (imulLatency - 1) | (fu_code(1) | fu_code(0))
+  def exe_bp_latency = exe_wb_latency | fu_code(2) << (memLatency - 1) // Loads are bypassable but are not scheduled writebacks
+
+  // Generate the fast wakeup signal the uop emits upon being issued
+  def fast_wakeup(grant: Bool): Valid[FastWakeup] = {
+    val fwu = Wire(Valid(new FastWakeup))
+
+    fwu.bits.pdst   := pdst
+    fwu.bits.status := exe_bp_latency << 2
+    fwu.bits.alu    := fu_code(0)
+    fwu.bits.mem    := fu_code(2)
+    fwu.valid       := grant && writes_irf && fu_code(3,0).orR  // This should work since non-forwardable loads are 'unique'
+
+    fwu
+  }
 }
 
 /**

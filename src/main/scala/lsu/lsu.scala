@@ -133,7 +133,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   // Speculatively tell the IQs that we'll get load data back next cycle
   val spec_ld_wakeup = Output(Valid(UInt(maxPregSz.W)))
   // Tell the IQs that the load we speculated last cycle was misspeculated
-  val ld_miss      = Output(Bool())
+  val ld_miss      = Output(UInt(coreWidth.W))
 
   val brupdate       = Input(new BrUpdateInfo)
   val rob_pnr_idx  = Input(UInt(robAddrSz.W))
@@ -1337,13 +1337,12 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
   }
 
-  // Initially assume the speculative load wakeup failed
-  io.core.ld_miss         := RegNext(io.core.spec_ld_wakeup.valid)
-  when (io.core.exe(0).iresp.valid && io.core.exe(0).iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop(0).ldq_idx)) {
-    // We correcty speculated last cycle, so we don't send miss signal
-    io.core.ld_miss := false.B
-  }
+  // TODO do this for an n-wide lsu
+  val spec_ld_miss = RegNext(io.core.spec_ld_wakeup.valid) &&
+    !(io.core.exe(0).iresp.valid && io.core.exe(0).iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop(0).ldq_idx))
+  io.core.ld_miss := Mux(spec_ld_miss, RegNext(mem_incoming_uop(0).pdst_col), 0.U)
 
+  //-------------------------------------------------------------
   //-------------------------------------------------------------
   // Kill speculated entries on branch mispredict
   //-------------------------------------------------------------
