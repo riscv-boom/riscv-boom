@@ -288,6 +288,8 @@ class Rob(
   val debug_entry = Wire(Vec(numRobEntries, new DebugRobBundle))
   debug_entry := DontCare // override in statements below
 
+  var num_inflight = 0.U(log2Ceil(numRobEntries+1).W)
+
   // **************************************************************************
   // --------------------------------------------------------------------------
   // **************************************************************************
@@ -532,7 +534,11 @@ class Rob(
         debug_entry(w + i*coreWidth).exception := rob_exception(i.U)
       }
     }
+
+    num_inflight = num_inflight + PopCount(rob_val)
   } //for (w <- 0 until coreWidth)
+
+  dontTouch(num_inflight)
 
   // **************************************************************************
   // --------------------------------------------------------------------------
