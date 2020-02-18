@@ -210,7 +210,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 	val fu = fu_code
 	VecInit(fu(0),                  // ALU
 			fu(2),                  // MEM
-			fu(1),                  // BRU
+			fu(1),                  // JMP
 			fu(3) || fu(4) || fu(5) // MUL || DIV || CSR
 			).asUInt
   }
