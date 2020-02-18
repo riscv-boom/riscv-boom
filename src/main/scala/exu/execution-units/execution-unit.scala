@@ -197,7 +197,7 @@ class ALUExeUnit(
     bypassable       = hasAlu,
     alwaysBypassable = hasAlu && !(hasMem || hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     hasCSR           = hasCSR,
-    hasJmp       = hasJmp,
+    hasJmp           = hasJmp,
     hasAlu           = hasAlu,
     hasMul           = hasMul,
     hasDiv           = hasDiv,

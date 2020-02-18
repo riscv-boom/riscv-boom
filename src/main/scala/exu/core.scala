@@ -482,11 +482,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val iss_jmp = iss_uops zip iss_valids map { case (u,v) => u.fu_code === FU_JMP && v }
   jmp_pc_req.valid                 := RegNext(iss_jmp.reduce(_||_))
   jmp_pc_req.bits                  := RegNext(Mux1H(iss_jmp, iss_uops.map(_.ftq_idx)))
-  exe_units.io.get_ftq_pc.pc       := RegNext(io.ifu.get_pc(0).pc)
-  exe_units.io.get_ftq_pc.entry    := RegNext(io.ifu.get_pc(0).entry)
+  exe_units.io.get_ftq_pc.pc       := io.ifu.get_pc(0).pc
+  exe_units.io.get_ftq_pc.entry    := io.ifu.get_pc(0).entry
   exe_units.io.get_ftq_pc.com_pc   := DontCare
-  exe_units.io.get_ftq_pc.next_val := RegNext(io.ifu.get_pc(0).next_val)
-  exe_units.io.get_ftq_pc.next_pc  := RegNext(io.ifu.get_pc(0).next_pc)
+  exe_units.io.get_ftq_pc.next_val := io.ifu.get_pc(0).next_val
+  exe_units.io.get_ftq_pc.next_pc  := io.ifu.get_pc(0).next_pc
 
   // Frontend Exception Requests
   val xcpt_idx = PriorityEncoder(dec_xcpts)
