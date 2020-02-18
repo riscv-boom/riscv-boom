@@ -38,6 +38,11 @@ class RegisterReadArbiter(implicit p: Parameters) extends BoomModule
     io.gnts(w) := (prs1_bank_gnts(w).orR || !io.uops(w).prs1_reads_irf && io.reqs(w)) &&
                   (prs2_bank_gnts(w).orR || !io.uops(w).prs2_reads_irf && io.reqs(w))
   }
+
+  val nacks = VecInit( io.reqs zip io.gnts map { case (r,g) => r && !g } )
+  val num_nacks = RegInit(0.U(32.W))
+  num_nacks := num_nacks + PopCount(nacks)
+  dontTouch(num_nacks)
 }
 
 class ExecutionArbiter(implicit p: Parameters) extends BoomModule
@@ -55,6 +60,11 @@ class ExecutionArbiter(implicit p: Parameters) extends BoomModule
   for (w <- 0 until coreWidth) {
     io.gnts(w) := shared_exe_gnts(w).orR || !io.uops(w).shared_eu_code.orR && io.reqs(w)
   }
+
+  val nacks = VecInit( io.reqs zip io.gnts map { case (r,g) => r && !g } )
+  val num_nacks = RegInit(0.U(32.W))
+  num_nacks := num_nacks + PopCount(nacks)
+  dontTouch(num_nacks)
 }
 
 class WritebackArbiter(implicit p: Parameters) extends BoomModule
@@ -76,4 +86,9 @@ class WritebackArbiter(implicit p: Parameters) extends BoomModule
     io.gnts(w) := !(wb_table(w) & latency).orR && io.reqs(w)
     wb_table(w) := Mux(io.fire(w), wb_table(w) | latency, wb_table(w)) >> 1
   }
+
+  val nacks = VecInit( io.reqs zip io.gnts map { case (r,g) => r && !g } )
+  val num_nacks = RegInit(0.U(32.W))
+  num_nacks := num_nacks + PopCount(nacks)
+  dontTouch(num_nacks)
 }

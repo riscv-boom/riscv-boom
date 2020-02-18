@@ -281,4 +281,19 @@ class RingRename(implicit p: Parameters) extends BoomModule
     // Need to know which prs was used to decide on a column. A bit of a hack.
     io.ren2_uops(w).busy_operand_sel := bypassed_uop.prs2_busy
   }
+
+  //----------------------------------------------------------------------------------------------------
+  // Performance Counters
+
+  val zero_waiting_count = RegInit(0.U(32.W))
+  val one_waiting_count  = RegInit(0.U(32.W))
+  val two_waiting_count  = RegInit(0.U(32.W))
+
+  zero_waiting_count := zero_waiting_count + PopCount(io.ren2_uops zip ren2_fire map {case (u,f) => u.zero_waiting && f})
+  one_waiting_count  := one_waiting_count  + PopCount(io.ren2_uops zip ren2_fire map {case (u,f) => u.one_waiting  && f})
+  two_waiting_count  := two_waiting_count  + PopCount(io.ren2_uops zip ren2_fire map {case (u,f) => u.two_waiting  && f})
+
+  dontTouch(zero_waiting_count)
+  dontTouch(one_waiting_count)
+  dontTouch(two_waiting_count)
 }

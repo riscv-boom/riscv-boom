@@ -230,6 +230,11 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
     fwu
   }
+
+  // Helpers for performance counters
+  def zero_waiting = !(prs1_busy || prs2_busy)
+  def one_waiting  = prs1_busy ^ prs2_busy
+  def two_waiting  = prs1_busy && prs2_busy
 }
 
 /**
