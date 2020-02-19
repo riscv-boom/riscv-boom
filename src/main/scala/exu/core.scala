@@ -1156,4 +1156,44 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     io.trace := DontCare
     io.trace map (t => t.valid := false.B)
   }
+
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+  // **** Commit log ****
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+
+  if (COMMIT_LOG_PRINTF) {
+    var new_commit_cnt = 0.U
+    for (w <- 0 until coreWidth) {
+      val priv = RegNext(csr.io.status.prv) // erets change the privilege. Get the old one
+
+      // To allow for diffs against spike :/
+      def printf_inst(uop: MicroOp) = {
+        when (uop.is_rvc) {
+          printf("(0x%x)", uop.debug_inst(15,0))
+        } .otherwise {
+          printf("(0x%x)", uop.debug_inst)
+        }
+      }
+
+      when (rob.io.commit.valids(w)) {
+        printf("%d 0x%x ",
+          priv,
+          Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen))
+        printf_inst(rob.io.commit.uops(w))
+        when (rob.io.commit.uops(w).dst_rtype === RT_FIX && rob.io.commit.uops(w).ldst =/= 0.U) {
+          printf(" x%d 0x%x\n",
+            rob.io.commit.uops(w).ldst,
+            rob.io.commit.debug_wdata(w))
+        } .elsewhen (rob.io.commit.uops(w).dst_rtype === RT_FLT) {
+          printf(" f%d 0x%x\n",
+            rob.io.commit.uops(w).ldst,
+            rob.io.commit.debug_wdata(w))
+        } .otherwise {
+          printf("\n")
+        }
+      }
+    }
+  }
 }

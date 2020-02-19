@@ -193,7 +193,7 @@ class ALUExeUnit(
     numBypassStages  =
       if (hasAlu && hasMul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
       else if (hasAlu) 1 else 0,
-    dataWidth        = p(tile.XLen) + 1,
+    dataWidth        = p(tile.XLen),
     bypassable       = hasAlu,
     alwaysBypassable = hasAlu && !(hasMem || hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     hasCSR           = hasCSR,
