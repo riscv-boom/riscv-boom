@@ -131,6 +131,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   for (arb <- arbiters) {
     arb.io.uops := sel_uops
     arb.io.reqs := sel_vals
+    arb.io.fire := DontCare
     arb_gnts = arb_gnts & arb.io.gnts.asUInt
   }
 
