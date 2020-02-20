@@ -20,10 +20,7 @@ class BIMMeta(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 case class BoomBIMParams(
-  nSets: Int = 2048,
-  indexWithGhist: Boolean = false,
-  indexWithLhist: Boolean = false,
-  histLength: Int = 32
+  nSets: Int = 2048
 )
 
 class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
@@ -31,7 +28,6 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
   override val nSets = params.nSets
 
   require(isPow2(nSets))
-  require(!(params.indexWithGhist && params.indexWithLhist))
 
   val nWrBypassEntries = 2
 
@@ -53,36 +49,14 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
 
   val data  = Seq.fill(bankWidth) { SyncReadMem(nSets, UInt(2.W)) }
 
-  def compute_folded_hist(hist: UInt, l: Int) = {
-    val nChunks = (params.histLength + l - 1) / l
-    val hist_chunks = (0 until nChunks) map {i =>
-      hist(min((i+1)*l, params.histLength)-1, i*l)
-    }
-    hist_chunks.reduce(_^_)
-  }
 
-  val f0_req_idx = if (params.indexWithGhist) {
-    compute_folded_hist(io.f0_req.bits.hist, log2Ceil(nSets)) ^ s0_req_idx
-  } else {
-    s0_req_idx
-  }
-  val f1_req_idx = if (params.indexWithLhist) {
-    compute_folded_hist(io.f1_req_lhist, log2Ceil(nSets)) ^ s1_req_idx
-  } else {
-    RegNext(f0_req_idx)
-  }
-
-  val s2_req_rdata    = if (params.indexWithLhist) {
-    VecInit(data.map(_.read(f1_req_idx, s1_req.valid)))
-  } else {
-    RegNext(VecInit(data.map(_.read(f0_req_idx   , io.f0_req.valid))))
-  }
+  val s2_req_rdata    = RegNext(VecInit(data.map(_.read(s0_idx   , s0_valid))))
 
   val s2_resp         = Wire(Vec(bankWidth, Bool()))
 
   for (w <- 0 until bankWidth) {
 
-    s2_resp(w)        := s2_req.valid && s2_req_rdata(w)(1) && !doing_reset
+    s2_resp(w)        := s2_valid && s2_req_rdata(w)(1) && !doing_reset
     s2_meta.bims(w)   := s2_req_rdata(w)
   }
 
@@ -90,11 +64,7 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
   val s1_update_wdata   = Wire(Vec(bankWidth, UInt(2.W)))
   val s1_update_wmask   = Wire(Vec(bankWidth, Bool()))
   val s1_update_meta    = s1_update.bits.meta.asTypeOf(new BIMMeta)
-  val s1_update_index = if (params.indexWithGhist || params.indexWithLhist) {
-    compute_folded_hist(s1_update.bits.hist, log2Ceil(nSets)) ^ s1_update_idx
-  } else {
-    s1_update_idx
-  }
+  val s1_update_index   = s1_update_idx
 
   val wrbypass_idxs = Reg(Vec(nWrBypassEntries, UInt(log2Ceil(nSets).W)))
   val wrbypass      = Reg(Vec(nWrBypassEntries, Vec(bankWidth, UInt(2.W))))

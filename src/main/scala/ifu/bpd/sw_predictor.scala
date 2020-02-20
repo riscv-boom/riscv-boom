@@ -25,11 +25,11 @@ class SwBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank(
     pred_harness.io.reset := reset.toBool
 
 
-    btb_harness.io.req_valid := io.f0_req.valid
-    btb_harness.io.req_pc    := bankAlign(io.f0_req.bits.pc) + (w << 1).U
+    btb_harness.io.req_valid := io.f0_valid
+    btb_harness.io.req_pc    := bankAlign(io.f0_pc) + (w << 1).U
 
-    pred_harness.io.req_valid := io.f0_req.valid
-    pred_harness.io.req_pc    := bankAlign(io.f0_req.bits.pc) + (w << 1).U
+    pred_harness.io.req_valid := io.f0_valid
+    pred_harness.io.req_pc    := bankAlign(io.f0_pc) + (w << 1).U
 
 
     btb_harness.io.update_valid  := io.update.valid && io.update.bits.is_commit_update && io.update.bits.cfi_idx.valid && (w == 0).B

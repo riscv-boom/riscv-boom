@@ -221,9 +221,9 @@ class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implici
   val tables = params.tableInfo map {
     case (n, l, s) => {
       val t = Module(new TageTable(n, s, l, params.uBitPeriod))
-      t.io.f1_req_valid := RegNext(io.f0_req.valid)
-      t.io.f1_req_pc    := RegNext(io.f0_req.bits.pc)
-      t.io.f1_req_ghist := RegNext(io.f0_req.bits.hist)
+      t.io.f1_req_valid := RegNext(io.f0_valid)
+      t.io.f1_req_pc    := RegNext(io.f0_pc)
+      t.io.f1_req_ghist := io.f1_hist
       t
     }
   }

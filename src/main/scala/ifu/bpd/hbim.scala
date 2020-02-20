@@ -14,8 +14,6 @@ import scala.math.min
 
 case class BoomHBIMParams(
   nSets: Int = 2048,
-  indexWithGhist: Boolean = false,
-  indexWithLhist: Boolean = false,
   histLength: Int = 32
 )
 
@@ -24,7 +22,6 @@ class HBIMBranchPredictorBank(params: BoomHBIMParams = BoomHBIMParams())(implici
   override val nSets = params.nSets
 
   require(isPow2(nSets))
-  require(params.indexWithGhist ^ params.indexWithLhist)
 
   val nWrBypassEntries = 2
 
@@ -54,17 +51,15 @@ class HBIMBranchPredictorBank(params: BoomHBIMParams = BoomHBIMParams())(implici
     hist_chunks.reduce(_^_)
   }
 
-  val f1_req_idx = compute_folded_hist(
-    Mux(params.indexWithGhist.B, RegNext(io.f0_req.bits.hist), io.f1_req_lhist),
-    log2Ceil(nSets)) ^ s1_req_idx
+  val f1_idx = compute_folded_hist(io.f1_hist, log2Ceil(nSets)) ^ s1_idx
 
-  val s3_req_rdata    = RegNext(VecInit(data.map(_.read(f1_req_idx, s1_req.valid))))
+  val s3_req_rdata    = RegNext(VecInit(data.map(_.read(f1_idx, s1_valid))))
 
   val s3_resp         = Wire(Vec(bankWidth, Bool()))
 
   for (w <- 0 until bankWidth) {
 
-    s3_resp(w)        := s3_req.valid && s3_req_rdata(w)(1) && !doing_reset
+    s3_resp(w)        := s3_valid && s3_req_rdata(w)(1) && !doing_reset
     s3_meta.bims(w)   := s3_req_rdata(w)
   }
 

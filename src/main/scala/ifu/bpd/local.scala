@@ -23,8 +23,8 @@ class LocalBranchPredictorBank(params: BoomLocalBPDParams = BoomLocalBPDParams()
   reset_idx := reset_idx + doing_reset
   when (reset_idx === (nSets-1).U) { doing_reset := false.B }
 
-  val lbim = Module(new BIMBranchPredictorBank(
-    BoomBIMParams(indexWithLhist = true, histLength = localHistoryLength)
+  val lbim = Module(new HBIMBranchPredictorBank(
+    BoomHBIMParams(histLength = localHistoryLength)
   ))
 
 
@@ -37,7 +37,7 @@ class LocalBranchPredictorBank(params: BoomLocalBPDParams = BoomLocalBPDParams()
 
   val entries = SyncReadMem(nSets, UInt(localHistoryLength.W))
 
-  val s1_rhist = entries.read(s0_req_idx, io.f0_req.valid)
+  val s1_rhist = entries.read(s0_idx, s0_valid)
   val s2_rhist = RegNext(s1_rhist)
   val s3_rhist = RegNext(s2_rhist)
 
@@ -65,15 +65,17 @@ class LocalBranchPredictorBank(params: BoomLocalBPDParams = BoomLocalBPDParams()
 
     f3_do_update    := true.B
     val f3_update_bidx = PriorityEncoder(io.resp_in(0).f3.map(e => e.is_br && e.predicted_pc.valid))
-    f3_update_idx   := s3_req_idx
+    f3_update_idx   := s3_idx
     f3_update_lhist := s3_rhist << 1 | io.resp_in(0).f3(f3_update_bidx).taken
 
   }
 
   val s0_update_meta = io.update.bits.meta.asTypeOf(new LocalMeta)
   lbim.io.resp_in := io.resp_in
-  lbim.io.f0_req  := io.f0_req
-  lbim.io.f1_req_lhist := s1_rhist
+  lbim.io.f0_valid  := io.f0_valid
+  lbim.io.f0_pc     := io.f0_pc
+  lbim.io.f0_mask   := io.f0_mask
+  lbim.io.f1_hist   := s1_rhist
   lbim.io.f3_fire      := io.f3_fire
   lbim.io.update       := io.update
   lbim.io.update.bits.hist := s0_update_meta.lhist

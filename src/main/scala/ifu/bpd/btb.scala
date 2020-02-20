@@ -66,10 +66,10 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
   val btb      = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, UInt(btbEntrySz.W))) }
   val ebtb     = SyncReadMem(extendedNSets, UInt(vaddrBitsExtended.W))
 
-  val s1_req_rbtb  = VecInit(btb.map { b => VecInit(b.read(s0_req_idx , io.f0_req.valid).map(_.asTypeOf(new BTBEntry))) })
-  val s1_req_rmeta = VecInit(meta.map { m => VecInit(m.read(s0_req_idx, io.f0_req.valid).map(_.asTypeOf(new BTBMeta))) })
-  val s1_req_rebtb = ebtb.read(s0_req_idx, io.f0_req.valid)
-  val s1_req_tag   = s1_req_idx >> log2Ceil(nSets)
+  val s1_req_rbtb  = VecInit(btb.map { b => VecInit(b.read(s0_idx , s0_valid).map(_.asTypeOf(new BTBEntry))) })
+  val s1_req_rmeta = VecInit(meta.map { m => VecInit(m.read(s0_idx, s0_valid).map(_.asTypeOf(new BTBMeta))) })
+  val s1_req_rebtb = ebtb.read(s0_idx, s0_valid)
+  val s1_req_tag   = s1_idx >> log2Ceil(nSets)
 
   val s1_resp   = Wire(Vec(bankWidth, Valid(UInt(vaddrBitsExtended.W))))
   val s1_is_br  = Wire(Vec(bankWidth, Bool()))
@@ -86,11 +86,11 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
   for (w <- 0 until bankWidth) {
     val entry_meta = s1_req_rmeta(s1_hit_ways(w))(w)
     val entry_btb  = s1_req_rbtb(s1_hit_ways(w))(w)
-    s1_resp(w).valid := !doing_reset && s1_req.valid && s1_hits(w)
+    s1_resp(w).valid := !doing_reset && s1_valid && s1_hits(w)
     s1_resp(w).bits  := Mux(
       entry_btb.extended,
       s1_req_rebtb,
-      (s1_req.bits.pc.asSInt + (w << 1).S + entry_btb.offset).asUInt)
+      (s1_pc.asSInt + (w << 1).S + entry_btb.offset).asUInt)
     s1_is_br(w)  := !doing_reset && s1_resp(w).valid &&  entry_meta.is_br
     s1_is_jal(w) := !doing_reset && s1_resp(w).valid && !entry_meta.is_br
 

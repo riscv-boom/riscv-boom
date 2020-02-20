@@ -174,9 +174,9 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
   val update_meta = s1_update.bits.meta.asTypeOf(Vec(bankWidth, new LoopMeta))
 
   for (w <- 0 until bankWidth) {
-    columns(w).io.f2_req_valid := s2_req.valid
-    columns(w).io.f2_req_idx  := s2_req_idx
-    columns(w).io.f3_req_fire := (s3_req.valid && s3_req.bits.mask(w) && io.f3_fire &&
+    columns(w).io.f2_req_valid := s2_valid
+    columns(w).io.f2_req_idx  := s2_idx
+    columns(w).io.f3_req_fire := (s3_valid && s3_mask(w) && io.f3_fire &&
       RegNext(io.resp_in(0).f2(w).predicted_pc.valid && io.resp_in(0).f2(w).is_br))
 
     columns(w).io.f3_pred_in  := io.resp_in(0).f3(w).taken

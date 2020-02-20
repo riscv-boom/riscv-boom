@@ -106,13 +106,6 @@ class BranchPredictionRequest(implicit p: Parameters) extends BoomBundle()(p)
   val ghist = new GlobalHistory
 }
 
-class BranchPredictionBankRequest(implicit p: Parameters) extends BoomBundle()(p)
-  with HasBoomFrontendParameters
-{
-  val pc    = UInt(vaddrBitsExtended.W)
-  val hist  = UInt(globalHistoryLength.W)
-  val mask  = UInt(bankWidth.W)
-}
 
 class BranchPredictionBankResponse(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomFrontendParameters
@@ -129,9 +122,11 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
   def nInputs = 1
 
   val io = IO(new Bundle {
-    val f0_req = Input(Valid(new BranchPredictionBankRequest))
+    val f0_valid = Input(Bool())
+    val f0_pc    = Input(UInt(vaddrBitsExtended.W))
+    val f0_mask  = Input(UInt(bankWidth.W))
     // Local history not available until end of f1
-    val f1_req_lhist = Input(UInt(localHistoryLength.W))
+    val f1_hist = Input(UInt((globalHistoryLength max localHistoryLength).W))
 
     val resp_in = Input(Vec(nInputs, new BranchPredictionBankResponse))
     val resp = Output(new BranchPredictionBankResponse)
@@ -147,25 +142,32 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
 
   io.f3_meta := 0.U
 
-  val s0_req       = io.f0_req
-  val s0_req_idx   = fetchIdx(io.f0_req.bits.pc)
+  val s0_idx       = fetchIdx(io.f0_pc)
+  val s1_idx       = RegNext(s0_idx)
+  val s2_idx       = RegNext(s1_idx)
+  val s3_idx       = RegNext(s2_idx)
+
+  val s0_valid = io.f0_valid
+  val s1_valid = RegNext(s0_valid)
+  val s2_valid = RegNext(s1_valid)
+  val s3_valid = RegNext(s2_valid)
+
+  val s0_mask = io.f0_mask
+  val s1_mask = RegNext(s0_mask)
+  val s2_mask = RegNext(s1_mask)
+  val s3_mask = RegNext(s2_mask)
+
+  val s0_pc = io.f0_pc
+  val s1_pc = RegNext(s0_pc)
 
   val s0_update     = io.update
   val s0_update_idx = fetchIdx(io.update.bits.pc)
 
 
-  val s1_req      = RegNext(s0_req)
-  val s1_req_idx  = RegNext(s0_req_idx)
 
   val s1_update     = RegNext(s0_update)
   val s1_update_idx = RegNext(s0_update_idx)
 
-
-  val s2_req     = RegNext(s1_req)
-  val s2_req_idx = RegNext(s1_req_idx)
-
-  val s3_req     = RegNext(s2_req)
-  val s3_req_idx = RegNext(s2_req_idx)
 }
 
 
@@ -176,7 +178,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   val io = IO(new Bundle {
 
     // Requests and responses
-    val f0_req  = Input(Valid(new BranchPredictionRequest))
+    val f0_req = Input(Valid(new BranchPredictionRequest))
 
     val resp = Output(new Bundle {
       val f1 = new BranchPredictionBundle
@@ -193,41 +195,42 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   val banked_predictors = Seq.fill(nBanks) { Module(new ComposedBranchPredictorBank) }
 
   if (nBanks == 1) {
-    banked_predictors(0).io.f0_req.bits.hist  := io.f0_req.bits.ghist.histories(0)
-    banked_predictors(0).io.f0_req.bits.pc    := bankAlign(io.f0_req.bits.pc)
-    banked_predictors(0).io.f0_req.bits.mask  := fetchMask(io.f0_req.bits.pc)
-    banked_predictors(0).io.f0_req.valid      := io.f0_req.valid
-    banked_predictors(0).io.f1_req_lhist      := DontCare
+    banked_predictors(0).io.f0_valid := io.f0_req.valid
+    banked_predictors(0).io.f0_pc    := bankAlign(io.f0_req.bits.pc)
+    banked_predictors(0).io.f0_mask  := fetchMask(io.f0_req.bits.pc)
+
+    banked_predictors(0).io.f1_hist  := RegNext(io.f0_req.bits.ghist.histories(0))
 
     banked_predictors(0).io.resp_in(0)           := (0.U).asTypeOf(new BranchPredictionBankResponse)
   } else {
     require(nBanks == 2)
 
-    banked_predictors(0).io.f1_req_lhist      := DontCare
-    banked_predictors(1).io.f1_req_lhist      := DontCare
-
     banked_predictors(0).io.resp_in(0)           := (0.U).asTypeOf(new BranchPredictionBankResponse)
     banked_predictors(1).io.resp_in(0)           := (0.U).asTypeOf(new BranchPredictionBankResponse)
+
     when (bank(io.f0_req.bits.pc) === 0.U) {
-      banked_predictors(0).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(0)
-      banked_predictors(0).io.f0_req.bits.pc   := bankAlign(io.f0_req.bits.pc)
-      banked_predictors(0).io.f0_req.bits.mask := fetchMask(io.f0_req.bits.pc)
-      banked_predictors(0).io.f0_req.valid     := io.f0_req.valid
+      banked_predictors(0).io.f0_valid := io.f0_req.valid
+      banked_predictors(0).io.f0_pc    := bankAlign(io.f0_req.bits.pc)
+      banked_predictors(0).io.f0_mask  := fetchMask(io.f0_req.bits.pc)
 
-      banked_predictors(1).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(1)
-      banked_predictors(1).io.f0_req.bits.pc   := nextBank(io.f0_req.bits.pc)
-      banked_predictors(1).io.f0_req.bits.mask := ~(0.U(bankWidth.W))
-      banked_predictors(1).io.f0_req.valid     := io.f0_req.valid
+      banked_predictors(1).io.f0_valid := io.f0_req.valid
+      banked_predictors(1).io.f0_pc    := nextBank(io.f0_req.bits.pc)
+      banked_predictors(1).io.f0_mask  := ~(0.U(bankWidth.W))
     } .otherwise {
-      banked_predictors(0).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(1)
-      banked_predictors(0).io.f0_req.bits.pc   := nextBank(io.f0_req.bits.pc)
-      banked_predictors(0).io.f0_req.bits.mask := ~(0.U(bankWidth.W))
-      banked_predictors(0).io.f0_req.valid     := io.f0_req.valid && !mayNotBeDualBanked(io.f0_req.bits.pc)
+      banked_predictors(0).io.f0_valid := io.f0_req.valid && !mayNotBeDualBanked(io.f0_req.bits.pc)
+      banked_predictors(0).io.f0_pc    := nextBank(io.f0_req.bits.pc)
+      banked_predictors(0).io.f0_mask  := ~(0.U(bankWidth.W))
 
-      banked_predictors(1).io.f0_req.bits.hist := io.f0_req.bits.ghist.histories(0)
-      banked_predictors(1).io.f0_req.bits.pc   := bankAlign(io.f0_req.bits.pc)
-      banked_predictors(1).io.f0_req.bits.mask := fetchMask(io.f0_req.bits.pc)
-      banked_predictors(1).io.f0_req.valid     := io.f0_req.valid
+      banked_predictors(1).io.f0_valid := io.f0_req.valid
+      banked_predictors(1).io.f0_pc    := bankAlign(io.f0_req.bits.pc)
+      banked_predictors(1).io.f0_mask  := fetchMask(io.f0_req.bits.pc)
+    }
+    when (RegNext(bank(io.f0_req.bits.pc) === 0.U)) {
+      banked_predictors(0).io.f1_hist  := RegNext(io.f0_req.bits.ghist.histories(0))
+      banked_predictors(1).io.f1_hist  := RegNext(io.f0_req.bits.ghist.histories(1))
+    } .otherwise {
+      banked_predictors(0).io.f1_hist  := RegNext(io.f0_req.bits.ghist.histories(1))
+      banked_predictors(1).io.f1_hist  := RegNext(io.f0_req.bits.ghist.histories(0))
     }
   }
 
@@ -241,10 +244,10 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   } else {
     require(nBanks == 2)
     banked_predictors(0).io.f3_fire := (
-      io.f3_fire && RegNext(RegNext(RegNext(banked_predictors(0).io.f0_req.valid)))
+      io.f3_fire && RegNext(RegNext(RegNext(banked_predictors(0).io.f0_valid)))
     )
     banked_predictors(1).io.f3_fire := (
-      io.f3_fire && RegNext(RegNext(RegNext(banked_predictors(1).io.f0_req.valid)))
+      io.f3_fire && RegNext(RegNext(RegNext(banked_predictors(1).io.f0_valid)))
     )
 
     // The branch prediction metadata is stored un-shuffled

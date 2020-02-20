@@ -60,9 +60,9 @@ class MicroBTBBranchPredictorBank(params: BoomMicroBTBParams)(implicit p: Parame
   val meta     = SyncReadMem(nSets, Vec(bankWidth, UInt(btbMetaSz.W)))
   val btb      = SyncReadMem(nSets, Vec(bankWidth, UInt(btbEntrySz.W)))
 
-  val s1_req_rbtb  = VecInit(btb.read(s0_req_idx , io.f0_req.valid).map(_.asTypeOf(new MicroBTBEntry)))
-  val s1_req_rmeta = VecInit(meta.read(s0_req_idx, io.f0_req.valid).map(_.asTypeOf(new MicroBTBMeta)))
-  val s1_req_tag   = s1_req_idx >> log2Ceil(nSets)
+  val s1_req_rbtb  = VecInit(btb.read(s0_idx , s0_valid).map(_.asTypeOf(new MicroBTBEntry)))
+  val s1_req_rmeta = VecInit(meta.read(s0_idx, s0_valid).map(_.asTypeOf(new MicroBTBMeta)))
+  val s1_req_tag   = s1_idx >> log2Ceil(nSets)
 
 
   val s1_resp   = Wire(Vec(bankWidth, Valid(UInt(vaddrBitsExtended.W))))
@@ -71,8 +71,8 @@ class MicroBTBBranchPredictorBank(params: BoomMicroBTBParams)(implicit p: Parame
   val s1_is_jal = Wire(Vec(bankWidth, Bool()))
 
   for (w <- 0 until bankWidth) {
-    s1_resp(w).valid := !doing_reset && s1_req.valid && s1_req_tag(tagSz-1,0) === s1_req_rmeta(w).tag
-    s1_resp(w).bits  := (s1_req.bits.pc.asSInt + (w << 1).S + s1_req_rbtb(w).offset).asUInt
+    s1_resp(w).valid := !doing_reset && s1_valid && s1_req_tag(tagSz-1,0) === s1_req_rmeta(w).tag
+    s1_resp(w).bits  := (s1_pc.asSInt + (w << 1).S + s1_req_rbtb(w).offset).asUInt
     s1_is_br(w)  := !doing_reset && s1_resp(w).valid &&  s1_req_rmeta(w).is_br
     s1_is_jal(w) := !doing_reset && s1_resp(w).valid && !s1_req_rmeta(w).is_br
     s1_taken(w)  := !doing_reset && (!s1_req_rmeta(w).is_br || s1_req_rmeta(w).ctr(1))

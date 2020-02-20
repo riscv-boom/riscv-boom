@@ -57,7 +57,7 @@ class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams = BoomFAMicroBT
   val meta     = RegInit((0.U).asTypeOf(Vec(nWays, Vec(bankWidth, new MicroBTBMeta))))
   val btb      = Reg(Vec(nWays, Vec(bankWidth, new MicroBTBEntry)))
 
-  val s1_req_tag   = s1_req_idx
+  val s1_req_tag   = s1_idx
 
 
   val s1_resp   = Wire(Vec(bankWidth, Valid(UInt(vaddrBitsExtended.W))))
@@ -75,8 +75,8 @@ class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams = BoomFAMicroBT
 
   for (w <- 0 until bankWidth) {
     val entry_meta = meta(s1_hit_ways(w))(w)
-    s1_resp(w).valid := s1_req.valid && s1_hits(w)
-    s1_resp(w).bits  := (s1_req.bits.pc.asSInt + (w << 1).S + btb(s1_hit_ways(w))(w).offset).asUInt
+    s1_resp(w).valid := s1_valid && s1_hits(w)
+    s1_resp(w).bits  := (s1_pc.asSInt + (w << 1).S + btb(s1_hit_ways(w))(w).offset).asUInt
     s1_is_br(w)      := s1_resp(w).valid &&  entry_meta.is_br
     s1_is_jal(w)     := s1_resp(w).valid && !entry_meta.is_br
     s1_taken(w)      := !entry_meta.is_br || entry_meta.ctr(1)
@@ -84,7 +84,7 @@ class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams = BoomFAMicroBT
     s1_meta.hits(w)     := s1_hits(w)
   }
   val alloc_way = {
-    val r_metas = Cat(VecInit(meta.map(e => VecInit(e.map(_.tag)))).asUInt, s1_req_idx(tagSz-1,0))
+    val r_metas = Cat(VecInit(meta.map(e => VecInit(e.map(_.tag)))).asUInt, s1_idx(tagSz-1,0))
     val l = log2Ceil(nWays)
     val nChunks = (r_metas.getWidth + l - 1) / l
     val chunks = (0 until nChunks) map { i =>
