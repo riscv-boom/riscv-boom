@@ -366,6 +366,23 @@ object AgePriorityEncoder
 }
 
 /**
+ * Select the first high bit starting at the head and rotating around to the left
+ */
+object AgePriorityEncoderOH
+{
+  def apply(in: UInt, head: UInt): UInt = {
+    require(in.getWidth == head.getWidth)
+
+    val n = in.getWidth
+    val vec = Cat(in,in)
+    val mask = MaskUpper(Cat(0.U(n.W),head))
+    val sel = PriorityEncoderOH(vec & mask)
+
+    sel(2*n-1,n) | sel(n-1,0)
+  }
+}
+
+/**
   * Object to determine whether queue
   * index i0 is older than index i1.
  */

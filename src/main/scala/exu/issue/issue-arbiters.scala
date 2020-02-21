@@ -36,14 +36,13 @@ abstract class IssueArbiter(implicit p: Parameters) extends BoomModule
   pri := RotateLeft(pri)
 
   def Grant(reqs: UInt) = {
-    PriorityEncoderOH(Cat(reqs, reqs) & MaskUpper(Cat(0.U(coreWidth.W), pri)))(coreWidth-1,0)
+    AgePriorityEncoderOH(reqs,pri)
   }
 
   val nacks = VecInit( io.reqs zip io.gnts map { case (r,g) => r && !g } )
   val num_nacks = RegInit(0.U(32.W))
   num_nacks := num_nacks + PopCount(nacks)
   dontTouch(num_nacks)
-
 }
 
 class RegisterReadArbiter(implicit p: Parameters) extends IssueArbiter
@@ -58,7 +57,6 @@ class RegisterReadArbiter(implicit p: Parameters) extends IssueArbiter
     io.gnts(w) := (prs1_bank_gnts(w).orR || !io.uops(w).prs1_reads_irf && io.reqs(w)) &&
                   (prs2_bank_gnts(w).orR || !io.uops(w).prs2_reads_irf && io.reqs(w))
   }
-
 }
 
 class ExecutionArbiter(implicit p: Parameters) extends IssueArbiter
