@@ -1,5 +1,4 @@
-#define BIMODAL_TABLE_SIZE 16384
-#define BIMODAL_PRIME 16381
+#define BIMODAL_TABLE_SIZE 256
 #define MAX_COUNTER 3
 
 #include <stdint.h>
@@ -13,15 +12,17 @@ extern "C" void initialize_branch_predictor()
     bimodal_table[i] = 0;
 }
 
-extern "C" void predict_branch(unsigned long long ip, unsigned char *pred)
+extern "C" void predict_branch(unsigned long long ip, unsigned long long hist, unsigned char *pred)
 {
-    uint32_t hash = ip % BIMODAL_PRIME;
+    uint32_t hash = ip % BIMODAL_TABLE_SIZE;
     *pred = (bimodal_table[hash] >= ((MAX_COUNTER + 1)/2)) ? 1 : 0;
+
+
 }
 
-extern "C" void update_branch(unsigned long long ip, unsigned char taken)
+extern "C" void update_branch(unsigned long long ip, unsigned long long hist, unsigned char taken)
 {
-  uint32_t hash = ip % BIMODAL_PRIME;
+  uint32_t hash = ip % BIMODAL_TABLE_SIZE;
 
   if (taken && (bimodal_table[hash] < MAX_COUNTER))
     bimodal_table[hash]++;

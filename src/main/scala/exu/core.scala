@@ -1313,125 +1313,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  // if (DEBUG_PRINTF) {
-  //   println("   ~~Chisel Printout Enabled~~")
-
-  //   val numFtqWhitespace = if (DEBUG_PRINTF_FTQ) (ftqSz/4)+1 else 0
-  //   val fetchWhitespace = if (fetchWidth >= 8) 2 else 0
-  //   var whitespace = (debugScreenheight - 25 + 3 -10 + 3 + 4 - coreWidth - (numLdqEntries max numStqEntries) -
-  //     issueParams.map(_.numEntries).sum - issueParams.length - (numRobEntries/coreWidth) -
-  //     numFtqWhitespace - fetchWhitespace)
-
-  //   println(s"   Whitespace padded: ${whitespace}\n")
-
-  //   printf("--- Cycle=%d --- Retired Instrs=%d ----------------------------------------------\n",
-  //     debug_tsc_reg,
-  //     debug_irt_reg & (0xffffff).U)
-
-  //   printf("Decode:\n")
-  //   for (w <- 0 until coreWidth) {
-  //     printf("    Slot:%d (PC:0x%x Valids:%c%c Inst:DASM(%x))\n",
-  //       w.U,
-  //       dec_uops(w).debug_pc(19,0),
-  //       BoolToChar(io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w), 'V'),
-  //       BoolToChar(dec_fire(w), 'V'),
-  //       dec_fbundle.uops(w).bits.debug_inst)
-  //   }
-
-  //   printf("Rename:\n")
-  //   for (w <- 0 until coreWidth) {
-  //     printf("    Slot:%d (PC:0x%x Valid:%c Inst:DASM(%x))\n",
-  //       w.U,
-  //       rename_stage.io.ren2_uops(w).debug_pc(19,0),
-  //       BoolToChar(rename_stage.io.ren2_mask(w), 'V'),
-  //       rename_stage.io.ren2_uops(w).debug_inst)
-  //   }
-
-  //   printf("Decode Finished:0x%x\n", dec_finished_mask)
-
-  //   printf("Dispatch:\n")
-  //   for (w <- 0 until coreWidth) {
-  //     val ren_uop = dispatcher.io.ren_uops(w).bits
-  //     printf("    Slot:%d (ISAREG: DST:%d SRCS:%d,%d,%d) (PREG: (#,Bsy,Typ) %d[-](%c) %d[%c](%c) %d[%c](%c) %d[%c](%c))\n",
-  //       w.U,
-  //       ren_uop.ldst,
-  //       ren_uop.lrs1,
-  //       ren_uop.lrs2,
-  //       ren_uop.lrs3,
-  //       ren_uop.pdst,
-  //       Mux(ren_uop.dst_rtype   === RT_FIX, Str("X"),
-  //         Mux(ren_uop.dst_rtype === RT_X  , Str("-"),
-  //           Mux(ren_uop.dst_rtype === RT_FLT, Str("f"),
-  //             Mux(ren_uop.dst_rtype === RT_PAS, Str("C"), Str("?"))))),
-  //       ren_uop.prs1,
-  //       BoolToChar(rename_stage.io.ren2_uops(w).prs1_busy, 'B', 'R'),
-  //       Mux(ren_uop.lrs1_rtype    === RT_FIX, Str("X"),
-  //         Mux(ren_uop.lrs1_rtype === RT_X  , Str("-"),
-  //           Mux(ren_uop.lrs1_rtype === RT_FLT, Str("f"),
-  //             Mux(ren_uop.lrs1_rtype === RT_PAS, Str("C"), Str("?"))))),
-  //       ren_uop.prs2,
-  //       BoolToChar(rename_stage.io.ren2_uops(w).prs2_busy, 'B', 'R'),
-  //       Mux(ren_uop.lrs2_rtype    === RT_FIX, Str("X"),
-  //         Mux(ren_uop.lrs2_rtype === RT_X  , Str("-"),
-  //           Mux(ren_uop.lrs2_rtype === RT_FLT, Str("f"),
-  //             Mux(ren_uop.lrs2_rtype === RT_PAS, Str("C"), Str("?"))))),
-  //       ren_uop.prs3,
-  //       BoolToChar(rename_stage.io.ren2_uops(w).prs3_busy, 'B', 'R'),
-  //       BoolToChar(ren_uop.frs3_en, 'f', '-'))
-  //   }
-
-  //   if (DEBUG_PRINTF_ROB) {
-  //     val robTypeStrs = RobTypeToChars(rob.io.debug.state)
-  //     printf("ROB:\n")
-  //     printf("    (State:%c%c%c Rdy:%c LAQFull:%c STQFull:%c Flush:%c BMskFull:%c) BMsk:0x%x Mode:%c\n",
-  //        robTypeStrs(0),
-  //        robTypeStrs(1),
-  //        robTypeStrs(2),
-  //        BoolToChar(           rob.io.ready, '_', '!'),
-  //        BoolToChar(          io.lsu.ldq_full(0), 'L'),
-  //        BoolToChar(          io.lsu.stq_full(0), 'S'),
-  //        BoolToChar(          rob.io.flush.valid, 'F'),
-  //        BoolToChar(branch_mask_full.reduce(_|_), 'B'),
-  //        dec_brmask_logic.io.debug.branch_mask,
-  //        Mux(csr.io.status.prv === (PRV.M).U, Str("M"),
-  //          Mux(csr.io.status.prv === (PRV.U).U, Str("U"),
-  //            Mux(csr.io.status.prv === (PRV.S).U, Str("S"), Str("?")))))
-  //   }
-
-  //   printf("Other:\n")
-  //   printf("    Expt:(V:%c Cause:%d) Commit:%x IFreeLst:0x%x TotFree:%d IPregLst:0x%x TotPreg:%d\n",
-  //     BoolToChar(rob.io.com_xcpt.valid, 'E'),
-  //     rob.io.com_xcpt.bits.cause,
-  //     rob.io.commit.valids.asUInt,
-  //     rename_stage.io.debug.freelist,
-  //     PopCount(rename_stage.io.debug.freelist),
-  //     rename_stage.io.debug.isprlist,
-  //     PopCount(rename_stage.io.debug.isprlist))
-  //   if (usingFPU) {
-  //     printf("    FFreeList:0x%x TotFree:%d FPrefLst:0x%x TotPreg:%d\n",
-  //       fp_rename_stage.io.debug.freelist,
-  //       PopCount(fp_rename_stage.io.debug.freelist),
-  //       fp_rename_stage.io.debug.isprlist,
-  //       PopCount(fp_rename_stage.io.debug.isprlist))
-  //   }
-
-  //   // branch unit
-  //   printf("Branch Unit:\n")
-  //   printf("    V:%c Mispred:%c T/NT:%c NPC:(V:%c PC:0x%x)\n",
-  //     BoolToChar(br_unit.brinfo.valid, 'V'),
-  //     BoolToChar(br_unit.brinfo.mispredict, 'M'),
-  //     BoolToChar(br_unit.brinfo.taken, 'T', 'N'),
-  //     BoolToChar(exe_units(brunit_idx).io.get_ftq_pc.next_val, 'V'),
-  //     exe_units(brunit_idx).io.get_ftq_pc.next_pc(19,0))
-
-  //   for (x <- 0 until whitespace) {
-  //     printf("|\n")
-  //   }
-  // } // End DEBUG_PRINTF
-
 
   if (COMMIT_LOG_PRINTF) {
     var new_commit_cnt = 0.U
+
     for (w <- 0 until coreWidth) {
       val priv = RegNext(csr.io.status.prv) // erets change the privilege. Get the old one
 
@@ -1444,7 +1329,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         }
       }
 
-      when (rob.io.commit.valids(w)) {
+      when (rob.io.commit.arch_valids(w)) {
         printf("%d 0x%x ",
           priv,
           Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen))
@@ -1462,6 +1347,32 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         }
       }
     }
+  } else if (BRANCH_PRINTF) {
+    val debug_ghist = RegInit(0.U(globalHistoryLength.W))
+    when (rob.io.flush.valid && FlushTypes.useCsrEvec(rob.io.flush.bits.flush_typ)) {
+      debug_ghist := 0.U
+    }
+
+    var new_ghist = debug_ghist
+
+    for (w <- 0 until coreWidth) {
+      when (rob.io.commit.arch_valids(w) &&
+        (rob.io.commit.uops(w).is_br || rob.io.commit.uops(w).is_jal || rob.io.commit.uops(w).is_jalr)) {
+        // for (i <- 0 until globalHistoryLength) {
+        //   printf("%x", new_ghist(globalHistoryLength-i-1))
+        // }
+        // printf("\n")
+        printf("%x %x %x %x %x %x\n",
+          rob.io.commit.uops(w).debug_fsrc, rob.io.commit.uops(w).taken,
+          rob.io.commit.uops(w).is_br, rob.io.commit.uops(w).is_jal,
+          rob.io.commit.uops(w).is_jalr, Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen))
+
+      }
+      new_ghist = Mux(rob.io.commit.arch_valids(w) && rob.io.commit.uops(w).is_br,
+        Mux(rob.io.commit.uops(w).taken, new_ghist << 1 | 1.U(1.W), new_ghist << 1),
+        new_ghist)
+    }
+    debug_ghist := new_ghist
   }
 
   // enable Dromajo cosimulation

@@ -1,4 +1,4 @@
-#define BTB_SIZE 16384
+#define BTB_SIZE 32
 
 #include <stdint.h>
 #include <stdio.h>
@@ -16,7 +16,7 @@ extern "C" void initialize_btb()
   entry_point = 0;
 }
 
-extern "C" void predict_target(unsigned long long ip, unsigned char *valid, unsigned long long *target,
+extern "C" void predict_target(unsigned long long ip, unsigned long long hist, unsigned char *valid, unsigned long long *target,
                                unsigned char *is_br, unsigned char *is_jal)
 {
   for (int i = 0; i < BTB_SIZE; i++) {
@@ -31,7 +31,7 @@ extern "C" void predict_target(unsigned long long ip, unsigned char *valid, unsi
   *valid = 0;
 }
 
-extern "C" void update_btb(unsigned long long ip, unsigned long long target,
+extern "C" void update_btb(unsigned long long ip, unsigned long long hist, unsigned long long target,
                            unsigned char is_br, unsigned char is_jal)
 {
   for (int i = 0; i < BTB_SIZE; i++) {
@@ -47,4 +47,7 @@ extern "C" void update_btb(unsigned long long ip, unsigned long long target,
   btb_is_br[entry_point] = is_br;
   btb_is_jal[entry_point] = is_jal;
   entry_point++;
+  if (entry_point == BTB_SIZE) {
+    entry_point = 0;
+  }
 }

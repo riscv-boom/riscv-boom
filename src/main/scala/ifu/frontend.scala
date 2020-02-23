@@ -397,7 +397,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       (s1_bpd_resp.preds(i).is_br && s1_bpd_resp.preds(i).taken))
   }
   val f1_redirect_idx = PriorityEncoder(f1_redirects)
-  val f1_do_redirect = f1_redirects.reduce(_||_)
+  val f1_do_redirect = f1_redirects.reduce(_||_) && useBPD.B
   val f1_targs = s1_bpd_resp.preds.map(_.predicted_pc.bits)
   val f1_predicted_target = Mux(f1_do_redirect,
                                 f1_targs(f1_redirect_idx),
@@ -451,7 +451,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   }
   val f2_redirect_idx = PriorityEncoder(f2_redirects)
   val f2_targs = f2_bpd_resp.preds.map(_.predicted_pc.bits)
-  val f2_do_redirect = f2_redirects.reduce(_||_)
+  val f2_do_redirect = f2_redirects.reduce(_||_) && useBPD.B
   val f2_predicted_target = Mux(f2_do_redirect,
                                 f2_targs(f2_redirect_idx),
                                 nextFetch(s2_vpc))
@@ -659,7 +659,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       //  2) the BPD believes this is a branch and says we should take it
       f3_redirects(i)    := f3_mask(i) && (
         bpd_decoder.io.cfi_type === CFI_JAL || bpd_decoder.io.cfi_type === CFI_JALR ||
-        (bpd_decoder.io.cfi_type === CFI_BR && f3_bpd_resp.io.deq.bits.preds(i).taken)
+        (bpd_decoder.io.cfi_type === CFI_BR && f3_bpd_resp.io.deq.bits.preds(i).taken && useBPD.B)
       )
 
       f3_br_mask(i)   := f3_mask(i) && bpd_decoder.io.cfi_type === CFI_BR
@@ -710,7 +710,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // can consume this packet
 
   val f3_predicted_target = Mux(f3_redirects.reduce(_||_),
-    Mux(f3_fetch_bundle.cfi_is_ret,
+    Mux(f3_fetch_bundle.cfi_is_ret && useBPD.B && useRAS.B,
       ras.io.read_addr,
       f3_targs(PriorityEncoder(f3_redirects))
     ),

@@ -37,6 +37,8 @@ case class BoomCoreParams(
   numFpPhysRegisters: Int = 64,
   maxBrCount: Int = 4,
   numFetchBufferEntries: Int = 16,
+  enableBranchPrediction: Boolean = true,
+  enableReturnAddressStack: Boolean = true,
   enableAgePriorityIssue: Boolean = true,
   enablePrefetching: Boolean = false,
   enableFastLoadUse: Boolean = true,
@@ -52,8 +54,9 @@ case class BoomCoreParams(
   numRCQEntries: Int = 8,
   numDCacheBanks: Int = 1,
   nPMPs: Int = 8,
-  /* more stuff */
 
+  /* more stuff */
+  useCompressed: Boolean = true,
   useFetchMonitor: Boolean = true,
   bootFreqHz: BigInt = 0,
   fpu: Option[FPUParams] = Some(FPUParams(sfmaLatency=4, dfmaLatency=4)),
@@ -71,17 +74,23 @@ case class BoomCoreParams(
   useDebug: Boolean = true,
   useUser: Boolean = true,
   useVM: Boolean = true,
-  useCompressed: Boolean = false,
   useSCIE: Boolean = false,
   useRVE: Boolean = false,
   useBPWatch: Boolean = false,
-  clockGate: Boolean = false
+  clockGate: Boolean = false,
+
+  /* debug stuff */
+  enableCommitLogPrintf: Boolean = false,
+  enableBranchPrintf: Boolean = false,
+  enableMemtracePrintf: Boolean = false,
+  enableDromajo: Boolean = false,
+
 // DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams
 {
   val haveFSDirty = true
   val pmpGranularity: Int = 4
-  val instBits: Int = if (useCompressed) 16 else 32
+  val instBits: Int = 16
   val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
   val retireWidth = decodeWidth
   val jumpInFrontend: Boolean = false // unused in boom
@@ -205,6 +214,9 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   val nRasEntries = 32
 
+  val useBPD = boomParams.enableBranchPrediction
+  val useRAS = boomParams.enableReturnAddressStack
+
   //************************************
   // Extra Knobs and Features
   val enableCommitMapTable = boomParams.enableCommitMapTable
@@ -234,6 +246,12 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   require ((numLdqEntries-1) > coreWidth)
   require ((numStqEntries-1) > coreWidth)
 
+  //***********************************
+  // Debug printout parameters
+  val COMMIT_LOG_PRINTF   = boomParams.enableCommitLogPrintf // dump commit state, for comparision against ISA sim
+  val BRANCH_PRINTF       = boomParams.enableBranchPrintf // dump branch predictor results
+  val MEMTRACE_PRINTF     = boomParams.enableMemtracePrintf // dump trace of memory accesses to L1D for debugging
+  val DROMAJO_COSIM_ENABLE = boomParams.enableDromajo
 
   //************************************
   // Other Non/Should-not-be sythesizable modules

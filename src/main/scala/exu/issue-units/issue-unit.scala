@@ -13,7 +13,7 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
-
+                                                                                 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.{Str}
 
@@ -174,35 +174,6 @@ abstract class IssueUnit(
 
   //-------------------------------------------------------------
 
-  if (DEBUG_PRINTF_IQ) {
-    printf(this.getType + " issue slots:\n")
-    for (i <- 0 until numIssueSlots) {
-      printf("    Slot[%d]: " +
-        "V:%c Req:%c Wen:%c P:(%c,%c,%c) PRegs:Dst:(Typ:%c #:%d) Srcs:(%d,%d,%d) " +
-        "[PC:0x%x Inst:DASM(%x) UOPCode:%d] RobIdx:%d BMsk:0x%x Imm:0x%x\n",
-        i.U(log2Ceil(numIssueSlots).W),
-        BoolToChar(       issue_slots(i).valid, 'V'),
-        BoolToChar(     issue_slots(i).request, 'R'),
-        BoolToChar(issue_slots(i).in_uop.valid, 'W'),
-        BoolToChar(    issue_slots(i).debug.p1, '!'),
-        BoolToChar(    issue_slots(i).debug.p2, '!'),
-        BoolToChar(    issue_slots(i).debug.p3, '!'),
-        Mux(issue_slots(i).uop.dst_rtype === RT_FIX, Str("X"),
-          Mux(issue_slots(i).uop.dst_rtype === RT_X, Str("-"),
-            Mux(issue_slots(i).uop.dst_rtype === RT_FLT, Str("f"),
-              Mux(issue_slots(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?"))))),
-        issue_slots(i).uop.pdst,
-        issue_slots(i).uop.prs1,
-        issue_slots(i).uop.prs2,
-        issue_slots(i).uop.prs3,
-        issue_slots(i).uop.debug_pc(31,0),
-        issue_slots(i).uop.debug_inst,
-        issue_slots(i).uop.uopc,
-        issue_slots(i).uop.rob_idx,
-        issue_slots(i).uop.br_mask,
-        issue_slots(i).uop.imm_packed)
-    }
-  }
 
   def getType: String =
     if (iqType == IQT_INT.litValue) "int"

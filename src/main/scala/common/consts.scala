@@ -18,32 +18,6 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 import freechips.rocketchip.rocket.RVCExpander
 
-/**
- * Mixin indicating the debug flags that can be set for viewing different
- * debug printf's
- */
-trait BOOMDebugConstants
-{
-  val DEBUG_PRINTF        = false // use the Chisel printf functionality
-  val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
-  val MEMTRACE_PRINTF     = false // dump trace of memory accesses to L1D for debugging
-
-  val DROMAJO_COSIM_ENABLE = false // enable dromajo cosim
-
-  // When enabling DEBUG_PRINTF, the vertical whitespace can be padded out
-  // such that viewing the *.out file in vim can line up veritically to
-  // enable ctrl+f/ctrl+b to advance the *.out file one cycle without
-  // moving the structures.
-  val debugScreenheight  = 79
-
-  // turn off stuff to dramatically reduce Chisel node count
-  val DEBUG_PRINTF_LSU    = true && DEBUG_PRINTF
-  val DEBUG_PRINTF_ROB    = true && DEBUG_PRINTF
-  val DEBUG_PRINTF_TAGE   = true && DEBUG_PRINTF
-  val DEBUG_PRINTF_FTQ    = true && DEBUG_PRINTF
-  val DEBUG_PRINTF_IQ     = true && DEBUG_PRINTF
-
-}
 
 /**
  * Mixin for issue queue types

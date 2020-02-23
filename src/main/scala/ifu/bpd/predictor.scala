@@ -192,7 +192,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     val update = Input(Valid(new BranchPredictionUpdate))
   })
 
-  val banked_predictors = Seq.fill(nBanks) { Module(new ComposedBranchPredictorBank) }
+  val banked_predictors = Seq.fill(nBanks) { Module(if (useBPD) new ComposedBranchPredictorBank else new NullBranchPredictorBank) }
 
   if (nBanks == 1) {
     banked_predictors(0).io.f0_valid := io.f0_req.valid

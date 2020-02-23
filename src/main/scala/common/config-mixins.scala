@@ -38,16 +38,6 @@ class WithBoomRV32 extends Config((site, here, up) => {
   }
 })
 
-/**
- * Disable support for C-extension (RVC)
- */
-class WithoutBoomRVC extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
-    b.copy(core = b.core.copy(
-      fetchWidth = b.core.fetchWidth / 2,
-      useCompressed = false))
-   }
-})
 
 /**
  * Remove FPU
@@ -153,7 +143,6 @@ class WithSmallBooms extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
       fetchWidth = 4,
-      useCompressed = true,
       decodeWidth = 1,
       numRobEntries = 32,
       issueParams = Seq(
@@ -185,7 +174,6 @@ class WithMediumBooms extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
       fetchWidth = 4,
-      useCompressed = true,
       decodeWidth = 2,
       numRobEntries = 64,
       issueParams = Seq(
@@ -219,7 +207,6 @@ class WithLargeBooms extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
       fetchWidth = 8,
-      useCompressed = true,
       decodeWidth = 3,
       numRobEntries = 96,
       issueParams = Seq(
@@ -251,7 +238,6 @@ class WithMegaBooms extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(
     core = b.core.copy(
       fetchWidth = 8,
-      useCompressed = true,
       decodeWidth = 4,
       numRobEntries = 128,
       issueParams = Seq(
@@ -277,6 +263,89 @@ class WithMegaBooms extends Config((site, here, up) => {
   case MaxHartIdBits => log2Up(site(BoomTilesKey).size)
 })
 
+
+/**
+  * BOOM Configs for CS152 lab
+  */
+class WithCS152BaselineBooms extends Config((site, here, up) => {
+  case BoomTilesKey => up(BoomTilesKey, site) map { b => {
+    val coreWidth = 1                     // CS152: Change me (1 to 4)
+    val memWidth = 1                      // CS152: Change me (1 or 2)
+    b.copy(
+      core = b.core.copy(
+        fetchWidth = 4,                   // CS152: Change me (4 or 8)
+        numRobEntries = 4,                // CS152: Change me (2+)
+        numIntPhysRegisters = 33,         // CS152: Change me (33+)
+        numLdqEntries = 8,                // CS152: Change me (2+)
+        numStqEntries = 8,                // CS152: Change me (2+)
+        maxBrCount = 8,                   // CS152: Change me (2+)
+        enableBranchPrediction = false,   // CS152: Change me
+        enableReturnAddressStack = false, // CS152: Change me
+
+        // DO NOT CHANGE BELOW
+        enableBranchPrintf = true,
+        decodeWidth = coreWidth,
+        numFetchBufferEntries = coreWidth * 4,
+        numDCacheBanks = memWidth,
+        issueParams = Seq(
+          IssueParams(issueWidth=memWidth,  numEntries=8,  iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
+          IssueParams(issueWidth=coreWidth, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=coreWidth),
+          IssueParams(issueWidth=1,         numEntries=4,  iqType=IQT_FP.litValue , dispatchWidth=coreWidth)),
+        // DO NOT CHANGE ABOVE
+      ),
+      dcache = Some(DCacheParams(
+        rowBits=site(SystemBusKey).beatBytes*8,
+        nSets=64, // CS152: Change me (must be pow2, 2-64)
+        nWays=4,  // CS152: Change me (1-8)
+        nMSHRs=2, // CS152: Change me (1+)
+      ))
+    )
+  }}
+})
+
+
+class WithCS152DefaultBooms extends Config((site, here, up) => {
+  case BoomTilesKey => up(BoomTilesKey, site) map { b => {
+    val coreWidth = 3                    // CS152: Change me (1 to 4)
+    val memWidth = 1                     // CS152: Change me (1 or 2)
+    val nIssueSlots = 32                 // CS152: Change me (2+)
+    b.copy(
+      core = b.core.copy(
+        fetchWidth = 4,                  // CS152: Change me (4 or 8)
+        numRobEntries = 96,              // CS152: Change me (2+)
+        numIntPhysRegisters = 96,        // CS152: Change me (33+)
+        numLdqEntries = 16,              // CS152: Change me (2+)
+        numStqEntries = 16,              // CS152: Change me (2+)
+        maxBrCount = 12,                 // CS152: Change me (2+)
+        enableBranchPrediction = true,   // CS152: Change me
+        enableReturnAddressStack = true, // CS152: Change me
+
+        // DO NOT CHANGE BELOW
+        enableBranchPrintf = true,
+        decodeWidth = coreWidth,
+        numFetchBufferEntries = coreWidth * 4,
+        numDCacheBanks = memWidth,
+        issueParams = Seq(
+          IssueParams(issueWidth=memWidth,  numEntries=nIssueSlots, iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
+          IssueParams(issueWidth=coreWidth, numEntries=nIssueSlots, iqType=IQT_INT.litValue, dispatchWidth=coreWidth),
+          IssueParams(issueWidth=1,         numEntries=nIssueSlots, iqType=IQT_FP.litValue , dispatchWidth=coreWidth)),
+        // DO NOT CHANGE ABOVE
+      ),
+      dcache = Some(DCacheParams(
+        rowBits=site(SystemBusKey).beatBytes*8,
+        nSets=64, // CS152: Change me (must be pow2, 2-64)
+        nWays=4,  // CS152: Change me (1-8)
+        nMSHRs=2, // CS152: Change me (1+)
+      ))
+    )
+  }}
+})
+
+
+
+/**
+  *  Branch prediction configs below
+  */
 class WithBoom2BPD extends Config((site, here, up) => {
   case BoomBPDComposition => ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
     // gshare is just variant of TAGE with 1 table
@@ -298,9 +367,7 @@ class WithBoom2BPD extends Config((site, here, up) => {
 class WithAlpha21264BPD extends Config((site, here, up) => {
   case BoomBPDComposition => ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
     val btb = Module(new BTBBranchPredictorBank()(p))
-    val gbim = Module(new BIMBranchPredictorBank(
-      BoomBIMParams(indexWithGhist = true)
-    )(p))
+    val gbim = Module(new HBIMBranchPredictorBank()(p))
     val local = Module(new LocalBranchPredictorBank()(p))
     val tourney = Module(new TourneyBranchPredictorBank()(p))
     val preds = Seq(local, btb, gbim, tourney)
@@ -313,5 +380,16 @@ class WithAlpha21264BPD extends Config((site, here, up) => {
     btb.io.resp_in(0)  := tourney.io.resp
 
     (preds, btb.io.resp)
+  })
+})
+
+
+class WithSWBPD extends Config((site, here, up) => {
+  case BoomBPDComposition => ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
+    val sw = Module(new SwBranchPredictorBank()(p))
+
+    sw.io.resp_in(0) := resp_in
+
+    (Seq(sw), sw.io.resp)
   })
 })
