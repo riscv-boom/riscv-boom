@@ -104,6 +104,13 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
   override def cloneType = new LSUDMemIO().asInstanceOf[this.type]
 }
 
+class LSUDebugStoreCommitIO(implicit p: Parameters) extends BoomBundle
+{
+  val idx  = Input(UInt(stqAddrSz.W))
+  val addr = Output(UInt(xLen.W))
+  val data = Output(UInt(xLen.W))
+}
+
 class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 {
   val exe = Vec(memWidth, new LSUExeIO)
@@ -145,6 +152,8 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val lxcpt       = Output(Valid(new Exception))
 
   val tsc_reg     = Input(UInt())
+
+  val debug_stcom = Vec(coreWidth, new LSUDebugStoreCommitIO)
 }
 
 class LSUIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
@@ -1601,7 +1610,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                     ~(st_brkilled_mask.asUInt) &
                     ~(st_exc_killed_mask.asUInt)
 
+  //----------------------------------------------------------------------------------------------------
+  // Debug store commit ports for commit log
 
+  for (w <- 0 until coreWidth) {
+    if (COMMIT_LOG_PRINTF) {
+      io.core.debug_stcom(w).addr := stq(io.core.debug_stcom(w).idx).bits.addr.bits
+      io.core.debug_stcom(w).data := stq(io.core.debug_stcom(w).idx).bits.data.bits
+    } else {
+      io.core.debug_stcom(w).addr := DontCare
+      io.core.debug_stcom(w).data := DontCare
+    }
+  }
 }
 
 /**
