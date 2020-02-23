@@ -1163,12 +1163,13 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
+  io.lsu.debug_stcom.foreach(_.idx := DontCare)
+
   if (COMMIT_LOG_PRINTF) {
-    var new_commit_cnt = 0.U
     for (w <- 0 until coreWidth) {
       val priv = RegNext(csr.io.status.prv) // erets change the privilege. Get the old one
 
-      // To allow for diffs against spike :/
+      // To allow for diffs against spike
       def printf_inst(uop: MicroOp) = {
         when (uop.is_rvc) {
           printf("(0x%x)", uop.debug_inst(15,0))
@@ -1176,6 +1177,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
           printf("(0x%x)", uop.debug_inst)
         }
       }
+
+      io.lsu.debug_stcom(w).idx := rob.io.commit.uops(w).stq_idx
 
       when (rob.io.commit.valids(w)) {
         printf("%d 0x%x ",
@@ -1190,6 +1193,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
           printf(" f%d 0x%x\n",
             rob.io.commit.uops(w).ldst,
             rob.io.commit.debug_wdata(w))
+        } .elsewhen (rob.io.commit.uops(w).uses_stq) {
+          printf(" 0x%x 0x%x\n",
+            io.lsu.debug_stcom(w).addr,
+            io.lsu.debug_stcom(w).data)
         } .otherwise {
           printf("\n")
         }
