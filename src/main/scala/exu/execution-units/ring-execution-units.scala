@@ -275,14 +275,16 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   //----------------------------------------------------------------------------------------------------
   // EU -> Slow (LL) Resp crossbar
 
-  val fpiu_req = if (usingFPU) Seq(io.from_fpu.bits.uop.pdst_col & Fill(coreWidth, io.from_fpu.valid)) else Seq()
+  val fpiu_wb_req = if (usingFPU) Seq(io.from_fpu.bits.uop.pdst_col & Fill(coreWidth, io.from_fpu.valid)) else Seq()
+  val fpiu_resp   = if (usingFPU) Seq(io.from_fpu.bits) else Seq()
 
   val slow_eu_reqs = Transpose(VecInit(shared_exe_units.filter(_.writesLlIrf).map(eu =>
-    eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid)) ++ fpiu_req))
+    eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid)) ++ fpiu_wb_req))
   val slow_eu_gnts = Transpose(VecInit(slow_eu_reqs.map(r => PriorityEncoderOH(r))))
 
   for (w <- 0 until coreWidth) {
-    io.ll_resps(w).bits  := PriorityMux(slow_eu_reqs(w), shared_exe_units.filter(_.writesLlIrf).map(_.io.ll_iresp.bits))
+    io.ll_resps(w).bits  := PriorityMux(slow_eu_reqs(w), shared_exe_units.filter(_.writesLlIrf).map(_.io.ll_iresp.bits) ++
+                                        fpiu_resp)
     io.ll_resps(w).valid := slow_eu_reqs(w).orR
   }
 
