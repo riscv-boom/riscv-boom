@@ -42,9 +42,6 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     // ALU branch resolution info
     val brinfos = Output(Vec(coreWidth, new BrResolutionInfo))
 
-    // TODO get rid of this output
-    val bypass = Output(new BypassData(coreWidth, xLen))
-
     // only used by the mem unit
     val lsu_io = Vec(memWidth, Flipped(new boom.lsu.LSUExeIO))
     val bp     = Input(Vec(nBreakpoints, new BP))
@@ -65,6 +62,9 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
     // TODO move this out of ExecutionUnit
     val com_exception = Input(Bool())
+
+    // for fp -> int writebacks
+    val from_fpu = Flipped(DecoupledIO(new ExeUnitResp(xLen)))
   })
 
   //----------------------------------------------------------------------------------------------------

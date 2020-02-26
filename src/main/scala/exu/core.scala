@@ -958,13 +958,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     // Connect IFPU
     fp_pipeline.io.from_int  <> exe_units.ifpu_unit.io.ll_fresp
     // Connect FPIU
-    //ll_wbarb.io.in(1)        <> fp_pipeline.io.to_int TODO
+    exe_units.io.from_fpu    <> fp_pipeline.io.to_int
     // Connect FLDs
-    //fp_pipeline.io.ll_wports <> exe_units.memory_units.map(_.io.ll_fresp)
-  }
-  if (usingRoCC) {
-    require(usingFPU)
-    //ll_wbarb.io.in(2)        <> exe_units.rocc_unit.io.ll_iresp TODO
+    fp_pipeline.io.ll_wports <> exe_units.memory_units.map(_.io.ll_fresp)
   }
 
   //-------------------------------------------------------------
