@@ -567,6 +567,24 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
   rename_stage.io.rollback := rob.io.commit.rollback
 
+  if (usingFPU) {
+    fp_rename_stage.io.kill := io.ifu.redirect_flush
+    fp_rename_stage.io.brupdate := brupdate
+
+    fp_rename_stage.io.debug_rob_empty := rob.io.empty
+
+    fp_rename_stage.io.dec_fire := dec_fire
+    fp_rename_stage.io.dec_uops := dec_uops
+
+    fp_rename_stage.io.dis_fire := dis_fire
+    fp_rename_stage.io.dis_ready := dis_ready
+
+    fp_rename_stage.io.com_valids := rob.io.commit.valids
+    fp_rename_stage.io.com_uops := rob.io.commit.uops
+    fp_rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
+    fp_rename_stage.io.rollback := rob.io.commit.rollback
+  }
+
   // Outputs
   dis_uops := rename_stage.io.ren2_uops
   dis_valids := rename_stage.io.ren2_mask
