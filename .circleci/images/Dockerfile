@@ -91,7 +91,7 @@ RUN groupadd --gid 3434 riscvuser \
 RUN if java -fullversion 2>&1 | grep -q '"9.'; then curl --silent --show-error --location --fail --retry 3 --output /etc/ssl/certs/java/cacerts https://circle-downloads.s3.amazonaws.com/circleci-images/cache/linux-amd64/openjdk-9-slim-cacerts; fi
 
 # Install Maven Version: 3.6.2
-RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/apache-maven.tar.gz https://www.apache.org/dist/maven/maven-3/3.6.2/binaries/apache-maven-3.6.2-bin.tar.gz \
+RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/apache-maven.tar.gz https://www.apache.org/dist/maven/maven-3/3.6.3/binaries/apache-maven-3.6.3-bin.tar.gz \
     && tar xf /tmp/apache-maven.tar.gz -C /opt/ \
     && rm /tmp/apache-maven.tar.gz \
     && ln -s /opt/apache-maven-* /opt/apache-maven \
@@ -120,6 +120,7 @@ RUN curl --silent --show-error --location --fail --retry 3 --output /tmp/sbt.tgz
     && /opt/sbt/bin/sbt sbtVersion
 
 # Install openjfx
+RUN apt-get update
 RUN apt-get install -y --no-install-recommends openjfx
 
 # Add build-essential
@@ -160,6 +161,12 @@ RUN apt-get install -y \
             libglib2.0-dev \
             libpixman-1-dev
 
+# Install verilator
+RUN git clone http://git.veripool.org/git/verilator \
+    && cd verilator \
+    && git checkout v4.028 \
+    && autoconf && ./configure && make && make install
+
 # Update PATH for Java tools
 ENV PATH="/opt/sbt/bin:/opt/apache-maven/bin:/opt/apache-ant/bin:/opt/gradle/bin:$PATH"
 
@@ -178,7 +185,8 @@ USER riscvuser
 RUN mvn -version \
     && ant -version \
     && gradle -version \
-    && sbt sbtVersion
+    && sbt sbtVersion \
+    && verilator --version
 
 # remove extra folders
 RUN rm -rf project/
