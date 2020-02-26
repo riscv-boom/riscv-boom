@@ -120,6 +120,7 @@ class WithRenumberHarts(rocketFirst: Boolean = false) extends Config((site, here
   case MaxHartIdBits => log2Up(up(BoomTilesKey, site).size + up(RocketTilesKey, site).size)
 })
 
+
 /**
  * Add a synchronous clock crossing to the tile boundary
  */
