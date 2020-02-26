@@ -37,7 +37,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     val brupdate         = Input(new BrUpdateInfo())
     val flush_pipeline   = Input(Bool())
     val fcsr_rm          = Input(UInt(width=freechips.rocketchip.tile.FPConstants.RM_SZ.W))
-    val status           = Input(new freechips.rocketchip.rocket.MStatus())
 
     val dis_uops         = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
@@ -247,7 +246,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   }
 
   exe_units.map(_.io.fcsr_rm := io.fcsr_rm)
-  exe_units.map(_.io.status := io.status)
 
   //-------------------------------------------------------------
   // **** Flush Pipeline ****

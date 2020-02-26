@@ -1044,9 +1044,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   exe_units.io.bp     := csr.io.bp
   exe_units.io.com_exception := rob.io.flush.valid
 
-  if (usingFPU)
-    fp_pipeline.io.status := csr.io.status
-
   // LSU <> ROB
   rob.io.lsu_clr_bsy    := io.lsu.clr_bsy
   rob.io.lsu_clr_unsafe := io.lsu.clr_unsafe
