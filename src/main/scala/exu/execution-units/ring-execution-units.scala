@@ -269,9 +269,10 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   //----------------------------------------------------------------------------------------------------
   // EU -> Slow (LL) Resp crossbar
 
+  val ifpu_req = if (usingFPU) Seq(io.from_fpu.bits.uop.pdst_col & Fill(coreWidth, io.from_fpu.valid)) else None
+
   val slow_eu_reqs = Transpose(VecInit(shared_exe_units.filter(_.writesLlIrf).map(eu =>
-    eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid)) ++
-    if (usingFPU) io.from_fpu.bits.uop.pdst_col & Fill(coreWidth, io.from_fpu.valid) else None))
+    eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid)) ++ ifpu_req))
   val slow_eu_gnts = Transpose(VecInit(slow_eu_reqs.map(r => PriorityEncoderOH(r))))
 
   for (w <- 0 until coreWidth) {
@@ -297,12 +298,6 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // Brinfo
   for (w <- 0 until coreWidth) {
     io.brinfos(w) := column_exe_units(w).io.brinfo
-  }
-
-  // ALU bypasses
-  io.bypass := DontCare
-  for (w <- 0 until coreWidth) {
-    io.bypass.data((w + 1) % coreWidth) := column_exe_units(w).io.bypass.data(0)
   }
 
   // Memory access units

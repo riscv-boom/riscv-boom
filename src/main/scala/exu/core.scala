@@ -126,7 +126,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Issue Stage/Register Read
   val iss_valids = Wire(Vec(coreWidth, Bool()))
   val iss_uops   = Wire(Vec(coreWidth, new MicroOp()))
-  val bypasses   = Wire(new BypassData(coreWidth, xLen))
 
   // --------------------------------------
   // Dealing with branch resolutions
@@ -774,8 +773,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   iregister_read.io.brupdate := brupdate
   iregister_read.io.kill   := RegNext(rob.io.flush.valid)
 
-  iregister_read.io.bypass := bypasses
-
   //-------------------------------------------------------------
   // Privileged Co-processor 0 Register File
   // Note: Normally this would be bad in that I'm writing state before
@@ -859,8 +856,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   exe_units.io.brupdate := brupdate
   exe_units.io.kill     := RegNext(rob.io.flush.valid)
-
-  bypasses := exe_units.io.bypass
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------

@@ -29,8 +29,6 @@ class RingRegisterReadIO
   // interface with register file's read ports
   val rf_read_ports = Flipped(Vec(coreWidth, new BankReadPort(log2Ceil(numIntPhysRegs/coreWidth), xLen)))
 
-  val bypass = Input(new BypassData(coreWidth, xLen))
-
   // send micro-ops to the execution pipelines
   val exe_reqs = Vec(coreWidth, new DecoupledIO(new FuncUnitReq(xLen)))
 
@@ -39,10 +37,6 @@ class RingRegisterReadIO
 }
 
 /**
- * Handle the register read and bypass network for the OoO backend
- * interfaces with the issue window on the enqueue side, and the execution
- * pipelines on the dequeue side.
- *
  * @param supportedUnitsArray seq of SupportedFuncUnits classes indicating what the functional units do
  */
 class RingRegisterRead(implicit p: Parameters) extends BoomModule
