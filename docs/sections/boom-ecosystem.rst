@@ -15,7 +15,7 @@ The core code structure is shown below:
 * ``src/main/scala/``
 
   * ``bpu/`` - branch predictor unit
-  * ``common/`` - configs mixins, constants, bundles, tile definitions
+  * ``common/`` - configs fragments, constants, bundles, tile definitions
   * ``exu/`` - execute/core unit
   * ``ifu/`` - instruction fetch unit
   * ``lsu/`` - load/store/memory unit
