@@ -56,10 +56,10 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
                            jmp  = true ,
                            mem  = true ,
                            muld = true ,
-                           fpu  = false,
                            csr  = true ,
+                           fpu  = false,
                            fdiv = false,
-                           ifpu = false)
+                           ifpu = usingFPU)
 
     val rrd_decode_unit = Module(new RegisterReadDecode(supportedUnits))
     rrd_decode_unit.io.iss_valid := io.iss_valids(w)
