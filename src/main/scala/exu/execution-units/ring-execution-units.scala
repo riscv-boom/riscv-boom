@@ -64,7 +64,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     val com_exception = Input(Bool())
 
     // fpu -> int writeback
-    val from_fpu = Flipped(DecoupledIO(new ExeUnitResp(xLen)))
+    val from_fpu = Flipped(DecoupledIO(new ExeUnitResp(xLen+1)))
 
     // int -> fpu writeback
     val to_fpu = DecoupledIO(new ExeUnitResp(xLen+1))
