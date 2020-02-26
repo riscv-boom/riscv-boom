@@ -63,7 +63,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     // TODO move this out of ExecutionUnit
     val com_exception = Input(Bool())
 
-    // for fp -> int writebacks
+    // for fpu -> int writebacks
     val from_fpu = Flipped(DecoupledIO(new ExeUnitResp(xLen)))
   })
 
@@ -162,7 +162,8 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // Put remaining functional units in a shared execution unit
   val misc_unit = Module(new ALUExeUnit(hasMul  = true,
                                         hasDiv  = true,
-                                        hasCSR  = true))
+                                        hasCSR  = true,
+                                        hasIfpu = usingFPU))
   misc_unit.suggestName("misc_unit")
   shared_exe_units += misc_unit
 
@@ -269,7 +270,8 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // EU -> Slow (LL) Resp crossbar
 
   val slow_eu_reqs = Transpose(VecInit(shared_exe_units.filter(_.writesLlIrf).map(eu =>
-    eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid))))
+    eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid)) ++
+    if (usingFPU) io.from_fpu.bits.uop.pdst_col & Fill(coreWidth, io.from_fpu.valid) else None))
   val slow_eu_gnts = Transpose(VecInit(slow_eu_reqs.map(r => PriorityEncoderOH(r))))
 
   for (w <- 0 until coreWidth) {
@@ -279,6 +281,12 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
   for ((eu,gnt) <- shared_exe_units.filter(_.writesLlIrf) zip slow_eu_gnts) {
     eu.io.ll_iresp.ready := (gnt & eu.io.ll_iresp.bits.uop.pdst_col).orR
+  }
+
+  if (usingFPU) {
+    io.from_fpu.ready := slow_eu_gnts.last
+  } else {
+    io.from_fpu.ready := DontCare
   }
 
   //----------------------------------------------------------------------------------------------------
@@ -312,7 +320,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // CSR unit
   io.csr_unit_resp <> csr_unit.io.iresp
 
-  // Core <-> FPU transfer units
+  // Int -> fpu unit
   if (usingFPU) {
     for (unit <- exe_units.filter(_.hasFcsr)) {
       unit.io.fcsr_rm := io.fcsr_rm

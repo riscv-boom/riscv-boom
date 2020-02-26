@@ -961,6 +961,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     exe_units.io.from_fpu    <> fp_pipeline.io.to_int
     // Connect FLDs
     fp_pipeline.io.ll_wports <> exe_units.memory_units.map(_.io.ll_fresp)
+  } else {
+    exe_units.io.from_fpu.bits  := DontCare
+    exe_units.io.from_fpu.valid := DontCare
   }
 
   //-------------------------------------------------------------
