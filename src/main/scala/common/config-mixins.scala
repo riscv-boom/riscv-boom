@@ -157,7 +157,8 @@ class WithRingBooms(n: Int, f: Int) extends Config((site, here, up) => {
       decodeWidth = n,
       numRobEntries = 25*n,
       issueParams = Seq(
-        IssueParams(issueWidth=n, numEntries=8*n, iqType=IQT_INT.litValue, dispatchWidth=n)),
+        IssueParams(issueWidth=n, numEntries=8*n, iqType=IQT_INT.litValue, dispatchWidth=n),
+        IssueParams(issueWidth=1, numEntries=4*n, iqType=IQT_FP.litValue , dispatchWidth=n)),
       numIntPhysRegisters = 32 + 17*n,
       numFpPhysRegisters = 32 + 12*n,
       numLdqEntries = 4*n,
@@ -165,8 +166,7 @@ class WithRingBooms(n: Int, f: Int) extends Config((site, here, up) => {
       maxBrCount = 4*n,
       numFetchBufferEntries = 8*n,
       ftq = FtqParameters(nEntries=50*n/f),
-      fpu = None,
-      usingFPU = false),
+      fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                nSets=64, nWays=2*n, nMSHRs=n, nTLBEntries=16)),
     icache = Some(ICacheParams(fetchBytes = 2*f, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=2*n, prefetch=true))
