@@ -63,8 +63,14 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     // TODO move this out of ExecutionUnit
     val com_exception = Input(Bool())
 
-    // for fpu -> int writebacks
+    // fpu -> int writeback
     val from_fpu = Flipped(DecoupledIO(new ExeUnitResp(xLen)))
+
+    // int -> fpu writeback
+    val to_fpu = DecoupledIO(new ExeUnitResp(xLen+1))
+
+    // load -> fpu writeback
+    val ll_fresps = Vec(memWidth, DecoupledIO(new ExeUnitResp(xLen)))
   })
 
   //----------------------------------------------------------------------------------------------------
@@ -269,10 +275,10 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   //----------------------------------------------------------------------------------------------------
   // EU -> Slow (LL) Resp crossbar
 
-  val ifpu_req = if (usingFPU) Seq(io.from_fpu.bits.uop.pdst_col & Fill(coreWidth, io.from_fpu.valid)) else None
+  val fpiu_req = if (usingFPU) Seq(io.from_fpu.bits.uop.pdst_col & Fill(coreWidth, io.from_fpu.valid)) else Seq()
 
   val slow_eu_reqs = Transpose(VecInit(shared_exe_units.filter(_.writesLlIrf).map(eu =>
-    eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid)) ++ ifpu_req))
+    eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid)) ++ fpiu_req))
   val slow_eu_gnts = Transpose(VecInit(slow_eu_reqs.map(r => PriorityEncoderOH(r))))
 
   for (w <- 0 until coreWidth) {
@@ -315,11 +321,23 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // CSR unit
   io.csr_unit_resp <> csr_unit.io.iresp
 
-  // Int -> fpu unit
+  // FPU related
   if (usingFPU) {
     for (unit <- exe_units.filter(_.hasFcsr)) {
       unit.io.fcsr_rm := io.fcsr_rm
     }
+
+    io.ll_fresps <> mem_units.map(_.io.ll_fresp)
+
+    io.to_fpu <> ifpu_unit.io.ll_fresp
+  } else {
+     for (ll_fresp <- io.ll_fresps) {
+      ll_fresp.bits  := DontCare
+      ll_fresp.valid := DontCare
+     }
+
+     io.to_fpu.bits  := DontCare
+     io.to_fpu.valid := DontCare
   }
 
   // RoCC unit
