@@ -60,7 +60,7 @@ class RenameStageIO(
   val dis_ready = Input(Bool())
 
   // wakeup ports
-  val wakeups = Flipped(Vec(numWbPorts, Valid(UInt(pregSz.W))))
+  val wakeups = Flipped(Vec(numWbPorts, Valid(new ExeUnitResp(xLen))))
 
   // commit stage
   val com_valids = Input(Vec(plWidth, Bool()))
@@ -274,7 +274,7 @@ class RenameStage(
   busytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
   busytable.io.rebusy_reqs := ren2_alloc_reqs
   busytable.io.wb_valids := io.wakeups.map(_.valid)
-  busytable.io.wb_pdsts := io.wakeups.map(_.bits)
+  busytable.io.wb_pdsts := io.wakeups.map(_.bits.uop.pdst)
 
   for ((uop, w) <- ren2_uops.zipWithIndex) {
     val busy = busytable.io.busy_resps(w)
