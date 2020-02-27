@@ -55,6 +55,7 @@ trait IQType
   val IQT_MEM = 2.U(IQT_SZ.W)
   val IQT_FP  = 4.U(IQT_SZ.W)
 
+  val IQT_IFP = 5.U(IQT_SZ.W)
   val IQT_MFP = 6.U(IQT_SZ.W)
 }
 

@@ -176,7 +176,7 @@ abstract class ExecutionUnit(
  * @param hasMem does the exe unit have a MemAddrCalcUnit
  */
 class ALUExeUnit(
-  hasJmp     : Boolean = false,
+  hasJmp         : Boolean = false,
   hasCSR         : Boolean = false,
   hasAlu         : Boolean = true,
   hasMul         : Boolean = false,
@@ -193,7 +193,7 @@ class ALUExeUnit(
     numBypassStages  =
       if (hasAlu && hasMul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
       else if (hasAlu) 1 else 0,
-    dataWidth        = p(tile.XLen),
+    dataWidth        = p(tile.XLen)+1,
     bypassable       = hasAlu,
     alwaysBypassable = hasAlu && !(hasMem || hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     hasCSR           = hasCSR,
@@ -312,7 +312,8 @@ class ALUExeUnit(
     ifpu.io.req        <> io.req
     ifpu.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_I2F)
     ifpu.io.fcsr_rm    := io.fcsr_rm
-    ifpu.io.brupdate   <> io.brupdate
+    ifpu.io.brupdate   := io.brupdate
+    ifpu.io.kill       := io.kill
     ifpu.io.resp.ready := DontCare
 
     // buffer up results since we share write-port on integer regfile.
@@ -455,7 +456,7 @@ class FPUExeUnit(
     fpu.io.req.bits.rs1_data := io.req.bits.rs1_data
     fpu.io.req.bits.rs2_data := io.req.bits.rs2_data
     fpu.io.req.bits.rs3_data := io.req.bits.rs3_data
-    fpu.io.kill     := io.kill
+    fpu.io.kill              := io.kill
     fpu.io.fcsr_rm           := io.fcsr_rm
     fpu.io.brupdate          := io.brupdate
     fpu.io.resp.ready        := DontCare
@@ -477,7 +478,7 @@ class FPUExeUnit(
     fdivsqrt.io.req.bits.rs1_data := io.req.bits.rs1_data
     fdivsqrt.io.req.bits.rs2_data := io.req.bits.rs2_data
     fdivsqrt.io.req.bits.rs3_data := DontCare
-    fdivsqrt.io.kill     := io.kill
+    fdivsqrt.io.kill              := io.kill
     fdivsqrt.io.fcsr_rm           := io.fcsr_rm
     fdivsqrt.io.brupdate          := io.brupdate
 

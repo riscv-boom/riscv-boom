@@ -42,9 +42,6 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     // ALU branch resolution info
     val brinfos = Output(Vec(coreWidth, new BrResolutionInfo))
 
-    // TODO get rid of this output
-    val bypass = Output(new BypassData(coreWidth, xLen))
-
     // only used by the mem unit
     val lsu_io = Vec(memWidth, Flipped(new boom.lsu.LSUExeIO))
     val bp     = Input(Vec(nBreakpoints, new BP))
@@ -65,6 +62,15 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
     // TODO move this out of ExecutionUnit
     val com_exception = Input(Bool())
+
+    // fpu -> int writeback
+    val from_fpu = Flipped(DecoupledIO(new ExeUnitResp(xLen+1)))
+
+    // int -> fpu writeback
+    val to_fpu = DecoupledIO(new ExeUnitResp(xLen+1))
+
+    // load -> fpu writeback
+    val ll_fresps = Vec(memWidth, DecoupledIO(new ExeUnitResp(xLen)))
   })
 
   //----------------------------------------------------------------------------------------------------
@@ -162,7 +168,8 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // Put remaining functional units in a shared execution unit
   val misc_unit = Module(new ALUExeUnit(hasMul  = true,
                                         hasDiv  = true,
-                                        hasCSR  = true))
+                                        hasCSR  = true,
+                                        hasIfpu = usingFPU))
   misc_unit.suggestName("misc_unit")
   shared_exe_units += misc_unit
 
@@ -268,33 +275,37 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   //----------------------------------------------------------------------------------------------------
   // EU -> Slow (LL) Resp crossbar
 
+  val fpiu_wb_req = if (usingFPU) Seq(io.from_fpu.bits.uop.pdst_col & Fill(coreWidth, io.from_fpu.valid)) else Seq()
+  val fpiu_resp   = if (usingFPU) Seq(io.from_fpu.bits) else Seq()
+
   val slow_eu_reqs = Transpose(VecInit(shared_exe_units.filter(_.writesLlIrf).map(eu =>
-    eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid))))
-  val slow_eu_gnts = Transpose(VecInit(slow_eu_reqs.map(r => PriorityEncoderOH(r))))
+    eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid)) ++ fpiu_wb_req))
+  val slow_eu_rdys = Transpose(VecInit(slow_eu_reqs.map(r => ~MaskAbove(r))))
 
   for (w <- 0 until coreWidth) {
-    io.ll_resps(w).bits  := PriorityMux(slow_eu_reqs(w), shared_exe_units.filter(_.writesLlIrf).map(_.io.ll_iresp.bits))
+    io.ll_resps(w).bits  := PriorityMux(slow_eu_reqs(w), shared_exe_units.filter(_.writesLlIrf).map(_.io.ll_iresp.bits) ++
+                                        fpiu_resp)
     io.ll_resps(w).valid := slow_eu_reqs(w).orR
   }
 
-  for ((eu,gnt) <- shared_exe_units.filter(_.writesLlIrf) zip slow_eu_gnts) {
-    eu.io.ll_iresp.ready := (gnt & eu.io.ll_iresp.bits.uop.pdst_col).orR
+  for ((eu,rdy) <- shared_exe_units.filter(_.writesLlIrf) zip slow_eu_rdys) {
+    eu.io.ll_iresp.ready := (rdy & eu.io.ll_iresp.bits.uop.pdst_col).orR
+  }
+
+  if (usingFPU) {
+    io.from_fpu.ready := (slow_eu_rdys.last & io.from_fpu.bits.uop.pdst_col).orR
+  } else {
+    io.from_fpu.ready := DontCare
   }
 
   //----------------------------------------------------------------------------------------------------
-  // Punch through misc unit I/O to core
+  // Punch through misc I/O to core
 
   io.fu_avail := exe_units.foldLeft(0.U(FUC_SZ.W))((fu,eu) => fu | eu.io.fu_types)
 
   // Brinfo
   for (w <- 0 until coreWidth) {
     io.brinfos(w) := column_exe_units(w).io.brinfo
-  }
-
-  // ALU bypasses
-  io.bypass := DontCare
-  for (w <- 0 until coreWidth) {
-    io.bypass.data((w + 1) % coreWidth) := column_exe_units(w).io.bypass.data(0)
   }
 
   // Memory access units
@@ -312,11 +323,23 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // CSR unit
   io.csr_unit_resp <> csr_unit.io.iresp
 
-  // Core <-> FPU transfer units
+  // FPU related
   if (usingFPU) {
     for (unit <- exe_units.filter(_.hasFcsr)) {
       unit.io.fcsr_rm := io.fcsr_rm
     }
+
+    io.ll_fresps <> mem_units.map(_.io.ll_fresp)
+
+    io.to_fpu <> ifpu_unit.io.ll_fresp
+  } else {
+     for (ll_fresp <- io.ll_fresps) {
+      ll_fresp.bits  := DontCare
+      ll_fresp.valid := DontCare
+     }
+
+     io.to_fpu.bits  := DontCare
+     io.to_fpu.valid := DontCare
   }
 
   // RoCC unit

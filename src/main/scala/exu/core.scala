@@ -126,7 +126,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Issue Stage/Register Read
   val iss_valids = Wire(Vec(coreWidth, Bool()))
   val iss_uops   = Wire(Vec(coreWidth, new MicroOp()))
-  val bypasses   = Wire(new BypassData(coreWidth, xLen))
 
   // --------------------------------------
   // Dealing with branch resolutions
@@ -568,6 +567,24 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
   rename_stage.io.rollback := rob.io.commit.rollback
 
+  if (usingFPU) {
+    fp_rename_stage.io.kill := io.ifu.redirect_flush
+    fp_rename_stage.io.brupdate := brupdate
+
+    fp_rename_stage.io.debug_rob_empty := rob.io.empty
+
+    fp_rename_stage.io.dec_fire := dec_fire
+    fp_rename_stage.io.dec_uops := dec_uops
+
+    fp_rename_stage.io.dis_fire := dis_fire
+    fp_rename_stage.io.dis_ready := dis_ready
+
+    fp_rename_stage.io.com_valids := rob.io.commit.valids
+    fp_rename_stage.io.com_uops := rob.io.commit.uops
+    fp_rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
+    fp_rename_stage.io.rollback := rob.io.commit.rollback
+  }
+
   // Outputs
   dis_uops := rename_stage.io.ren2_uops
   dis_valids := rename_stage.io.ren2_mask
@@ -774,8 +791,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   iregister_read.io.brupdate := brupdate
   iregister_read.io.kill   := RegNext(rob.io.flush.valid)
 
-  iregister_read.io.bypass := bypasses
-
   //-------------------------------------------------------------
   // Privileged Co-processor 0 Register File
   // Note: Normally this would be bad in that I'm writing state before
@@ -859,8 +874,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   exe_units.io.brupdate := brupdate
   exe_units.io.kill     := RegNext(rob.io.flush.valid)
-
-  bypasses := exe_units.io.bypass
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -956,16 +969,21 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   if (usingFPU) {
     // Connect IFPU
-    fp_pipeline.io.from_int  <> exe_units.ifpu_unit.io.ll_fresp
+    fp_pipeline.io.from_int  <> exe_units.io.to_fpu
     // Connect FPIU
-    //ll_wbarb.io.in(1)        <> fp_pipeline.io.to_int TODO
+    exe_units.io.from_fpu    <> fp_pipeline.io.to_int
     // Connect FLDs
-    //fp_pipeline.io.ll_wports <> exe_units.memory_units.map(_.io.ll_fresp)
+    fp_pipeline.io.ll_wports <> exe_units.io.ll_fresps
+  } else {
+    exe_units.io.from_fpu.bits  := DontCare
+    exe_units.io.from_fpu.valid := DontCare
+    exe_units.io.to_fpu.ready   := DontCare
+
+    for (ll_fresp <- exe_units.io.ll_fresps) {
+      ll_fresp.ready := DontCare
+    }
   }
-  if (usingRoCC) {
-    require(usingFPU)
-    //ll_wbarb.io.in(2)        <> exe_units.rocc_unit.io.ll_iresp TODO
-  }
+
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -1043,9 +1061,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   exe_units.io.status := csr.io.status
   exe_units.io.bp     := csr.io.bp
   exe_units.io.com_exception := rob.io.flush.valid
-
-  if (usingFPU)
-    fp_pipeline.io.status := csr.io.status
 
   // LSU <> ROB
   rob.io.lsu_clr_bsy    := io.lsu.clr_bsy

@@ -208,11 +208,11 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def prs2_reads_irf = lrs2_rtype === RT_FIX && !prs2_bypass && lrs2 =/= 0.U
   def eu_code        = {	// Hard code this for now
 	val fu = fu_code
-	VecInit(fu(0),                  // ALU
-			fu(2),                  // MEM
-			fu(1),                  // JMP
-			fu(3) || fu(4) || fu(5) // MUL || DIV || CSR
-			).asUInt
+	VecInit(fu(0),                           // ALU
+			    fu(2),                           // MEM
+			    fu(1),                           // JMP
+			    fu(3) || fu(4) || fu(5) || fu(8) // MUL || DIV || CSR || I2F
+			    ).asUInt
   }
   def shared_eu_code = eu_code(3,1)
   def exe_wb_latency = fu_code(3) << (imulLatency - 1) | (fu_code(1) | fu_code(0))

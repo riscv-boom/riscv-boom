@@ -37,7 +37,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     val brupdate         = Input(new BrUpdateInfo())
     val flush_pipeline   = Input(Bool())
     val fcsr_rm          = Input(UInt(width=freechips.rocketchip.tile.FPConstants.RM_SZ.W))
-    val status           = Input(new freechips.rocketchip.rocket.MStatus())
 
     val dis_uops         = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
@@ -205,11 +204,11 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   val fpiu_unit = exe_units.fpiu_unit
   val fpiu_is_sdq = fpiu_unit.io.ll_iresp.bits.uop.uopc === uopSTA
-  io.to_int.valid := fpiu_unit.io.ll_iresp.fire() && !fpiu_is_sdq
-  io.to_sdq.valid := fpiu_unit.io.ll_iresp.fire() &&  fpiu_is_sdq
+  io.to_int.valid := fpiu_unit.io.ll_iresp.valid && !fpiu_is_sdq
+  io.to_sdq.valid := fpiu_unit.io.ll_iresp.valid && fpiu_is_sdq
   io.to_int.bits  := fpiu_unit.io.ll_iresp.bits
   io.to_sdq.bits  := fpiu_unit.io.ll_iresp.bits
-  fpiu_unit.io.ll_iresp.ready := io.to_sdq.ready && io.to_int.ready
+  fpiu_unit.io.ll_iresp.ready := Mux(fpiu_is_sdq, io.to_sdq.ready, io.to_int.ready)
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -247,7 +246,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   }
 
   exe_units.map(_.io.fcsr_rm := io.fcsr_rm)
-  exe_units.map(_.io.status := io.status)
 
   //-------------------------------------------------------------
   // **** Flush Pipeline ****
