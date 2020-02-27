@@ -397,6 +397,28 @@ object MaskUpper
 }
 
 /**
+ * Set all bits below the highest order '1'.
+ */
+object MaskBelow
+{
+  def apply(in: UInt) = {
+    val n = in.getWidth
+    (1 until n).map(i => in >> i.U).reduce(_|_)
+  }
+}
+
+/**
+ * Set all bits above the lowest order '1'.
+ */
+object MaskAbove
+{
+  def apply(in: UInt) = {
+    val n = in.getWidth
+    (1 until n).map(i => (in << i.U)(n-1,0)).reduce(_|_)
+  }
+}
+
+/**
  * Transpose a matrix of Chisel Vecs.
  */
 object Transpose

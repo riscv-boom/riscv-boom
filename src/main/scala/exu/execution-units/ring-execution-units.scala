@@ -280,7 +280,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
   val slow_eu_reqs = Transpose(VecInit(shared_exe_units.filter(_.writesLlIrf).map(eu =>
     eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid)) ++ fpiu_wb_req))
-  val slow_eu_gnts = Transpose(VecInit(slow_eu_reqs.map(r => PriorityEncoderOH(r))))
+  val slow_eu_rdys = Transpose(VecInit(slow_eu_reqs.map(r => ~MaskAbove(r))))
 
   for (w <- 0 until coreWidth) {
     io.ll_resps(w).bits  := PriorityMux(slow_eu_reqs(w), shared_exe_units.filter(_.writesLlIrf).map(_.io.ll_iresp.bits) ++
@@ -288,18 +288,18 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     io.ll_resps(w).valid := slow_eu_reqs(w).orR
   }
 
-  for ((eu,gnt) <- shared_exe_units.filter(_.writesLlIrf) zip slow_eu_gnts) {
-    eu.io.ll_iresp.ready := (gnt & eu.io.ll_iresp.bits.uop.pdst_col).orR
+  for ((eu,rdy) <- shared_exe_units.filter(_.writesLlIrf) zip slow_eu_rdys) {
+    eu.io.ll_iresp.ready := (rdy & eu.io.ll_iresp.bits.uop.pdst_col).orR
   }
 
   if (usingFPU) {
-    io.from_fpu.ready := slow_eu_gnts.last
+    io.from_fpu.ready := (slow_eu_rdys.last & io.from_fpu.bits.uop.pdst_col).orR
   } else {
     io.from_fpu.ready := DontCare
   }
 
   //----------------------------------------------------------------------------------------------------
-  // Punch through misc unit I/O to core
+  // Punch through misc I/O to core
 
   io.fu_avail := exe_units.foldLeft(0.U(FUC_SZ.W))((fu,eu) => fu | eu.io.fu_types)
 
