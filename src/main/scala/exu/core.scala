@@ -1497,9 +1497,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
       // Recalculate the PC
       io.ifu.debug_ftq_idx(w) := rob.io.commit.uops(w).ftq_idx
-      io.trace(w).iaddr      := Sext(AlignPCToBoundary(io.ifu.debug_fetch_pc(w), icBlockBytes)
-                                      + RegNext(rob.io.commit.uops(w).pc_lob)
-                                      - Mux(RegNext(rob.io.commit.uops(w).edge_inst), 2.U, 0.U), xLen)
+      val iaddr = (AlignPCToBoundary(io.ifu.debug_fetch_pc(w), icBlockBytes)
+                   + RegNext(rob.io.commit.uops(w).pc_lob)
+                   - Mux(RegNext(rob.io.commit.uops(w).edge_inst), 2.U, 0.U))(vaddrBits-1,0)
+      io.trace(w).iaddr      := Sext(iaddr, xLen)
 
       // use debug_insts instead of uop.debug_inst to use the rob's debug_inst_mem
       io.trace(w).insn       := rob.io.commit.debug_insts(w)
