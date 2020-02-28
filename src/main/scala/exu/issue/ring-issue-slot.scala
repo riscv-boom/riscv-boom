@@ -25,7 +25,6 @@ class FastWakeup(implicit p: Parameters) extends BoomBundle
   val pdst   = UInt(ipregSz.W)
   val status = UInt(operandStatusSz.W)
   val alu    = Bool()
-  val mem    = Bool()
 }
 
 /**
@@ -47,8 +46,9 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
   val ld_miss       = Input(Bool())
 
-  val slow_wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
   val fast_wakeup   = Input(Valid(new FastWakeup))
+  val load_wakeups  = Input(Vec(memWidth, Valid(UInt(ipregSz.W))))
+  val slow_wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
 
   val in_uop        = Flipped(Valid(new MicroOp)) // Received from dispatch or another slot during compaction
   val out_uop       = Output(new MicroOp) // The updated slot uop; will be shifted upwards in a collasping queue
@@ -76,26 +76,39 @@ class RingIssueSlot(implicit p: Parameters)
   //----------------------------------------------------------------------------------------------------
   // Helpers
 
-  def wakeup(uop: MicroOp, fwu: Valid[FastWakeup], swu: Seq[Valid[UInt]]): MicroOp = {
-    val wu_uop = Wire(new MicroOp)
-    wu_uop := uop
+  def wakeup(uop: MicroOp, fwu: Valid[FastWakeup], lwu: Seq[Valid[UInt]], swu: Seq[Valid[UInt]]): MicroOp = {
+    val woke_uop = Wire(new MicroOp)
+    woke_uop := uop
 
-    val do_fast_wakeup = fwu.bits.pdst === uop.busy_operand && fwu.valid
+    val do_fwu   = fwu.bits.pdst === uop.busy_operand && fwu.valid
+    val fwu_prs1 = do_fwu && !uop.busy_operand_sel
+    val fwu_prs2 = do_fwu &&  uop.busy_operand_sel
 
-    wu_uop.prs1_status := ( uop.prs1_status >> 1
-                          | uop.prs1_status & 1.U
-                          | Mux(do_fast_wakeup && !uop.busy_operand_sel, fwu.bits.status, 0.U)
-                          | swu.foldLeft(0.U) ((ss,wu) => ss | Mux(wu.bits === uop.prs1 && wu.valid, 1.U, 0.U)) )
-    wu_uop.prs2_status := ( uop.prs2_status >> 1
-                          | uop.prs2_status & 1.U
-                          | Mux(do_fast_wakeup &&  uop.busy_operand_sel, fwu.bits.status, 0.U)
-                          | swu.foldLeft(0.U) ((ss,wu) => ss | Mux(wu.bits === uop.prs2 && wu.valid, 1.U, 0.U)) )
+    val lwu_prs1 = lwu.map(wu => wu.bits === uop.prs1 && wu.valid).reduce(_||_)
+    val lwu_prs2 = lwu.map(wu => wu.bits === uop.prs2 && wu.valid).reduce(_||_)
 
-    wu_uop.prs1_can_bypass_alu := uop.prs1_can_bypass_alu || do_fast_wakeup && !uop.busy_operand_sel && fwu.bits.alu
-    wu_uop.prs2_can_bypass_alu := uop.prs2_can_bypass_alu || do_fast_wakeup &&  uop.busy_operand_sel && fwu.bits.alu
+    val swu_prs1 = swu.map(wu => wu.bits === uop.prs1 && wu.valid).reduce(_||_)
+    val swu_prs2 = swu.map(wu => wu.bits === uop.prs2 && wu.valid).reduce(_||_)
 
-    wu_uop.prs1_can_bypass_mem := uop.prs1_can_bypass_mem || do_fast_wakeup && !uop.busy_operand_sel && fwu.bits.mem
-    wu_uop.prs2_can_bypass_mem := uop.prs2_can_bypass_mem || do_fast_wakeup &&  uop.busy_operand_sel && fwu.bits.mem
+    woke_uop.prs1_status := ( uop.prs1_status >> 1
+                            | uop.prs1_status & 1.U
+                            | Mux(fwu_prs1, fwu.bits.status, 0.U)
+                            | Mux(lwu_prs1,             2.U, 0.U)
+                            | Mux(swu_prs1,             1.U, 0.U) )
+    woke_uop.prs2_status := ( uop.prs2_status >> 1
+                            | uop.prs2_status & 1.U
+                            | Mux(fwu_prs2, fwu.bits.status, 0.U)
+                            | Mux(lwu_prs2,             2.U, 0.U)
+                            | Mux(swu_prs2,             1.U, 0.U) )
+
+    woke_uop.prs1_can_bypass_alu := uop.prs1_can_bypass_alu || fwu_prs1 && fwu.bits.alu
+    woke_uop.prs2_can_bypass_alu := uop.prs2_can_bypass_alu || fwu_prs2 && fwu.bits.alu
+
+    woke_uop.prs1_can_bypass_mem := uop.prs1_can_bypass_mem || lwu_prs1
+    woke_uop.prs2_can_bypass_mem := uop.prs2_can_bypass_mem || lwu_prs2
+
+    assert (!(uop.prs1_status.orR && woke_uop.prs1_status.orR), "prs1 received multiple wakeups")
+    assert (!(uop.prs2_status.orR && woke_uop.prs2_status.orR), "prs2 received multiple wakeups")
 
     wu_uop
   }
@@ -112,6 +125,7 @@ class RingIssueSlot(implicit p: Parameters)
   def is_invalid = state === s_invalid
   def is_valid = state =/= s_invalid
 
+  val state           = RegInit(s_invalid)
   val next_state      = Wire(UInt()) // the next state of this slot (which might then get moved to a new slot)
   val next_uopc       = Wire(UInt()) // the next uopc of this slot (which might then get moved to a new slot)
   val next_lrs1_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
@@ -119,11 +133,10 @@ class RingIssueSlot(implicit p: Parameters)
 
   val slot_uop = RegInit(NullMicroOp)
   val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, io.out_uop)
-  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.slow_wakeups)
+  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.load_wakeups, io.slow_wakeups)
 
-  val state = RegInit(s_invalid)
-  val p1    = slot_uop.prs1_ready
-  val p2    = slot_uop.prs2_ready
+  val p1 = slot_uop.prs1_ready
+  val p2 = slot_uop.prs2_ready
 
   //----------------------------------------------------------------------------------------------------
   // next slot state computation
