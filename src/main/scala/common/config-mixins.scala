@@ -86,6 +86,7 @@ class WithTrace extends Config((site, here, up) => {
  */
 class WithNBoomCores(n: Int) extends Config(
   new WithSmallBooms ++
+  new WithTAGELBPD ++ // Default to TAGE-L BPD
   new Config((site, here, up) => {
     case BoomTilesKey => {
       List.tabulate(n)(i => BoomTileParams(hartId = i))
@@ -346,6 +347,27 @@ class WithCS152DefaultBooms extends Config((site, here, up) => {
 /**
   *  Branch prediction configs below
   */
+
+class WithTAGELBPD extends Config((site, here, up) => {
+  case BoomBPDComposition => ((resp_in: BranchPredictionBankResponse, p: Parameters) =>{
+    val loop = Module(new LoopBranchPredictorBank()(p))
+    val tage = Module(new TageBranchPredictorBank()(p))
+    val btb = Module(new BTBBranchPredictorBank()(p))
+    val bim = Module(new BIMBranchPredictorBank()(p))
+    val ubtb = Module(new FAMicroBTBBranchPredictorBank()(p))
+    val preds = Seq(loop, tage, btb, ubtb, bim)
+    preds.map(_.io := DontCare)
+
+    ubtb.io.resp_in(0)  := resp_in
+    bim.io.resp_in(0)   := ubtb.io.resp
+    btb.io.resp_in(0)   := bim.io.resp
+    tage.io.resp_in(0)  := btb.io.resp
+    loop.io.resp_in(0)  := tage.io.resp
+
+    (preds, loop.io.resp)
+  })
+})
+
 class WithBoom2BPD extends Config((site, here, up) => {
   case BoomBPDComposition => ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
     // gshare is just variant of TAGE with 1 table

@@ -11,24 +11,7 @@ import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
 case object BoomBPDComposition extends Field[Function2[BranchPredictionBankResponse, Parameters, Tuple2[Seq[BranchPredictorBank], BranchPredictionBankResponse]]](
-  (resp_in: BranchPredictionBankResponse, p: Parameters) => {
-    val loop = Module(new LoopBranchPredictorBank()(p))
-    val tage = Module(new TageBranchPredictorBank()(p))
-    val btb = Module(new BTBBranchPredictorBank()(p))
-    val bim = Module(new BIMBranchPredictorBank()(p))
-    val ubtb = Module(new FAMicroBTBBranchPredictorBank()(p))
-    val preds = Seq(loop, tage, btb, ubtb, bim)
-    preds.map(_.io := DontCare)
-
-    ubtb.io.resp_in(0)  := resp_in
-    bim.io.resp_in(0)   := ubtb.io.resp
-    btb.io.resp_in(0)   := bim.io.resp
-    tage.io.resp_in(0)  := btb.io.resp
-    loop.io.resp_in(0)  := tage.io.resp
-
-    (preds, loop.io.resp)
-  }
-)
+  (resp_in: BranchPredictionBankResponse, p: Parameters) => (Nil, resp_in))
 
 class ComposedBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
