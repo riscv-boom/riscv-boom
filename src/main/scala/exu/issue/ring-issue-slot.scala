@@ -48,7 +48,7 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val fast_wakeup   = Input(Valid(new FastWakeup))
   val slow_wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
   val load_wakeups  = Input(Vec(memWidth, Valid(UInt(ipregSz.W))))
-  val load_misses   = Input(Vec(memWidth, Bool()))
+  val load_nacks    = Input(Vec(memWidth, Bool()))
 
   val in_uop        = Flipped(Valid(new MicroOp)) // Received from dispatch or another slot during compaction
   val out_uop       = Output(new MicroOp) // The updated slot uop; will be shifted upwards in a collasping queue
@@ -80,7 +80,7 @@ class RingIssueSlot(implicit p: Parameters)
              fwu: Valid[FastWakeup],
              lwu: Vec[Valid[UInt]],
              swu: Vec[Valid[UInt]]
-             ldm: Vec[Bool]): MicroOp = {
+             ldn: Vec[Bool]): MicroOp = {
 
     val woke_uop = Wire(new MicroOp)
     woke_uop := uop
@@ -115,8 +115,8 @@ class RingIssueSlot(implicit p: Parameters)
     woke_uop.prs2_can_bypass_mem := (uop.prs2_can_bypass_mem.asBits | lwu_prs2_hits.asBits).asBools
 
     // Reset status to zero if woken up last cycle by a load which missed
-    when ((uop.prs1_bypass_load.asBits & ldm.asBits).orR) { woke_uop.prs1_status := 0.U }
-    when ((uop.prs2_bypass_load.asBits & ldm.asBits).orR) { woke_uop.prs2_status := 0.U }
+    when ((uop.prs1_bypass_load.asBits & ldn.asBits).orR) { woke_uop.prs1_status := 0.U }
+    when ((uop.prs2_bypass_load.asBits & ldn.asBits).orR) { woke_uop.prs2_status := 0.U }
 
     assert (!(uop.prs1_status.orR && woke_uop.prs1_status.orR) && PopCount(woke_uop.prs1_status) <= 1.U,
             "prs1 received multiple wakeups")
@@ -146,7 +146,7 @@ class RingIssueSlot(implicit p: Parameters)
 
   val slot_uop = RegInit(NullMicroOp)
   val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, io.out_uop)
-  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.load_wakeups, io.slow_wakeups, io.load_misses)
+  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.load_wakeups, io.slow_wakeups, io.load_nacks)
 
   val p1 = slot_uop.prs1_ready
   val p2 = slot_uop.prs2_ready

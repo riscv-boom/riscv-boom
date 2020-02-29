@@ -30,7 +30,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
     val slow_wakeups = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
     val load_wakeups = Input(Vec(memWidth   , Valid(UInt(ipregSz.W))))
-    val load_misses  = Input(Vec(memWidth   , Bool()))
+    val load_nacks   = Input(Vec(memWidth   , Bool()))
 
     val fu_avail = Input(UInt(FUC_SZ.W))
 
@@ -143,7 +143,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   //----------------------------------------------------------------------------------------------------
   // Grant, Fast Wakeup, and Issue
 
-  val do_issue = arb_gnts & ~VecInit(sel_uops.map(_.load_miss_nack(io.load_misses))).asBools
+  val do_issue = arb_gnts & ~VecInit(sel_uops.map(_.load_wakeup_nacked(io.load_nacks))).asBools
 
   // Grant signals
   for (w <- 0 until coreWidth) {
