@@ -32,6 +32,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val load_wakeups = Input(Vec(memWidth   , Valid(UInt(ipregSz.W))))
     val load_nacks   = Input(Vec(memWidth   , Bool()))
 
+    val fast_wakeups = Output(Vec(coreWidth , Valid(UInt(ipregSz.W))))
+
     val fu_avail = Input(UInt(FUC_SZ.W))
 
     val brupdate = Input(new BrUpdateInfo)
@@ -151,11 +153,18 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     }
   }
 
-  // Connect fast wakeups
+  // Generate fast wakeups
   for (w <- 0 until coreWidth) {
+    val fast_wakeup = sel_uops(w).fast_wakeup(do_issue(w))
+
+    // Broadcast to slots in next column
     for (slot <- slots((w + 1) % coreWidth)) {
-      slot.fast_wakeup := sel_uops(w).fast_wakeup(do_issue(w))
+      slot.fast_wakeup := fast_wakeup
     }
+
+    // Send to rename (ALU only)
+    io.fast_wakeups(w).valid := RegNext(fast_wakeup.valid && fast_wakeup.bits.alu)
+    io.fast_wakeups(w).bits  := RegNext(fast_wakeup.bits.pdst)
   }
 
   // Hookup issue output
