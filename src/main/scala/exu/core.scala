@@ -744,9 +744,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                                   && wbresp.bits.uop.dst_rtype === RT_FIX )
   }
 
-  for ((renport, intport) <- rename_stage.io.wakeups zip wakeups) {
-    renport <> intport
-  }
+  rename_stage.io.wakeups := scheduler.io.fast_wakeups ++ wakeups
+
   if (usingFPU) {
     for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
       renport <> fpport
