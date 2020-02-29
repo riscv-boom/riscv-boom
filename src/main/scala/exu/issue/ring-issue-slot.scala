@@ -44,11 +44,11 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val brupdate      = Input(new BrUpdateInfo)
   val kill          = Input(Bool()) // pipeline flush
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
-  val ld_miss       = Input(Bool())
 
   val fast_wakeup   = Input(Valid(new FastWakeup))
-  val load_wakeups  = Input(Vec(memWidth, Valid(UInt(ipregSz.W))))
   val slow_wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
+  val load_wakeups  = Input(Vec(memWidth, Valid(UInt(ipregSz.W))))
+  val load_misses   = Input(Vec(memWidth, Bool()))
 
   val in_uop        = Flipped(Valid(new MicroOp)) // Received from dispatch or another slot during compaction
   val out_uop       = Output(new MicroOp) // The updated slot uop; will be shifted upwards in a collasping queue
@@ -76,7 +76,12 @@ class RingIssueSlot(implicit p: Parameters)
   //----------------------------------------------------------------------------------------------------
   // Helpers
 
-  def wakeup(uop: MicroOp, fwu: Valid[FastWakeup], lwu: Seq[Valid[UInt]], swu: Seq[Valid[UInt]]): MicroOp = {
+  def wakeup(uop: MicroOp,
+             fwu: Valid[FastWakeup],
+             lwu: Vec[Valid[UInt]],
+             swu: Vec[Valid[UInt]]
+             ldm: Vec[Bool]): MicroOp = {
+
     val woke_uop = Wire(new MicroOp)
     woke_uop := uop
 
@@ -84,8 +89,10 @@ class RingIssueSlot(implicit p: Parameters)
     val fwu_prs1 = do_fwu && !uop.busy_operand_sel
     val fwu_prs2 = do_fwu &&  uop.busy_operand_sel
 
-    val lwu_prs1 = lwu.map(wu => wu.bits === uop.prs1 && wu.valid).reduce(_||_)
-    val lwu_prs2 = lwu.map(wu => wu.bits === uop.prs2 && wu.valid).reduce(_||_)
+    val lwu_prs1_hits = lwu.map(wu => wu.bits === uop.prs1 && wu.valid)
+    val lwu_prs2_hits = lwu.map(wu => wu.bits === uop.prs2 && wu.valid)
+    val lwu_prs1 = lwu_prs1_hits.reduce(_||_)
+    val lwu_prs2 = lwu_prs2_hits.reduce(_||_)
 
     val swu_prs1 = swu.map(wu => wu.bits === uop.prs1 && wu.valid).reduce(_||_)
     val swu_prs2 = swu.map(wu => wu.bits === uop.prs2 && wu.valid).reduce(_||_)
@@ -104,13 +111,19 @@ class RingIssueSlot(implicit p: Parameters)
     woke_uop.prs1_can_bypass_alu := uop.prs1_can_bypass_alu || fwu_prs1 && fwu.bits.alu
     woke_uop.prs2_can_bypass_alu := uop.prs2_can_bypass_alu || fwu_prs2 && fwu.bits.alu
 
-    woke_uop.prs1_can_bypass_mem := uop.prs1_can_bypass_mem || lwu_prs1
-    woke_uop.prs2_can_bypass_mem := uop.prs2_can_bypass_mem || lwu_prs2
+    woke_uop.prs1_can_bypass_mem := (uop.prs1_can_bypass_mem.asBits | lwu_prs1_hits.asBits).asBools
+    woke_uop.prs2_can_bypass_mem := (uop.prs2_can_bypass_mem.asBits | lwu_prs2_hits.asBits).asBools
 
-    assert (!(uop.prs1_status.orR && woke_uop.prs1_status.orR), "prs1 received multiple wakeups")
-    assert (!(uop.prs2_status.orR && woke_uop.prs2_status.orR), "prs2 received multiple wakeups")
+    // Reset status to zero if woken up last cycle by a load which missed
+    when ((uop.prs1_bypass_load.asBits & ldm.asBits).orR) { woke_uop.prs1_status := 0.U }
+    when ((uop.prs2_bypass_load.asBits & ldm.asBits).orR) { woke_uop.prs2_status := 0.U }
 
-    wu_uop
+    assert (!(uop.prs1_status.orR && woke_uop.prs1_status.orR) && PopCount(woke_uop.prs1_status) <= 1.U,
+            "prs1 received multiple wakeups")
+    assert (!(uop.prs2_status.orR && woke_uop.prs2_status.orR) && PopCount(woke_uop.prs2_status) <= 1.U,
+            "prs2 received multiple wakeups")
+
+    woke_uop
   }
 
 
@@ -133,7 +146,7 @@ class RingIssueSlot(implicit p: Parameters)
 
   val slot_uop = RegInit(NullMicroOp)
   val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, io.out_uop)
-  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.load_wakeups, io.slow_wakeups)
+  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.load_wakeups, io.slow_wakeups, io.load_misses)
 
   val p1 = slot_uop.prs1_ready
   val p2 = slot_uop.prs2_ready
@@ -197,10 +210,6 @@ class RingIssueSlot(implicit p: Parameters)
   when (!io.in_uop.valid) {
     slot_uop.br_mask := next_br_mask
   }
-
-  // Poison logic which can override the operand statuses of woke_uop
-  when (next_uop.prs1_bypass_mem && io.ld_miss) { slot_uop.prs1_status := 0.U }
-  when (next_uop.prs2_bypass_mem && io.ld_miss) { slot_uop.prs2_status := 0.U }
 
   //----------------------------------------------------------------------------------------------------
   // Request Logic
