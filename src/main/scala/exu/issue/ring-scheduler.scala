@@ -28,8 +28,9 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val dis_uops = Flipped(Vec(coreWidth, DecoupledIO(new MicroOp)))
     val iss_uops = Output(Vec(coreWidth, Valid(new MicroOp)))
 
-    val wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
-    val ld_miss  = Input(UInt(coreWidth.W)) // Per-column load miss vector
+    val slow_wakeups = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
+    val load_wakeups = Input(Vec(memWidth   , Valid(UInt(ipregSz.W))))
+    val load_misses  = Input(Vec(memWidth   , Bool()))
 
     val fu_avail = Input(UInt(FUC_SZ.W))
 
@@ -48,8 +49,10 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
   for (w <- 0 until coreWidth) {
     for (i <- 0 until numSlotsPerColumn) {
-      slots(w)(i).slow_wakeups := io.wakeups
-      slots(w)(i).ld_miss      := io.ld_miss((w - 1 + coreWidth) % coreWidth)
+      slots()
+      slots(w)(i).slow_wakeups := io.slow_wakeups
+      slots(w)(i).load_wakeups := io.load_wakeups
+      slots(w)(i).load_miss    := io.load_miss
 
       slots(w)(i).brupdate := io.brupdate
       slots(w)(i).kill     := io.kill
@@ -140,7 +143,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   //----------------------------------------------------------------------------------------------------
   // Grant, Fast Wakeup, and Issue
 
-  val do_issue = arb_gnts & ~RotateLeft(io.ld_miss)
+  val do_issue = arb_gnts & ~VecInit(sel_uops.map(_.load_miss_nack(io.load_misses))).asBools
 
   // Grant signals
   for (w <- 0 until coreWidth) {

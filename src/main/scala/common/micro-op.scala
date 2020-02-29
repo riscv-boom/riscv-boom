@@ -119,8 +119,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def prs1_bypass_gen  = prs1_status(1)
   def prs2_bypass_gen  = prs2_status(1)
 
-  // Might have to cancel issue if there was a load miss
-  def poisoned         = prs1_bypass_mem || prs2_bypass_mem
+  // Check if a load miss kills this uop while being issued
+  def load_miss_nack(load_miss: Vec[Bool]) = ((prs1_bypass_mem.asBits | prs2.bypass_mem.asBits) & load_miss.asBits).orR
 
   val exception        = Bool()
   val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity
