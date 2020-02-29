@@ -12,7 +12,7 @@
 package boom.exu
 
 import chisel3._
-import chisel3.util.Valid
+import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
 
@@ -79,7 +79,7 @@ class RingIssueSlot(implicit p: Parameters)
   def wakeup(uop: MicroOp,
              fwu: Valid[FastWakeup],
              lwu: Vec[Valid[UInt]],
-             swu: Vec[Valid[UInt]]
+             swu: Vec[Valid[UInt]],
              ldn: Vec[Bool]): MicroOp = {
 
     val woke_uop = Wire(new MicroOp)
@@ -89,8 +89,8 @@ class RingIssueSlot(implicit p: Parameters)
     val fwu_prs1 = do_fwu && !uop.busy_operand_sel
     val fwu_prs2 = do_fwu &&  uop.busy_operand_sel
 
-    val lwu_prs1_hits = lwu.map(wu => wu.bits === uop.prs1 && wu.valid)
-    val lwu_prs2_hits = lwu.map(wu => wu.bits === uop.prs2 && wu.valid)
+    val lwu_prs1_hits = VecInit(lwu.map(wu => wu.bits === uop.prs1 && wu.valid))
+    val lwu_prs2_hits = VecInit(lwu.map(wu => wu.bits === uop.prs2 && wu.valid))
     val lwu_prs1 = lwu_prs1_hits.reduce(_||_)
     val lwu_prs2 = lwu_prs2_hits.reduce(_||_)
 
@@ -111,12 +111,12 @@ class RingIssueSlot(implicit p: Parameters)
     woke_uop.prs1_can_bypass_alu := uop.prs1_can_bypass_alu || fwu_prs1 && fwu.bits.alu
     woke_uop.prs2_can_bypass_alu := uop.prs2_can_bypass_alu || fwu_prs2 && fwu.bits.alu
 
-    woke_uop.prs1_can_bypass_mem := (uop.prs1_can_bypass_mem.asBits | lwu_prs1_hits.asBits).asBools
-    woke_uop.prs2_can_bypass_mem := (uop.prs2_can_bypass_mem.asBits | lwu_prs2_hits.asBits).asBools
+    woke_uop.prs1_can_bypass_mem := (uop.prs1_can_bypass_mem.asUInt | lwu_prs1_hits.asUInt).asBools
+    woke_uop.prs2_can_bypass_mem := (uop.prs2_can_bypass_mem.asUInt | lwu_prs2_hits.asUInt).asBools
 
     // Reset status to zero if woken up last cycle by a load which missed
-    when ((uop.prs1_bypass_load.asBits & ldn.asBits).orR) { woke_uop.prs1_status := 0.U }
-    when ((uop.prs2_bypass_load.asBits & ldn.asBits).orR) { woke_uop.prs2_status := 0.U }
+    when ((uop.prs1_bypass_mem.asUInt & ldn.asUInt).orR) { woke_uop.prs1_status := 0.U }
+    when ((uop.prs2_bypass_mem.asUInt & ldn.asUInt).orR) { woke_uop.prs2_status := 0.U }
 
     assert (!(uop.prs1_status.orR && woke_uop.prs1_status.orR) && PopCount(woke_uop.prs1_status) <= 1.U,
             "prs1 received multiple wakeups")

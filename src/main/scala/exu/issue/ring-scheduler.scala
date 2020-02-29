@@ -49,10 +49,9 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
   for (w <- 0 until coreWidth) {
     for (i <- 0 until numSlotsPerColumn) {
-      slots()
       slots(w)(i).slow_wakeups := io.slow_wakeups
       slots(w)(i).load_wakeups := io.load_wakeups
-      slots(w)(i).load_miss    := io.load_miss
+      slots(w)(i).load_nacks   := io.load_nacks
 
       slots(w)(i).brupdate := io.brupdate
       slots(w)(i).kill     := io.kill
@@ -143,7 +142,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   //----------------------------------------------------------------------------------------------------
   // Grant, Fast Wakeup, and Issue
 
-  val do_issue = arb_gnts & ~VecInit(sel_uops.map(_.load_wakeup_nacked(io.load_nacks))).asBools
+  val do_issue = arb_gnts & ~VecInit(sel_uops.map(_.load_wakeup_nacked(io.load_nacks))).asUInt
 
   // Grant signals
   for (w <- 0 until coreWidth) {

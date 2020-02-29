@@ -120,7 +120,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def prs2_bypass_gen  = prs2_status(1)
 
   // Check if a load nack kills this uop while being issued
-  def load_wakeup_nacked(load_nacks: Vec[Bool]) = ((prs1_bypass_mem.asBits | prs2.bypass_mem.asBits) & load_nacks.asBits).orR
+  def load_wakeup_nacked(load_nacks: Vec[Bool]) = ((prs1_bypass_mem.asUInt | prs2_bypass_mem.asUInt) & load_nacks.asUInt).orR
 
   val exception        = Bool()
   val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity
