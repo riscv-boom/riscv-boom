@@ -17,6 +17,15 @@ import boom.common._
 import boom.util._
 import freechips.rocketchip.config.Parameters
 
+class RingBusyResp extends Bundle
+{
+  val prs1_busy = Bool()
+  val prs2_busy = Bool()
+
+  val prs1_load = Bool()
+  val prs2_load = Bool()
+}
+
 class RingBusyTable(
   val plWidth: Int,
   val numPregs: Int,
@@ -38,7 +47,7 @@ class RingBusyTable(
 
   val io = IO(new BoomBundle()(p) {
     val ren_uops = Input(Vec(plWidth, new MicroOp))
-    val busy_resps = Output(Vec(plWidth, new BusyResp))
+    val busy_resps = Output(Vec(plWidth, new RingBusyResp))
     val rebusy_reqs = Input(Vec(plWidth, Bool()))
 
     val wb_pdsts = Input(Vec(numWbPorts, UInt(ipregSz.W)))
