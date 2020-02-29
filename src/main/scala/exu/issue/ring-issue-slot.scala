@@ -118,9 +118,6 @@ class RingIssueSlot(implicit p: Parameters)
     when ((uop.prs1_bypass_mem.asUInt & ldn.asUInt).orR) { woke_uop.prs1_status := 0.U }
     when ((uop.prs2_bypass_mem.asUInt & ldn.asUInt).orR) { woke_uop.prs2_status := 0.U }
 
-    assert (PopCount(woke_uop.prs1_status) <= 1.U, "prs1 received multiple wakeups")
-    assert (PopCount(woke_uop.prs2_status) <= 1.U, "prs2 received multiple wakeups")
-
     woke_uop
   }
 
