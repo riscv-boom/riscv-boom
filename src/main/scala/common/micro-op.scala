@@ -85,6 +85,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val prs2_busy        = Bool()
   val prs3_busy        = Bool()
 
+  // Is the operand produced by a load?
+  val prs1_load        = Bool()
+  val prs2_load        = Bool()
+
   // Selectors for operands in the integer scheduler
   val busy_operand_sel = Bool() // Which prs was used to pick a dst column? Can receive a bypassed operand.
   def busy_operand     = Mux(busy_operand_sel, prs2, prs1)

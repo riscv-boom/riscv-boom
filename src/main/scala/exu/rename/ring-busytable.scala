@@ -48,19 +48,31 @@ class RingBusyTable(
   })
 
   val busy_table = RegInit(0.U(numPregs.W))
-  // Unbusy written back registers.
-  val busy_table_wb = busy_table & ~(io.wb_pdsts zip io.wb_valids)
-    .map {case (pdst, valid) => DecodePreg(pdst) & Fill(numPregs, valid)}.reduce(_|_)
-  // Rebusy newly allocated registers.
-  val busy_table_next = busy_table_wb | (io.ren_uops zip io.rebusy_reqs)
-    .map {case (uop, req) => DecodePreg(uop.pdst) & Fill(numPregs, req)}.reduce(_|_)
 
-  busy_table := busy_table_next
+  busy_table := ( busy_table
+                & ~(io.wb_pdsts zip io.wb_valids) .map {case (pdst, valid) =>
+                     DecodePreg(pdst) & Fill(numPregs, valid)}.reduce(_|_)
+                |  (io.ren_uops zip io.rebusy_reqs) .map {case (uop, req) =>
+                     DecodePreg(uop.pdst) & Fill(numPregs, req)}.reduce(_|_)
+                )
+
+  val load_table = RegInit(0.U(numPregs.W))
+
+  load_table:= ( load_table
+                & ~(io.wb_pdsts zip io.wb_valids) .map {case (pdst, valid) =>
+                     DecodePreg(pdst) & Fill(numPregs, valid)}.reduce(_|_)
+                |  (io.ren_uops zip io.rebusy_reqs) .map {case (uop, req) =>
+                     DecodePreg(uop.pdst) & Fill(numPregs, req && uop.is_load)}.reduce(_|_)
+                )
+
 
   // Read the busy table.
   for (i <- 0 until plWidth) {
     io.busy_resps(i).prs1_busy := (busy_table & DecodePreg(io.ren_uops(i).prs1)).orR
     io.busy_resps(i).prs2_busy := (busy_table & DecodePreg(io.ren_uops(i).prs2)).orR
+
+    io.busy_resps(i).prs1_load := (load_table & DecodePreg(io.ren_uops(i).prs1)).orR
+    io.busy_resps(i).prs2_load := (load_table & DecodePreg(io.ren_uops(i).prs2)).orR
   }
 
   io.debug.busytable := busy_table
