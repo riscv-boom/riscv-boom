@@ -49,8 +49,8 @@ class ColumnArbiter(implicit p: Parameters) extends BoomModule
     var prs1_col = uop.bits.prs1_col
     var prs2_col = uop.bits.prs2_col
 
-    var prs1_busy = uop.bits.prs1_busy
-    var prs2_busy = uop.bits.prs2_busy
+    var prs1_busy = uop.bits.prs1_busy && !uop.bits.prs1_load
+    var prs2_busy = uop.bits.prs2_busy && !uop.bits.prs2_load
 
     for ((bp_uop, bp_col) <- io.uops zip prev_pdst_cols) {
       val prs1_do_bypass = uop.bits.lrs1 === bp_uop.bits.ldst && bp_uop.bits.writes_irf && bp_uop.valid
@@ -59,15 +59,15 @@ class ColumnArbiter(implicit p: Parameters) extends BoomModule
       prs1_col = Mux(prs1_do_bypass, bp_col, prs1_col)
       prs2_col = Mux(prs2_do_bypass, bp_col, prs2_col)
 
-      prs1_busy = prs1_busy || prs1_do_bypass
-      prs2_busy = prs2_busy || prs2_do_bypass
+      prs1_busy = prs1_busy || prs1_do_bypass && !bp_uop.uses_ldq
+      prs2_busy = prs2_busy || prs2_do_bypass && !bp_uop.uses_ldq
     }
 
     val pdst_col = PickColumn(prs1_col,
-                             prs1_busy,
-                             prs2_col,
-                             prs2_busy,
-                             rnd_col)
+                              prs1_busy,
+                              prs2_col,
+                              prs2_busy,
+                              rnd_col)
     prev_pdst_cols ++= Seq(pdst_col)
     io.gnts(w) := pdst_col & Fill(coreWidth, uop.valid)
 

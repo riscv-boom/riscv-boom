@@ -52,7 +52,7 @@ class RingBusyTable(
   busy_table := ( busy_table
                 & ~(io.wb_pdsts zip io.wb_valids) .map {case (pdst, valid) =>
                      DecodePreg(pdst) & Fill(numPregs, valid)}.reduce(_|_)
-                |  (io.ren_uops zip io.rebusy_reqs) .map {case (uop, req) =>
+                |  (io.ren_uops zip io.rebusy_reqs) .map {case (uop, req)  =>
                      DecodePreg(uop.pdst) & Fill(numPregs, req)}.reduce(_|_)
                 )
 
@@ -61,8 +61,8 @@ class RingBusyTable(
   load_table:= ( load_table
                 & ~(io.wb_pdsts zip io.wb_valids) .map {case (pdst, valid) =>
                      DecodePreg(pdst) & Fill(numPregs, valid)}.reduce(_|_)
-                |  (io.ren_uops zip io.rebusy_reqs) .map {case (uop, req) =>
-                     DecodePreg(uop.pdst) & Fill(numPregs, req && uop.is_load)}.reduce(_|_)
+                |  (io.ren_uops zip io.rebusy_reqs) .map {case (uop, req)  =>
+                     DecodePreg(uop.pdst) & Fill(numPregs, req && uop.uses_ldq)}.reduce(_|_)
                 )
 
 
