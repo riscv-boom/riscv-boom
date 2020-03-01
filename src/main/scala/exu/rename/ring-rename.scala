@@ -279,7 +279,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
     io.ren2_uops(w) := GetNewUopAndBrMask(bypassed_uop, io.brupdate)
 
     // Need to know which prs was used to decide on a column. A bit of a hack.
-    io.ren2_uops(w).busy_operand_sel := bypassed_uop.prs2_busy
+    io.ren2_uops(w).busy_operand_sel := !bypassed_uop.prs1_busy
   }
 
   //----------------------------------------------------------------------------------------------------
