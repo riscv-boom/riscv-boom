@@ -33,8 +33,8 @@ class ColumnArbiter(implicit p: Parameters) extends BoomModule
     b2  : Bool,
     rnd : UInt) =
   {
-    RotateLeft(Mux(b2, col2,
-               Mux(b1, col1, rnd)))
+    RotateLeft(Mux(b1, col1,
+               Mux(b2, col2, rnd)))
   }
 
   val rnd = RegInit(1.U(coreWidth.W))
