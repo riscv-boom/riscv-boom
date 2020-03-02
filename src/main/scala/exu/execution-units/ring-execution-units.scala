@@ -159,13 +159,13 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
       hasMem = true))
     mem_unit.suggestName("mem_unit_" + w)
     mem_unit.io.ll_iresp.ready := DontCare
-    shared_exe_units += mem_unit
+    memory_exe_units += mem_unit
   }
 
   // Jump unit
   val jmp_unit = Module(new ALUExeUnit(hasJmp = true))
   jmp_unit.suggestName("jmp_unit")
-  shared_exe_units += jmp_unit
+  unique_exe_units += jmp_unit
 
   // Put remaining functional units in a shared execution unit
   val misc_unit = Module(new ALUExeUnit(hasMul  = true,
@@ -173,7 +173,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
                                         hasCSR  = true,
                                         hasIfpu = usingFPU))
   misc_unit.suggestName("misc_unit")
-  shared_exe_units += misc_unit
+  unique_exe_units += misc_unit
 
   //----------------------------------------------------------------------------------------------------
   // Generator string output
