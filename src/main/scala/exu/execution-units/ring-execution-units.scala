@@ -250,7 +250,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   }
 
   // Hookup memory units (any number suppported)
-  val mem_reqs = VecInit(exe_reqs.map(req => req.bits.uop.eu_code(1)))
+  val mem_reqs = VecInit(exe_reqs.map(req => req.bits.uop.eu_code(1) && req.valid))
   val mem_sels = mem_reqs.scanLeft(1.U(memWidth.W)) ((s,r) => Mux(r, s << 1, s)(memWidth-1,0)).dropRight(1)
   val mem_gnts = Transpose(mem_sels).map(s => s & mem_reqs.asUInt)
   for ((mem,gnt) <- mem_units zip mem_gnts) {
