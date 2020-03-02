@@ -247,18 +247,18 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   }
 
   // Hookup memory units (any number suppported)
-  val mem_reqs = exe_reqs.map(req => req.bits.uop.eu_code(1))
+  val mem_reqs = VecInit(exe_reqs.map(req => req.bits.uop.eu_code(1)))
   val mem_sels = mem_reqs.scanLeft(1.U(memWidth.W)) ((s,r) => Mux(r, s << 1, s)(memWidth-1,0)).dropRight(1)
   val mem_gnts = Transpose(mem_sels).map(s => s & mem_reqs.asUInt)
   for ((mem,gnt) <- mem_units zip mem_gnts) {
     mem.io.req.bits  := Mux1H(gnt, exe_reqs.map(_.bits))
     mem.io.req.valid := gnt.orR
   }
-  assert (PopCount(mem_reqs <= memWidth.U), "[exe] too many requests to the memory units")
+  assert (PopCount(mem_reqs) <= memWidth.U, "[exe] too many requests to the memory units")
 
   // Hookup remaining shared units (FUs in this set should be unique)
   val unq_gnts = Transpose(VecInit(exe_reqs.map(req => req.bits.uop.eu_code(3,2) & Fill(2, req.valid))))
-  for ((eu,gnt) <- (unique_exe_units, unq_gnts) {
+  for ((eu,gnt) <- unique_exe_units zip unq_gnts) {
     eu.io.req.bits  := Mux1H(gnt, exe_reqs.map(_.bits))
     eu.io.req.valid := gnt.orR
 

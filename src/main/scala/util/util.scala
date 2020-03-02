@@ -436,18 +436,18 @@ object MaskAbove
 }
 
 /**
- * Transpose a matrix of Chisel Vecs.
+ * Transpose a matrix of Chisel Data.
  */
 object Transpose
 {
   // General Data matrix
-  def apply[T <: chisel3.Data](in: Vec[Vec[T]]) = {
+  def apply[T <: chisel3.Data](in: Seq[Seq[T]]) = {
     val n = in(0).size
     VecInit((0 until n).map(i => VecInit(in.map(row => row(i)))))
   }
 
   // Row major UInt bit matrix
-  def apply(in: => Vec[UInt]) = {
+  def apply(in: => Seq[UInt]) = {
     val n = in(0).getWidth
     VecInit((0 until n).map(i => VecInit(in.map(row => row(i))).asUInt))
   }
