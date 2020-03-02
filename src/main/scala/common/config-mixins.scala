@@ -353,6 +353,7 @@ class WithTAGELBPD extends Config((site, here, up) => {
     b.copy(core = b.core.copy(
       enableBranchPrediction = true,
       enableReturnAddressStack = true,
+      bpdMaxMetaLength = 120,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val loop = Module(new LoopBranchPredictorBank()(p))
         val tage = Module(new TageBranchPredictorBank()(p))
@@ -379,6 +380,7 @@ class WithBoom2BPD extends Config((site, here, up) => {
     b.copy(core = b.core.copy(
       enableBranchPrediction = true,
       enableReturnAddressStack = true,
+      bpdMaxMetaLength = 45,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         // gshare is just variant of TAGE with 1 table
         val gshare = Module(new TageBranchPredictorBank(
@@ -403,6 +405,7 @@ class WithAlpha21264BPD extends Config((site, here, up) => {
     b.copy(core = b.core.copy(
       enableBranchPrediction = true,
       enableReturnAddressStack = true,
+      bpdMaxMetaLength = 64,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val btb = Module(new BTBBranchPredictorBank()(p))
         val gbim = Module(new HBIMBranchPredictorBank()(p))
@@ -429,6 +432,7 @@ class WithSWBPD extends Config((site, here, up) => {
     b.copy(core = b.core.copy(
       enableBranchPrediction = true,
       enableReturnAddressStack = true,
+      bpdMaxMetaLength = 1,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val sw = Module(new SwBranchPredictorBank()(p))
 
