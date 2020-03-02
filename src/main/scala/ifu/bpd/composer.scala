@@ -10,13 +10,11 @@ import freechips.rocketchip.tilelink._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
-case object BoomBPDComposition extends Field[Function2[BranchPredictionBankResponse, Parameters, Tuple2[Seq[BranchPredictorBank], BranchPredictionBankResponse]]](
-  (resp_in: BranchPredictionBankResponse, p: Parameters) => (Nil, resp_in))
 
 class ComposedBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
 
-  val (components, resp) = p(BoomBPDComposition)(io.resp_in(0), p)
+  val (components, resp) = getBPDComponents(io.resp_in(0), p)
   io.resp := resp
 
 

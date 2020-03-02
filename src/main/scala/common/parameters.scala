@@ -37,8 +37,6 @@ case class BoomCoreParams(
   numFpPhysRegisters: Int = 64,
   maxBrCount: Int = 4,
   numFetchBufferEntries: Int = 16,
-  enableBranchPrediction: Boolean = true,
-  enableReturnAddressStack: Boolean = true,
   enableAgePriorityIssue: Boolean = true,
   enablePrefetching: Boolean = false,
   enableFastLoadUse: Boolean = true,
@@ -54,6 +52,11 @@ case class BoomCoreParams(
   numRCQEntries: Int = 8,
   numDCacheBanks: Int = 1,
   nPMPs: Int = 8,
+
+  /* branch prediction */
+  enableBranchPrediction: Boolean = true,
+  enableReturnAddressStack: Boolean = true,
+  branchPredictor: Function2[BranchPredictionBankResponse, Parameters, Tuple2[Seq[BranchPredictorBank], BranchPredictionBankResponse]] = ((resp_in: BranchPredictionBankResponse, p: Parameters) => (Nil, resp_in)),
 
   /* more stuff */
   useCompressed: Boolean = true,
@@ -211,6 +214,10 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val globalHistoryLength = 64
   val localHistoryLength = 32
   val bpdMaxMetaLength = 120
+
+  def getBPDComponents(resp_in: BranchPredictionBankResponse, p: Parameters) = {
+    boomParams.branchPredictor(resp_in, p)
+  }
 
   val nRasEntries = 32
 

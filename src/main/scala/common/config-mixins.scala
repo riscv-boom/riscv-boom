@@ -349,69 +349,93 @@ class WithCS152DefaultBooms extends Config((site, here, up) => {
   */
 
 class WithTAGELBPD extends Config((site, here, up) => {
-  case BoomBPDComposition => ((resp_in: BranchPredictionBankResponse, p: Parameters) =>{
-    val loop = Module(new LoopBranchPredictorBank()(p))
-    val tage = Module(new TageBranchPredictorBank()(p))
-    val btb = Module(new BTBBranchPredictorBank()(p))
-    val bim = Module(new BIMBranchPredictorBank()(p))
-    val ubtb = Module(new FAMicroBTBBranchPredictorBank()(p))
-    val preds = Seq(loop, tage, btb, ubtb, bim)
-    preds.map(_.io := DontCare)
+  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
+    b.copy(core = b.core.copy(
+      enableBranchPrediction = true,
+      enableReturnAddressStack = true,
+      branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
+        val loop = Module(new LoopBranchPredictorBank()(p))
+        val tage = Module(new TageBranchPredictorBank()(p))
+        val btb = Module(new BTBBranchPredictorBank()(p))
+        val bim = Module(new BIMBranchPredictorBank()(p))
+        val ubtb = Module(new FAMicroBTBBranchPredictorBank()(p))
+        val preds = Seq(loop, tage, btb, ubtb, bim)
+        preds.map(_.io := DontCare)
 
-    ubtb.io.resp_in(0)  := resp_in
-    bim.io.resp_in(0)   := ubtb.io.resp
-    btb.io.resp_in(0)   := bim.io.resp
-    tage.io.resp_in(0)  := btb.io.resp
-    loop.io.resp_in(0)  := tage.io.resp
+        ubtb.io.resp_in(0)  := resp_in
+        bim.io.resp_in(0)   := ubtb.io.resp
+        btb.io.resp_in(0)   := bim.io.resp
+        tage.io.resp_in(0)  := btb.io.resp
+        loop.io.resp_in(0)  := tage.io.resp
 
-    (preds, loop.io.resp)
-  })
+        (preds, loop.io.resp)
+      })
+    ))
+  }
 })
 
 class WithBoom2BPD extends Config((site, here, up) => {
-  case BoomBPDComposition => ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
-    // gshare is just variant of TAGE with 1 table
-    val gshare = Module(new TageBranchPredictorBank(
-      BoomTageParams(tableInfo = Seq((256, 16, 7)))
-    )(p))
-    val btb = Module(new BTBBranchPredictorBank()(p))
-    val bim = Module(new BIMBranchPredictorBank()(p))
-    val preds = Seq(bim, btb, gshare)
-    preds.map(_.io := DontCare)
+  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
+    b.copy(core = b.core.copy(
+      enableBranchPrediction = true,
+      enableReturnAddressStack = true,
+      branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
+        // gshare is just variant of TAGE with 1 table
+        val gshare = Module(new TageBranchPredictorBank(
+          BoomTageParams(tableInfo = Seq((256, 16, 7)))
+        )(p))
+        val btb = Module(new BTBBranchPredictorBank()(p))
+        val bim = Module(new BIMBranchPredictorBank()(p))
+        val preds = Seq(bim, btb, gshare)
+        preds.map(_.io := DontCare)
 
-    bim.io.resp_in(0)  := resp_in
-    btb.io.resp_in(0)  := bim.io.resp
-    gshare.io.resp_in(0) := btb.io.resp
-    (preds, gshare.io.resp)
-  })
+        bim.io.resp_in(0)  := resp_in
+        btb.io.resp_in(0)  := bim.io.resp
+        gshare.io.resp_in(0) := btb.io.resp
+        (preds, gshare.io.resp)
+      })
+    ))
+  }
 })
 
 class WithAlpha21264BPD extends Config((site, here, up) => {
-  case BoomBPDComposition => ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
-    val btb = Module(new BTBBranchPredictorBank()(p))
-    val gbim = Module(new HBIMBranchPredictorBank()(p))
-    val local = Module(new LocalBranchPredictorBank()(p))
-    val tourney = Module(new TourneyBranchPredictorBank()(p))
-    val preds = Seq(local, btb, gbim, tourney)
-    preds.map(_.io := DontCare)
+  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
+    b.copy(core = b.core.copy(
+      enableBranchPrediction = true,
+      enableReturnAddressStack = true,
+      branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
+        val btb = Module(new BTBBranchPredictorBank()(p))
+        val gbim = Module(new HBIMBranchPredictorBank()(p))
+        val local = Module(new LocalBranchPredictorBank()(p))
+        val tourney = Module(new TourneyBranchPredictorBank()(p))
+        val preds = Seq(local, btb, gbim, tourney)
+        preds.map(_.io := DontCare)
 
-    gbim.io.resp_in(0) := resp_in
-    local.io.resp_in(0) := resp_in
-    tourney.io.resp_in(0) := gbim.io.resp
-    tourney.io.resp_in(1) := local.io.resp
-    btb.io.resp_in(0)  := tourney.io.resp
+        gbim.io.resp_in(0) := resp_in
+        local.io.resp_in(0) := resp_in
+        tourney.io.resp_in(0) := gbim.io.resp
+        tourney.io.resp_in(1) := local.io.resp
+        btb.io.resp_in(0)  := tourney.io.resp
 
-    (preds, btb.io.resp)
-  })
+        (preds, btb.io.resp)
+      })
+    ))
+  }
 })
 
 
 class WithSWBPD extends Config((site, here, up) => {
-  case BoomBPDComposition => ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
-    val sw = Module(new SwBranchPredictorBank()(p))
+  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
+    b.copy(core = b.core.copy(
+      enableBranchPrediction = true,
+      enableReturnAddressStack = true,
+      branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
+        val sw = Module(new SwBranchPredictorBank()(p))
 
-    sw.io.resp_in(0) := resp_in
+        sw.io.resp_in(0) := resp_in
 
-    (Seq(sw), sw.io.resp)
-  })
+        (Seq(sw), sw.io.resp)
+      })
+    ))
+  }
 })
