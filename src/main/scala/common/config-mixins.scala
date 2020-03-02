@@ -281,12 +281,12 @@ class WithCS152BaselineBooms extends Config((site, here, up) => {
         numStqEntries = 8,                // CS152: Change me (2+)
         maxBrCount = 8,                   // CS152: Change me (2+)
         enableBranchPrediction = false,   // CS152: Change me
-        enableReturnAddressStack = false, // CS152: Change me
+        numRasEntries = 0,                // CS152: Change me
 
         // DO NOT CHANGE BELOW
         enableBranchPrintf = true,
         decodeWidth = coreWidth,
-        numFetchBufferEntries = coreWidth * 4,
+        numFetchBufferEntries = coreWidth * 8,
         numDCacheBanks = memWidth,
         issueParams = Seq(
           IssueParams(issueWidth=memWidth,  numEntries=8,  iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
@@ -319,7 +319,7 @@ class WithCS152DefaultBooms extends Config((site, here, up) => {
         numStqEntries = 16,              // CS152: Change me (2+)
         maxBrCount = 12,                 // CS152: Change me (2+)
         enableBranchPrediction = true,   // CS152: Change me
-        enableReturnAddressStack = true, // CS152: Change me
+        numRasEntries = 16,              // CS152: Change me
 
         // DO NOT CHANGE BELOW
         enableBranchPrintf = true,
@@ -351,9 +351,8 @@ class WithCS152DefaultBooms extends Config((site, here, up) => {
 class WithTAGELBPD extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b =>
     b.copy(core = b.core.copy(
-      enableBranchPrediction = true,
-      enableReturnAddressStack = true,
       bpdMaxMetaLength = 120,
+      globalHistoryLength = 64,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val loop = Module(new LoopBranchPredictorBank()(p))
         val tage = Module(new TageBranchPredictorBank()(p))
@@ -378,9 +377,8 @@ class WithTAGELBPD extends Config((site, here, up) => {
 class WithBoom2BPD extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b =>
     b.copy(core = b.core.copy(
-      enableBranchPrediction = true,
-      enableReturnAddressStack = true,
       bpdMaxMetaLength = 45,
+      globalHistoryLength = 16,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         // gshare is just variant of TAGE with 1 table
         val gshare = Module(new TageBranchPredictorBank(
@@ -403,9 +401,8 @@ class WithBoom2BPD extends Config((site, here, up) => {
 class WithAlpha21264BPD extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b =>
     b.copy(core = b.core.copy(
-      enableBranchPrediction = true,
-      enableReturnAddressStack = true,
       bpdMaxMetaLength = 64,
+      globalHistoryLength = 32,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val btb = Module(new BTBBranchPredictorBank()(p))
         val gbim = Module(new HBIMBranchPredictorBank()(p))
@@ -430,9 +427,8 @@ class WithAlpha21264BPD extends Config((site, here, up) => {
 class WithSWBPD extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b =>
     b.copy(core = b.core.copy(
-      enableBranchPrediction = true,
-      enableReturnAddressStack = true,
       bpdMaxMetaLength = 1,
+      globalHistoryLength = 32,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val sw = Module(new SwBranchPredictorBank()(p))
 

@@ -55,9 +55,11 @@ case class BoomCoreParams(
 
   /* branch prediction */
   enableBranchPrediction: Boolean = true,
-  enableReturnAddressStack: Boolean = true,
   branchPredictor: Function2[BranchPredictionBankResponse, Parameters, Tuple2[Seq[BranchPredictorBank], BranchPredictionBankResponse]] = ((resp_in: BranchPredictionBankResponse, p: Parameters) => (Nil, resp_in)),
+  globalHistoryLength: Int = 64,
   bpdMaxMetaLength: Int = 120,
+  numRasEntries: Int = 32,
+  enableRasTopRepair: Boolean = true,
 
   /* more stuff */
   useCompressed: Boolean = true,
@@ -212,7 +214,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   //************************************
   // Branch Prediction
-  val globalHistoryLength = 64
+  val globalHistoryLength = boomParams.globalHistoryLength
   val localHistoryLength = 32
   val bpdMaxMetaLength = boomParams.bpdMaxMetaLength
 
@@ -220,10 +222,11 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
     boomParams.branchPredictor(resp_in, p)
   }
 
-  val nRasEntries = 32
+  val nRasEntries = boomParams.numRasEntries max 2
+  val useRAS = boomParams.numRasEntries > 0
+  val enableRasTopRepair = boomParams.enableRasTopRepair
 
   val useBPD = boomParams.enableBranchPrediction
-  val useRAS = boomParams.enableReturnAddressStack
 
   //************************************
   // Extra Knobs and Features
