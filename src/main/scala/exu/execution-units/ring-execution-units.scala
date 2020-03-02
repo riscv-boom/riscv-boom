@@ -174,6 +174,14 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   misc_unit.suggestName("misc_unit")
   unique_exe_units += misc_unit
 
+  // Hookup I/O common to all units
+  for (eu <- exe_units) {
+    eu.io.brupdate := io.brupdate
+    eu.io.kill     := io.kill
+
+    if (eu.writesIrf) eu.io.iresp.ready := DontCare
+  }
+
   //----------------------------------------------------------------------------------------------------
   // Generator string output
 
@@ -239,11 +247,6 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   for (w <- 0 until coreWidth) {
     column_exe_units(w).io.req.bits    := exe_reqs(w).bits
     column_exe_units(w).io.req.valid   := exe_reqs(w).valid && exe_reqs(w).bits.uop.eu_code(0)
-
-    column_exe_units(w).io.brupdate    := io.brupdate
-    column_exe_units(w).io.kill        := io.kill
-
-    column_exe_units(w).io.iresp.ready := DontCare
   }
 
   // Hookup memory units (any number suppported)
@@ -263,11 +266,6 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     eu.io.req.valid := gnt.orR
 
     assert (PopCount(gnt) <= 1.U, "[exe] multiple grants to a unique execution unit")
-
-    eu.io.brupdate := io.brupdate
-    eu.io.kill     := io.kill
-
-    if (eu.writesIrf) eu.io.iresp.ready := DontCare
   }
 
   //----------------------------------------------------------------------------------------------------
