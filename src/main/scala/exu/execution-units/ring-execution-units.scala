@@ -77,9 +77,11 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // Instantiate the ExecutionUnits
 
   private val column_exe_units = ArrayBuffer[ExecutionUnit]()
-  private val shared_exe_units = ArrayBuffer[ExecutionUnit]()
+  private val memory_exe_units = ArrayBuffer[ExecutionUnit]()
+  private val unique_exe_units = ArrayBuffer[ExecutionUnit]()
 
-  def exe_units = column_exe_units ++ shared_exe_units
+  def shared_exe_units = memory_exe_units ++ unique_exe_units
+  def exe_units        = column_exe_units ++ shared_exe_units
 
   //----------------------------------------------------------------------------------------------------
   // Getters
@@ -210,15 +212,15 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     val req = io.exe_reqs(w).bits
     val k = (coreWidth + w - 1) % coreWidth
 
-    rs1_data(w) := RegNext(Mux(req.uop.prs1_bypass_alu , column_exe_units(k).io.bypass.data(0),
+    rs1_data(w) := RegNext(Mux(req.uop.prs1_bypass_alu, column_exe_units(k).io.bypass.data(0),
                            Mux(req.uop.prs1_bypass_mem.reduce(_||_),
-                         Mux1H(req.uop.prs1_bypass_mem , mem_units.map(_.io.ll_iresp.bits.data)),
-                           Mux(req.uop.prs1_bypass_gen , io.exe_resps(k).bits.data,
+                         Mux1H(req.uop.prs1_bypass_mem, mem_units.map(_.io.ll_iresp.bits.data)),
+                           Mux(req.uop.prs1_bypass_gen, io.exe_resps(k).bits.data,
                                                          req.rs1_data))))
-    rs2_data(w) := RegNext(Mux(req.uop.prs2_bypass_alu , column_exe_units(k).io.bypass.data(0),
+    rs2_data(w) := RegNext(Mux(req.uop.prs2_bypass_alu, column_exe_units(k).io.bypass.data(0),
                            Mux(req.uop.prs2_bypass_mem.reduce(_||_),
-                         Mux1H(req.uop.prs2_bypass_mem , mem_units.map(_.io.ll_iresp.bits.data)),
-                           Mux(req.uop.prs2_bypass_gen , io.exe_resps(k).bits.data,
+                         Mux1H(req.uop.prs2_bypass_mem, mem_units.map(_.io.ll_iresp.bits.data)),
+                           Mux(req.uop.prs2_bypass_gen, io.exe_resps(k).bits.data,
                                                          req.rs2_data))))
   }
 
@@ -248,7 +250,16 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     column_exe_units(w).io.iresp.ready := DontCare
   }
 
-  // Hookup shared units
+  val mem_reqs = exe_reqs.map(req => req.bits.uop.eu_code(1))
+  val mem_sels = mem_reqs.scanLeft(1.U(memWidth.W)) ((s,r) => Mux(r, s << 1, s)(memWidth-1,0)).dropRight(1)
+  val mem_gnts = Transpose(mem_sels).map(s => s & mem_reqs.asUInt)
+  // Hookup memory units (any number suppported)
+  for ((mem,gnt) <- mem_units zip mem_gnts) {
+    mem.io.req.bits  := Mux1H(gnt, exe_reqs.map(_.bits))
+    mem.io.req.valid := gnt.orR
+  }
+
+  // Hookup remaining shared units (FUs in this set should be unique)
   for ((i,eu) <- (1 until xbarSize) zip shared_exe_units) {
     eu.io.req.bits  := Mux1H(col_sels(i), exe_reqs.map(_.bits))
     eu.io.req.valid := col_sels(i).orR
