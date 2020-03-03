@@ -354,7 +354,7 @@ class WithTAGELBPD extends Config((site, here, up) => {
       bpdMaxMetaLength = 120,
       globalHistoryLength = 64,
       localHistoryLength = 1,
-      localHistoryNSets = 2,
+      localHistoryNSets = 0,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val loop = Module(new LoopBranchPredictorBank()(p))
         val tage = Module(new TageBranchPredictorBank()(p))
@@ -382,7 +382,7 @@ class WithBoom2BPD extends Config((site, here, up) => {
       bpdMaxMetaLength = 45,
       globalHistoryLength = 16,
       localHistoryLength = 1,
-      localHistoryNSets = 2,
+      localHistoryNSets = 0,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         // gshare is just variant of TAGE with 1 table
         val gshare = Module(new TageBranchPredictorBank(
@@ -436,7 +436,7 @@ class WithSWBPD extends Config((site, here, up) => {
       bpdMaxMetaLength = 1,
       globalHistoryLength = 32,
       localHistoryLength = 1,
-      localHistoryNSets = 2,
+      localHistoryNSets = 0,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val sw = Module(new SwBranchPredictorBank()(p))
 

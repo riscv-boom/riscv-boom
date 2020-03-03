@@ -201,7 +201,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   })
 
   val banked_predictors = Seq.fill(nBanks) { Module(if (useBPD) new ComposedBranchPredictorBank else new NullBranchPredictorBank) }
-  val banked_lhist_providers = Seq.fill(nBanks) { Module(new LocalBranchPredictorBank) }
+  val banked_lhist_providers = Seq.fill(nBanks) { Module(if (localHistoryNSets > 0) new LocalBranchPredictorBank else new NullLocalBranchPredictorBank) }
 
   if (nBanks == 1) {
     banked_lhist_providers(0).io.f0_valid := io.f0_req.valid

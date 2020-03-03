@@ -10,12 +10,8 @@ import freechips.rocketchip.tilelink._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
-case class BoomLocalHistProviderParams(
-  nSets: Int = 128,
-  histLength: Int = 32
-)
 
-class LocalBranchPredictorBank(implicit p: Parameters) extends BoomModule()(p)
+abstract class AbstractLocalBranchPredictorBank(implicit p: Parameters) extends BoomModule()(p)
   with HasBoomFrontendParameters
 {
   val io = IO(new Bundle {
@@ -37,7 +33,16 @@ class LocalBranchPredictorBank(implicit p: Parameters) extends BoomModule()(p)
       val lhist      = Input(UInt(localHistoryLength.W))
     })
   })
+}
 
+class NullLocalBranchPredictorBank(implicit p: Parameters) extends AbstractLocalBranchPredictorBank
+{
+  io.f1_lhist := 0.U
+  io.f3_lhist := 0.U
+}
+
+class LocalBranchPredictorBank(implicit p: Parameters) extends AbstractLocalBranchPredictorBank
+{
   override val nSets = localHistoryNSets
 
   val doing_reset = RegInit(true.B)

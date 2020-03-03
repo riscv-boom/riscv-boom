@@ -142,7 +142,11 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   val meta     = SyncReadMem(num_entries, Vec(nBanks, UInt(bpdMaxMetaLength.W)))
   val ram      = Reg(Vec(num_entries, new FTQBundle))
   val ghist    = Seq.fill(2) { SyncReadMem(num_entries, new GlobalHistory) }
-  val lhist    = SyncReadMem(num_entries, Vec(nBanks, UInt(localHistoryLength.W)))
+  val lhist    = if (useLHist) {
+    Some(SyncReadMem(num_entries, Vec(nBanks, UInt(localHistoryLength.W))))
+  } else {
+    None
+  }
 
   val do_enq = io.enq.fire()
 
@@ -185,7 +189,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
       )
     )
 
-    lhist.write(enq_ptr, io.enq.bits.lhist)
+    lhist.map( l => l.write(enq_ptr, io.enq.bits.lhist))
     ghist.map( g => g.write(enq_ptr, new_ghist))
     meta.write(enq_ptr, io.enq.bits.bpd_meta)
     ram(enq_ptr) := new_entry
@@ -230,7 +234,11 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     Mux(bpd_update_repair || bpd_update_mispredict, bpd_repair_idx, bpd_ptr))
   val bpd_entry = RegNext(ram(bpd_idx))
   val bpd_ghist = ghist(0).read(bpd_idx, true.B)
-  val bpd_lhist = lhist.read(bpd_idx, true.B)
+  val bpd_lhist = if (useLHist) {
+    lhist.get.read(bpd_idx, true.B)
+  } else {
+    VecInit(Seq.fill(nBanks) { 0.U })
+  }
   val bpd_meta  = meta.read(bpd_idx, true.B) // TODO fix these SRAMs
   val bpd_pc    = RegNext(pcs(bpd_idx))
   val bpd_target = RegNext(pcs(WrapInc(bpd_idx, num_entries)))

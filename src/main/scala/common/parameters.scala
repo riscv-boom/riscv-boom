@@ -231,6 +231,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   val useBPD = boomParams.enableBranchPrediction
 
+  val useLHist = localHistoryNSets > 1 && localHistoryLength > 1
+
   //************************************
   // Extra Knobs and Features
   val enableCommitMapTable = boomParams.enableCommitMapTable
