@@ -396,6 +396,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     val flush_typ = RegNext(rob.io.flush.bits.flush_typ)
     // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
     val new_ghist = WireInit((0.U).asTypeOf(new GlobalHistory))
+    new_ghist.current_saw_branch_not_taken := true.B
     new_ghist.ras_idx := io.ifu.get_pc(0).entry.ras_idx
     io.ifu.redirect_ghist := new_ghist
     when (FlushTypes.useCsrEvec(flush_typ)) {
