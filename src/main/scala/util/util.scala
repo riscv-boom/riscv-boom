@@ -454,7 +454,7 @@ object Transpose
 }
 
 /**
-  * N-wide one-hot priority encoder.
+ * N-wide one-hot priority encoder.
  */
 object SelectFirstN
 {
@@ -465,6 +465,31 @@ object SelectFirstN
     for (i <- 0 until n) {
       sels(i) := PriorityEncoderOH(mask)
       mask = mask & ~sels(i)
+    }
+
+    sels
+  }
+}
+
+/**
+ * N-wide one-hot priority encoder for circular queue.
+ */
+object AgeSelectFirstN
+{
+  def apply(in: UInt, head: UInt, n: Int): UInt = {
+    require(in.getWidth == head.getWidth)
+
+    val k = in.getWidth
+    val vec = Cat(in,in)
+    val mask = MaskUpper(Cat(0.U(k.W),head))
+    var masked = vec & mask
+
+    val sels = Wire(Vec(n, UInt(k.W)))
+
+    for (i <- 0 until n) {
+      val sel = PriorityEncoderOH(masked)
+      sels(i) := sel(2*k-1,k) | sel(k-1,0)
+      masked = masked & ~sel
     }
 
     sels
