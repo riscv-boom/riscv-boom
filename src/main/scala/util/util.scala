@@ -397,7 +397,7 @@ object IsOlder
 object MaskLower
 {
   def apply(in: UInt) = {
-    in.asBools.scanRight(false.B)((b,m) => m || b).dropRight(1)
+    VecInit(in.asBools.scanRight(false.B)((b,m) => m || b).dropRight(1)).asUInt
   }
 }
 
@@ -407,7 +407,7 @@ object MaskLower
 object MaskUpper
 {
   def apply(in: UInt) = {
-    in.asBools.scanLeft(false.B)((m,b) => m || b).takeRight(in.getWidth)
+    VecInit(in.asBools.scanLeft(false.B)((m,b) => m || b).takeRight(in.getWidth)).asUInt
   }
 }
 
@@ -474,7 +474,7 @@ object SelectFirstN
  */
 object AgeSelectFirstN
 {
-  def apply(in: UInt, head: UInt, n: Int): UInt = {
+  def apply(in: UInt, head: UInt, n: Int): Vec[UInt] = {
     require(in.getWidth == head.getWidth)
 
     val k = in.getWidth
