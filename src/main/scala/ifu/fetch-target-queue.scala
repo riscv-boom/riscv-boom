@@ -50,7 +50,7 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
   // Was this CFI mispredicted by the branch prediction pipeline?
   val cfi_mispredicted = Bool()
   // What type of CFI was taken out of this bundle
-  val cfi_type = Bool()
+  val cfi_type = UInt(CFI_SZ.W)
   // mask of branches which were visible in this fetch bundle
   val br_mask   = UInt(fetchWidth.W)
   // This CFI is likely a CALL
