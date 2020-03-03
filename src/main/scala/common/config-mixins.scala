@@ -353,6 +353,8 @@ class WithTAGELBPD extends Config((site, here, up) => {
     b.copy(core = b.core.copy(
       bpdMaxMetaLength = 120,
       globalHistoryLength = 64,
+      localHistoryLength = 1,
+      localHistoryNSets = 2,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val loop = Module(new LoopBranchPredictorBank()(p))
         val tage = Module(new TageBranchPredictorBank()(p))
@@ -379,6 +381,8 @@ class WithBoom2BPD extends Config((site, here, up) => {
     b.copy(core = b.core.copy(
       bpdMaxMetaLength = 45,
       globalHistoryLength = 16,
+      localHistoryLength = 1,
+      localHistoryNSets = 2,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         // gshare is just variant of TAGE with 1 table
         val gshare = Module(new TageBranchPredictorBank(
@@ -403,18 +407,20 @@ class WithAlpha21264BPD extends Config((site, here, up) => {
     b.copy(core = b.core.copy(
       bpdMaxMetaLength = 64,
       globalHistoryLength = 32,
+      localHistoryLength = 32,
+      localHistoryNSets = 128,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val btb = Module(new BTBBranchPredictorBank()(p))
         val gbim = Module(new HBIMBranchPredictorBank()(p))
-        val local = Module(new LocalBranchPredictorBank()(p))
+        val lbim = Module(new HBIMBranchPredictorBank(BoomHBIMParams(useLocal=true))(p))
         val tourney = Module(new TourneyBranchPredictorBank()(p))
-        val preds = Seq(local, btb, gbim, tourney)
+        val preds = Seq(lbim, btb, gbim, tourney)
         preds.map(_.io := DontCare)
 
         gbim.io.resp_in(0) := resp_in
-        local.io.resp_in(0) := resp_in
+        lbim.io.resp_in(0) := resp_in
         tourney.io.resp_in(0) := gbim.io.resp
-        tourney.io.resp_in(1) := local.io.resp
+        tourney.io.resp_in(1) := lbim.io.resp
         btb.io.resp_in(0)  := tourney.io.resp
 
         (preds, btb.io.resp)
@@ -429,6 +435,8 @@ class WithSWBPD extends Config((site, here, up) => {
     b.copy(core = b.core.copy(
       bpdMaxMetaLength = 1,
       globalHistoryLength = 32,
+      localHistoryLength = 1,
+      localHistoryNSets = 2,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val sw = Module(new SwBranchPredictorBank()(p))
 

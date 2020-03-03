@@ -10,39 +10,50 @@ import freechips.rocketchip.tilelink._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
-case class BoomLocalBPDParams(
-  nSets: Int = 128
+case class BoomLocalHistProviderParams(
+  nSets: Int = 128,
+  histLength: Int = 32
 )
 
-class LocalBranchPredictorBank(params: BoomLocalBPDParams = BoomLocalBPDParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
+class LocalBranchPredictorBank(implicit p: Parameters) extends BoomModule()(p)
+  with HasBoomFrontendParameters
 {
-  override val nSets = params.nSets
+  val io = IO(new Bundle {
+    val f0_valid = Input(Bool())
+    val f0_pc    = Input(UInt(vaddrBitsExtended.W))
+
+    val f1_lhist  = Output(UInt(localHistoryLength.W))
+
+    val f3_lhist = Output(UInt(localHistoryLength.W))
+
+    val f3_taken_br = Input(Bool())
+    val f3_fire = Input(Bool())
+
+    val update = Input(new Bundle {
+      val valid      = Input(Bool())
+      val mispredict = Input(Bool())
+      val repair     = Input(Bool())
+      val pc         = Input(UInt(vaddrBitsExtended.W))
+      val lhist      = Input(UInt(localHistoryLength.W))
+    })
+  })
+
+  override val nSets = localHistoryNSets
 
   val doing_reset = RegInit(true.B)
   val reset_idx = RegInit(0.U(log2Ceil(nSets).W))
   reset_idx := reset_idx + doing_reset
   when (reset_idx === (nSets-1).U) { doing_reset := false.B }
 
-  val lbim = Module(new HBIMBranchPredictorBank(
-    BoomHBIMParams(histLength = localHistoryLength)
-  ))
-
-
-  class LocalMeta extends Bundle {
-    val lhist = UInt(localHistoryLength.W)
-  }
-
-  val f3_meta  = Wire(new LocalMeta)
-  override val metaSz = lbim.metaSz + f3_meta.asUInt.getWidth
 
   val entries = SyncReadMem(nSets, UInt(localHistoryLength.W))
 
-  val s1_rhist = entries.read(s0_idx, s0_valid)
+  val s0_idx = fetchIdx(io.f0_pc)
+  val s1_rhist = entries.read(s0_idx, io.f0_valid)
   val s2_rhist = RegNext(s1_rhist)
   val s3_rhist = RegNext(s2_rhist)
-
-  f3_meta.lhist := s3_rhist
-  io.f3_meta  := Cat(lbim.io.f3_meta, f3_meta.asUInt)
+  io.f1_lhist := s1_rhist
+  io.f3_lhist := s3_rhist
 
   val f3_do_update    = Wire(Bool())
   val f3_update_idx   = Wire(UInt(log2Ceil(nSets).W))
@@ -53,34 +64,23 @@ class LocalBranchPredictorBank(params: BoomLocalBPDParams = BoomLocalBPDParams()
   f3_update_idx := DontCare
   f3_update_lhist := DontCare
 
-  when (s1_update.valid &&
-        (s1_update.bits.is_mispredict_update || s1_update.bits.is_repair_update) &&
-        s1_update.bits.br_mask =/= 0.U) {
+  val s1_update = RegNext(io.update)
+  val s1_update_idx = fetchIdx(s1_update.pc)
 
+  when (s1_update.valid &&
+        (s1_update.mispredict || s1_update.repair)) {
     f3_do_update    := true.B
     f3_update_idx   := s1_update_idx
-    f3_update_lhist := s1_update.bits.meta.asTypeOf(new LocalMeta).lhist
+    f3_update_lhist := s1_update.lhist
 
-  } .elsewhen (io.f3_fire && io.resp_in(0).f3.map(e => e.is_br && e.predicted_pc.valid).reduce(_||_)) {
+  } .elsewhen (io.f3_fire) {
 
     f3_do_update    := true.B
-    val f3_update_bidx = PriorityEncoder(io.resp_in(0).f3.map(e => e.is_br && e.predicted_pc.valid))
-    f3_update_idx   := s3_idx
-    f3_update_lhist := s3_rhist << 1 | io.resp_in(0).f3(f3_update_bidx).taken
+    f3_update_idx   := RegNext(RegNext(RegNext(s0_idx)))
+    f3_update_lhist := s3_rhist << 1 | io.f3_taken_br
 
   }
 
-  val s0_update_meta = io.update.bits.meta.asTypeOf(new LocalMeta)
-  lbim.io.resp_in := io.resp_in
-  lbim.io.f0_valid  := io.f0_valid
-  lbim.io.f0_pc     := io.f0_pc
-  lbim.io.f0_mask   := io.f0_mask
-  lbim.io.f1_hist   := s1_rhist
-  lbim.io.f3_fire      := io.f3_fire
-  lbim.io.update       := io.update
-  lbim.io.update.bits.hist := s0_update_meta.lhist
-  lbim.io.update.bits.meta := io.update.bits.meta >> f3_meta.asUInt.getWidth
-  io.resp := lbim.io.resp
 
   when (doing_reset || f3_do_update) {
     entries.write(Mux(doing_reset, reset_idx, f3_update_idx),

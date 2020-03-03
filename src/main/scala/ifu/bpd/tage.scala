@@ -223,7 +223,7 @@ class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implici
       val t = Module(new TageTable(n, s, l, params.uBitPeriod))
       t.io.f1_req_valid := RegNext(io.f0_valid)
       t.io.f1_req_pc    := RegNext(io.f0_pc)
-      t.io.f1_req_ghist := io.f1_hist
+      t.io.f1_req_ghist := io.f1_ghist
       t
     }
   }
@@ -348,7 +348,7 @@ class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implici
       tables(i).io.update_u(w)      := RegNext(s1_update_u(i)(w))
     }
     tables(i).io.update_pc    := RegNext(s1_update.bits.pc)
-    tables(i).io.update_hist  := RegNext(s1_update.bits.hist)
+    tables(i).io.update_hist  := RegNext(s1_update.bits.ghist)
   }
 
 

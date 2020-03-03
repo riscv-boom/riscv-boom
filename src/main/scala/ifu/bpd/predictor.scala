@@ -11,6 +11,8 @@ import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
 
+
+
 // A branch prediction for a single instruction
 class BranchPrediction(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -36,6 +38,7 @@ class BranchPredictionBundle(implicit p: Parameters) extends BoomBundle()(p)
   val pc = UInt(vaddrBitsExtended.W)
   val preds = Vec(fetchWidth, new BranchPrediction)
   val meta = Output(Vec(nBanks, UInt(bpdMaxMetaLength.W)))
+  val lhist = Output(Vec(nBanks, UInt(localHistoryLength.W)))
 }
 
 
@@ -67,6 +70,7 @@ class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
   //val cfi_is_ret  = Bool()
 
   val ghist = new GlobalHistory
+  val lhist = Vec(nBanks, UInt(localHistoryLength.W))
 
 
   // What did this CFI jump to?
@@ -93,7 +97,8 @@ class BranchPredictionBankUpdate(implicit p: Parameters) extends BoomBundle()(p)
   val cfi_is_br        = Bool()
   val cfi_is_jal       = Bool()
 
-  val hist             = UInt(globalHistoryLength.W)
+  val ghist            = UInt(globalHistoryLength.W)
+  val lhist            = UInt(localHistoryLength.W)
 
   val target           = UInt(vaddrBitsExtended.W)
 
@@ -126,7 +131,8 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
     val f0_pc    = Input(UInt(vaddrBitsExtended.W))
     val f0_mask  = Input(UInt(bankWidth.W))
     // Local history not available until end of f1
-    val f1_hist = Input(UInt((globalHistoryLength max localHistoryLength).W))
+    val f1_ghist = Input(UInt(globalHistoryLength.W))
+    val f1_lhist = Input(UInt(localHistoryLength.W))
 
     val resp_in = Input(Vec(nInputs, new BranchPredictionBankResponse))
     val resp = Output(new BranchPredictionBankResponse)
@@ -162,11 +168,13 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
 
   val s0_update     = io.update
   val s0_update_idx = fetchIdx(io.update.bits.pc)
-
-
+  val s0_update_valid = io.update.valid
 
   val s1_update     = RegNext(s0_update)
   val s1_update_idx = RegNext(s0_update_idx)
+  val s1_update_valid = RegNext(s0_update_valid)
+
+
 
 }
 
@@ -193,13 +201,18 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   })
 
   val banked_predictors = Seq.fill(nBanks) { Module(if (useBPD) new ComposedBranchPredictorBank else new NullBranchPredictorBank) }
+  val banked_lhist_providers = Seq.fill(nBanks) { Module(new LocalBranchPredictorBank) }
 
   if (nBanks == 1) {
+    banked_lhist_providers(0).io.f0_valid := io.f0_req.valid
+    banked_lhist_providers(0).io.f0_pc    := bankAlign(io.f0_req.bits.pc)
+
     banked_predictors(0).io.f0_valid := io.f0_req.valid
     banked_predictors(0).io.f0_pc    := bankAlign(io.f0_req.bits.pc)
     banked_predictors(0).io.f0_mask  := fetchMask(io.f0_req.bits.pc)
 
-    banked_predictors(0).io.f1_hist  := RegNext(io.f0_req.bits.ghist.histories(0))
+    banked_predictors(0).io.f1_ghist := RegNext(io.f0_req.bits.ghist.histories(0))
+    banked_predictors(0).io.f1_lhist := banked_lhist_providers(0).io.f1_lhist
 
     banked_predictors(0).io.resp_in(0)           := (0.U).asTypeOf(new BranchPredictionBankResponse)
   } else {
@@ -209,6 +222,12 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     banked_predictors(1).io.resp_in(0)           := (0.U).asTypeOf(new BranchPredictionBankResponse)
 
     when (bank(io.f0_req.bits.pc) === 0.U) {
+      banked_lhist_providers(0).io.f0_valid := io.f0_req.valid
+      banked_lhist_providers(0).io.f0_pc    := bankAlign(io.f0_req.bits.pc)
+
+      banked_lhist_providers(1).io.f0_valid := io.f0_req.valid
+      banked_lhist_providers(1).io.f0_pc    := nextBank(io.f0_req.bits.pc)
+
       banked_predictors(0).io.f0_valid := io.f0_req.valid
       banked_predictors(0).io.f0_pc    := bankAlign(io.f0_req.bits.pc)
       banked_predictors(0).io.f0_mask  := fetchMask(io.f0_req.bits.pc)
@@ -217,6 +236,12 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
       banked_predictors(1).io.f0_pc    := nextBank(io.f0_req.bits.pc)
       banked_predictors(1).io.f0_mask  := ~(0.U(bankWidth.W))
     } .otherwise {
+      banked_lhist_providers(0).io.f0_valid := io.f0_req.valid && !mayNotBeDualBanked(io.f0_req.bits.pc)
+      banked_lhist_providers(0).io.f0_pc    := nextBank(io.f0_req.bits.pc)
+
+      banked_lhist_providers(1).io.f0_valid := io.f0_req.valid
+      banked_lhist_providers(1).io.f0_pc    := bankAlign(io.f0_req.bits.pc)
+
       banked_predictors(0).io.f0_valid := io.f0_req.valid && !mayNotBeDualBanked(io.f0_req.bits.pc)
       banked_predictors(0).io.f0_pc    := nextBank(io.f0_req.bits.pc)
       banked_predictors(0).io.f0_mask  := ~(0.U(bankWidth.W))
@@ -226,33 +251,48 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
       banked_predictors(1).io.f0_mask  := fetchMask(io.f0_req.bits.pc)
     }
     when (RegNext(bank(io.f0_req.bits.pc) === 0.U)) {
-      banked_predictors(0).io.f1_hist  := RegNext(io.f0_req.bits.ghist.histories(0))
-      banked_predictors(1).io.f1_hist  := RegNext(io.f0_req.bits.ghist.histories(1))
+      banked_predictors(0).io.f1_ghist  := RegNext(io.f0_req.bits.ghist.histories(0))
+      banked_predictors(1).io.f1_ghist  := RegNext(io.f0_req.bits.ghist.histories(1))
     } .otherwise {
-      banked_predictors(0).io.f1_hist  := RegNext(io.f0_req.bits.ghist.histories(1))
-      banked_predictors(1).io.f1_hist  := RegNext(io.f0_req.bits.ghist.histories(0))
+      banked_predictors(0).io.f1_ghist  := RegNext(io.f0_req.bits.ghist.histories(1))
+      banked_predictors(1).io.f1_ghist  := RegNext(io.f0_req.bits.ghist.histories(0))
     }
   }
 
+
+  for (i <- 0 until nBanks) {
+    banked_lhist_providers(i).io.f3_taken_br := banked_predictors(i).io.resp.f3.map ( p =>
+      p.is_br && p.predicted_pc.valid && p.taken
+    ).reduce(_||_)
+  }
+
   if (nBanks == 1) {
-    io.resp.f1.preds   := banked_predictors(0).io.resp.f1
-    io.resp.f2.preds   := banked_predictors(0).io.resp.f2
-    io.resp.f3.preds   := banked_predictors(0).io.resp.f3
-    io.resp.f3.meta(0) := banked_predictors(0).io.f3_meta
+    io.resp.f1.preds    := banked_predictors(0).io.resp.f1
+    io.resp.f2.preds    := banked_predictors(0).io.resp.f2
+    io.resp.f3.preds    := banked_predictors(0).io.resp.f3
+    io.resp.f3.meta(0)  := banked_predictors(0).io.f3_meta
+    io.resp.f3.lhist(0) := banked_lhist_providers(0).io.f3_lhist
 
     banked_predictors(0).io.f3_fire := io.f3_fire
+    banked_lhist_providers(0).io.f3_fire := io.f3_fire
   } else {
     require(nBanks == 2)
-    banked_predictors(0).io.f3_fire := (
-      io.f3_fire && RegNext(RegNext(RegNext(banked_predictors(0).io.f0_valid)))
-    )
-    banked_predictors(1).io.f3_fire := (
-      io.f3_fire && RegNext(RegNext(RegNext(banked_predictors(1).io.f0_valid)))
-    )
+    val b0_fire = io.f3_fire && RegNext(RegNext(RegNext(banked_predictors(0).io.f0_valid)))
+    val b1_fire = io.f3_fire && RegNext(RegNext(RegNext(banked_predictors(1).io.f0_valid)))
+    banked_predictors(0).io.f3_fire := b0_fire
+    banked_predictors(1).io.f3_fire := b1_fire
+
+    banked_lhist_providers(0).io.f3_fire := b0_fire
+    banked_lhist_providers(1).io.f3_fire := b1_fire
+
+
 
     // The branch prediction metadata is stored un-shuffled
     io.resp.f3.meta(0)    := banked_predictors(0).io.f3_meta
     io.resp.f3.meta(1)    := banked_predictors(1).io.f3_meta
+
+    io.resp.f3.lhist(0)   := banked_lhist_providers(0).io.f3_lhist
+    io.resp.f3.lhist(1)   := banked_lhist_providers(1).io.f3_lhist
 
     when (bank(io.resp.f1.pc) === 0.U) {
       for (i <- 0 until bankWidth) {
@@ -299,6 +339,8 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   // Use the meta from the latest resp
   io.resp.f1.meta := DontCare
   io.resp.f2.meta := DontCare
+  io.resp.f1.lhist := DontCare
+  io.resp.f2.lhist := DontCare
 
 
   for (i <- 0 until nBanks) {
@@ -306,12 +348,17 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     banked_predictors(i).io.update.bits.is_repair_update     := io.update.bits.is_repair_update
 
     banked_predictors(i).io.update.bits.meta             := io.update.bits.meta(i)
+    banked_predictors(i).io.update.bits.lhist            := io.update.bits.lhist(i)
     banked_predictors(i).io.update.bits.cfi_idx.bits     := io.update.bits.cfi_idx.bits
     banked_predictors(i).io.update.bits.cfi_taken        := io.update.bits.cfi_taken
     banked_predictors(i).io.update.bits.cfi_mispredicted := io.update.bits.cfi_mispredicted
     banked_predictors(i).io.update.bits.cfi_is_br        := io.update.bits.cfi_is_br
     banked_predictors(i).io.update.bits.cfi_is_jal       := io.update.bits.cfi_is_jal
     banked_predictors(i).io.update.bits.target           := io.update.bits.target
+
+    banked_lhist_providers(i).io.update.mispredict := io.update.bits.is_mispredict_update
+    banked_lhist_providers(i).io.update.repair     := io.update.bits.is_repair_update
+    banked_lhist_providers(i).io.update.lhist      := io.update.bits.lhist(i)
   }
 
   if (nBanks == 1) {
@@ -319,16 +366,27 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     banked_predictors(0).io.update.bits.pc               := bankAlign(io.update.bits.pc)
     banked_predictors(0).io.update.bits.br_mask          := io.update.bits.br_mask
     banked_predictors(0).io.update.bits.cfi_idx.valid    := io.update.bits.cfi_idx.valid
-    banked_predictors(0).io.update.bits.hist             := io.update.bits.ghist.histories(0)
+    banked_predictors(0).io.update.bits.ghist            := io.update.bits.ghist.histories(0)
+
+    banked_lhist_providers(0).io.update.valid := io.update.valid && io.update.bits.br_mask =/= 0.U
+    banked_lhist_providers(0).io.update.pc    := bankAlign(io.update.bits.pc)
   } else {
     require(nBanks == 2)
     // Split the single update bundle for the fetchpacket into two updates
     // 1 for each bank.
 
     when (bank(io.update.bits.pc) === 0.U) {
-      banked_predictors(0).io.update.valid := io.update.valid
-      banked_predictors(1).io.update.valid := io.update.valid &&
+      val b1_update_valid = io.update.valid &&
         (!io.update.bits.cfi_idx.valid || io.update.bits.cfi_idx.bits >= bankWidth.U)
+
+      banked_lhist_providers(0).io.update.valid := io.update.valid && io.update.bits.br_mask(bankWidth-1,0) =/= 0.U
+      banked_lhist_providers(1).io.update.valid := b1_update_valid && io.update.bits.br_mask(fetchWidth-1,bankWidth) =/= 0.U
+
+      banked_lhist_providers(0).io.update.pc := bankAlign(io.update.bits.pc)
+      banked_lhist_providers(1).io.update.pc := nextBank(io.update.bits.pc)
+
+      banked_predictors(0).io.update.valid := io.update.valid
+      banked_predictors(1).io.update.valid := b1_update_valid
 
       banked_predictors(0).io.update.bits.pc := bankAlign(io.update.bits.pc)
       banked_predictors(1).io.update.bits.pc := nextBank(io.update.bits.pc)
@@ -339,12 +397,20 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
       banked_predictors(0).io.update.bits.cfi_idx.valid := io.update.bits.cfi_idx.valid && io.update.bits.cfi_idx.bits < bankWidth.U
       banked_predictors(1).io.update.bits.cfi_idx.valid := io.update.bits.cfi_idx.valid && io.update.bits.cfi_idx.bits >= bankWidth.U
 
-      banked_predictors(0).io.update.bits.hist := io.update.bits.ghist.histories(0)
-      banked_predictors(1).io.update.bits.hist := io.update.bits.ghist.histories(1)
+      banked_predictors(0).io.update.bits.ghist := io.update.bits.ghist.histories(0)
+      banked_predictors(1).io.update.bits.ghist := io.update.bits.ghist.histories(1)
     } .otherwise {
-      banked_predictors(1).io.update.valid := io.update.valid
-      banked_predictors(0).io.update.valid := io.update.valid && !mayNotBeDualBanked(io.update.bits.pc) &&
+      val b0_update_valid = io.update.valid && !mayNotBeDualBanked(io.update.bits.pc) &&
         (!io.update.bits.cfi_idx.valid || io.update.bits.cfi_idx.bits >= bankWidth.U)
+
+      banked_lhist_providers(1).io.update.valid := io.update.valid && io.update.bits.br_mask(bankWidth-1,0) =/= 0.U
+      banked_lhist_providers(0).io.update.valid := b0_update_valid && io.update.bits.br_mask(fetchWidth-1,bankWidth) =/= 0.U
+
+      banked_lhist_providers(1).io.update.pc := bankAlign(io.update.bits.pc)
+      banked_lhist_providers(0).io.update.pc := nextBank(io.update.bits.pc)
+
+      banked_predictors(1).io.update.valid := io.update.valid
+      banked_predictors(0).io.update.valid := b0_update_valid
 
       banked_predictors(1).io.update.bits.pc := bankAlign(io.update.bits.pc)
       banked_predictors(0).io.update.bits.pc := nextBank(io.update.bits.pc)
@@ -355,8 +421,8 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
       banked_predictors(1).io.update.bits.cfi_idx.valid := io.update.bits.cfi_idx.valid && io.update.bits.cfi_idx.bits < bankWidth.U
       banked_predictors(0).io.update.bits.cfi_idx.valid := io.update.bits.cfi_idx.valid && io.update.bits.cfi_idx.bits >= bankWidth.U
 
-      banked_predictors(1).io.update.bits.hist := io.update.bits.ghist.histories(0)
-      banked_predictors(0).io.update.bits.hist := io.update.bits.ghist.histories(1)
+      banked_predictors(1).io.update.bits.ghist := io.update.bits.ghist.histories(0)
+      banked_predictors(0).io.update.bits.ghist := io.update.bits.ghist.histories(1)
     }
 
   }

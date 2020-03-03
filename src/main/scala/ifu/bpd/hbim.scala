@@ -14,6 +14,7 @@ import scala.math.min
 
 case class BoomHBIMParams(
   nSets: Int = 2048,
+  useLocal: Boolean = false,
   histLength: Int = 32
 )
 
@@ -51,7 +52,9 @@ class HBIMBranchPredictorBank(params: BoomHBIMParams = BoomHBIMParams())(implici
     hist_chunks.reduce(_^_)
   }
 
-  val f1_idx = compute_folded_hist(io.f1_hist, log2Ceil(nSets)) ^ s1_idx
+  val f1_idx = compute_folded_hist(
+    if (params.useLocal) io.f1_lhist else io.f1_ghist,
+    log2Ceil(nSets)) ^ s1_idx
 
   val s3_req_rdata    = RegNext(VecInit(data.map(_.read(f1_idx, s1_valid))))
 
@@ -67,7 +70,9 @@ class HBIMBranchPredictorBank(params: BoomHBIMParams = BoomHBIMParams())(implici
   val s1_update_wdata   = Wire(Vec(bankWidth, UInt(2.W)))
   val s1_update_wmask   = Wire(Vec(bankWidth, Bool()))
   val s1_update_meta    = s1_update.bits.meta.asTypeOf(new BIMMeta)
-  val s1_update_index   = compute_folded_hist(s1_update.bits.hist, log2Ceil(nSets)) ^ s1_update_idx
+  val s1_update_index   = compute_folded_hist(
+    if (params.useLocal) s1_update.bits.lhist else s1_update.bits.ghist,
+    log2Ceil(nSets)) ^ s1_update_idx
 
   val wrbypass_idxs = Reg(Vec(nWrBypassEntries, UInt(log2Ceil(nSets).W)))
   val wrbypass      = Reg(Vec(nWrBypassEntries, Vec(bankWidth, UInt(2.W))))

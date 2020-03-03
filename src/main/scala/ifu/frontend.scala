@@ -223,6 +223,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
   val br_mask       = UInt(fetchWidth.W)
 
   val ghist         = new GlobalHistory
+  val lhist         = Vec(nBanks, UInt(localHistoryLength.W))
 
   val xcpt_pf_if    = Bool() // I-TLB miss (instruction fetch fault).
   val xcpt_ae_if    = Bool() // Access exception.
@@ -687,6 +688,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   f3_fetch_bundle.cfi_npc_plus4 := f3_npc_plus4_mask(f3_fetch_bundle.cfi_idx.bits)
 
   f3_fetch_bundle.ghist    := f3.io.deq.bits.ghist
+  f3_fetch_bundle.lhist    := f3_bpd_resp.io.deq.bits.lhist
   f3_fetch_bundle.bpd_meta := f3_bpd_resp.io.deq.bits.meta
 
   f3_fetch_bundle.end_half.valid := bank_prev_is_half
@@ -837,7 +839,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
 
   bpd.io.update := ftq.io.bpdupdate
-  when (ftq.io.ras_update) {
+
+  when (ftq.io.ras_update && enableRasTopRepair.B) {
     ras.io.write_valid := true.B
     ras.io.write_idx   := ftq.io.ras_update_idx
     ras.io.write_addr  := ftq.io.ras_update_pc

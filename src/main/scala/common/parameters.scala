@@ -57,6 +57,8 @@ case class BoomCoreParams(
   enableBranchPrediction: Boolean = true,
   branchPredictor: Function2[BranchPredictionBankResponse, Parameters, Tuple2[Seq[BranchPredictorBank], BranchPredictionBankResponse]] = ((resp_in: BranchPredictionBankResponse, p: Parameters) => (Nil, resp_in)),
   globalHistoryLength: Int = 64,
+  localHistoryLength: Int = 32,
+  localHistoryNSets: Int = 128,
   bpdMaxMetaLength: Int = 120,
   numRasEntries: Int = 32,
   enableRasTopRepair: Boolean = true,
@@ -215,7 +217,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   //************************************
   // Branch Prediction
   val globalHistoryLength = boomParams.globalHistoryLength
-  val localHistoryLength = 32
+  val localHistoryLength = boomParams.localHistoryLength
+  val localHistoryNSets = boomParams.localHistoryNSets
   val bpdMaxMetaLength = boomParams.bpdMaxMetaLength
 
   def getBPDComponents(resp_in: BranchPredictionBankResponse, p: Parameters) = {

@@ -394,7 +394,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     io.ifu.redirect_val   := true.B
     io.ifu.redirect_flush := true.B
     val flush_typ = RegNext(rob.io.flush.bits.flush_typ)
-    io.ifu.redirect_ghist := io.ifu.get_pc(0).entry.ghist
+    // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
+    val new_ghist = WireInit((0.U).asTypeOf(new GlobalHistory))
+    new_ghist.ras_idx := io.ifu.get_pc(0).entry.ras_idx
+    io.ifu.redirect_ghist := new_ghist
     when (FlushTypes.useCsrEvec(flush_typ)) {
       io.ifu.redirect_pc  := Mux(flush_typ === FlushTypes.eret,
                                  RegNext(RegNext(csr.io.evec)),
@@ -428,7 +431,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     val ftq_entry = io.ifu.get_pc(1).entry
     val cfi_idx = (brupdate.b2.uop.pc_lob ^
       Mux(ftq_entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
-    val next_ghist = ftq_entry.ghist.update(
+    val ftq_ghist = io.ifu.get_pc(1).ghist
+    val next_ghist = ftq_ghist.update(
       ftq_entry.br_mask.asUInt,
       brupdate.b2.taken,
       brupdate.b2.cfi_type === CFI_BR,
@@ -441,7 +445,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
     io.ifu.redirect_ghist   := Mux(
       use_same_ghist,
-      ftq_entry.ghist,
+      ftq_ghist,
       next_ghist)
     io.ifu.redirect_ghist.current_saw_branch_not_taken := use_same_ghist
   } .elsewhen (rob.io.flush_frontend || brupdate.b1.mispredict_mask =/= 0.U) {
@@ -525,9 +529,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Branch Unit Requests (for JALs) (Should delay issue of JALs if this not ready)
   jmp_pc_req.valid := RegNext(iss_valids(jmp_unit_idx) && iss_uops(jmp_unit_idx).fu_code === FU_JMP)
   jmp_pc_req.bits  := RegNext(iss_uops(jmp_unit_idx).ftq_idx)
+
+  jmp_unit.io.get_ftq_pc := DontCare
   jmp_unit.io.get_ftq_pc.pc               := io.ifu.get_pc(0).pc
   jmp_unit.io.get_ftq_pc.entry            := io.ifu.get_pc(0).entry
-  jmp_unit.io.get_ftq_pc.com_pc           := DontCare // This shouldn't be used by jmpunit
   jmp_unit.io.get_ftq_pc.next_val         := io.ifu.get_pc(0).next_val
   jmp_unit.io.get_ftq_pc.next_pc          := io.ifu.get_pc(0).next_pc
 
