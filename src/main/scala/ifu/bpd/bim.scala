@@ -47,10 +47,10 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
   when (reset_idx === (nSets-1).U) { doing_reset := false.B }
 
 
-  val data  = Seq.fill(bankWidth) { SyncReadMem(nSets, UInt(2.W)) }
+  val data  = SyncReadMem(nSets, Vec(bankWidth, UInt(2.W)))
 
 
-  val s2_req_rdata    = RegNext(VecInit(data.map(_.read(s0_idx   , s0_valid))))
+  val s2_req_rdata    = RegNext(data.read(s0_idx   , s0_valid))
 
   val s2_resp         = Wire(Vec(bankWidth, Bool()))
 
@@ -105,13 +105,12 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
 
   }
 
-  for (w <- 0 until bankWidth) {
-    when (doing_reset || (s1_update_wmask(w) && s1_update.valid && s1_update.bits.is_commit_update)) {
-      data(w).write(
-        Mux(doing_reset, reset_idx, s1_update_index),
-        Mux(doing_reset, 2.U, s1_update_wdata(w))
-      )
-    }
+  when (doing_reset || (s1_update.valid && s1_update.bits.is_commit_update)) {
+    data.write(
+      Mux(doing_reset, reset_idx, s1_update_index),
+      Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 2.U }), s1_update_wdata),
+      Mux(doing_reset, (~(0.U(bankWidth.W))), s1_update_wmask.asUInt).asBools
+    )
   }
   when (s1_update_wmask.reduce(_||_) && s1_update.valid && s1_update.bits.is_commit_update) {
     when (wrbypass_hit) {
