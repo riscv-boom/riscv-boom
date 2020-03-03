@@ -221,6 +221,9 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     banked_predictors(0).io.resp_in(0)           := (0.U).asTypeOf(new BranchPredictionBankResponse)
     banked_predictors(1).io.resp_in(0)           := (0.U).asTypeOf(new BranchPredictionBankResponse)
 
+    banked_predictors(0).io.f1_lhist := banked_lhist_providers(0).io.f1_lhist
+    banked_predictors(1).io.f1_lhist := banked_lhist_providers(1).io.f1_lhist
+
     when (bank(io.f0_req.bits.pc) === 0.U) {
       banked_lhist_providers(0).io.f0_valid := io.f0_req.valid
       banked_lhist_providers(0).io.f0_pc    := bankAlign(io.f0_req.bits.pc)
