@@ -138,9 +138,9 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val fence_dmem   = Input(Bool())
 
   // Speculatively tell the IQs that we'll get load data back next cycle
-  val spec_ld_wakeup = Output(Valid(UInt(maxPregSz.W)))
+  val spec_load_wakeups = Output(Vec(memWidth, Valid(UInt(maxPregSz.W))))
   // Tell the IQs that the load we speculated last cycle was misspeculated
-  val ld_miss      = Output(UInt(coreWidth.W))
+  val spec_load_nacks   = Output(Vec(memWidth, Bool()))
 
   val brupdate       = Input(new BrUpdateInfo)
   val rob_pnr_idx  = Input(UInt(robAddrSz.W))
@@ -1208,11 +1208,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.core.lxcpt.bits  := r_xcpt
 
   // Task 4: Speculatively wakeup loads 1 cycle before they come back
-  io.core.spec_ld_wakeup.valid := enableFastLoadUse.B          &&
-                                  fired_load_incoming(0)       &&
-                                  !mem_incoming_uop(0).fp_val  &&
-                                  mem_incoming_uop(0).pdst =/= 0.U
-  io.core.spec_ld_wakeup.bits  := mem_incoming_uop(0).pdst
+  for (w <- 0 until memWidth) {
+    io.core.spec_load_wakeups(w).valid := enableFastLoadUse.B          &&
+                                          fired_load_incoming(w)       &&
+                                          !mem_incoming_uop(w).fp_val  &&
+                                          mem_incoming_uop(w).ldst_val
+    io.core.spec_load_wakeups(w).bits  := mem_incoming_uop(w).pdst
+  }
   // TODO: Do this on retry? Wakeup?
 
 
@@ -1349,10 +1351,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
   }
 
-  // TODO do this for an n-wide lsu
-  val spec_ld_miss = RegNext(io.core.spec_ld_wakeup.valid) &&
-    !(io.core.exe(0).iresp.valid && io.core.exe(0).iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop(0).ldq_idx))
-  io.core.ld_miss := Mux(spec_ld_miss, RegNext(mem_incoming_uop(0).pdst_col), 0.U)
+  for (w <- 0 until memWidth) {
+    io.core.spec_load_nacks(w) := RegNext(io.core.spec_load_wakeups(w).valid) &&
+      !(io.core.exe(w).iresp.valid && io.core.exe(w).iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop(w).ldq_idx))
+  }
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------

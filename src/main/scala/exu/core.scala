@@ -744,9 +744,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                                   && wbresp.bits.uop.dst_rtype === RT_FIX )
   }
 
-  for ((renport, intport) <- rename_stage.io.wakeups zip wakeups) {
-    renport <> intport
-  }
+  rename_stage.io.wakeups := scheduler.io.fast_wakeups ++ wakeups
+
   if (usingFPU) {
     for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
       renport <> fpport
@@ -767,10 +766,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   scheduler.io.fu_avail := exe_units.io.fu_avail & ~(Fill(FUC_SZ, RegNext(idiv_issued)) & FU_DIV)
 
   // Send slow wakeups to scheduler
-  scheduler.io.wakeups := wakeups
+  scheduler.io.slow_wakeups := wakeups
 
-  // Load-hit Misspeculations
-  scheduler.io.ld_miss := io.lsu.ld_miss
+  // Load-hit speculation
+  scheduler.io.load_wakeups := io.lsu.spec_load_wakeups
+  scheduler.io.load_nacks   := io.lsu.spec_load_nacks
 
   scheduler.io.brupdate := brupdate
   scheduler.io.kill     := RegNext(rob.io.flush.valid)

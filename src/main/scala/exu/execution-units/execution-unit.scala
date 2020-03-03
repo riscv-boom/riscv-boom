@@ -253,12 +253,12 @@ class ALUExeUnit(
     //ROCC Rocc Commands are taken by the RoCC unit
 
     alu.io.req.bits.uop      := io.req.bits.uop
-    alu.io.kill     := io.kill
     alu.io.req.bits.rs1_data := io.req.bits.rs1_data
     alu.io.req.bits.rs2_data := io.req.bits.rs2_data
     alu.io.req.bits.rs3_data := DontCare
     alu.io.resp.ready := DontCare
     alu.io.brupdate := io.brupdate
+    alu.io.kill     := io.kill
 
     iresp_fu_units += alu
 

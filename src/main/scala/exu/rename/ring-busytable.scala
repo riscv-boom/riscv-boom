@@ -17,6 +17,15 @@ import boom.common._
 import boom.util._
 import freechips.rocketchip.config.Parameters
 
+class RingBusyResp extends Bundle
+{
+  val prs1_busy = Bool()
+  val prs2_busy = Bool()
+
+  val prs1_load = Bool()
+  val prs2_load = Bool()
+}
+
 class RingBusyTable(
   val plWidth: Int,
   val numPregs: Int,
@@ -38,7 +47,7 @@ class RingBusyTable(
 
   val io = IO(new BoomBundle()(p) {
     val ren_uops = Input(Vec(plWidth, new MicroOp))
-    val busy_resps = Output(Vec(plWidth, new BusyResp))
+    val busy_resps = Output(Vec(plWidth, new RingBusyResp))
     val rebusy_reqs = Input(Vec(plWidth, Bool()))
 
     val wb_pdsts = Input(Vec(numWbPorts, UInt(ipregSz.W)))
@@ -48,19 +57,31 @@ class RingBusyTable(
   })
 
   val busy_table = RegInit(0.U(numPregs.W))
-  // Unbusy written back registers.
-  val busy_table_wb = busy_table & ~(io.wb_pdsts zip io.wb_valids)
-    .map {case (pdst, valid) => DecodePreg(pdst) & Fill(numPregs, valid)}.reduce(_|_)
-  // Rebusy newly allocated registers.
-  val busy_table_next = busy_table_wb | (io.ren_uops zip io.rebusy_reqs)
-    .map {case (uop, req) => DecodePreg(uop.pdst) & Fill(numPregs, req)}.reduce(_|_)
 
-  busy_table := busy_table_next
+  busy_table := ( busy_table
+                & ~(io.wb_pdsts zip io.wb_valids) .map {case (pdst, valid) =>
+                     DecodePreg(pdst) & Fill(numPregs, valid)}.reduce(_|_)
+                |  (io.ren_uops zip io.rebusy_reqs) .map {case (uop, req)  =>
+                     DecodePreg(uop.pdst) & Fill(numPregs, req)}.reduce(_|_)
+                )
+
+  val load_table = RegInit(0.U(numPregs.W))
+
+  load_table:= ( load_table
+                & ~(io.wb_pdsts zip io.wb_valids) .map {case (pdst, valid) =>
+                     DecodePreg(pdst) & Fill(numPregs, valid)}.reduce(_|_)
+                |  (io.ren_uops zip io.rebusy_reqs) .map {case (uop, req)  =>
+                     DecodePreg(uop.pdst) & Fill(numPregs, req && uop.uses_ldq)}.reduce(_|_)
+                )
+
 
   // Read the busy table.
   for (i <- 0 until plWidth) {
     io.busy_resps(i).prs1_busy := (busy_table & DecodePreg(io.ren_uops(i).prs1)).orR
     io.busy_resps(i).prs2_busy := (busy_table & DecodePreg(io.ren_uops(i).prs2)).orR
+
+    io.busy_resps(i).prs1_load := (load_table & DecodePreg(io.ren_uops(i).prs1)).orR
+    io.busy_resps(i).prs2_load := (load_table & DecodePreg(io.ren_uops(i).prs2)).orR
   }
 
   io.debug.busytable := busy_table

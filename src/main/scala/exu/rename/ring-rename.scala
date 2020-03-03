@@ -41,7 +41,7 @@ class RingRenameIO(implicit p: Parameters) extends BoomBundle
   val dis_ready = Input(Bool())
 
   // wakeup ports
-  val wakeups = Flipped(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
+  val wakeups = Flipped(Vec(coreWidth*3, Valid(UInt(ipregSz.W))))
 
   // commit stage
   val com_valids = Input(Vec(coreWidth, Bool()))
@@ -109,7 +109,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
   val busytable = Module(new RingBusyTable(
     coreWidth,
     numIntPhysRegs,
-    coreWidth*2))
+    coreWidth*3))
 
   //----------------------------------------------------------------------------------------------------
   // Pipeline State & Wires
@@ -217,6 +217,9 @@ class RingRename(implicit p: Parameters) extends BoomModule
 
     uop.prs1_busy := uop.lrs1_rtype === rtype && busy.prs1_busy
     uop.prs2_busy := uop.lrs2_rtype === rtype && busy.prs2_busy
+
+    uop.prs1_load := busy.prs1_load
+    uop.prs2_load := busy.prs2_load
 
     val valid = ren2_valids(w)
     assert (!(valid && busy.prs1_busy && rtype === RT_FIX && uop.lrs1 === 0.U), "[rename] x0 is busy??")

@@ -28,8 +28,11 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val dis_uops = Flipped(Vec(coreWidth, DecoupledIO(new MicroOp)))
     val iss_uops = Output(Vec(coreWidth, Valid(new MicroOp)))
 
-    val wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
-    val ld_miss  = Input(UInt(coreWidth.W)) // Per-column load miss vector
+    val slow_wakeups = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
+    val load_wakeups = Input(Vec(memWidth   , Valid(UInt(ipregSz.W))))
+    val load_nacks   = Input(Vec(memWidth   , Bool()))
+
+    val fast_wakeups = Output(Vec(coreWidth , Valid(UInt(ipregSz.W))))
 
     val fu_avail = Input(UInt(FUC_SZ.W))
 
@@ -48,8 +51,9 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
   for (w <- 0 until coreWidth) {
     for (i <- 0 until numSlotsPerColumn) {
-      slots(w)(i).slow_wakeups := io.wakeups
-      slots(w)(i).ld_miss      := io.ld_miss((w - 1 + coreWidth) % coreWidth)
+      slots(w)(i).slow_wakeups := io.slow_wakeups
+      slots(w)(i).load_wakeups := io.load_wakeups
+      slots(w)(i).load_nacks   := io.load_nacks
 
       slots(w)(i).brupdate := io.brupdate
       slots(w)(i).kill     := io.kill
@@ -140,7 +144,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   //----------------------------------------------------------------------------------------------------
   // Grant, Fast Wakeup, and Issue
 
-  val do_issue = arb_gnts & ~RotateLeft(io.ld_miss)
+  val do_issue = arb_gnts & ~VecInit(sel_uops.map(_.load_wakeup_nacked(io.load_nacks))).asUInt
 
   // Grant signals
   for (w <- 0 until coreWidth) {
@@ -149,11 +153,18 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     }
   }
 
-  // Connect fast wakeups
+  // Generate fast wakeups
   for (w <- 0 until coreWidth) {
+    val fast_wakeup = sel_uops(w).fast_wakeup(do_issue(w))
+
+    // Broadcast to slots in next column
     for (slot <- slots((w + 1) % coreWidth)) {
-      slot.fast_wakeup := sel_uops(w).fast_wakeup(do_issue(w))
+      slot.fast_wakeup := fast_wakeup
     }
+
+    // Send to rename (ALU only)
+    io.fast_wakeups(w).valid := RegNext(fast_wakeup.valid && fast_wakeup.bits.alu)
+    io.fast_wakeups(w).bits  := RegNext(fast_wakeup.bits.pdst)
   }
 
   // Hookup issue output
