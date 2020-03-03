@@ -31,6 +31,7 @@ case class BoomCoreParams(
     IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=1),
     IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue, dispatchWidth=1),
     IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=1)),
+  memWidth: Int = 1,
   numLdqEntries: Int = 16,
   numStqEntries: Int = 16,
   numIntPhysRegisters: Int = 96,
@@ -183,7 +184,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   //val memIssueParam = issueParams.find(_.iqType == IQT_MEM.litValue).get
 
   val intWidth = intIssueParam.issueWidth
-  val memWidth = 1 // TODO
+  val memWidth = boomParams.memWidth
 
   issueParams.map(x => require(x.dispatchWidth <= coreWidth && x.dispatchWidth > 0))
 
