@@ -674,7 +674,7 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
   val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: (cs_is_shadowable:Bool) :: (cs_has_rs2) :: Nil = bpd_csignals
 
   io.is_call := (cs_is_jal || cs_is_jalr) && GetRd(io.inst) === RA
-  io.is_ret  := cs_is_jalr && GetRs1(io.inst) === BitPat("b00?01")
+  io.is_ret  := cs_is_jalr && GetRs1(io.inst) === BitPat("b00?01") && GetRd(io.inst) === X0
 
   io.target := Mux(cs_is_br, ComputeBranchTarget(io.pc, io.inst, xLen),
                               ComputeJALTarget(io.pc, io.inst, xLen))
