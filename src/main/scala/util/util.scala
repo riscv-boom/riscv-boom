@@ -397,8 +397,7 @@ object IsOlder
 object MaskLower
 {
   def apply(in: UInt) = {
-    val n = in.getWidth
-    (0 until n).map(i => in >> i.U).reduce(_|_)
+    in.asBools.scanRight(false.B)((b,m) => m || b).dropRight(1)
   }
 }
 
@@ -408,8 +407,7 @@ object MaskLower
 object MaskUpper
 {
   def apply(in: UInt) = {
-    val n = in.getWidth
-    (0 until n).map(i => (in << i.U)(n-1,0)).reduce(_|_)
+    in.asBools.scanLeft(false.B)((m,b) => m || b).takeRight(in.getWidth)
   }
 }
 
