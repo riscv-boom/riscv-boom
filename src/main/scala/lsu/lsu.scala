@@ -514,21 +514,34 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // Controller logic. Arbitrate which request actually fires
 
   val exe_tlb_valid = Wire(Vec(memWidth, Bool()))
+
+  var load_wb_cols = widthMap(w => Mux(can_fire_load_incoming(w), exe_req(w).bits.uop.pdst_col, 0.U)).reduce(_|_)
+  val lrwc = ldq_retry_e.bits.uop.pdst_col
+  val lwwc = ldq_wakeup_e.bits.uop.pdst_col
+
   for (w <- 0 until memWidth) {
     var tlb_avail  = true.B
     var dc_avail   = true.B
     var lcam_avail = true.B
     var rob_avail  = true.B
 
-    def lsu_sched(can_fire: Bool, uses_tlb:Boolean, uses_dc:Boolean, uses_lcam: Boolean, uses_rob:Boolean): Bool = {
-      val will_fire = can_fire && !(uses_tlb.B && !tlb_avail) &&
-                                  !(uses_lcam.B && !lcam_avail) &&
-                                  !(uses_dc.B && !dc_avail) &&
+    def lsu_sched(can_fire  : Bool,
+                  writes_col: UInt,
+                  uses_tlb  : Boolean,
+                  uses_dc   : Boolean,
+                  uses_lcam : Boolean,
+                  uses_rob  : Boolean): Bool = {
+      val will_fire = can_fire && !(writes_col & load_wb_cols).orR &&
+                                  !(uses_tlb.B && !tlb_avail)      &&
+                                  !(uses_lcam.B && !lcam_avail)    &&
+                                  !(uses_dc.B && !dc_avail)        &&
                                   !(uses_rob.B && !rob_avail)
       tlb_avail  = tlb_avail  && !(will_fire && uses_tlb.B)
       lcam_avail = lcam_avail && !(will_fire && uses_lcam.B)
       dc_avail   = dc_avail   && !(will_fire && uses_dc.B)
       rob_avail  = rob_avail  && !(will_fire && uses_rob.B)
+      load_wb_cols = load_wb_cols | Mux(will_fire, writes_col, 0.U)
+
       dontTouch(will_fire) // dontTouch these so we can inspect the will_fire signals
       will_fire
     }
@@ -537,18 +550,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     // Some restrictions
     //  - Incoming ops must get precedence, can't backpresure memaddrgen
     //  - Incoming hellacache ops must get precedence over retrying ops (PTW must get precedence over retrying translation)
-    will_fire_load_incoming (w) := lsu_sched(can_fire_load_incoming (w) , true , true , true , false) // TLB , DC , LCAM
-    will_fire_stad_incoming (w) := lsu_sched(can_fire_stad_incoming (w) , true , false, true , true)  // TLB ,    , LCAM , ROB
-    will_fire_sta_incoming  (w) := lsu_sched(can_fire_sta_incoming  (w) , true , false, true , true)  // TLB ,    , LCAM , ROB
-    will_fire_std_incoming  (w) := lsu_sched(can_fire_std_incoming  (w) , false, false, false, true)  //                 , ROB
-    will_fire_sfence        (w) := lsu_sched(can_fire_sfence        (w) , true , false, false, true)  // TLB ,    ,      , ROB
-    will_fire_release       (w) := lsu_sched(can_fire_release       (w) , false, false, true , false) //            LCAM
-    will_fire_hella_incoming(w) := lsu_sched(can_fire_hella_incoming(w) , true , true , false, false) // TLB , DC
-    will_fire_hella_wakeup  (w) := lsu_sched(can_fire_hella_wakeup  (w) , false, true , false, false) //     , DC
-    will_fire_load_retry    (w) := lsu_sched(can_fire_load_retry    (w) , true , true , true , false) // TLB , DC , LCAM
-    will_fire_sta_retry     (w) := lsu_sched(can_fire_sta_retry     (w) , true , false, true , true)  // TLB ,    , LCAM , ROB // TODO: This should be higher priority
-    will_fire_store_commit  (w) := lsu_sched(can_fire_store_commit  (w) , false, true , false, false) //     , DC
-    will_fire_load_wakeup   (w) := lsu_sched(can_fire_load_wakeup   (w) , false, true , true , false) //     , DC , LCAM
+    will_fire_load_incoming (w) := lsu_sched(can_fire_load_incoming (w) ,  0.U, true , true , true , false) // TLB , DC , LCAM
+    will_fire_stad_incoming (w) := lsu_sched(can_fire_stad_incoming (w) ,  0.U, true , false, true , true)  // TLB ,    , LCAM , ROB
+    will_fire_sta_incoming  (w) := lsu_sched(can_fire_sta_incoming  (w) ,  0.U, true , false, true , true)  // TLB ,    , LCAM , ROB
+    will_fire_std_incoming  (w) := lsu_sched(can_fire_std_incoming  (w) ,  0.U, false, false, false, true)  //                 , ROB
+    will_fire_sfence        (w) := lsu_sched(can_fire_sfence        (w) ,  0.U, true , false, false, true)  // TLB ,    ,      , ROB
+    will_fire_release       (w) := lsu_sched(can_fire_release       (w) ,  0.U, false, false, true , false) //            LCAM
+    will_fire_hella_incoming(w) := lsu_sched(can_fire_hella_incoming(w) ,  0.U, true , true , false, false) // TLB , DC
+    will_fire_hella_wakeup  (w) := lsu_sched(can_fire_hella_wakeup  (w) ,  0.U, false, true , false, false) //     , DC
+    will_fire_load_retry    (w) := lsu_sched(can_fire_load_retry    (w) , lrwc, true , true , true , false) // TLB , DC , LCAM
+    will_fire_sta_retry     (w) := lsu_sched(can_fire_sta_retry     (w) ,  0.U, true , false, true , true)  // TLB ,    , LCAM , ROB // TODO: This should be higher priority
+    will_fire_store_commit  (w) := lsu_sched(can_fire_store_commit  (w) ,  0.U, false, true , false, false) //     , DC
+    will_fire_load_wakeup   (w) := lsu_sched(can_fire_load_wakeup   (w) , lwwc, false, true , true , false) //     , DC , LCAM
 
     assert(!(exe_req(w).valid && !(will_fire_load_incoming(w) || will_fire_stad_incoming(w) || will_fire_sta_incoming(w) || will_fire_std_incoming(w) || will_fire_sfence(w))))
 
