@@ -58,17 +58,17 @@ import boom.util.{BoolToChar, AgePriorityEncoder, IsKilledByBranch, GetNewBrMask
 class LSUExeIO(implicit p: Parameters) extends BoomBundle()(p)
 {
   // The "resp" of the maddrcalc is really a "req" to the LSU
-  val req       = Flipped(new ValidIO(new FuncUnitResp(xLen)))
+  val req   = Flipped(new ValidIO(new FuncUnitResp(xLen)))
   // Send load data to regfiles
-  val iresp    = new DecoupledIO(new boom.exu.ExeUnitResp(xLen))
-  val fresp    = new DecoupledIO(new boom.exu.ExeUnitResp(xLen+1)) // TODO: Should this be fLen?
+  val iresp = new DecoupledIO(new boom.exu.ExeUnitResp(xLen))
+  val fresp = new DecoupledIO(new boom.exu.ExeUnitResp(xLen+1)) // TODO: Should this be fLen?
 }
 
 class BoomDCacheReq(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomUOP
 {
-  val addr  = UInt(coreMaxAddrBits.W)
-  val data  = Bits(coreDataBits.W)
+  val addr = UInt(coreMaxAddrBits.W)
+  val data = Bits(coreDataBits.W)
   val is_hella = Bool() // Is this the hellacache req? If so this is not tracked in LDQ or STQ
 }
 
@@ -82,15 +82,15 @@ class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
 class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
 {
   // In LSU's dmem stage, send the request
-  val req         = new DecoupledIO(Vec(memWidth, Valid(new BoomDCacheReq)))
+  val req     = new DecoupledIO(Vec(memWidth, Valid(new BoomDCacheReq)))
   // In LSU's LCAM search stage, kill if order fail (or forwarding possible)
-  val s1_kill     = Output(Vec(memWidth, Bool()))
+  val s1_kill = Output(Vec(memWidth, Bool()))
   // Get a request any cycle
-  val resp        = Flipped(Vec(memWidth, new ValidIO(new BoomDCacheResp)))
+  val resp    = Flipped(Vec(memWidth, new ValidIO(new BoomDCacheResp)))
   // In our response stage, if we get a nack, we need to reexecute
-  val nack        = Flipped(Vec(memWidth, new ValidIO(new BoomDCacheReq)))
+  val nack    = Flipped(Vec(memWidth, new ValidIO(new BoomDCacheReq)))
 
-  val brupdate       = Output(new BrUpdateInfo)
+  val brupdate     = Output(new BrUpdateInfo)
   val exception    = Output(Bool())
   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
   val rob_head_idx = Output(UInt(robAddrSz.W))
@@ -98,8 +98,10 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
   val release = Flipped(new DecoupledIO(new TLBundleC(edge.bundle)))
 
   // Clears prefetching MSHRs
-  val force_order  = Output(Bool())
+  val force_order = Output(Bool())
   val ordered     = Input(Bool())
+
+  val replay_wb_col = Input(UInt(coreWidth.W))
 
   override def cloneType = new LSUDMemIO().asInstanceOf[this.type]
 }
@@ -515,7 +517,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   val exe_tlb_valid = Wire(Vec(memWidth, Bool()))
 
-  var load_wb_cols = widthMap(w => Mux(can_fire_load_incoming(w), exe_req(w).bits.uop.pdst_col, 0.U)).reduce(_|_)
+  var load_wb_cols = io.dmem.replay_wb_col
+  val ilwc = widthMap(w => exe_req(w).bits.uop.pdst_col)
   val lrwc = ldq_retry_e.bits.uop.pdst_col
   val lwwc = ldq_wakeup_e.bits.uop.pdst_col
 
@@ -550,18 +553,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     // Some restrictions
     //  - Incoming ops must get precedence, can't backpresure memaddrgen
     //  - Incoming hellacache ops must get precedence over retrying ops (PTW must get precedence over retrying translation)
-    will_fire_load_incoming (w) := lsu_sched(can_fire_load_incoming (w) ,  0.U, true , true , true , false) // TLB , DC , LCAM
-    will_fire_stad_incoming (w) := lsu_sched(can_fire_stad_incoming (w) ,  0.U, true , false, true , true)  // TLB ,    , LCAM , ROB
-    will_fire_sta_incoming  (w) := lsu_sched(can_fire_sta_incoming  (w) ,  0.U, true , false, true , true)  // TLB ,    , LCAM , ROB
-    will_fire_std_incoming  (w) := lsu_sched(can_fire_std_incoming  (w) ,  0.U, false, false, false, true)  //                 , ROB
-    will_fire_sfence        (w) := lsu_sched(can_fire_sfence        (w) ,  0.U, true , false, false, true)  // TLB ,    ,      , ROB
-    will_fire_release       (w) := lsu_sched(can_fire_release       (w) ,  0.U, false, false, true , false) //            LCAM
-    will_fire_hella_incoming(w) := lsu_sched(can_fire_hella_incoming(w) ,  0.U, true , true , false, false) // TLB , DC
-    will_fire_hella_wakeup  (w) := lsu_sched(can_fire_hella_wakeup  (w) ,  0.U, false, true , false, false) //     , DC
-    will_fire_load_retry    (w) := lsu_sched(can_fire_load_retry    (w) , lrwc, true , true , true , false) // TLB , DC , LCAM
-    will_fire_sta_retry     (w) := lsu_sched(can_fire_sta_retry     (w) ,  0.U, true , false, true , true)  // TLB ,    , LCAM , ROB // TODO: This should be higher priority
-    will_fire_store_commit  (w) := lsu_sched(can_fire_store_commit  (w) ,  0.U, false, true , false, false) //     , DC
-    will_fire_load_wakeup   (w) := lsu_sched(can_fire_load_wakeup   (w) , lwwc, false, true , true , false) //     , DC , LCAM
+    will_fire_load_incoming (w) := lsu_sched(can_fire_load_incoming (w) , ilwc(w), true , true , true , false) // TLB , DC , LCAM
+    will_fire_stad_incoming (w) := lsu_sched(can_fire_stad_incoming (w) ,     0.U, true , false, true , true)  // TLB ,    , LCAM , ROB
+    will_fire_sta_incoming  (w) := lsu_sched(can_fire_sta_incoming  (w) ,     0.U, true , false, true , true)  // TLB ,    , LCAM , ROB
+    will_fire_std_incoming  (w) := lsu_sched(can_fire_std_incoming  (w) ,     0.U, false, false, false, true)  //                 , ROB
+    will_fire_sfence        (w) := lsu_sched(can_fire_sfence        (w) ,     0.U, true , false, false, true)  // TLB ,    ,      , ROB
+    will_fire_release       (w) := lsu_sched(can_fire_release       (w) ,     0.U, false, false, true , false) //            LCAM
+    will_fire_hella_incoming(w) := lsu_sched(can_fire_hella_incoming(w) ,     0.U, true , true , false, false) // TLB , DC
+    will_fire_hella_wakeup  (w) := lsu_sched(can_fire_hella_wakeup  (w) ,     0.U, false, true , false, false) //     , DC
+    will_fire_load_retry    (w) := lsu_sched(can_fire_load_retry    (w) ,    lrwc, true , true , true , false) // TLB , DC , LCAM
+    will_fire_sta_retry     (w) := lsu_sched(can_fire_sta_retry     (w) ,     0.U, true , false, true , true)  // TLB ,    , LCAM , ROB // TODO: This should be higher priority
+    will_fire_store_commit  (w) := lsu_sched(can_fire_store_commit  (w) ,     0.U, false, true , false, false) //     , DC
+    will_fire_load_wakeup   (w) := lsu_sched(can_fire_load_wakeup   (w) ,    lwwc, false, true , true , false) //     , DC , LCAM
 
     assert(!(exe_req(w).valid && !(will_fire_load_incoming(w) || will_fire_stad_incoming(w) || will_fire_sta_incoming(w) || will_fire_std_incoming(w) || will_fire_sfence(w))))
 

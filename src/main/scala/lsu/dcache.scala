@@ -398,7 +398,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val prober = Module(new BoomProbeUnit)
   val mshrs = Module(new BoomMSHRFile)
   mshrs.io.clear_all    := io.lsu.force_order
-  mshrs.io.brupdate       := io.lsu.brupdate
+  mshrs.io.brupdate     := io.lsu.brupdate
   mshrs.io.exception    := io.lsu.exception
   mshrs.io.rob_pnr_idx  := io.lsu.rob_pnr_idx
   mshrs.io.rob_head_idx := io.lsu.rob_head_idx
@@ -477,6 +477,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   dataReadArb.io.in(0).bits.req(0).addr   := mshrs.io.replay.bits.addr
   dataReadArb.io.in(0).bits.req(0).way_en := mshrs.io.replay.bits.way_en
   dataReadArb.io.in(0).bits.valid         := widthMap(w => (w == 0).B)
+
+  io.lsu.replay_wb_col := Mux(mshrs.io.replay.valid && isRead(replay_req(0).uop.mem_cmd), replay_req(0).uop.pdst_col, 0.U)
 
   // -----------
   // MSHR Meta read
