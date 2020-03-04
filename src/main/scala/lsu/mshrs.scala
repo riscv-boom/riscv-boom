@@ -734,7 +734,12 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   TLArbiter.lowestFromSeq(edge, io.mem_acquire, mshrs.map(_.io.mem_acquire) ++ mmios.map(_.io.mem_access))
   TLArbiter.lowestFromSeq(edge, io.mem_finish,  mshrs.map(_.io.mem_finish))
 
-  io.resp           <> resp_arb.io.out
+  val respq = Module(new BranchKillableQueue(new BoomDCacheResp, 4))
+  respq.io.brupdate := io.brupdate
+  respq.io.flush    := io.exception
+  respq.io.enq      <> resp_arb.io.out
+  io.resp           <> respq.io.deq
+
   for (w <- 0 until memWidth) {
     io.req(w).ready      := (w.U === req_idx) &&
       Mux(!cacheable, mmio_rdy, sdq_rdy && Mux(idx_match(w), tag_match(w) && sec_rdy, pri_rdy))

@@ -521,6 +521,15 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   f3.io.enq.bits.fsrc := s2_fsrc
   f3.io.enq.bits.tsrc := s2_tsrc
 
+  // RAS takes a cycle to read
+  val ras_read_idx = RegInit(0.U(log2Ceil(nRasEntries).W))
+  ras.io.read_idx := ras_read_idx
+  when (f3.io.enq.fire()) {
+    ras_read_idx := f3.io.enq.bits.ghist.ras_idx
+    ras.io.read_idx := f3.io.enq.bits.ghist.ras_idx
+  }
+
+
   // The BPD resp comes in f3
   f3_bpd_resp.io.enq.valid := f3.io.deq.valid && RegNext(f3.io.enq.ready)
   f3_bpd_resp.io.enq.bits  := bpd.io.resp.f3
@@ -702,7 +711,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   f3_fetch_bundle.cfi_idx.valid := f3_redirects.reduce(_||_)
   f3_fetch_bundle.cfi_idx.bits  := PriorityEncoder(f3_redirects)
-  ras.io.read_idx := f3_fetch_bundle.ghist.ras_idx
+
   f3_fetch_bundle.ras_top := ras.io.read_addr
   // Redirect earlier stages only if the later stage
   // can consume this packet
