@@ -201,7 +201,6 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     enq_ptr := WrapInc(enq_ptr, num_entries)
   }
 
-  io.enq.ready := !full
   io.enq_idx := enq_ptr
 
   io.bpdupdate.valid := false.B
@@ -304,6 +303,8 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   when (do_commit_update) {
     bpd_ptr := WrapInc(bpd_ptr, num_entries)
   }
+
+  io.enq.ready := RegNext(!full || do_commit_update)
 
   val redirect_idx = io.redirect.bits
   val redirect_entry = ram(redirect_idx)

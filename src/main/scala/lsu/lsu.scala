@@ -1270,13 +1270,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         dmem_resp_fired(w) := true.B
 
         ldq(ldq_idx).bits.succeeded      := io.core.exe(w).iresp.valid || io.core.exe(w).fresp.valid
-        ldq(ldq_idx).bits.execute_ignore := false.B
-        when (ldq(ldq_idx).bits.execute_ignore) {
-          // We were told to ignore this response because of order fail
-          // Clear the execute bit, so we can re-fire this load
-          ldq(ldq_idx).bits.executed := false.B
-        }
-
         ldq(ldq_idx).bits.debug_wb_data  := io.dmem.resp(w).bits.data
       }
         .elsewhen (io.dmem.resp(w).bits.uop.uses_stq)
@@ -1291,6 +1284,15 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
           stq(io.dmem.resp(w).bits.uop.stq_idx).bits.debug_wb_data := io.dmem.resp(w).bits.data
         }
+      }
+    }
+    when (RegNext(io.dmem.resp(w).valid && io.dmem.resp(w).bits.uop.uses_ldq)) {
+      val ldq_idx = RegNext(io.dmem.resp(w).bits.uop.ldq_idx)
+      ldq(ldq_idx).bits.execute_ignore := false.B
+      when (ldq(ldq_idx).bits.execute_ignore) {
+        // We were told to ignore this response because of order fail
+        // Clear the execute bit, so we can re-fire this load
+        ldq(ldq_idx).bits.executed := false.B
       }
     }
 

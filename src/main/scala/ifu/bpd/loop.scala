@@ -78,15 +78,28 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
     io.f3_pred := io.f3_pred_in
     io.f3_meta.s_cnt := f3_scnt
 
-    when (io.f3_req_fire) {
-      when (f3_entry.tag === f3_tag) {
-        when (f3_scnt === f3_entry.p_cnt && f3_entry.conf === 7.U) {
-          io.f3_pred := !io.f3_pred_in
-          entries(RegNext(io.f2_req_idx)).age   := 7.U
-          entries(RegNext(io.f2_req_idx)).s_cnt := 0.U
+    when (f3_entry.tag === f3_tag) {
+      when (f3_scnt === f3_entry.p_cnt && f3_entry.conf === 7.U) {
+        io.f3_pred := !io.f3_pred_in
+      }
+    }
+
+
+    val f4_fire  = RegNext(io.f3_req_fire)
+    val f4_entry = RegNext(f3_entry)
+    val f4_tag   = RegNext(f3_tag)
+    val f4_scnt  = RegNext(f3_scnt)
+    val f4_idx   = RegNext(RegNext(io.f2_req_idx))
+
+
+    when (f4_fire) {
+      when (f4_entry.tag === f4_tag) {
+        when (f4_scnt === f4_entry.p_cnt && f4_entry.conf === 7.U) {
+          entries(f4_idx).age   := 7.U
+          entries(f4_idx).s_cnt := 0.U
         } .otherwise {
-          entries(RegNext(io.f2_req_idx)).s_cnt := f3_scnt + 1.U
-          entries(RegNext(io.f2_req_idx)).age   := Mux(f3_entry.age === 7.U, 7.U, f3_entry.age + 1.U)
+          entries(f4_idx).s_cnt := f4_scnt + 1.U
+          entries(f4_idx).age   := Mux(f4_entry.age === 7.U, 7.U, f4_entry.age + 1.U)
         }
       }
     }
@@ -153,7 +166,7 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
 
       entries(io.update_idx) := wentry
     } .elsewhen (io.update_repair && !doing_reset) {
-      when (tag_match && !(io.f3_req_fire && io.update_idx === RegNext(io.f2_req_idx))) {
+      when (tag_match && !(f4_fire && io.update_idx === f4_idx)) {
         wentry.s_cnt := io.update_meta.s_cnt
         entries(io.update_idx) := wentry
       }
