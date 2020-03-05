@@ -568,7 +568,8 @@ class Rob(
   // Note: exception must be the first valid instruction in the commit bundle.
   exception_thrown := will_throw_exception
   val is_mini_exception = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING ||
-                          io.com_xcpt.bits.cause === MINI_EXCEPTION_REPLAY
+                          io.com_xcpt.bits.cause === MINI_EXCEPTION_REPLAY       ||
+                          io.com_xcpt.bits.cause === MINI_EXCEPTION_STORE_BLOCKED
   io.com_xcpt.valid := exception_thrown && !is_mini_exception
   io.com_xcpt.bits.cause := r_xcpt_uop.exc_cause
 
