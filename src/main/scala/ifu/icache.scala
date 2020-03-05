@@ -124,6 +124,7 @@ object GetPropertyByHartId
 class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   with HasBoomFrontendParameters
 {
+  val enableICacheDelay = tileParams.core.asInstanceOf[BoomCoreParams].enableICacheDelay
   val io = IO(new ICacheBundle(outer))
 
   val (tl_out, edge_out) = outer.masterNode.out(0)
@@ -187,7 +188,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     invalidated := true.B
   }
 
-  val s1_dout   = Wire(Vec(nWays, UInt(wordBits.W)))
+  val s2_dout   = Wire(Vec(nWays, UInt(wordBits.W)))
   val s1_bankid = Wire(Bool())
 
   for (i <- 0 until nWays) {
@@ -246,7 +247,10 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
       when (wen) {
         dataArray.write(mem_idx, tl_out.d.bits.data)
       }
-      s1_dout(i) := dataArray.read(mem_idx, !wen && s0_ren)
+      if (enableICacheDelay)
+        s2_dout(i) := dataArray.read(RegNext(mem_idx), RegNext(!wen && s0_ren))
+      else
+        s2_dout(i) := RegNext(dataArray.read(mem_idx, !wen && s0_ren))
     }
   } else {
     // Use two banks, interleaved.
@@ -308,12 +312,17 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
           dataArraysB1(i).write(mem_idx1, data(wordBits-1, wordBits/2))
         }
       }
-      s1_dout(i) := Cat(dataArraysB1(i).read(mem_idx1, !wen && s0_ren), dataArraysB0(i).read(mem_idx0, !wen && s0_ren))
+      if (enableICacheDelay) {
+        s2_dout(i) := Cat(dataArraysB1(i).read(RegNext(mem_idx1), RegNext(!wen && s0_ren)),
+                          dataArraysB0(i).read(RegNext(mem_idx0), RegNext(!wen && s0_ren)))
+      } else {
+        s2_dout(i) := RegNext(Cat(dataArraysB1(i).read(mem_idx1, !wen && s0_ren),
+                                  dataArraysB0(i).read(mem_idx0, !wen && s0_ren)))
+      }
     }
   }
   val s2_tag_hit = RegNext(s1_tag_hit)
   val s2_hit_way = OHToUInt(s2_tag_hit)
-  val s2_dout = RegNext(s1_dout)
   val s2_bankid = RegNext(s1_bankid)
   val s2_way_mux = Mux1H(s2_tag_hit, s2_dout)
 
