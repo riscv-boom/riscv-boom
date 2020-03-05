@@ -564,7 +564,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   //--------------------------------------------
   // TLB Access
 
-  assert(hella_req.cmd =/= rocket.M_SFENCE,
+  assert(!(hella_state =/= h_ready && hella_req.cmd === rocket.M_SFENCE),
     "SFENCE through hella interface not supported")
 
   val exe_tlb_uop = widthMap(w =>
