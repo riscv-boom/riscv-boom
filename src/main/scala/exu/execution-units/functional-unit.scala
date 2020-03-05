@@ -439,7 +439,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   val r_pred = Reg(Vec(numStages, Bool()))
   val alu_out = Mux(io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data,
     Mux(io.req.bits.uop.ldst_is_rs1, io.req.bits.rs1_data, io.req.bits.rs2_data),
-    alu.io.out)
+    Mux(io.req.bits.uop.uopc === uopMOV, io.req.bits.rs2_data, alu.io.out))
   r_val (0) := io.req.valid
   r_data(0) := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
   r_pred(0) := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data

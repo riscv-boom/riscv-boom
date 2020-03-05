@@ -125,7 +125,7 @@ trait ScalarOpConstants
 
   // Micro-op opcodes
   // TODO change micro-op opcodes into using enum
-  val UOPC_SZ = 9
+  val UOPC_SZ = 7
   val uopX    = BitPat.dontCare(UOPC_SZ)
   val uopNOP  =  0.U(UOPC_SZ.W)
   val uopLD   =  1.U(UOPC_SZ.W)
@@ -256,6 +256,8 @@ trait ScalarOpConstants
   val uopSFENCE    = 107.U(UOPC_SZ.W)
 
   val uopROCC      = 108.U(UOPC_SZ.W)
+
+  val uopMOV       = 109.U(UOPC_SZ.W) // conditional mov decoded from "add rd, x0, rs2"
 
   // The Bubble Instruction (Machine generated NOP)
   // Insert (XOR x0,x0,x0) which is different from software compiler

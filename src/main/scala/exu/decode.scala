@@ -545,6 +545,10 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     uop.lrs2_rtype  := RT_FIX
     uop.lrs2        := inst(RD_MSB,RD_LSB)
     uop.ldst_is_rs1 := false.B
+  } .elsewhen (uop.is_sfb_shadow && cs.uopc === uopADD && inst(RS1_MSB,RS1_LSB) === 0.U) {
+    uop.uopc        := uopMOV
+    uop.lrs1        := inst(RD_MSB, RD_LSB)
+    uop.ldst_is_rs1 := true.B
   }
   when (uop.is_sfb_br) {
     uop.fu_code := FU_JMP
@@ -691,7 +695,11 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
   // Is a sfb if it points forwards (offset is positive)
   io.sfb_offset.valid := cs_is_br && !io.inst(31) && br_offset =/= 0.U && (br_offset >> log2Ceil(icBlockBytes)) === 0.U
   io.sfb_offset.bits  := br_offset
-  io.shadowable := cs_is_shadowable && (!cs_has_rs2 || (GetRs1(io.inst) === GetRd(io.inst)))
+  io.shadowable := cs_is_shadowable && (
+    !cs_has_rs2 ||
+    (GetRs1(io.inst) === GetRd(io.inst)) ||
+    (io.inst === ADD && GetRs1(io.inst) === X0)
+  )
 }
 
 /**
