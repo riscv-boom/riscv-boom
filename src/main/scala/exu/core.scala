@@ -866,7 +866,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // jmp unit performs fast wakeup of the predicate bits
   require (jmp_unit.bypassable)
-  pred_wakeup.valid := iss_valids(jmp_unit_idx) && iss_uops(jmp_unit_idx).is_sfb_br
+  pred_wakeup.valid := (iss_valids(jmp_unit_idx) &&
+                        iss_uops(jmp_unit_idx).is_sfb_br &&
+                        !(io.lsu.ld_miss && (iss_uops(jmp_unit_idx).iw_p1_poisoned || iss_uops(jmp_unit_idx).iw_p2_poisoned))
+  )
   pred_wakeup.bits.uop := iss_uops(jmp_unit_idx)
   pred_wakeup.bits.fflags := DontCare
   pred_wakeup.bits.data := DontCare
