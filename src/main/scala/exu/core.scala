@@ -281,17 +281,32 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
   val debug_tsc_reg = RegInit(0.U(xLen.W))
   val debug_irt_reg = RegInit(0.U(xLen.W))
-  val debug_cfis = RegInit(0.U(xLen.W))
+  val debug_cfis    = RegInit(0.U(xLen.W))
+  val debug_brs     = RegInit(0.U(xLen.W))
+  val debug_br_mispredicts = RegInit(0.U(xLen.W)) // How many brs were missed by the l3 predictor
   val debug_f3_mispredicts = RegInit(0.U(xLen.W)) // How many cfis were missed by the l3 predictor
   val debug_f2_mispredicts = RegInit(0.U(xLen.W)) // How many cfis were missed by the l2 predictor
   val debug_f1_mispredicts = RegInit(0.U(xLen.W)) // How many cfis were missed by the l1 predictor
+
+  dontTouch(debug_cfis)
+  dontTouch(debug_brs)
+  dontTouch(debug_br_mispredicts)
   dontTouch(debug_f3_mispredicts)
   dontTouch(debug_f2_mispredicts)
   dontTouch(debug_f1_mispredicts)
-  dontTouch(debug_cfis)
+
   debug_cfis := debug_cfis + PopCount(VecInit((0 until coreWidth) map {i =>
     rob.io.commit.arch_valids(i) &&
     (rob.io.commit.uops(i).is_br || rob.io.commit.uops(i).is_jal || rob.io.commit.uops(i).is_jalr)
+  }))
+  debug_brs := debug_brs + PopCount(VecInit((0 until coreWidth) map {i =>
+    rob.io.commit.arch_valids(i) &&
+    rob.io.commit.uops(i).is_br
+  }))
+  debug_br_mispredicts := debug_br_mispredicts + PopCount(VecInit((0 until coreWidth) map {i =>
+    rob.io.commit.arch_valids(i) &&
+    rob.io.commit.uops(i).is_br &&
+    rob.io.commit.uops(i).debug_fsrc > BSRC_3
   }))
   debug_f3_mispredicts := debug_f3_mispredicts + PopCount(VecInit((0 until coreWidth) map { i =>
     rob.io.commit.arch_valids(i) &&
