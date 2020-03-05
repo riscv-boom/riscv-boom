@@ -577,6 +577,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
     exe_tlb_valid(w) := !tlb_avail
   }
+
   assert((memWidth == 1).B ||
     (!(will_fire_sfence.reduce(_||_) && !will_fire_sfence.reduce(_&&_)) &&
      !will_fire_hella_incoming.reduce(_&&_) &&
@@ -1209,14 +1210,24 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   val use_mem_xcpt = (mem_xcpt_valid && IsOlder(mem_xcpt_uop.rob_idx, ld_xcpt_uop.rob_idx, io.core.rob_head_idx)) || !ld_xcpt_valid
 
-  val xcpt_uop = Mux(use_mem_xcpt, mem_xcpt_uop, ld_xcpt_uop)
+  val store_commit_blocked_cycles = RegInit(0.U(8.W))
 
-  r_xcpt_valid := (ld_xcpt_valid || mem_xcpt_valid) &&
+  when (can_fire_store_commit(0) && !will_fire_store_commit(0)) {
+    store_commit_blocked_cycles := store_commit_blocked_cycles + 1.U
+  } .otherwise {
+    store_commit_blocked_cycles := 0.U
+  }
+
+  val flush_for_store = store_commit_blocked_cycles.andR && dmem_req(0).valid && !will_fire_store_commit(0)
+
+  val xcpt_uop = Mux(use_mem_xcpt, mem_xcpt_uop, Mux(ld_xcpt_valid, ld_xcpt_uop, dmem_req(0).bits.uop))
+
+  r_xcpt_valid := (ld_xcpt_valid || mem_xcpt_valid || flush_for_store) &&
                    !io.core.exception &&
                    !IsKilledByBranch(io.core.brupdate, xcpt_uop)
   r_xcpt.uop         := xcpt_uop
   r_xcpt.uop.br_mask := GetNewBrMask(io.core.brupdate, xcpt_uop)
-  r_xcpt.cause       := Mux(use_mem_xcpt, mem_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
+  r_xcpt.cause       := Mux(use_mem_xcpt, mem_xcpt_cause, Mux(ld_xcpt_valid, MINI_EXCEPTION_MEM_ORDERING, MINI_EXCEPTION_STORE_BLOCKED))
   r_xcpt.badvaddr    := mem_xcpt_vaddr // TODO is there another register we can use instead?
 
   io.core.lxcpt.valid := r_xcpt_valid && !io.core.exception && !IsKilledByBranch(io.core.brupdate, r_xcpt.uop)
