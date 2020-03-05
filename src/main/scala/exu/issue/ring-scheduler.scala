@@ -171,6 +171,11 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   for (w <- 0 until coreWidth) {
     io.iss_uops(w).bits  := sel_uops(w)
     io.iss_uops(w).valid := do_issue(w)
+
+    assert (PopCount(sel_uops(w).prs1_status) === 1.U || sel_uops(w).lrs1_rtype === RT_X || !do_issue(w),
+            "Operand status should be one-hot at issue")
+    assert (PopCount(sel_uops(w).prs2_status) === 1.U || sel_uops(w).lrs2_rtype === RT_X || !do_issue(w),
+            "Operand status should be one-hot at issue")
   }
 
   //----------------------------------------------------------------------------------------------------
