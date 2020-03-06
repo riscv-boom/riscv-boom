@@ -517,11 +517,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   val exe_tlb_valid = Wire(Vec(memWidth, Bool()))
 
-  var load_wb_cols = io.dmem.replay_wb_col
-  val ilwc = widthMap(w => exe_req(w).bits.uop.pdst_col)
-  val lrwc = ldq_retry_e.bits.uop.pdst_col
-  val lwwc = ldq_wakeup_e.bits.uop.pdst_col
-
   for (w <- 0 until memWidth) {
     var tlb_avail  = true.B
     var dc_avail   = true.B
@@ -529,21 +524,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     var rob_avail  = true.B
 
     def lsu_sched(can_fire  : Bool,
-                  writes_col: UInt,
                   uses_tlb  : Boolean,
                   uses_dc   : Boolean,
                   uses_lcam : Boolean,
                   uses_rob  : Boolean): Bool = {
-      val will_fire = can_fire && !(writes_col & load_wb_cols).orR &&
-                                  !(uses_tlb.B && !tlb_avail)      &&
-                                  !(uses_lcam.B && !lcam_avail)    &&
-                                  !(uses_dc.B && !dc_avail)        &&
-                                  !(uses_rob.B && !rob_avail)
+      val will_fire = can_fire && !(uses_tlb.B  && !tlb_avail ) &&
+                                  !(uses_lcam.B && !lcam_avail) &&
+                                  !(uses_dc.B   && !dc_avail  ) &&
+                                  !(uses_rob.B  && !rob_avail )
       tlb_avail  = tlb_avail  && !(will_fire && uses_tlb.B)
       lcam_avail = lcam_avail && !(will_fire && uses_lcam.B)
       dc_avail   = dc_avail   && !(will_fire && uses_dc.B)
       rob_avail  = rob_avail  && !(will_fire && uses_rob.B)
-      load_wb_cols = load_wb_cols | Mux(will_fire, writes_col, 0.U)
 
       dontTouch(will_fire) // dontTouch these so we can inspect the will_fire signals
       will_fire
@@ -553,18 +545,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     // Some restrictions
     //  - Incoming ops must get precedence, can't backpresure memaddrgen
     //  - Incoming hellacache ops must get precedence over retrying ops (PTW must get precedence over retrying translation)
-    will_fire_load_incoming (w) := lsu_sched(can_fire_load_incoming (w) , ilwc(w), true , true , true , false) // TLB , DC , LCAM
-    will_fire_stad_incoming (w) := lsu_sched(can_fire_stad_incoming (w) ,     0.U, true , false, true , true)  // TLB ,    , LCAM , ROB
-    will_fire_sta_incoming  (w) := lsu_sched(can_fire_sta_incoming  (w) ,     0.U, true , false, true , true)  // TLB ,    , LCAM , ROB
-    will_fire_std_incoming  (w) := lsu_sched(can_fire_std_incoming  (w) ,     0.U, false, false, false, true)  //                 , ROB
-    will_fire_sfence        (w) := lsu_sched(can_fire_sfence        (w) ,     0.U, true , false, false, true)  // TLB ,    ,      , ROB
-    will_fire_release       (w) := lsu_sched(can_fire_release       (w) ,     0.U, false, false, true , false) //            LCAM
-    will_fire_hella_incoming(w) := lsu_sched(can_fire_hella_incoming(w) ,     0.U, true , true , false, false) // TLB , DC
-    will_fire_hella_wakeup  (w) := lsu_sched(can_fire_hella_wakeup  (w) ,     0.U, false, true , false, false) //     , DC
-    will_fire_load_retry    (w) := lsu_sched(can_fire_load_retry    (w) ,    lrwc, true , true , true , false) // TLB , DC , LCAM
-    will_fire_sta_retry     (w) := lsu_sched(can_fire_sta_retry     (w) ,     0.U, true , false, true , true)  // TLB ,    , LCAM , ROB // TODO: This should be higher priority
-    will_fire_store_commit  (w) := lsu_sched(can_fire_store_commit  (w) ,     0.U, false, true , false, false) //     , DC
-    will_fire_load_wakeup   (w) := lsu_sched(can_fire_load_wakeup   (w) ,    lwwc, false, true , true , false) //     , DC , LCAM
+    will_fire_load_incoming (w) := lsu_sched(can_fire_load_incoming (w) , true , true , true , false) // TLB , DC , LCAM
+    will_fire_stad_incoming (w) := lsu_sched(can_fire_stad_incoming (w) , true , false, true , true ) // TLB ,    , LCAM , ROB
+    will_fire_sta_incoming  (w) := lsu_sched(can_fire_sta_incoming  (w) , true , false, true , true ) // TLB ,    , LCAM , ROB
+    will_fire_std_incoming  (w) := lsu_sched(can_fire_std_incoming  (w) , false, false, false, true ) //                 , ROB
+    will_fire_sfence        (w) := lsu_sched(can_fire_sfence        (w) , true , false, false, true ) // TLB ,    ,      , ROB
+    will_fire_release       (w) := lsu_sched(can_fire_release       (w) , false, false, true , false) //            LCAM
+    will_fire_hella_incoming(w) := lsu_sched(can_fire_hella_incoming(w) , true , true , false, false) // TLB , DC
+    will_fire_hella_wakeup  (w) := lsu_sched(can_fire_hella_wakeup  (w) , false, true , false, false) //     , DC
+    will_fire_load_retry    (w) := lsu_sched(can_fire_load_retry    (w) , true , true , true , false) // TLB , DC , LCAM
+    will_fire_sta_retry     (w) := lsu_sched(can_fire_sta_retry     (w) , true , false, true , true ) // TLB ,    , LCAM , ROB // TODO: This should be higher priority
+    will_fire_store_commit  (w) := lsu_sched(can_fire_store_commit  (w) , false, true , false, false) //     , DC
+    will_fire_load_wakeup   (w) := lsu_sched(can_fire_load_wakeup   (w) , false, true , true , false) //     , DC , LCAM
 
     assert(!(exe_req(w).valid && !(will_fire_load_incoming(w) || will_fire_stad_incoming(w) || will_fire_sta_incoming(w) || will_fire_std_incoming(w) || will_fire_sfence(w))))
 
@@ -744,34 +736,42 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
 
   // defaults
-  io.dmem.brupdate         := io.core.brupdate
-  io.dmem.exception      := io.core.exception
-  io.dmem.rob_head_idx   := io.core.rob_head_idx
-  io.dmem.rob_pnr_idx    := io.core.rob_pnr_idx
+  io.dmem.brupdate     := io.core.brupdate
+  io.dmem.exception    := io.core.exception
+  io.dmem.rob_head_idx := io.core.rob_head_idx
+  io.dmem.rob_pnr_idx  := io.core.rob_pnr_idx
 
   val dmem_req = Wire(Vec(memWidth, Valid(new BoomDCacheReq)))
   io.dmem.req.valid := dmem_req.map(_.valid).reduce(_||_)
   io.dmem.req.bits  := dmem_req
-  val dmem_req_fire = widthMap(w => dmem_req(w).valid && io.dmem.req.fire())
+  val dmem_req_fire = widthMap(w => dmem_req(w).valid && io.dmem.req.ready)
+
+  // Track which column write ports have been used by previous pipe slots or the replay mechanism
+  var load_wb_cols = io.dmem.replay_wb_col
 
   for (w <- 0 until memWidth) {
-    dmem_req(w).valid := false.B
-    dmem_req(w).bits.uop   := NullMicroOp
-    dmem_req(w).bits.addr  := 0.U
-    dmem_req(w).bits.data  := 0.U
+    dmem_req(w).valid         := false.B
+    dmem_req(w).bits.uop      := NullMicroOp
+    dmem_req(w).bits.addr     := 0.U
+    dmem_req(w).bits.data     := 0.U
     dmem_req(w).bits.is_hella := false.B
 
     io.dmem.s1_kill(w) := false.B
 
     when (will_fire_load_incoming(w)) {
-      dmem_req(w).valid      := !exe_tlb_miss(w) && !exe_tlb_uncacheable(w)
+      // First pipe's request will be killed by the replay anyways,
+      // but need to check for writeback collisions on the other pipes.
+      dmem_req(w).valid      := !exe_tlb_miss(w) && !exe_tlb_uncacheable(w) &&
+                                !((w > 0).B && (exe_tlb_uop(w).pdst_col & io.dmem.replay_wb_col).orR)
       dmem_req(w).bits.addr  := exe_tlb_paddr(w)
       dmem_req(w).bits.uop   := exe_tlb_uop(w)
 
       ldq(ldq_incoming_idx(w)).bits.executed := dmem_req_fire(w)
       assert(!ldq_incoming_e(w).bits.executed)
+
     } .elsewhen (will_fire_load_retry(w)) {
-      dmem_req(w).valid      := !exe_tlb_miss(w) && !exe_tlb_uncacheable(w)
+      dmem_req(w).valid      := !exe_tlb_miss(w) && !exe_tlb_uncacheable(w) &&
+                                !((w > 0).B && (exe_tlb_uop(w).pdst_col & load_wb_cols).orR)
       dmem_req(w).bits.addr  := exe_tlb_paddr(w)
       dmem_req(w).bits.uop   := exe_tlb_uop(w)
 
@@ -786,13 +786,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                     coreDataBytes)).data
       dmem_req(w).bits.uop      := stq_commit_e.bits.uop
 
-      stq_execute_head                     := Mux(dmem_req_fire(w),
-                                                WrapInc(stq_execute_head, numStqEntries),
-                                                stq_execute_head)
+      stq_execute_head          := Mux(dmem_req_fire(w),
+                                       WrapInc(stq_execute_head, numStqEntries),
+                                       stq_execute_head)
 
       stq(stq_execute_head).bits.succeeded := false.B
     } .elsewhen (will_fire_load_wakeup(w)) {
-      dmem_req(w).valid      := true.B
+      dmem_req(w).valid      := !((w > 0).B && (ldq_wakeup_e.bits.uop.pdst_col & load_wb_cols).orR)
       dmem_req(w).bits.addr  := ldq_wakeup_e.bits.addr.bits
       dmem_req(w).bits.uop   := ldq_wakeup_e.bits.uop
 
@@ -878,6 +878,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       assert(!(stq(sidx).bits.data.valid),
         "[lsu] Incoming store is overwriting a valid data entry")
     }
+
+    load_wb_cols = Mux(dmem_req_fire(w) && dmem_req(w).bits.uop.ctrl.is_load,
+                       load_wb_cols | dmem_req(w).bits.uop.pdst_col,
+                       load_wb_cols)
   }
   val will_fire_stdf_incoming = io.core.fp_stdata.fire()
   require (xLen >= fLen) // for correct SDQ size
