@@ -26,7 +26,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.util.property._
 
 import boom.common._
-import boom.exu.{CommitExceptionSignals, BranchDecode, BrUpdateInfo}
+import boom.exu.{CommitExceptionSignals, BranchDecode, BrUpdateInfo, BranchDecodeSignals}
 import boom.util._
 
 
@@ -508,6 +508,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
 
 
+
   val f4_ready = Wire(Bool())
   f3_ready := f3.io.enq.ready
   f3.io.enq.valid   := (s2_valid && !f2_clear &&
@@ -557,6 +558,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3_call_mask    = Wire(Vec(fetchWidth, Bool()))
   val f3_ret_mask     = Wire(Vec(fetchWidth, Bool()))
   val f3_npc_plus4_mask = Wire(Vec(fetchWidth, Bool()))
+  val f3_btb_mispredicts = Wire(Vec(fetchWidth, Bool()))
   f3_fetch_bundle.mask := f3_mask.asUInt
   f3_fetch_bundle.br_mask := f3_br_mask.asUInt
   f3_fetch_bundle.pc := f3_imemresp.pc
@@ -586,56 +588,86 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       val i = (b * bankWidth) + w
 
       val valid = Wire(Bool())
-      val inst = Wire(UInt(32.W))
-      if (w == 0) {
-        when (bank_prev_is_half) {
-          inst := Cat(bank_data(15,0), bank_prev_half)
-          f3_fetch_bundle.edge_inst(b) := true.B
-        } .otherwise {
-          inst := bank_data(31,0)
-          f3_fetch_bundle.edge_inst(b) := false.B
-        }
-        valid := true.B
-      } else if (w == 1) {
-        // Need special case since 0th instruction may carry over the wrap around
-        inst  := bank_data(47,16)
-        valid := bank_prev_is_half || !(bank_mask(0) && !isRVC(bank_insts(0)))
-      } else if (w == bankWidth - 1) {
-        inst  := Cat(0.U(16.W), bank_data(bankWidth*16-1,(bankWidth-1)*16))
-        valid := !((bank_mask(w-1) && !isRVC(bank_insts(w-1))) ||
-                   !isRVC(inst))
-      } else {
-        inst  := bank_data(w*16+32-1,w*16)
-        valid := !(bank_mask(w-1) && !isRVC(bank_insts(w-1)))
-      }
-
-      bank_insts(w) := inst
-
-      f3_fetch_bundle.insts(i) := inst
-
-      val pc = ((f3_aligned_pc
-        + (i << log2Ceil(coreInstBytes)).U
-        - Mux(bank_prev_is_half && (w == 0).B, 2.U, 0.U)))
-      f3_is_rvc(i) := isRVC(inst)
-
-      val exp_inst = ExpandRVC(inst)
-      f3_fetch_bundle.exp_insts(i) := exp_inst
-
-      val bpd_decoder = Module(new BranchDecode)
-      bpd_decoder.io.inst := exp_inst
-      bpd_decoder.io.pc   := pc
-
       val bpu = Module(new BreakpointUnit(nBreakpoints))
       bpu.io.status := io.cpu.status
       bpu.io.bp     := io.cpu.bp
-      bpu.io.pc     := pc
       bpu.io.ea     := DontCare
+
+      val brsigs = Wire(new BranchDecodeSignals)
+      if (w == 0) {
+        val inst0 = Cat(bank_data(15,0), bank_prev_half)
+        val inst1 = bank_data(31,0)
+        val exp_inst0 = ExpandRVC(inst0)
+        val exp_inst1 = ExpandRVC(inst1)
+        val pc0 = (f3_aligned_pc + (i << log2Ceil(coreInstBytes)).U - 2.U)
+        val pc1 = (f3_aligned_pc + (i << log2Ceil(coreInstBytes)).U)
+
+        val bpd_decoder0 = Module(new BranchDecode)
+        bpd_decoder0.io.inst := exp_inst0
+        bpd_decoder0.io.pc   := pc0
+        val bpd_decoder1 = Module(new BranchDecode)
+        bpd_decoder1.io.inst := exp_inst1
+        bpd_decoder1.io.pc   := pc1
+
+        when (bank_prev_is_half) {
+          bank_insts(w)                := inst0
+          f3_fetch_bundle.insts(i)     := inst0
+          f3_fetch_bundle.exp_insts(i) := exp_inst0
+          bpu.io.pc                    := pc0
+          brsigs                       := bpd_decoder0.io.out
+          f3_fetch_bundle.edge_inst(b) := true.B
+        } .otherwise {
+          bank_insts(w)                := inst1
+          f3_fetch_bundle.insts(i)     := inst1
+          f3_fetch_bundle.exp_insts(i) := exp_inst1
+          bpu.io.pc                    := pc1
+          brsigs                       := bpd_decoder1.io.out
+          f3_fetch_bundle.edge_inst(b) := false.B
+        }
+        valid := true.B
+      } else {
+        val inst = Wire(UInt(32.W))
+        val exp_inst = ExpandRVC(inst)
+        val pc = f3_aligned_pc + (i << log2Ceil(coreInstBytes)).U
+        val bpd_decoder = Module(new BranchDecode)
+        bpd_decoder.io.inst := exp_inst
+        bpd_decoder.io.pc   := pc
+
+        bank_insts(w)                := inst
+        f3_fetch_bundle.insts(i)     := inst
+        f3_fetch_bundle.exp_insts(i) := exp_inst
+        bpu.io.pc                    := pc
+        brsigs                       := bpd_decoder.io.out
+        if (w == 1) {
+          // Need special case since 0th instruction may carry over the wrap around
+          inst  := bank_data(47,16)
+          valid := bank_prev_is_half || !(bank_mask(0) && !isRVC(bank_insts(0)))
+        } else if (w == bankWidth - 1) {
+          inst  := Cat(0.U(16.W), bank_data(bankWidth*16-1,(bankWidth-1)*16))
+          valid := !((bank_mask(w-1) && !isRVC(bank_insts(w-1))) ||
+            !isRVC(inst))
+        } else {
+          inst  := bank_data(w*16+32-1,w*16)
+          valid := !(bank_mask(w-1) && !isRVC(bank_insts(w-1)))
+        }
+      }
+
+      f3_is_rvc(i) := isRVC(bank_insts(w))
+
 
       bank_mask(w) := f3.io.deq.valid && f3_imemresp.mask(i) && valid && !redirect_found
       f3_mask  (i) := f3.io.deq.valid && f3_imemresp.mask(i) && valid && !redirect_found
-      f3_targs (i) := Mux(bpd_decoder.io.cfi_type === CFI_JALR,
+      f3_targs (i) := Mux(brsigs.cfi_type === CFI_JALR,
         f3_bpd_resp.io.deq.bits.preds(i).predicted_pc.bits,
-        bpd_decoder.io.target)
+        brsigs.target)
+
+      // Flush BTB entries for JALs if we mispredict the target
+      f3_btb_mispredicts(i) := (brsigs.cfi_type === CFI_JAL && valid &&
+        f3_bpd_resp.io.deq.bits.preds(i).predicted_pc.valid &&
+        (f3_bpd_resp.io.deq.bits.preds(i).predicted_pc.bits =/= brsigs.target)
+      )
+
+
       f3_npc_plus4_mask(i) := (if (w == 0) {
         !f3_is_rvc(i) && !bank_prev_is_half
       } else {
@@ -643,7 +675,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       })
       val offset_from_aligned_pc = (
         (i << 1).U((log2Ceil(icBlockBytes)+1).W) +
-        bpd_decoder.io.sfb_offset.bits -
+        brsigs.sfb_offset.bits -
         Mux(bank_prev_is_half && (w == 0).B, 2.U, 0.U)
       )
       val lower_mask = Wire(UInt((2*fetchWidth).W))
@@ -653,25 +685,25 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
       f3_fetch_bundle.sfbs(i) := (
         f3_mask(i) &&
-        bpd_decoder.io.sfb_offset.valid &&
+        brsigs.sfb_offset.valid &&
         (offset_from_aligned_pc <= Mux(f3_is_last_bank_in_block, (fetchBytes+bankBytes).U,(2*fetchBytes).U))
       )
       f3_fetch_bundle.sfb_masks(i)       := ~MaskLower(lower_mask) & ~MaskUpper(upper_mask)
-      f3_fetch_bundle.shadowable_mask(i) := bpd_decoder.io.shadowable && f3_mask(i)
+      f3_fetch_bundle.shadowable_mask(i) := brsigs.shadowable && f3_mask(i)
       f3_fetch_bundle.sfb_dests(i)       := offset_from_aligned_pc
 
       // Redirect if
       //  1) its a JAL/JALR (unconditional)
       //  2) the BPD believes this is a branch and says we should take it
       f3_redirects(i)    := f3_mask(i) && (
-        bpd_decoder.io.cfi_type === CFI_JAL || bpd_decoder.io.cfi_type === CFI_JALR ||
-        (bpd_decoder.io.cfi_type === CFI_BR && f3_bpd_resp.io.deq.bits.preds(i).taken && useBPD.B)
+        brsigs.cfi_type === CFI_JAL || brsigs.cfi_type === CFI_JALR ||
+        (brsigs.cfi_type === CFI_BR && f3_bpd_resp.io.deq.bits.preds(i).taken && useBPD.B)
       )
 
-      f3_br_mask(i)   := f3_mask(i) && bpd_decoder.io.cfi_type === CFI_BR
-      f3_cfi_types(i) := bpd_decoder.io.cfi_type
-      f3_call_mask(i) := bpd_decoder.io.is_call
-      f3_ret_mask(i)  := bpd_decoder.io.is_ret
+      f3_br_mask(i)   := f3_mask(i) && brsigs.cfi_type === CFI_BR
+      f3_cfi_types(i) := brsigs.cfi_type
+      f3_call_mask(i) := brsigs.is_call
+      f3_ret_mask(i)  := brsigs.is_ret
 
       f3_fetch_bundle.bp_debug_if_oh(i) := bpu.io.debug_if
       f3_fetch_bundle.bp_xcpt_if_oh (i) := bpu.io.xcpt_if

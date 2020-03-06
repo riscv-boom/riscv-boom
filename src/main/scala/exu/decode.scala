@@ -600,23 +600,29 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
  * Smaller Decode unit for the Frontend to decode different
  * branches.
  * Accepts EXPANDED RVC instructions
- */
+  */
+
+class BranchDecodeSignals(implicit p: Parameters) extends BoomBundle
+{
+  val is_ret   = Bool()
+  val is_call  = Bool()
+  val target   = UInt(vaddrBitsExtended.W)
+  val cfi_type = UInt(CFI_SZ.W)
+
+
+  // Is this branch a short forwards jump?
+  val sfb_offset = Valid(UInt(log2Ceil(icBlockBytes).W))
+  // Is this instruction allowed to be inside a sfb?
+  val shadowable = Bool()
+}
 
 class BranchDecode(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new Bundle {
     val inst    = Input(UInt(32.W))
     val pc      = Input(UInt(vaddrBitsExtended.W))
-    val is_ret  = Output(Bool())
-    val is_call = Output(Bool())
-    val target = Output(UInt(vaddrBitsExtended.W))
-    val cfi_type = Output(UInt(CFI_SZ.W))
 
-
-    // Is this branch a short forwards jump?
-    val sfb_offset = Valid(UInt(log2Ceil(icBlockBytes).W))
-    // Is this instruction allowed to be inside a sfb?
-    val shadowable = Output(Bool())
+    val out = Output(new BranchDecodeSignals)
   })
 
   val bpd_csignals =
@@ -677,12 +683,12 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
 
   val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: (cs_is_shadowable:Bool) :: (cs_has_rs2) :: Nil = bpd_csignals
 
-  io.is_call := (cs_is_jal || cs_is_jalr) && GetRd(io.inst) === RA
-  io.is_ret  := cs_is_jalr && GetRs1(io.inst) === BitPat("b00?01") && GetRd(io.inst) === X0
+  io.out.is_call := (cs_is_jal || cs_is_jalr) && GetRd(io.inst) === RA
+  io.out.is_ret  := cs_is_jalr && GetRs1(io.inst) === BitPat("b00?01") && GetRd(io.inst) === X0
 
-  io.target := Mux(cs_is_br, ComputeBranchTarget(io.pc, io.inst, xLen),
-                              ComputeJALTarget(io.pc, io.inst, xLen))
-  io.cfi_type :=
+  io.out.target := Mux(cs_is_br, ComputeBranchTarget(io.pc, io.inst, xLen),
+                                 ComputeJALTarget(io.pc, io.inst, xLen))
+  io.out.cfi_type :=
     Mux(cs_is_jalr,
       CFI_JALR,
     Mux(cs_is_jal,
@@ -693,9 +699,9 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
 
   val br_offset = Cat(io.inst(7), io.inst(30,25), io.inst(11,8), 0.U(1.W))
   // Is a sfb if it points forwards (offset is positive)
-  io.sfb_offset.valid := cs_is_br && !io.inst(31) && br_offset =/= 0.U && (br_offset >> log2Ceil(icBlockBytes)) === 0.U
-  io.sfb_offset.bits  := br_offset
-  io.shadowable := cs_is_shadowable && (
+  io.out.sfb_offset.valid := cs_is_br && !io.inst(31) && br_offset =/= 0.U && (br_offset >> log2Ceil(icBlockBytes)) === 0.U
+  io.out.sfb_offset.bits  := br_offset
+  io.out.shadowable := cs_is_shadowable && (
     !cs_has_rs2 ||
     (GetRs1(io.inst) === GetRd(io.inst)) ||
     (io.inst === ADD && GetRs1(io.inst) === X0)
