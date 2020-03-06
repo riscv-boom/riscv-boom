@@ -34,7 +34,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   val fpPregSz = log2Ceil(numFpPhysRegs)
 
   val io = IO(new Bundle {
-    val brinfo           = Input(new BrResolutionInfo())
+    val brupdate         = Input(new BrUpdateInfo())
     val flush_pipeline   = Input(Bool())
     val fcsr_rm          = Input(UInt(width=freechips.rocketchip.tile.FPConstants.RM_SZ.W))
 
@@ -58,7 +58,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   // construct all of the modules
 
   val exe_units      = new boom.exu.ExecutionUnits(fpu=true)
-  val issue_unit     = Module(new IssueUnitCollapsing(
+  val issue_unit     = Module(new IssueQueue(
                          issueParams.find(_.iqType == IQT_FP.litValue).get,
                          numWakeupPorts))
   issue_unit.suggestName("fp_issue_unit")
@@ -86,8 +86,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   val iss_valids = Wire(Vec(exe_units.numFrfReaders, Bool()))
   val iss_uops   = Wire(Vec(exe_units.numFrfReaders, new MicroOp()))
 
-  issue_unit.io.tsc_reg := io.debug_tsc_reg
-  issue_unit.io.brinfo := io.brinfo
+  issue_unit.io.brupdate := io.brupdate
   issue_unit.io.flush_pipeline := io.flush_pipeline
   // Don't support ld-hit speculation to FP window.
   issue_unit.io.spec_ld_wakeup.valid := false.B
@@ -141,14 +140,14 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   fregister_read.io.iss_valids <> iss_valids
   fregister_read.io.iss_uops := iss_uops
 
-  fregister_read.io.brinfo := io.brinfo
+  fregister_read.io.brupdate := io.brupdate
   fregister_read.io.kill := io.flush_pipeline
 
   //-------------------------------------------------------------
   // **** Execute Stage ****
   //-------------------------------------------------------------
 
-  exe_units.map(_.io.brinfo := io.brinfo)
+  exe_units.map(_.io.brupdate := io.brupdate)
 
   for ((ex,w) <- exe_units.withFilter(_.readsFrf).map(x=>x).zipWithIndex) {
     ex.io.req <> fregister_read.io.exe_reqs(w)
@@ -205,11 +204,11 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   val fpiu_unit = exe_units.fpiu_unit
   val fpiu_is_sdq = fpiu_unit.io.ll_iresp.bits.uop.uopc === uopSTA
-  io.to_int.valid := fpiu_unit.io.ll_iresp.fire() && !fpiu_is_sdq
-  io.to_sdq.valid := fpiu_unit.io.ll_iresp.fire() &&  fpiu_is_sdq
+  io.to_int.valid := fpiu_unit.io.ll_iresp.valid && !fpiu_is_sdq
+  io.to_sdq.valid := fpiu_unit.io.ll_iresp.valid && fpiu_is_sdq
   io.to_int.bits  := fpiu_unit.io.ll_iresp.bits
   io.to_sdq.bits  := fpiu_unit.io.ll_iresp.bits
-  fpiu_unit.io.ll_iresp.ready := io.to_sdq.ready && io.to_int.ready
+  fpiu_unit.io.ll_iresp.ready := Mux(fpiu_is_sdq, io.to_sdq.ready, io.to_int.ready)
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -254,7 +253,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   // flush on exceptions, miniexeptions, and after some special instructions
 
   for (w <- 0 until exe_units.length) {
-    exe_units(w).io.req.bits.kill := io.flush_pipeline
+    exe_units(w).io.kill := io.flush_pipeline
   }
 
   override def toString: String =

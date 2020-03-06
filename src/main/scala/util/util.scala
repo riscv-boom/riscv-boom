@@ -21,7 +21,7 @@ import freechips.rocketchip.config.{Parameters}
 import freechips.rocketchip.tile.{TileKey}
 
 import boom.common.{MicroOp}
-import boom.exu.{BrResolutionInfo}
+import boom.exu.{BrUpdateInfo}
 
 /**
  * Object to XOR fold a input register of fullLength into a compressedLength.
@@ -49,19 +49,16 @@ object Fold
 
 /**
  * Object to check if MicroOp was killed due to a branch mispredict.
+ * Uses "Fast" branch masks
  */
 object IsKilledByBranch
 {
-  def apply(brinfo: BrResolutionInfo, uop: MicroOp): Bool = {
-    return (brinfo.valid &&
-            brinfo.mispredict &&
-            maskMatch(brinfo.mask, uop.br_mask))
+  def apply(brupdate: BrUpdateInfo, uop: MicroOp): Bool = {
+    return maskMatch(brupdate.b1.mispredict_mask, uop.br_mask)
   }
 
-  def apply(brinfo: BrResolutionInfo, uop_mask: UInt): Bool = {
-    return (brinfo.valid &&
-            brinfo.mispredict &&
-            maskMatch(brinfo.mask, uop_mask))
+  def apply(brupdate: BrUpdateInfo, uop_mask: UInt): Bool = {
+    return maskMatch(brupdate.b1.mispredict_mask, uop_mask)
   }
 }
 
@@ -71,12 +68,10 @@ object IsKilledByBranch
  */
 object GetNewUopAndBrMask
 {
-  def apply(uop: MicroOp, brinfo: BrResolutionInfo)
+  def apply(uop: MicroOp, brupdate: BrUpdateInfo)
     (implicit p: Parameters): MicroOp = {
     val newuop = WireInit(uop)
-    newuop.br_mask := Mux(brinfo.valid,
-                          (uop.br_mask & ~brinfo.mask),
-                           uop.br_mask)
+    newuop.br_mask := uop.br_mask & ~brupdate.b1.resolve_mask
     newuop
   }
 }
@@ -86,35 +81,31 @@ object GetNewUopAndBrMask
  */
 object GetNewBrMask
 {
-   def apply(brinfo: BrResolutionInfo, uop: MicroOp): UInt = {
-     return Mux(brinfo.valid,
-                (uop.br_mask & ~brinfo.mask),
-                uop.br_mask)
+   def apply(brupdate: BrUpdateInfo, uop: MicroOp): UInt = {
+     return uop.br_mask & ~brupdate.b1.resolve_mask
    }
 
-   def apply(brinfo: BrResolutionInfo, br_mask: UInt): UInt = {
-     return Mux(brinfo.valid,
-                (br_mask & ~brinfo.mask),
-                br_mask)
+   def apply(brupdate: BrUpdateInfo, br_mask: UInt): UInt = {
+     return br_mask & ~brupdate.b1.resolve_mask
    }
 }
 
 object UpdateBrMask
 {
-  def apply(brinfo: BrResolutionInfo, uop: MicroOp): MicroOp = {
+  def apply(brupdate: BrUpdateInfo, uop: MicroOp): MicroOp = {
     val out = WireInit(uop)
-    out.br_mask := GetNewBrMask(brinfo, uop)
+    out.br_mask := GetNewBrMask(brupdate, uop)
     out
   }
-  def apply[T <: boom.common.HasBoomUOP](brinfo: BrResolutionInfo, bundle: T): T = {
+  def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, bundle: T): T = {
     val out = WireInit(bundle)
-    out.uop.br_mask := GetNewBrMask(brinfo, bundle.uop.br_mask)
+    out.uop.br_mask := GetNewBrMask(brupdate, bundle.uop.br_mask)
     out
   }
-  def apply[T <: boom.common.HasBoomUOP](brinfo: BrResolutionInfo, bundle: Valid[T]): Valid[T] = {
+  def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, bundle: Valid[T]): Valid[T] = {
     val out = WireInit(bundle)
-    out.bits.uop.br_mask := GetNewBrMask(brinfo, bundle.bits.uop.br_mask)
-    out.valid := bundle.valid && !IsKilledByBranch(brinfo, bundle.bits.uop.br_mask)
+    out.bits.uop.br_mask := GetNewBrMask(brupdate, bundle.bits.uop.br_mask)
+    out.valid := bundle.valid && !IsKilledByBranch(brupdate, bundle.bits.uop.br_mask)
     out
   }
 }
@@ -231,6 +222,17 @@ object WrapDec
       val wrap = (value === 0.U)
       Mux(wrap, (n-1).U, value - 1.U)
     }
+  }
+}
+
+/**
+  * Rotate a bit-vector left by one.
+ */
+object RotateLeft
+{
+  def apply(in: UInt) = {
+    val w = in.getWidth
+    Cat(in(w-2,0), in(w-1))
   }
 }
 
@@ -364,6 +366,23 @@ object AgePriorityEncoder
 }
 
 /**
+ * Select the first high bit starting at the head and rotating around to the left
+ */
+object AgePriorityEncoderOH
+{
+  def apply(in: UInt, head: UInt): UInt = {
+    require(in.getWidth == head.getWidth)
+
+    val n = in.getWidth
+    val vec = Cat(in,in)
+    val mask = MaskUpper(Cat(0.U(n.W),head))
+    val sel = PriorityEncoderOH(vec & mask)
+
+    sel(2*n-1,n) | sel(n-1,0)
+  }
+}
+
+/**
   * Object to determine whether queue
   * index i0 is older than index i1.
  */
@@ -395,13 +414,42 @@ object MaskUpper
 }
 
 /**
+ * Set all bits below the highest order '1'.
+ */
+object MaskBelow
+{
+  def apply(in: UInt) = {
+    val n = in.getWidth
+    (1 until n).map(i => in >> i.U).reduce(_|_)
+  }
+}
+
+/**
+ * Set all bits above the lowest order '1'.
+ */
+object MaskAbove
+{
+  def apply(in: UInt) = {
+    val n = in.getWidth
+    (1 until n).map(i => (in << i.U)(n-1,0)).reduce(_|_)
+  }
+}
+
+/**
  * Transpose a matrix of Chisel Vecs.
  */
 object Transpose
 {
-  def apply[T <: chisel3.core.Data](in: Vec[Vec[T]]) = {
+  // General Data matrix
+  def apply[T <: chisel3.Data](in: Vec[Vec[T]]) = {
     val n = in(0).size
     VecInit((0 until n).map(i => VecInit(in.map(row => row(i)))))
+  }
+
+  // Row major UInt bit matrix
+  def apply(in: => Vec[UInt]) = {
+    val n = in(0).getWidth
+    VecInit((0 until n).map(i => VecInit(in.map(row => row(i))).asUInt))
   }
 }
 
@@ -426,7 +474,7 @@ object SelectFirstN
 /**
  * Connect the first k of n valid input interfaces to k output interfaces.
  */
-class Compactor[T <: chisel3.core.Data](n: Int, k: Int, gen: T) extends Module
+class Compactor[T <: chisel3.Data](n: Int, k: Int, gen: T) extends Module
 {
   require(n >= k)
 
@@ -463,7 +511,7 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flu
     val enq     = Flipped(Decoupled(gen))
     val deq     = Decoupled(gen)
 
-    val brinfo  = Input(new BrResolutionInfo())
+    val brupdate  = Input(new BrUpdateInfo())
     val flush   = Input(Bool())
 
     val empty   = Output(Bool())
@@ -487,17 +535,17 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flu
   for (i <- 0 until entries) {
     val mask = uops(i).br_mask
     val uop  = uops(i)
-    valids(i)  := valids(i) && !IsKilledByBranch(io.brinfo, mask) && !(io.flush && flush_fn(uop))
+    valids(i)  := valids(i) && !IsKilledByBranch(io.brupdate, mask) && !(io.flush && flush_fn(uop))
     when (valids(i)) {
-      uops(i).br_mask := GetNewBrMask(io.brinfo, mask)
+      uops(i).br_mask := GetNewBrMask(io.brupdate, mask)
     }
   }
 
   when (do_enq) {
     ram(enq_ptr.value)          := io.enq.bits
-    valids(enq_ptr.value)       := true.B //!IsKilledByBranch(io.brinfo, io.enq.bits.uop)
+    valids(enq_ptr.value)       := true.B //!IsKilledByBranch(io.brupdate, io.enq.bits.uop)
     uops(enq_ptr.value)         := io.enq.bits.uop
-    uops(enq_ptr.value).br_mask := GetNewBrMask(io.brinfo, io.enq.bits.uop)
+    uops(enq_ptr.value).br_mask := GetNewBrMask(io.brupdate, io.enq.bits.uop)
     enq_ptr.inc()
   }
 
@@ -515,16 +563,16 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flu
   val out = Wire(gen)
   out             := ram(deq_ptr.value)
   out.uop         := uops(deq_ptr.value)
-  io.deq.valid            := !io.empty && valids(deq_ptr.value) && !IsKilledByBranch(io.brinfo, out.uop)
+  io.deq.valid            := !io.empty && valids(deq_ptr.value) && !IsKilledByBranch(io.brupdate, out.uop)
   io.deq.bits             := out
-  io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, out.uop)
+  io.deq.bits.uop.br_mask := GetNewBrMask(io.brupdate, out.uop)
 
   // For flow queue behavior.
   if (flow) {
     when (io.empty) {
-      io.deq.valid := io.enq.valid //&& !IsKilledByBranch(io.brinfo, io.enq.bits.uop)
+      io.deq.valid := io.enq.valid //&& !IsKilledByBranch(io.brupdate, io.enq.bits.uop)
       io.deq.bits := io.enq.bits
-      io.deq.bits.uop.br_mask := GetNewBrMask(io.brinfo, io.enq.bits.uop)
+      io.deq.bits.uop.br_mask := GetNewBrMask(io.brupdate, io.enq.bits.uop)
 
       do_deq := false.B
       when (io.deq.ready) { do_enq := false.B }

@@ -27,8 +27,6 @@ trait BOOMDebugConstants
   val DEBUG_PRINTF        = false // use the Chisel printf functionality
   val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
   val MEMTRACE_PRINTF     = false // dump trace of memory accesses to L1D for debugging
-  val O3PIPEVIEW_PRINTF   = false // dump trace for O3PipeView from gem5
-  val O3_CYCLE_TIME       = (1000)// "cycle" time expected by o3pipeview.py
 
   val DROMAJO_COSIM_ENABLE = false // enable dromajo cosim
 
@@ -45,16 +43,6 @@ trait BOOMDebugConstants
   val DEBUG_PRINTF_FTQ    = true && DEBUG_PRINTF
   val DEBUG_PRINTF_IQ     = true && DEBUG_PRINTF
 
-  if (O3PIPEVIEW_PRINTF) require (!DEBUG_PRINTF && !COMMIT_LOG_PRINTF)
-}
-
-/**
- * Mixin for branch prediction constants
- */
-trait BrPredConstants
-{
-  val NOT_TAKEN = false.B
-  val TAKEN = true.B
 }
 
 /**
@@ -67,6 +55,7 @@ trait IQType
   val IQT_MEM = 2.U(IQT_SZ.W)
   val IQT_FP  = 4.U(IQT_SZ.W)
 
+  val IQT_IFP = 5.U(IQT_SZ.W)
   val IQT_MFP = 6.U(IQT_SZ.W)
 }
 
@@ -82,6 +71,13 @@ trait ScalarOpConstants
 
   //************************************
   // Extra Constants
+
+  // Which branch predictor predicted us
+  val BSRC_SZ = 2
+  val BSRC_1 = 0.U(BSRC_SZ.W) // 1-cycle branch pred
+  val BSRC_2 = 1.U(BSRC_SZ.W) // 2-cycle branch pred
+  val BSRC_3 = 2.U(BSRC_SZ.W) // 3-cycle branch pred
+  val BSRC_C = 3.U(BSRC_SZ.W) // core branch resolution
 
   //************************************
   // Control Signals
@@ -305,8 +301,6 @@ trait ScalarOpConstants
     uop.uses_ldq   := false.B
     uop.pdst       := 0.U
     uop.dst_rtype  := RT_X
-    // TODO these unnecessary? used in regread stage?
-    uop.is_br_or_jmp := false.B
 
     val cs = Wire(new boom.common.CtrlSignals())
     cs             := DontCare // Overridden in the following lines

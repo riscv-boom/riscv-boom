@@ -16,8 +16,7 @@ import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
 
-import boom.bpu.BranchPredInfo
-import boom.exu.FUConstants
+import boom.exu.{FUConstants,FastWakeup}
 
 /**
  * Extension to BoomBundle to add a MicroOp
@@ -46,40 +45,28 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // What is the next state of this uop in the issue window? useful
   // for the compacting queue.
   val iw_state         = UInt(2.W)
-  // Has operand 1 or 2 been waken speculatively by a load?
-  // Only integer operands are speculaively woken up,
-  // so we can ignore p3.
   val iw_p1_poisoned   = Bool()
   val iw_p2_poisoned   = Bool()
 
-  val allocate_brtag   = Bool()                      // does this allocate a branch tag? (is branch or JR but not JAL)
-  val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs a regular PC+4 inst?
-  val is_jump          = Bool()                      // is this a jump? (jal or jalr)
+  def allocate_brtag   = is_br || is_jalr
+  val is_br            = Bool()                      // is this micro-op a (branch) vs a regular PC+4 inst?
+  val is_jalr          = Bool()                      // is this a jump? (jal or jalr)
   val is_jal           = Bool()                      // is this a JAL (doesn't include JR)? used for branch unit
-  val is_ret           = Bool()                      // is jalr with rd=x0, rs1=x1? (i.e., a return)
-  val is_call          = Bool()                      //
+
   val br_mask          = UInt(maxBrCount.W)  // which branches are we being speculated under?
   val br_tag           = UInt(brTagSz.W)
 
-  val br_prediction    = new BranchPredInfo
-
-
-  // stat tracking of committed instructions
-  val stat_brjmp_mispredicted = Bool()                 // number of mispredicted branches/jmps
-  val stat_btb_made_pred      = Bool()                 // the BTB made a prediction (even if BPD overrided it)
-  val stat_btb_mispredicted   = Bool()                 //
-  val stat_bpd_made_pred      = Bool()                 // the BPD made the prediction
-  val stat_bpd_mispredicted   = Bool()                 // denominator: all committed branches
-
   // Index into FTQ to figure out our fetch PC.
   val ftq_idx          = UInt(log2Ceil(ftqSz).W)
-  // Index in fetch bundle.
-  val cfi_idx          = UInt(log2Ceil(fetchWidth).W)
   // This inst straddles two fetch packets
   val edge_inst        = Bool()
   // Low-order bits of our own PC. Combine with ftq[ftq_idx] to get PC.
   // Aligned to a cache-line size, as that is the greater fetch granularity.
+  // TODO: Shouldn't this be aligned to fetch-width size?
   val pc_lob           = UInt(log2Ceil(icBlockBytes).W)
+
+  // Was this a branch that was predicted taken?
+  val taken            = Bool()
 
   val imm_packed       = UInt(LONGEST_IMM_SZ.W) // densely pack the imm in decode...
                                               // then translate and sign-extend in execute
@@ -92,14 +79,56 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val prs1             = UInt(maxPregSz.W)
   val prs2             = UInt(maxPregSz.W)
   val prs3             = UInt(maxPregSz.W)
+  val stale_pdst       = UInt(maxPregSz.W)
 
   val prs1_busy        = Bool()
   val prs2_busy        = Bool()
   val prs3_busy        = Bool()
-  val stale_pdst       = UInt(maxPregSz.W)
+
+  // Is the operand produced by a load?
+  val prs1_load        = Bool()
+  val prs2_load        = Bool()
+
+  // Selectors for operands in the integer scheduler
+  val busy_operand_sel = Bool() // Which prs was used to pick a dst column? Can receive a bypassed operand.
+  def busy_operand     = Mux(busy_operand_sel, prs2, prs1)
+  def chained_operand  = Mux(busy_operand_sel, prs1, prs2)
+
+  // Status of operands in the integer scheduler
+  val prs1_status      = UInt(operandStatusSz.W)
+  val prs2_status      = UInt(operandStatusSz.W)
+
+  // Woken up by an alu operation
+  val prs1_can_bypass_alu = Bool()
+  val prs2_can_bypass_alu = Bool()
+
+  // Woken up by a load
+  val prs1_can_bypass_mem = Vec(memWidth, Bool())
+  val prs2_can_bypass_mem = Vec(memWidth, Bool())
+
+  // Is the operand ready for issue? (present bit)
+  // Very hard coded and unlikely to change substantially
+  def prs1_ready       = (prs1_status & Mux(prs1_can_bypass_alu, 7.U, 3.U))(2,0).orR
+  def prs2_ready       = (prs2_status & Mux(prs2_can_bypass_alu, 7.U, 3.U))(2,0).orR
+
+  // Bypass the operand from the ALU
+  def prs1_bypass_alu  = prs1_can_bypass_alu && prs1_status(2)
+  def prs2_bypass_alu  = prs2_can_bypass_alu && prs2_status(2)
+
+  // Bypass the operand from the memory unit(s)
+  def prs1_bypass_mem  = VecInit(Mux(prs1_status(1), prs1_can_bypass_mem.asUInt, 0.U).asBools)
+  def prs2_bypass_mem  = VecInit(Mux(prs2_status(1), prs2_can_bypass_mem.asUInt, 0.U).asBools)
+
+  // Bypass the operand from the scheduled writeback crossbar
+  def prs1_bypass_gen  = prs1_status(1)
+  def prs2_bypass_gen  = prs2_status(1)
+
+  // Check if a load nack kills this uop while being issued
+  def load_wakeup_nacked(load_nacks: Vec[Bool]) = ((prs1_bypass_mem.asUInt | prs2_bypass_mem.asUInt) & load_nacks.asUInt).orR
+
   val exception        = Bool()
   val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity
-  val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, csr, etc...)
+  val bypassable       = Bool()                // can we bypass ALU results? (doesn't include loads, csr, etc...)
   val mem_cmd          = UInt(M_SZ.W)          // sync primitives/cache flushes
   val mem_size         = UInt(2.W)
   val mem_signed       = Bool()
@@ -137,18 +166,79 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val bp_debug_if      = Bool()             // Breakpoint
   val bp_xcpt_if       = Bool()             // Breakpoint
 
-  // purely debug information
-  val debug_wdata      = UInt(xLen.W)
-  val debug_events     = new DebugStageEvents
 
+  // What prediction structure provides the prediction FROM this op
+  val debug_fsrc       = UInt(BSRC_SZ.W)
+  // What prediction structure provides the prediction TO this op
+  val debug_tsrc       = UInt(BSRC_SZ.W)
 
   // Does this register write-back
   def rf_wen           = dst_rtype =/= RT_X
 
   // Is it possible for this uop to misspeculate, preventing the commit of subsequent uops?
-  def unsafe           = uses_ldq || (uses_stq && !is_fence) || (is_br_or_jmp && !is_jal)
+  def unsafe           = uses_ldq || (uses_stq && !is_fence) || is_br || is_jalr
 
   def fu_code_is(_fu: UInt) = (fu_code & _fu) =/= 0.U
+
+  // In which column does a physical register reside?
+  def ColIdx(in: UInt) = {
+    val pregSz = in.getWidth
+    val colSz = log2Ceil(coreWidth)
+    in(pregSz-1, pregSz-colSz)
+  }
+
+  // Physical register's specifier within a column.
+  def ColSpec(in: UInt) = {
+    val pregSz = in.getWidth
+    val colSz = log2Ceil(coreWidth)
+    in(pregSz-colSz-1, 0)
+  }
+
+  // Get the columns of the uop's physical registers
+  def pdst_col  = UIntToOH(ColIdx(pdst))
+  def prs1_col  = UIntToOH(ColIdx(prs1))
+  def prs2_col  = UIntToOH(ColIdx(prs2))
+  def stale_col = UIntToOH(ColIdx(stale_pdst))
+
+  // Get the specifiers of the uop's physical registers with in a column
+  def pdst_spec  = ColSpec(pdst)
+  def prs1_spec  = ColSpec(prs1)
+  def prs2_spec  = ColSpec(prs2)
+  def stale_spec = ColSpec(stale_pdst)
+
+  def writes_irf = dst_rtype === RT_FIX && ldst_val
+
+  // Getters that help with scheduling
+  def prs1_reads_irf = lrs1_rtype === RT_FIX && !prs1_status(2,1).orR && lrs1 =/= 0.U
+  def prs2_reads_irf = lrs2_rtype === RT_FIX && !prs2_status(2,1).orR && lrs2 =/= 0.U
+
+  def eu_code        = {	// Hard code this for now
+    val fu = fu_code
+    VecInit(fu(0),                           // ALU
+            fu(2),                           // MEM
+            fu(1),                           // JMP
+            fu(3) || fu(4) || fu(5) || fu(8) // MUL || DIV || CSR || I2F
+            ).asUInt
+  }
+  def shared_eu_code = eu_code(3,1)
+  def exe_wb_latency = fu_code(3) << (imulLatency - 1) | (fu_code(1) | fu_code(0))  // Hard coded latency vector
+
+  // Generate the fast wakeup signal the uop emits upon being issued
+  def fast_wakeup(grant: Bool): Valid[FastWakeup] = {
+    val fwu = Wire(Valid(new FastWakeup))
+
+    fwu.bits.pdst   := pdst
+    fwu.bits.status := exe_wb_latency << 2
+    fwu.bits.alu    := fu_code(0)
+    fwu.valid       := grant && writes_irf && exe_wb_latency.orR  // Only do fast wakeups for scheduled writebacks
+
+    fwu
+  }
+
+  // Helpers for performance counters
+  def zero_waiting = !(prs1_busy || prs2_busy)
+  def one_waiting  =   prs1_busy ^  prs2_busy
+  def two_waiting  =   prs1_busy && prs2_busy
 }
 
 /**
@@ -170,13 +260,5 @@ class CtrlSignals extends Bundle()
   val is_std      = Bool()
 }
 
-/**
- * Debug stage events for Fetch stage
- */
-class DebugStageEvents extends Bundle()
-{
-  // Track the sequence number of each instruction fetched.
-  val fetch_seq        = UInt(32.W)
-}
 
 

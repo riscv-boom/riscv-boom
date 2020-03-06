@@ -99,7 +99,7 @@ run_once () {
         return 0
     fi
 
-    cmp -s <(grep checksum $BASE_NAME.sim.out) $BASE_NAME.spike.out
+    cmp -s <(grep "checksum = .*" $BASE_NAME.sim.out) $BASE_NAME.spike.out
     RV=$?
     if [ $RV -ne 0 ]; then
         echo "[$1] Simulator produced wrong result."

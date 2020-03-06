@@ -48,7 +48,7 @@ class RegisterReadIO(
   val exe_reqs = Vec(issueWidth, (new DecoupledIO(new FuncUnitReq(registerWidth))))
 
   val kill   = Input(Bool())
-  val brinfo = Input(new BrResolutionInfo())
+  val brupdate = Input(new BrUpdateInfo())
 }
 
 /**
@@ -95,8 +95,8 @@ class RegisterRead(
     rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
 
     rrd_valids(w) := RegNext(rrd_decode_unit.io.rrd_valid &&
-                !IsKilledByBranch(io.brinfo, rrd_decode_unit.io.rrd_uop))
-    rrd_uops(w)   := RegNext(GetNewUopAndBrMask(rrd_decode_unit.io.rrd_uop, io.brinfo))
+                !IsKilledByBranch(io.brupdate, rrd_decode_unit.io.rrd_uop))
+    rrd_uops(w)   := RegNext(GetNewUopAndBrMask(rrd_decode_unit.io.rrd_uop, io.brupdate))
   }
 
   //-------------------------------------------------------------
@@ -131,16 +131,13 @@ class RegisterRead(
     if (numReadPorts > 1) rrd_rs2_data(w) := io.rf_read_ports(idx+1).data
     if (numReadPorts > 2) rrd_rs3_data(w) := io.rf_read_ports(idx+2).data
 
-    val rrd_kill = Mux(io.kill, true.B,
-                   Mux(io.brinfo.valid && io.brinfo.mispredict,
-                       maskMatch(rrd_uops(w).br_mask, io.brinfo.mask),
-                       false.B))
+    val rrd_kill = io.kill || IsKilledByBranch(io.brupdate, rrd_uops(w))
 
     exe_reg_valids(w) := Mux(rrd_kill, false.B, rrd_valids(w))
     // TODO use only the valids signal, don't require us to set nullUop
     exe_reg_uops(w)   := Mux(rrd_kill, NullMicroOp, rrd_uops(w))
 
-    exe_reg_uops(w).br_mask := GetNewBrMask(io.brinfo, rrd_uops(w))
+    exe_reg_uops(w).br_mask := GetNewBrMask(io.brupdate, rrd_uops(w))
 
     idx += numReadPorts
   }

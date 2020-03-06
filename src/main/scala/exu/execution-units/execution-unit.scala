@@ -28,7 +28,7 @@ import freechips.rocketchip.tile
 import FUConstants._
 import boom.common._
 import boom.ifu.{GetPCFromFtqIO}
-import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue, BoomCoreStringPrefix}
+import boom.util._
 
 /**
  * Response from Execution Unit. Bundles a MicroOp with data
@@ -51,62 +51,6 @@ class FFlagsResp(implicit p: Parameters) extends BoomBundle
   val flags = Bits(tile.FPConstants.FLAGS_SZ.W)
 }
 
-/**
- * IO bundle for a Execution Unit.
- *
- * @param writesIrf does this exe unit need a integer regfile port
- * @param writesLlIrf does this exe unit need a long latency integer regfile port
- * @param writesFrf does this exe unit need a FP regfile port
- * @param writesLlFrf does this exe unit need a long latency FP regfile port
- * @param numBypassPorts number of bypass ports for the exe unit
- * @param dataWidth width of the data coming out of the execution unit
- */
-class ExecutionUnitIO(
-  val writesIrf      : Boolean,
-  val writesLlIrf    : Boolean,
-  val writesFrf      : Boolean,
-  val writesLlFrf    : Boolean,
-  val hasRocc        : Boolean,
-  val hasBrUnit      : Boolean,
-  val hasFcsr        : Boolean,
-  val hasMem         : Boolean,
-  val numBypassPorts : Int,
-  val dataWidth      : Int
-  )(implicit p: Parameters) extends BoomBundle
-{
-  // describe which functional units we support (used by the issue window)
-  val fu_types = Output(Bits(FUC_SZ.W))
-
-  val req      = Flipped(new DecoupledIO(new FuncUnitReq(dataWidth)))
-
-  val iresp    = if (writesIrf)   new DecoupledIO(new ExeUnitResp(dataWidth)) else null
-  val fresp    = if (writesFrf)   new DecoupledIO(new ExeUnitResp(dataWidth)) else null
-  val ll_iresp = if (writesLlIrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
-  val ll_fresp = if (writesLlFrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
-
-
-  val bypass   = Output(new BypassData(numBypassPorts, dataWidth))
-  val brinfo   = Input(new BrResolutionInfo())
-
-
-  // only used by the rocc unit
-  val rocc = if (hasRocc) new RoCCShimCoreIO else null
-
-  // only used by the branch unit
-  val br_unit    = if (hasBrUnit) Output(new BranchUnitResp()) else null
-  val get_ftq_pc = if (hasBrUnit) Flipped(new GetPCFromFtqIO()) else null
-  val status     = if (hasBrUnit || hasRocc || hasMem) Input(new freechips.rocketchip.rocket.MStatus()) else null
-
-  // only used by the fpu unit
-  val fcsr_rm = if (hasFcsr) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
-
-  // only used by the mem unit
-  val lsu_io = if (hasMem) Flipped(new boom.lsu.LSUExeIO) else null
-  val bp = if (hasMem) Input(Vec(nBreakpoints, new BP)) else null
-
-  // TODO move this out of ExecutionUnit
-  val com_exception = if (hasMem || hasRocc) Input(Bool()) else null
-}
 
 /**
  * Abstract Top level Execution Unit that wraps lower level functional units to make a
@@ -123,7 +67,7 @@ class ExecutionUnitIO(
  * @param bypassable is the exe unit able to be bypassed
  * @param hasMem does the exe unit have a MemAddrCalcUnit
  * @param hasCSR does the exe unit write to the CSRFile
- * @param hasBrUnit does the exe unit have a branch unit
+ * @param hasJmp does the exe unit have a jump unit
  * @param hasAlu does the exe unit have a alu
  * @param hasFpu does the exe unit have a fpu
  * @param hasMul does the exe unit have a multiplier
@@ -145,7 +89,7 @@ abstract class ExecutionUnit(
   val alwaysBypassable : Boolean       = false,
   val hasMem           : Boolean       = false,
   val hasCSR           : Boolean       = false,
-  val hasBrUnit        : Boolean       = false,
+  val hasJmp       : Boolean       = false,
   val hasAlu           : Boolean       = false,
   val hasFpu           : Boolean       = false,
   val hasMul           : Boolean       = false,
@@ -156,19 +100,50 @@ abstract class ExecutionUnit(
   val hasRocc          : Boolean       = false
   )(implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new ExecutionUnitIO(writesIrf, writesLlIrf, writesFrf, writesLlFrf,
-    hasRocc, hasBrUnit, hasFpu || hasIfpu || hasFdiv, hasMem,
-    numBypassStages, dataWidth))
 
-  if (writesIrf)   { io.iresp.bits.fflags.valid    := false.B; assert(io.iresp.ready) }
+  val io = IO(new Bundle {
+    val fu_types = Output(Bits(FUC_SZ.W))
+
+    val req      = Flipped(new DecoupledIO(new FuncUnitReq(dataWidth)))
+
+    val iresp    = if (writesIrf)   new DecoupledIO(new ExeUnitResp(dataWidth)) else null
+    val fresp    = if (writesFrf)   new DecoupledIO(new ExeUnitResp(dataWidth)) else null
+    val ll_iresp = if (writesLlIrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
+    val ll_fresp = if (writesLlFrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
+
+    val bypass   = Output(new BypassData(numBypassStages, dataWidth))
+
+    val brupdate = Input(new BrUpdateInfo)
+    val kill     = Input(Bool())
+
+    // only used by the rocc unit
+    val rocc = if (hasRocc) new RoCCShimCoreIO else null
+
+    // only used by the branch unit
+    val brinfo     = if (hasAlu) Output(new BrResolutionInfo()) else null
+    val get_ftq_pc = if (hasJmp) Flipped(new GetPCFromFtqIO()) else null
+    val status     = if (hasMem || hasRocc) Input(new freechips.rocketchip.rocket.MStatus()) else null
+
+    // only used by the fpu unit
+    val fcsr_rm = if (hasFcsr) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
+
+    // only used by the mem unit
+    val lsu_io = if (hasMem) Flipped(new boom.lsu.LSUExeIO) else null
+    val bp = if (hasMem) Input(Vec(nBreakpoints, new BP)) else null
+
+    // TODO move this out of ExecutionUnit
+    val com_exception = if (hasMem || hasRocc) Input(Bool()) else null
+  })
+
+  if (writesIrf)   { io.iresp.bits.fflags.valid    := false.B }
   if (writesLlIrf) { io.ll_iresp.bits.fflags.valid := false.B }
-  if (writesFrf)   { io.fresp.bits.fflags.valid    := false.B; assert(io.fresp.ready) }
+  if (writesFrf)   { io.fresp.bits.fflags.valid    := false.B }
   if (writesLlFrf) { io.ll_fresp.bits.fflags.valid := false.B }
 
   // TODO add "number of fflag ports", so we can properly account for FPU+Mem combinations
   def hasFFlags     : Boolean = hasFpu || hasFdiv
 
-  require ((hasFpu || hasFdiv) ^ (hasAlu || hasMul || hasMem || hasIfpu),
+  require ((hasFpu || hasFdiv) ^ (hasAlu || hasMem || hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
   def hasFcsr = hasIfpu || hasFpu || hasFdiv
 
@@ -178,7 +153,7 @@ abstract class ExecutionUnit(
   def supportedFuncUnits = {
     new SupportedFuncUnits(
       alu = hasAlu,
-      bru = hasBrUnit,
+      jmp = hasJmp,
       mem = hasMem,
       muld = hasMul || hasDiv,
       fpu = hasFpu,
@@ -192,7 +167,7 @@ abstract class ExecutionUnit(
  * ALU execution unit that can have a branch, alu, mul, div, int to FP,
  * and memory unit.
  *
- * @param hasBrUnit does the exe unit have a branch unit
+ * @param hasJmp does the exe unit have a jump unit
  * @param hasCSR does the exe unit write to the CSRFile
  * @param hasAlu does the exe unit have a alu
  * @param hasMul does the exe unit have a multiplier
@@ -201,7 +176,7 @@ abstract class ExecutionUnit(
  * @param hasMem does the exe unit have a MemAddrCalcUnit
  */
 class ALUExeUnit(
-  hasBrUnit      : Boolean = false,
+  hasJmp         : Boolean = false,
   hasCSR         : Boolean = false,
   hasAlu         : Boolean = true,
   hasMul         : Boolean = false,
@@ -212,17 +187,17 @@ class ALUExeUnit(
   (implicit p: Parameters)
   extends ExecutionUnit(
     readsIrf         = true,
-    writesIrf        = hasAlu || hasMul || hasDiv,
-    writesLlIrf      = hasMem || hasRocc,
+    writesIrf        = hasAlu || hasJmp || hasMul || hasCSR,
+    writesLlIrf      = hasMem || hasDiv || hasRocc,
     writesLlFrf      = (hasIfpu || hasMem) && p(tile.TileKey).core.fpu != None,
     numBypassStages  =
       if (hasAlu && hasMul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
       else if (hasAlu) 1 else 0,
-    dataWidth        = p(tile.XLen) + 1,
+    dataWidth        = p(tile.XLen)+1,
     bypassable       = hasAlu,
-    alwaysBypassable = hasAlu && !(hasMem || hasBrUnit || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
+    alwaysBypassable = hasAlu && !(hasMem || hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     hasCSR           = hasCSR,
-    hasBrUnit        = hasBrUnit,
+    hasJmp           = hasJmp,
     hasAlu           = hasAlu,
     hasMul           = hasMul,
     hasDiv           = hasDiv,
@@ -260,30 +235,30 @@ class ALUExeUnit(
                  Mux(hasMul.B, FU_MUL, 0.U) |
                  Mux(!div_busy && hasDiv.B, FU_DIV, 0.U) |
                  Mux(hasCSR.B, FU_CSR, 0.U) |
-                 Mux(hasBrUnit.B, FU_BRU, 0.U) |
+                 Mux(hasJmp.B, FU_JMP, 0.U) |
                  Mux(!ifpu_busy && hasIfpu.B, FU_I2F, 0.U) |
                  Mux(hasMem.B, FU_MEM, 0.U)
 
   // ALU Unit -------------------------------
   var alu: ALUUnit = null
   if (hasAlu) {
-    alu = Module(new ALUUnit(isBranchUnit = hasBrUnit,
+    alu = Module(new ALUUnit(isJmpUnit = hasJmp,
                              numStages = numBypassStages,
                              dataWidth = xLen))
     alu.io.req.valid := (
       io.req.valid &&
       (io.req.bits.uop.fu_code === FU_ALU ||
-       io.req.bits.uop.fu_code === FU_BRU ||
+       io.req.bits.uop.fu_code === FU_JMP ||
       (io.req.bits.uop.fu_code === FU_CSR && io.req.bits.uop.uopc =/= uopROCC)))
     //ROCC Rocc Commands are taken by the RoCC unit
 
     alu.io.req.bits.uop      := io.req.bits.uop
-    alu.io.req.bits.kill     := io.req.bits.kill
     alu.io.req.bits.rs1_data := io.req.bits.rs1_data
     alu.io.req.bits.rs2_data := io.req.bits.rs2_data
     alu.io.req.bits.rs3_data := DontCare
     alu.io.resp.ready := DontCare
-    alu.io.brinfo <> io.brinfo
+    alu.io.brupdate := io.brupdate
+    alu.io.kill     := io.kill
 
     iresp_fu_units += alu
 
@@ -291,10 +266,9 @@ class ALUExeUnit(
     io.bypass <> alu.io.bypass
 
     // branch unit is embedded inside the ALU
-    if (hasBrUnit) {
-      io.br_unit <> alu.io.br_unit
+    io.brinfo := alu.io.brinfo
+    if (hasJmp) {
       alu.io.get_ftq_pc <> io.get_ftq_pc
-      alu.io.status <> io.status
     }
   }
 
@@ -304,10 +278,9 @@ class ALUExeUnit(
     rocc.io.req.valid         := io.req.valid && io.req.bits.uop.uopc === uopROCC
     rocc.io.req.bits          := DontCare
     rocc.io.req.bits.uop      := io.req.bits.uop
-    rocc.io.req.bits.kill     := io.req.bits.kill
     rocc.io.req.bits.rs1_data := io.req.bits.rs1_data
     rocc.io.req.bits.rs2_data := io.req.bits.rs2_data
-    rocc.io.brinfo            <> io.brinfo // We should assert on this somewhere
+    rocc.io.brupdate          := io.brupdate // We should assert on this somewhere
     rocc.io.status            := io.status
     rocc.io.exception         := io.com_exception
     io.rocc                   <> rocc.io.core
@@ -328,8 +301,8 @@ class ALUExeUnit(
     imul.io.req.bits.uop      := io.req.bits.uop
     imul.io.req.bits.rs1_data := io.req.bits.rs1_data
     imul.io.req.bits.rs2_data := io.req.bits.rs2_data
-    imul.io.req.bits.kill     := io.req.bits.kill
-    imul.io.brinfo <> io.brinfo
+    imul.io.kill     := io.kill
+    imul.io.brupdate := io.brupdate
     iresp_fu_units += imul
   }
 
@@ -339,7 +312,8 @@ class ALUExeUnit(
     ifpu.io.req        <> io.req
     ifpu.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_I2F)
     ifpu.io.fcsr_rm    := io.fcsr_rm
-    ifpu.io.brinfo     <> io.brinfo
+    ifpu.io.brupdate   := io.brupdate
+    ifpu.io.kill       := io.kill
     ifpu.io.resp.ready := DontCare
 
     // buffer up results since we share write-port on integer regfile.
@@ -349,8 +323,8 @@ class ALUExeUnit(
     queue.io.enq.bits.uop    := ifpu.io.resp.bits.uop
     queue.io.enq.bits.data   := ifpu.io.resp.bits.data
     queue.io.enq.bits.fflags := ifpu.io.resp.bits.fflags
-    queue.io.brinfo := io.brinfo
-    queue.io.flush := io.req.bits.kill
+    queue.io.brupdate := io.brupdate
+    queue.io.flush    := io.kill
 
     io.ll_fresp <> queue.io.deq
     ifpu_busy := !(queue.io.empty)
@@ -367,17 +341,14 @@ class ALUExeUnit(
     div.io.req.bits.uop        := io.req.bits.uop
     div.io.req.bits.rs1_data   := io.req.bits.rs1_data
     div.io.req.bits.rs2_data   := io.req.bits.rs2_data
-    div.io.brinfo              := io.brinfo
-    div.io.req.bits.kill       := io.req.bits.kill
-
-    // share write port with the pipelined units
-    div.io.resp.ready := !(iresp_fu_units.map(_.io.resp.valid).reduce(_|_))
+    div.io.brupdate            := io.brupdate
+    div.io.kill                := io.kill
 
     div_resp_val := div.io.resp.valid
     div_busy     := !div.io.req.ready ||
                     (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV))
 
-    iresp_fu_units += div
+    io.ll_iresp <> div.io.resp
   }
 
   // Mem Unit --------------------------
@@ -386,7 +357,8 @@ class ALUExeUnit(
     val maddrcalc = Module(new MemAddrCalcUnit)
     maddrcalc.io.req        <> io.req
     maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
-    maddrcalc.io.brinfo     <> io.brinfo
+    maddrcalc.io.brupdate   := io.brupdate
+    maddrcalc.io.kill       := io.kill
     maddrcalc.io.status     := io.status
     maddrcalc.io.bp         := io.bp
     maddrcalc.io.resp.ready := DontCare
@@ -395,14 +367,21 @@ class ALUExeUnit(
 
     io.lsu_io.req := maddrcalc.io.resp
 
-    io.ll_iresp <> io.lsu_io.iresp
+    // Mem unit writeback pipeline register
+    val kill = io.kill || IsKilledByBranch(io.brupdate, io.lsu_io.iresp.bits.uop)
+    val resp_bits  = RegNext(io.lsu_io.iresp.bits)
+    resp_bits.uop := GetNewUopAndBrMask(io.lsu_io.iresp.bits.uop, io.brupdate)
+    val resp_valid = RegNext(io.lsu_io.iresp.valid && !kill)
+
+    io.ll_iresp.bits  := resp_bits
+    io.ll_iresp.valid := resp_valid
     if (usingFPU) {
       io.ll_fresp <> io.lsu_io.fresp
     }
   }
 
   // Outputs (Write Port #0)  ---------------
-  if (writesIrf) {
+  if (writesIrf && !hasMem) {
     io.iresp.valid     := iresp_fu_units.map(_.io.resp.valid).reduce(_|_)
     io.iresp.bits.uop  := PriorityMux(iresp_fu_units.map(f =>
       (f.io.resp.valid, f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
@@ -477,9 +456,9 @@ class FPUExeUnit(
     fpu.io.req.bits.rs1_data := io.req.bits.rs1_data
     fpu.io.req.bits.rs2_data := io.req.bits.rs2_data
     fpu.io.req.bits.rs3_data := io.req.bits.rs3_data
-    fpu.io.req.bits.kill     := io.req.bits.kill
+    fpu.io.kill              := io.kill
     fpu.io.fcsr_rm           := io.fcsr_rm
-    fpu.io.brinfo            <> io.brinfo
+    fpu.io.brupdate          := io.brupdate
     fpu.io.resp.ready        := DontCare
     fpu_resp_val             := fpu.io.resp.valid
     fpu_resp_fflags          := fpu.io.resp.bits.fflags
@@ -499,9 +478,9 @@ class FPUExeUnit(
     fdivsqrt.io.req.bits.rs1_data := io.req.bits.rs1_data
     fdivsqrt.io.req.bits.rs2_data := io.req.bits.rs2_data
     fdivsqrt.io.req.bits.rs3_data := DontCare
-    fdivsqrt.io.req.bits.kill     := io.req.bits.kill
+    fdivsqrt.io.kill              := io.kill
     fdivsqrt.io.fcsr_rm           := io.fcsr_rm
-    fdivsqrt.io.brinfo <> io.brinfo
+    fdivsqrt.io.brupdate          := io.brupdate
 
     // share write port with the pipelined units
     fdivsqrt.io.resp.ready := !(fu_units.map(_.io.resp.valid).reduce(_|_)) // TODO PERF will get blocked by fpiu.
@@ -535,19 +514,19 @@ class FPUExeUnit(
     queue.io.enq.bits.uop    := fpu.io.resp.bits.uop
     queue.io.enq.bits.data   := fpu.io.resp.bits.data
     queue.io.enq.bits.fflags := fpu.io.resp.bits.fflags
-    queue.io.brinfo          := io.brinfo
-    queue.io.flush           := io.req.bits.kill
+    queue.io.brupdate        := io.brupdate
+    queue.io.flush           := io.kill
 
     assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
 
     val fp_sdq = Module(new BranchKillableQueue(new ExeUnitResp(dataWidth),
       entries = 3)) // Lets us backpressure floating point store data
-    fp_sdq.io.enq.valid      := io.req.valid && io.req.bits.uop.uopc === uopSTA && !IsKilledByBranch(io.brinfo, io.req.bits.uop)
+    fp_sdq.io.enq.valid      := io.req.valid && io.req.bits.uop.uopc === uopSTA && !IsKilledByBranch(io.brupdate, io.req.bits.uop)
     fp_sdq.io.enq.bits.uop   := io.req.bits.uop
     fp_sdq.io.enq.bits.data  := ieee(io.req.bits.rs2_data)
     fp_sdq.io.enq.bits.fflags:= DontCare
-    fp_sdq.io.brinfo         := io.brinfo
-    fp_sdq.io.flush          := io.req.bits.kill
+    fp_sdq.io.brupdate       := io.brupdate
+    fp_sdq.io.flush          := io.kill
 
     assert(!(fp_sdq.io.enq.valid && !fp_sdq.io.enq.ready))
 

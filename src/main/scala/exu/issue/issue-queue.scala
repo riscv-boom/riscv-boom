@@ -2,8 +2,6 @@
 // Copyright (c) 2015 - 2018, The Regents of the University of California (Regents).
 // All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
 //------------------------------------------------------------------------------
-// Author: Christopher Celio
-//------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
@@ -28,7 +26,7 @@ import boom.common._
  * @param params issue queue params
  * @param numWakeupPorts number of wakeup ports for the issue queue
  */
-class IssueUnitPrioritizing(
+class IssueQueue(
   params: IssueParams,
   numWakeupPorts: Int)
   (implicit p: Parameters)
@@ -78,7 +76,7 @@ class IssueUnitPrioritizing(
     issue_slots(i).wakeup_ports := io.wakeup_ports
     issue_slots(i).ldspec_dst   := io.spec_ld_wakeup
     issue_slots(i).ldspec_miss  := io.ld_miss
-    issue_slots(i).brinfo       := io.brinfo
+    issue_slots(i).brupdate       := io.brupdate
     issue_slots(i).kill         := io.flush_pipeline
     issue_slots(i).clear        := shamts_oh(i) =/= 0.U
   }
@@ -109,42 +107,27 @@ class IssueUnitPrioritizing(
     io.iss_uops(w).lrs2_rtype := RT_X
   }
 
-  val requests = issue_slots.map(s => s.request && !s.request_hp)
-  val requests_hp = issue_slots.map(s => s.request_hp)
-
-  var uop_issued = 0.U(numIssueSlots.W)
+  val requests = issue_slots.map(s => s.request)
+  val port_issued = Array.fill(issueWidth){Bool()}
   for (w <- 0 until issueWidth) {
-    var port_issued = false.B
-    val t_uop_issued = WireInit(VecInit(uop_issued.asBools))
-
-    // Find high-priority
-    if (params.iqType == IQT_INT.litValue) {
-      for (i <- 0 until numIssueSlots) {
-        val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= 0.U
-        val will_issue = requests_hp(i) && !uop_issued(i) && can_allocate && !port_issued
-        when (will_issue) {
-          io.iss_valids(w)     := true.B
-          io.iss_uops(w)       := issue_slots(i).uop
-          t_uop_issued(i)      := true.B
-        }
-        port_issued = will_issue || port_issued
-      }
-    }
-
-    // Find low-priority
-    for (i <- 0 until numIssueSlots) {
-      val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= 0.U
-      val will_issue = requests(i) && !uop_issued(i) && can_allocate && !port_issued
-      when (will_issue) {
-        io.iss_valids(w)     := true.B
-        io.iss_uops(w)       := issue_slots(i).uop
-        t_uop_issued(i)      := true.B
-      }
-      port_issued = will_issue || port_issued
-    }
-    uop_issued = t_uop_issued.asUInt()
+    port_issued(w) = false.B
   }
+
   for (i <- 0 until numIssueSlots) {
-    issue_slots(i).grant := uop_issued(i)
+    issue_slots(i).grant := false.B
+    var uop_issued = false.B
+
+    for (w <- 0 until issueWidth) {
+      val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= 0.U
+
+      when (requests(i) && !uop_issued && can_allocate && !port_issued(w)) {
+        issue_slots(i).grant := true.B
+        io.iss_valids(w) := true.B
+        io.iss_uops(w) := issue_slots(i).uop
+      }
+      val was_port_issued_yet = port_issued(w)
+      port_issued(w) = (requests(i) && !uop_issued && can_allocate) | port_issued(w)
+      uop_issued = (requests(i) && can_allocate && !was_port_issued_yet) | uop_issued
+    }
   }
 }
