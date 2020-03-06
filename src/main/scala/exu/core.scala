@@ -1150,6 +1150,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
   }
 
+  io.ifu.get_pc_debug := DontCare
+
   if (p(BoomTilesKey)(0).trace) {
     for (w <- 0 until coreWidth) {
       io.trace(w).clock      := clock
@@ -1159,8 +1161,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       io.trace(w).valid      := RegNext(rob.io.commit.valids(w))
 
       // Recalculate the PC
-      io.ifu.get_pc.debug_ftq_idx(w) := rob.io.commit.uops(w).ftq_idx
-      io.trace(w).iaddr      := RegNext(Sext(AlignPCToBoundary(io.ifu.get_pc.debug_fetch_pc(w), icBlockBytes)
+      io.ifu.get_pc_debug(w).ftq_idx := rob.io.commit.uops(w).ftq_idx
+      io.trace(w).iaddr := RegNext(Sext(AlignPCToBoundary(io.ifu.get_pc_debug(w).pc, icBlockBytes)
                                       + rob.io.commit.uops(w).pc_lob
                                       - Mux(rob.io.commit.uops(w).edge_inst, 2.U, 0.U), xLen))
 
@@ -1190,7 +1192,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   } else {
     io.trace := DontCare
     io.trace map (t => t.valid := false.B)
-    io.ifu.get_pc.debug_ftq_idx := DontCare
   }
 
   //-------------------------------------------------------------
