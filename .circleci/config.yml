@@ -589,10 +589,10 @@ workflows:
                 requires:
                     - prepare-build-environment
                     - install-riscv-toolchain
-            - prepare-smallrv32boomconfig:
-                requires:
-                    - prepare-build-environment
-                    - install-riscv-toolchain
+            # - prepare-smallrv32boomconfig:
+            #     requires:
+            #         - prepare-build-environment
+            #         - install-riscv-toolchain
             - prepare-hwachaboomconfig:
                 requires:
                     - prepare-build-environment
@@ -631,9 +631,9 @@ workflows:
                     - prepare-megaboomconfig
 
             # Run the SmallRV32BoomConfig tests
-            - smallrv32boomconfig-run-riscv-tests:
-                requires:
-                    - prepare-smallrv32boomconfig
+            # - smallrv32boomconfig-run-riscv-tests:
+            #     requires:
+            #         - prepare-smallrv32boomconfig
 
             # Run the HwachaBoomConfig tests
             - hwachaboomconfig-run-riscv-tests:
