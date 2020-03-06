@@ -385,6 +385,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val p1_block_load_mask = RegNext(block_load_mask)
   val p2_block_load_mask = RegNext(p1_block_load_mask)
 
+  // Prioritize emptying the store queue when it is almost full
+  val stq_almost_full = RegNext(WrapInc(WrapInc(st_enq_idx, numStqEntries), numStqEntries) === stq_head ||
+                                WrapInc(st_enq_idx, numStqEntries) === stq_head)
+
   // The store at the commit head needs the DCache to appear ordered
   // Delay firing load wakeups and retries now
   val store_needs_order = WireInit(false.B)
@@ -481,16 +485,16 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   // Can we wakeup a load that was nack'd
   val can_fire_load_wakeup = widthMap(w =>
-                             ( ldq_wakeup_e.valid                      &&
-                               ldq_wakeup_e.bits.addr.valid            &&
-                              !ldq_wakeup_e.bits.succeeded             &&
-                              !ldq_wakeup_e.bits.addr_is_virtual       &&
-                              !ldq_wakeup_e.bits.executed              &&
-                              !ldq_wakeup_e.bits.order_fail            &&
-                              !p1_block_load_mask(ldq_wakeup_idx)      &&
-                              !p2_block_load_mask(ldq_wakeup_idx)      &&
-                              !store_needs_order                       &&
-                              (w == memWidth-1).B                      &&
+                             ( ldq_wakeup_e.valid                                      &&
+                               ldq_wakeup_e.bits.addr.valid                            &&
+                              !ldq_wakeup_e.bits.succeeded                             &&
+                              !ldq_wakeup_e.bits.addr_is_virtual                       &&
+                              !ldq_wakeup_e.bits.executed                              &&
+                              !ldq_wakeup_e.bits.order_fail                            &&
+                              !p1_block_load_mask(ldq_wakeup_idx)                      &&
+                              !p2_block_load_mask(ldq_wakeup_idx)                      &&
+                              !store_needs_order                                       &&
+                              (w == memWidth-1).B                                      &&
                               (!ldq_wakeup_e.bits.addr_is_uncacheable || (io.core.commit_load_at_rob_head &&
                                                                           ldq_head === ldq_wakeup_idx &&
                                                                           ldq_wakeup_e.bits.st_dep_mask.asUInt === 0.U))))
@@ -528,6 +532,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     // Some restrictions
     //  - Incoming ops must get precedence, can't backpresure memaddrgen
     //  - Incoming hellacache ops must get precedence over retrying ops (PTW must get precedence over retrying translation)
+    // Notes on performance
+    //  - Prioritize releases, this speeds up cache line writebacks and refills
+    //  - Store commits are lowest priority, since they don't "block" younger instructions unless stq fills up
     will_fire_load_incoming (w) := lsu_sched(can_fire_load_incoming (w) , true , true , true , false) // TLB , DC , LCAM
     will_fire_stad_incoming (w) := lsu_sched(can_fire_stad_incoming (w) , true , false, true , true)  // TLB ,    , LCAM , ROB
     will_fire_sta_incoming  (w) := lsu_sched(can_fire_sta_incoming  (w) , true , false, true , true)  // TLB ,    , LCAM , ROB
@@ -538,8 +545,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     will_fire_hella_wakeup  (w) := lsu_sched(can_fire_hella_wakeup  (w) , false, true , false, false) //     , DC
     will_fire_load_retry    (w) := lsu_sched(can_fire_load_retry    (w) , true , true , true , false) // TLB , DC , LCAM
     will_fire_sta_retry     (w) := lsu_sched(can_fire_sta_retry     (w) , true , false, true , true)  // TLB ,    , LCAM , ROB // TODO: This should be higher priority
+    will_fire_load_wakeup   (w) := lsu_sched(can_fire_load_wakeup   (w) , false, true , true , false) //     , DC , LCAM1
     will_fire_store_commit  (w) := lsu_sched(can_fire_store_commit  (w) , false, true , false, false) //     , DC
-    will_fire_load_wakeup   (w) := lsu_sched(can_fire_load_wakeup   (w) , false, true , true , false) //     , DC , LCAM
+
 
     assert(!(exe_req(w).valid && !(will_fire_load_incoming(w) || will_fire_stad_incoming(w) || will_fire_sta_incoming(w) || will_fire_std_incoming(w) || will_fire_sfence(w))))
 
