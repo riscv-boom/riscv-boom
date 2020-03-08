@@ -579,6 +579,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   var redirect_found = false.B
   var bank_prev_is_half = f3_prev_is_half
   var bank_prev_half    = f3_prev_half
+  var last_inst = 0.U(16.W)
   for (b <- 0 until nBanks) {
     val bank_data  = f3_data((b+1)*bankWidth*16-1, b*bankWidth*16)
     val bank_mask  = Wire(Vec(bankWidth, Bool()))
@@ -595,7 +596,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
       val brsigs = Wire(new BranchDecodeSignals)
       if (w == 0) {
-        val inst0 = Cat(bank_data(15,0), bank_prev_half)
+        val inst0 = Cat(bank_data(15,0), f3_prev_half)
         val inst1 = bank_data(31,0)
         val exp_inst0 = ExpandRVC(inst0)
         val exp_inst1 = ExpandRVC(inst1)
@@ -616,6 +617,20 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
           bpu.io.pc                    := pc0
           brsigs                       := bpd_decoder0.io.out
           f3_fetch_bundle.edge_inst(b) := true.B
+          if (b > 0) {
+            val inst0b     = Cat(bank_data(15,0), last_inst)
+            val exp_inst0b = ExpandRVC(inst0b)
+            val bpd_decoder0b = Module(new BranchDecode)
+            bpd_decoder0b.io.inst := exp_inst0b
+            bpd_decoder0b.io.pc   := pc0
+
+            when (f3_bank_mask(b-1)) {
+              bank_insts(w)                := inst0b
+              f3_fetch_bundle.insts(i)     := inst0b
+              f3_fetch_bundle.exp_insts(i) := exp_inst0b
+              brsigs                       := bpd_decoder0b.io.out
+            }
+          }
         } .otherwise {
           bank_insts(w)                := inst1
           f3_fetch_bundle.insts(i)     := inst1
@@ -710,7 +725,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
       redirect_found = redirect_found || f3_redirects(i)
     }
-    val last_inst = bank_insts(bankWidth-1)
+    last_inst = bank_insts(bankWidth-1)(15,0)
     bank_prev_is_half = Mux(f3_bank_mask(b),
       (!(bank_mask(bankWidth-2) && !isRVC(bank_insts(bankWidth-2))) && !isRVC(last_inst)),
       bank_prev_is_half)
