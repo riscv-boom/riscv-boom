@@ -1038,6 +1038,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val s1_executing_loads = RegNext(s0_executing_loads)
   val s1_set_execute     = WireInit(s1_executing_loads)
 
+  val forwarding_loads = WireInit(VecInit((0 until numLdqEntries) map (x=>false.B)))
+
   for (i <- 0 until numLdqEntries) {
     val l_valid = ldq(i).valid
     val l_bits  = ldq(i).bits
@@ -1062,7 +1064,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       } .elsewhen (do_st_search(w)                                                                                                &&
                    l_valid                                                                                                        &&
                    l_bits.addr.valid                                                                                              &&
-                   (l_bits.executed || l_bits.succeeded)                                                                          &&
+                   (l_bits.executed || l_bits.succeeded || forwarding_loads(i))                                                   &&
                    !l_bits.addr_is_virtual                                                                                        &&
                    l_bits.st_dep_mask(lcam_stq_idx(w))                                                                            &&
                    dword_addr_matches(w)) {
@@ -1081,7 +1083,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                    ((lcam_mask(w) & l_mask) =/= 0.U)) {
         val searcher_is_older = IsOlder(lcam_ldq_idx(w), i.U, ldq_head)
         when (searcher_is_older) {
-          when ((l_bits.executed || l_bits.succeeded) &&
+          when ((l_bits.executed || l_bits.succeeded || forwarding_loads(i)) &&
                 !s1_executing_loads(i) && // If the load is proceeding in parallel we don't need to kill it
                 l_bits.observed) {        // Its only a ordering failure if the cache line was observed between the younger load and us
             ldq(i).bits.order_fail := true.B
@@ -1216,6 +1218,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val wb_forward_ldq_idx  = RegNext(mem_forward_ldq_idx)
   val wb_forward_ld_addr  = RegNext(mem_forward_ld_addr)
   val wb_forward_stq_idx  = RegNext(mem_forward_stq_idx)
+
+  for (w <- 0 until memWidth) {
+    forwarding_loads(wb_forward_ldq_idx(w)) := wb_forward_valid(w)
+  }
 
   // Handle Memory Responses and nacks
   //----------------------------------
