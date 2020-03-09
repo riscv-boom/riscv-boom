@@ -103,14 +103,17 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
   val io = IO(new BoomBundle {
     // Enqueue one entry for every fetch cycle.
-    val enq = Flipped(Decoupled(new FetchBundle()))
+    val enq = Flipped(Decoupled(new FetchBundle))
     // Pass to FetchBuffer (newly fetched instructions).
     val enq_idx = Output(UInt(idx_sz.W))
     // ROB tells us the youngest committed ftq_idx to remove from FTQ.
     val deq = Flipped(Valid(UInt(idx_sz.W)))
 
     // Give PC info to BranchUnit.
-    val get_ftq_pc = Vec(2, new GetPCFromFtqIO())
+    val get_ftq_pc = Vec(2, new GetPCFromFtqIO)
+
+    // Get PCs for debug tracing
+    val get_pc_debug = Vec(coreWidth, new GetPCFromFtqIO)
 
     val redirect = Input(Valid(UInt(idx_sz.W)))
 
@@ -275,10 +278,19 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     val next_pc = Mux(next_is_enq, io.enq.bits.pc, pcs(next_idx))
     val get_entry = ram(idx)
     val next_entry = ram(next_idx)
-    io.get_ftq_pc(i).entry     := RegNext(get_entry)
-    io.get_ftq_pc(i).pc        := RegNext(pcs(idx))
-    io.get_ftq_pc(i).next_pc   := RegNext(next_pc)
-    io.get_ftq_pc(i).next_val  := RegNext(next_idx =/= enq_ptr || next_is_enq)
-    io.get_ftq_pc(i).com_pc    := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))
+    io.get_ftq_pc(i).entry    := RegNext(get_entry)
+    io.get_ftq_pc(i).pc       := RegNext(pcs(idx))
+    io.get_ftq_pc(i).next_pc  := RegNext(next_pc)
+    io.get_ftq_pc(i).next_val := RegNext(next_idx =/= enq_ptr || next_is_enq)
+    io.get_ftq_pc(i).com_pc   := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))
+  }
+
+  //-------------------------------------------------------------
+  // **** Trace Debug PCs ****
+  //-------------------------------------------------------------
+
+  for (w <- 0 until coreWidth) {
+    io.get_pc_debug(w)    := DontCare
+    io.get_pc_debug(w).pc := pcs(io.get_pc_debug(w).ftq_idx)
   }
 }

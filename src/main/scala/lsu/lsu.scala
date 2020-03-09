@@ -576,7 +576,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   //--------------------------------------------
   // TLB Access
 
-  assert(hella_req.cmd =/= rocket.M_SFENCE,
+  assert(!(hella_state =/= h_ready && hella_req.cmd === rocket.M_SFENCE),
     "SFENCE through hella interface not supported")
 
   val exe_tlb_uop = widthMap(w =>
@@ -1054,7 +1054,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     val dword_addr_matches = widthMap(w => block_addr_matches(w) && lcam_addr(w)(blockOffBits-1,3) === l_addr(blockOffBits-1,3))
     val mask_match   = widthMap(w => (l_mask & lcam_mask(w)) === l_mask)
     val mask_overlap = widthMap(w => (l_mask & lcam_mask(w)).orR)
-
     val l_is_succeeding = succeeding_loads(i)
 
     // Searcher is a store
@@ -1090,7 +1089,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                    l_bits.addr.valid          &&
                    !l_bits.addr_is_virtual    &&
                    dword_addr_matches(w)      &&
-                   ((lcam_mask(w) & l_mask) =/= 0.U)) {
+                   mask_overlap(w)) {
         val searcher_is_older = IsOlder(lcam_ldq_idx(w), i.U, ldq_head)
         when (searcher_is_older) {
           when (l_bits.executed        &&

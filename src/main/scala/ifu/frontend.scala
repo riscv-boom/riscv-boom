@@ -241,7 +241,8 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   val fetchpacket       = Flipped(new DecoupledIO(new FetchBufferResp))
 
   // 1 for xcpt/jalr/auipc/flush
-  val get_pc            = Flipped(Vec(2, new GetPCFromFtqIO()))
+  val get_pc            = Flipped(Vec(2, new GetPCFromFtqIO))
+  val get_pc_debug      = Flipped(Vec(coreWidth, new GetPCFromFtqIO))
 
   // Breakpoint info
   val status            = Output(new MStatus)
@@ -773,6 +774,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   io.cpu.fetchpacket <> fb.io.deq
   io.cpu.get_pc <> ftq.io.get_ftq_pc
+  io.cpu.get_pc_debug <> ftq.io.get_pc_debug
   ftq.io.deq := io.cpu.commit
   ftq.io.brupdate := io.cpu.brupdate
 

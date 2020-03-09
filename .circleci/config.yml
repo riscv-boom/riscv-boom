@@ -222,38 +222,6 @@ jobs:
                 key: megaboomconfig-{{ .Branch }}-{{ .Revision }}
                 paths:
                     - "/home/riscvuser/chipyard"
-    prepare-smallboomandrocketconfig:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - add_ssh_keys:
-                fingerprints:
-                    - "3e:c3:02:5b:ed:64:8c:b7:b0:04:43:bc:83:43:73:1e"
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
-            - run:
-                name: Building SmallBoomAndRocketConfig using Verilator
-                command: .circleci/do-rtl-build.sh boomandrocket
-                no_output_timeout: 120m
-            - save_cache:
-                key: smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
-                paths:
-                    - "/home/riscvuser/chipyard"
     prepare-smallrv32boomconfig:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -515,55 +483,6 @@ jobs:
                 name: Run MegaBoomConfig riscv tests
                 command: .circleci/run-tests.sh megaboom
                 no_output_timeout: 30m
-    smallboomandrocketconfig-run-csmith-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
-            - run:
-                name: Run SmallBoomAndRocketConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh boomandrocket 50
-                no_output_timeout: 30m
-    smallboomandrocketconfig-run-riscv-tests:
-        docker:
-            - image: riscvboom/riscvboom-images:0.0.12
-        environment:
-            JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
-            TERM: dumb
-        steps:
-            - checkout
-            - run:
-                name: Create hash of toolchains
-                command: |
-                    .circleci/create-hash.sh
-            - restore_cache:
-                keys:
-                    - riscv-tools-installed-v4-{{ checksum "../riscv-tools.hash" }}
-            - restore_cache:
-                keys:
-                    - smallboomandrocketconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
-            - run:
-                name: Run SmallBoomAndRocketConfig riscv tests
-                command: .circleci/run-tests.sh boomandrocket
     smallrv32boomconfig-run-csmith-tests:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -670,14 +589,10 @@ workflows:
                 requires:
                     - prepare-build-environment
                     - install-riscv-toolchain
-            - prepare-smallboomandrocketconfig:
-                requires:
-                    - prepare-build-environment
-                    - install-riscv-toolchain
-            - prepare-smallrv32boomconfig:
-                requires:
-                    - prepare-build-environment
-                    - install-riscv-toolchain
+            # - prepare-smallrv32boomconfig:
+            #     requires:
+            #         - prepare-build-environment
+            #         - install-riscv-toolchain
             - prepare-hwachaboomconfig:
                 requires:
                     - prepare-build-environment
@@ -715,18 +630,10 @@ workflows:
                 requires:
                     - prepare-megaboomconfig
 
-            # Run the SmallBoomAndRocketConfig tests
-            - smallboomandrocketconfig-run-csmith-tests:
-                requires:
-                    - prepare-smallboomandrocketconfig
-            - smallboomandrocketconfig-run-riscv-tests:
-                requires:
-                    - prepare-smallboomandrocketconfig
-
             # Run the SmallRV32BoomConfig tests
-            - smallrv32boomconfig-run-riscv-tests:
-                requires:
-                    - prepare-smallrv32boomconfig
+            # - smallrv32boomconfig-run-riscv-tests:
+            #     requires:
+            #         - prepare-smallrv32boomconfig
 
             # Run the HwachaBoomConfig tests
             - hwachaboomconfig-run-riscv-tests:

@@ -1150,21 +1150,43 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
   }
 
+  io.ifu.get_pc_debug := DontCare
+
   if (p(BoomTilesKey)(0).trace) {
     for (w <- 0 until coreWidth) {
       io.trace(w).clock      := clock
       io.trace(w).reset      := reset
+
+      // Delay the trace so we have a cycle to pull PCs out of the FTQ
       io.trace(w).valid      := RegNext(rob.io.commit.valids(w))
-      io.trace(w).iaddr      := RegNext(Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen))
+
+      // Recalculate the PC
+      io.ifu.get_pc_debug(w).ftq_idx := rob.io.commit.uops(w).ftq_idx
+      io.trace(w).iaddr := RegNext(Sext(AlignPCToBoundary(io.ifu.get_pc_debug(w).pc, icBlockBytes)
+                                      + rob.io.commit.uops(w).pc_lob
+                                      - Mux(rob.io.commit.uops(w).edge_inst, 2.U, 0.U), xLen))
+
+      // use debug_insts instead of uop.debug_inst to use the rob's debug_inst_mem
       io.trace(w).insn       := rob.io.commit.debug_insts(w)
 
+      // Comment out this assert because it blows up FPGA synth-asserts
+      // This tests correctedness of the debug_inst mem
+      // when (RegNext(rob.io.commit.valids(w))) {
+      //   assert(rob.io.commit.debug_insts(w) === RegNext(rob.io.commit.uops(w).debug_inst))
+      // }
+      // This tests correctedness of recovering pcs through ftq debug ports
+      // when (RegNext(rob.io.commit.valids(w))) {
+      //   assert(Sext(io.trace(w).iaddr, xLen) ===
+      //     RegNext(Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen)))
+      // }
+
       // These csr signals do not exactly match up with the ROB commit signals.
-      io.trace(w).priv       := csr.io.status.prv
+      io.trace(w).priv       := RegNext(csr.io.status.prv)
       // Can determine if it is an interrupt or not based on the MSB of the cause
-      io.trace(w).exception  := rob.io.com_xcpt.valid && !rob.io.com_xcpt.bits.cause(xLen - 1)
-      io.trace(w).interrupt  := rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.cause(xLen - 1)
-      io.trace(w).cause      := rob.io.com_xcpt.bits.cause
-      io.trace(w).tval       := csr.io.tval
+      io.trace(w).exception  := RegNext(rob.io.com_xcpt.valid && !rob.io.com_xcpt.bits.cause(xLen - 1))
+      io.trace(w).interrupt  := RegNext(rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.cause(xLen - 1))
+      io.trace(w).cause      := RegNext(rob.io.com_xcpt.bits.cause)
+      io.trace(w).tval       := RegNext(csr.io.tval)
     }
     dontTouch(io.trace)
   } else {
