@@ -135,10 +135,14 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
     Fill(bankWidth, s1_update.bits.cfi_idx.valid && s1_update.valid && s1_update.bits.cfi_taken && s1_update.bits.is_commit_update))
 
   val s1_update_wmeta_mask = ((s1_update_wbtb_mask | s1_update.bits.br_mask) &
-    Fill(bankWidth, s1_update.valid && s1_update.bits.is_commit_update))
+    (Fill(bankWidth, s1_update.valid && s1_update.bits.is_commit_update) |
+     (Fill(bankWidth, s1_update.valid) & s1_update.bits.btb_mispredicts)
+    )
+  )
   val s1_update_wmeta_data = Wire(Vec(bankWidth, new BTBMeta))
+
   for (w <- 0 until bankWidth) {
-    s1_update_wmeta_data(w).tag     := s1_update_idx >> log2Ceil(nSets)
+    s1_update_wmeta_data(w).tag     := Mux(s1_update.bits.btb_mispredicts(w), 0.U, s1_update_idx >> log2Ceil(nSets))
     s1_update_wmeta_data(w).is_br   := s1_update.bits.br_mask(w)
   }
 

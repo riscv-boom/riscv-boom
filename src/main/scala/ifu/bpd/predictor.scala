@@ -51,7 +51,9 @@ class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
   // Global predictors only care about non-speculative updates
   val is_mispredict_update = Bool()
   val is_repair_update = Bool()
-  def is_commit_update = !(is_mispredict_update || is_repair_update)
+  val btb_mispredicts = UInt(fetchWidth.W)
+  def is_btb_mispredict_update = btb_mispredicts =/= 0.U
+  def is_commit_update = !(is_mispredict_update || is_repair_update || is_btb_mispredict_update)
 
   val pc            = UInt(vaddrBitsExtended.W)
   // Mask of instructions which are branches.
@@ -83,9 +85,13 @@ class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
 class BranchPredictionBankUpdate(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomFrontendParameters
 {
-  val is_mispredict_update = Bool()
-  val is_repair_update = Bool()
-  def is_commit_update = !(is_mispredict_update || is_repair_update)
+  val is_mispredict_update     = Bool()
+  val is_repair_update         = Bool()
+
+  val btb_mispredicts  = UInt(bankWidth.W)
+  def is_btb_mispredict_update = btb_mispredicts =/= 0.U
+
+  def is_commit_update = !(is_mispredict_update || is_repair_update || is_btb_mispredict_update)
 
   val pc               = UInt(vaddrBitsExtended.W)
 
@@ -368,6 +374,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     banked_predictors(0).io.update.valid                 := io.update.valid
     banked_predictors(0).io.update.bits.pc               := bankAlign(io.update.bits.pc)
     banked_predictors(0).io.update.bits.br_mask          := io.update.bits.br_mask
+    banked_predictors(0).io.update.bits.btb_mispredicts  := io.update.bits.btb_mispredicts
     banked_predictors(0).io.update.bits.cfi_idx.valid    := io.update.bits.cfi_idx.valid
     banked_predictors(0).io.update.bits.ghist            := io.update.bits.ghist.histories(0)
 
@@ -397,6 +404,9 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
       banked_predictors(0).io.update.bits.br_mask := io.update.bits.br_mask
       banked_predictors(1).io.update.bits.br_mask := io.update.bits.br_mask >> bankWidth
 
+      banked_predictors(0).io.update.bits.btb_mispredicts  := io.update.bits.btb_mispredicts
+      banked_predictors(1).io.update.bits.btb_mispredicts  := io.update.bits.btb_mispredicts >> bankWidth
+
       banked_predictors(0).io.update.bits.cfi_idx.valid := io.update.bits.cfi_idx.valid && io.update.bits.cfi_idx.bits < bankWidth.U
       banked_predictors(1).io.update.bits.cfi_idx.valid := io.update.bits.cfi_idx.valid && io.update.bits.cfi_idx.bits >= bankWidth.U
 
@@ -420,6 +430,9 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
 
       banked_predictors(1).io.update.bits.br_mask := io.update.bits.br_mask
       banked_predictors(0).io.update.bits.br_mask := io.update.bits.br_mask >> bankWidth
+
+      banked_predictors(1).io.update.bits.btb_mispredicts  := io.update.bits.btb_mispredicts
+      banked_predictors(0).io.update.bits.btb_mispredicts  := io.update.bits.btb_mispredicts >> bankWidth
 
       banked_predictors(1).io.update.bits.cfi_idx.valid := io.update.bits.cfi_idx.valid && io.update.bits.cfi_idx.bits < bankWidth.U
       banked_predictors(0).io.update.bits.cfi_idx.valid := io.update.bits.cfi_idx.valid && io.update.bits.cfi_idx.bits >= bankWidth.U

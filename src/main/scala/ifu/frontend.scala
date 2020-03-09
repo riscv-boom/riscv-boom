@@ -816,6 +816,19 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     }
   }
 
+  // When f3 finds a btb mispredict, queue up a bpd correction update
+  val f4_btb_corrections = Module(new Queue(new BranchPredictionUpdate, 2))
+  f4_btb_corrections.io.enq.valid := f3.io.deq.fire() && f3_btb_mispredicts.reduce(_||_)
+  f4_btb_corrections.io.enq.bits  := DontCare
+  f4_btb_corrections.io.enq.bits.is_mispredict_update := false.B
+  f4_btb_corrections.io.enq.bits.is_repair_update     := false.B
+  f4_btb_corrections.io.enq.bits.btb_mispredicts      := f3_btb_mispredicts.asUInt
+  f4_btb_corrections.io.enq.bits.pc                   := f3_fetch_bundle.pc
+  f4_btb_corrections.io.enq.bits.ghist                := f3_fetch_bundle.ghist
+  f4_btb_corrections.io.enq.bits.lhist                := f3_fetch_bundle.lhist
+  f4_btb_corrections.io.enq.bits.meta                 := f3_fetch_bundle.bpd_meta
+
+
   // -------------------------------------------------------
   // **** F4 ****
   // -------------------------------------------------------
@@ -889,8 +902,13 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   ftq.io.enq.valid          := f4.io.deq.valid && fb.io.enq.ready && !f4_delay
   ftq.io.enq.bits           := f4.io.deq.bits
 
-
-  bpd.io.update := ftq.io.bpdupdate
+  val bpd_update_arbiter = Module(new Arbiter(new BranchPredictionUpdate, 2))
+  bpd_update_arbiter.io.in(0).valid := ftq.io.bpdupdate.valid
+  bpd_update_arbiter.io.in(0).bits  := ftq.io.bpdupdate.bits
+  assert(bpd_update_arbiter.io.in(0).ready)
+  bpd_update_arbiter.io.in(1) <> f4_btb_corrections.io.deq
+  bpd.io.update := bpd_update_arbiter.io.out
+  bpd_update_arbiter.io.out.ready := true.B
 
   when (ftq.io.ras_update && enableRasTopRepair.B) {
     ras.io.write_valid := true.B

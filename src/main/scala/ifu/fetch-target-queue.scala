@@ -285,6 +285,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     io.bpdupdate.bits.is_mispredict_update := RegNext(do_mispredict_update)
     io.bpdupdate.bits.is_repair_update     := RegNext(do_repair_update)
     io.bpdupdate.bits.pc      := bpd_pc
+    io.bpdupdate.bits.btb_mispredicts := 0.U
     io.bpdupdate.bits.br_mask := Mux(bpd_entry.cfi_idx.valid,
       MaskLower(UIntToOH(cfi_idx)) & bpd_entry.br_mask, bpd_entry.br_mask)
     io.bpdupdate.bits.cfi_idx := bpd_entry.cfi_idx
