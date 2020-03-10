@@ -244,11 +244,6 @@ jobs:
             - prepare-rtl:
                 config-key: "megaboom"
                 timeout: "240m"
-    prepare-smallboomandrocketconfig:
-        executor: main-env
-        steps:
-            - prepare-rtl:
-                config-key: "boomandrocket"
     prepare-smallrv32boomconfig:
         executor: main-env
         steps:
@@ -329,23 +324,6 @@ jobs:
                 name: Run MegaBoomConfig riscv tests
                 command: .circleci/run-tests.sh megaboom
                 no_output_timeout: 30m
-    smallboomandrocketconfig-run-csmith-tests:
-        executor: main-env
-        steps:
-            - test-setup:
-                config-key: "boomandrocket"
-            - run:
-                name: Run SmallBoomAndRocketConfig csmith tests
-                command: .circleci/build-run-csmith-tests.sh boomandrocket 50
-                no_output_timeout: 30m
-    smallboomandrocketconfig-run-riscv-tests:
-        executor: main-env
-        steps:
-            - test-setup:
-                config-key: "boomandrocket"
-            - run:
-                name: Run SmallBoomAndRocketConfig riscv tests
-                command: .circleci/run-tests.sh boomandrocket
     smallrv32boomconfig-run-csmith-tests:
         executor: main-env
         steps:
