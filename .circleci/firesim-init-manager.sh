@@ -4,6 +4,8 @@
 # init manager with chipyard and firesim as a library
 # do firesim managerinit (don't need to do it in future setups)
 # add version of boom (override older version)
+#
+# run location: circle ci docker image
 # -------------------------------------------------------------
 
 # turn echo on and error on earliest command
@@ -78,6 +80,11 @@ echo $FIRESIM_PEM | tr , '\n' > firesim.pem
 copy firesim.pem $AWS_SERVER:$CI_AWS_DIR/
 
 # copy over the spec iso from the build server to the manager instance
+# NOTE:
+#   The SPEC2017 ISO is located on the build server (located at UCB).
+#   Only BOOM developers (and Chipyard) developers can get access to it.
+#   The following steps copy it from the build server -> docker circleci image -> firesim manager
+# TODO: figure out cleaner way to move SPEC to manager instance that is still "secure"
 copy $SERVER:$REMOTE_SPEC $HOME/spec-2017.iso
 copy $HOME/spec-2017.iso $AWS_SERVER:$CI_AWS_DIR/
 rm -rf $HOME/spec-2017.iso

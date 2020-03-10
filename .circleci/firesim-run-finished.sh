@@ -5,6 +5,7 @@
 #   cat the output log from the run
 #   use the variables *_PASSED given by the post that spawned this job to determine status
 #
+# run location: circle ci docker image
 # usage:
 #   $1 - config string (translates to afi folder inside firesim-configs/*)
 #   $2 - workload name (folder inside firesim-configs/afi-longname/*)

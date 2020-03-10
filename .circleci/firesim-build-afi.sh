@@ -6,6 +6,7 @@
 # **runs all workloads that finished building**
 #   - otherwise it just skips that workload
 #
+# run location: circle ci docker image
 # usage:
 #   $1 - config string (translates to afi folder inside firesim-configs/*)
 #-------------------------------------------------------------

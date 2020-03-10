@@ -1,7 +1,13 @@
 #!/bin/bash
 
-# create the different verilator builds of BOOM based on arg
+#-------------------------------------------------------------
+# create the different verilator builds of BOOM
 # the command is the make command string
+#
+# run location: circle ci docker image
+# usage:
+#   $1 - config string
+#-------------------------------------------------------------
 
 # turn echo on and error on earliest command
 set -ex

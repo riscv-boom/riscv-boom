@@ -3,6 +3,7 @@
 # -------------------------------------------------------------
 # retrieve and cat the output log from the failed build
 #
+# run location: circle ci docker image
 # usage:
 #   $1 - config string (translates to afi folder inside firesim-configs/*)
 #-------------------------------------------------------------

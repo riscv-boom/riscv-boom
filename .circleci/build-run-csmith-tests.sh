@@ -1,6 +1,13 @@
 #!/bin/bash
 
+#-------------------------------------------------------------
 # test the verilator simulation using csmith random testing
+#
+# run location: circle ci docker image
+# usage:
+#   $1 - config string
+#   $2 - name of the toolchain to build
+#-------------------------------------------------------------
 
 # turn echo on and error on earliest command
 set -ex

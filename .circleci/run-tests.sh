@@ -1,6 +1,12 @@
 #!/bin/bash
 
-# run the different tests
+#-------------------------------------------------------------
+# run the different tests (based on the config)
+#
+# run location: circle ci docker image
+# usage:
+#   $1 - config string
+#-------------------------------------------------------------
 
 # turn echo on and error on earliest command
 set -ex

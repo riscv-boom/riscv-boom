@@ -3,6 +3,7 @@
 #-------------------------------------------------------------
 # run the afi's workload (run, detach)
 #
+# run location: circle ci docker image
 # usage:
 #   $1 - config string (translates to afi folder inside firesim-configs/*)
 #   $2 - workload name (folder inside firesim-configs/afi-longname/*)

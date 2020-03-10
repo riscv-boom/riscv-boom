@@ -1,6 +1,12 @@
 #!/bin/bash
 
+#-------------------------------------------------------------
 # create the riscv tools binaries from ucb-bar/chipyard with rocket-chip hash given by riscv-boom
+#
+# run location: circle ci docker image
+# usage:
+#   $1 - name of the toolchain to build
+#-------------------------------------------------------------
 
 # turn echo on and error on earliest command
 set -ex

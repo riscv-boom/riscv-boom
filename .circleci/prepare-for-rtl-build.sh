@@ -1,6 +1,10 @@
 #!/bin/bash
 
+#-------------------------------------------------------------
 # build verilator and init submodules with chipyard hash given by riscv-boom
+#
+# run location: circle ci docker image
+#-------------------------------------------------------------
 
 # turn echo on and error on earliest command
 set -ex

@@ -3,6 +3,7 @@
 #-------------------------------------------------------------
 # clean directories that are older than 30 days
 #
+# run location: build server (located at UCB)
 # usage:
 #   $1 - the directory to search in
 #-------------------------------------------------------------
