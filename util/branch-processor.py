@@ -31,7 +31,7 @@ class BranchInfo:
         return self.mispredicted/self.count
 
     def __str__(self):
-        return "({}, {}/{}, {}, {})".format(
+        return "({}, {}/{}, {:.4f}, {})".format(
             self.addr,
             self.mispredicted,
             self.count,
@@ -45,7 +45,11 @@ for line in args.file:
     if len(l) == 6:
         src, taken, is_br, is_jal, is_jalr, addr = map(str, l)
         addr = addr[:-1]
-        print(src, taken ,addr)
+        label = 'br' if is_br == '1' else (
+            'jal' if is_jal == '1' else (
+            'jalr' if is_jalr == '1' else (
+            'X')))
+        print(src, taken, addr, label, flush=True)
         mispredicted = (src == '3')
         if is_jal != '1':# and int(addr, 16) < 0x80000000:
             if addr not in branches:
