@@ -1,18 +1,17 @@
+import argparse
 import sys
 
+parser = argparse.ArgumentParser(description='BOOM branch trace analyzer')
+parser.add_argument('-v', '--verbose', action='store_true',
+                    help='echo log contents')
+parser.add_argument('file', nargs='?', type=argparse.FileType('r'),
+                    default=sys.stdin,
+                    help='workload.out file')
+parser.add_argument('n', nargs='?', type=int, default=1,
+                    help='number of branches to print')
 
-if len(sys.argv) < 2 or sys.argv[1] == '-h':
-    print("""
-BOOM branch trace analyzer
-
-Usage: python3 branch-processor.py workload.out
-""")
-    exit(0)
-
-f = open(sys.argv[1], 'r').readlines()
-n = 1
-if len(sys.argv) >= 3:
-    n = int(sys.argv[2])
+args = parser.parse_args()
+n = args.n
 
 
 class BranchInfo:
@@ -41,8 +40,8 @@ class BranchInfo:
 
 branches = {}
 ghist = '0'*128
-for l in f:
-    l = l.split(' ')
+for line in args.file:
+    l = line.split(' ')
     if len(l) == 6:
         src, taken, is_br, is_jal, is_jalr, addr = map(str, l)
         addr = addr[:-1]
@@ -57,6 +56,11 @@ for l in f:
                 branches[addr].lhist += taken
             if is_jalr != '1':
                 ghist = ghist[1:] + taken
+    elif args.verbose:
+        print(line, end='', flush=True)
+
+if not branches:
+    sys.exit(0)
 
 blist = list(map(lambda kv:kv[1], branches.items()))
 bad_branches       = list(sorted(blist, key=lambda b:(b.mispredict_rate(), b.count)))[::-1]
