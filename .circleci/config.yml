@@ -61,9 +61,6 @@ parameters:
         default: false
 
     # misc parameters
-    verilator-cache-version:
-        type: string
-        default: "v13"
     tools-cache-version:
         type: string
         default: "v4"
@@ -128,9 +125,6 @@ commands:
             - restore_cache:
                 keys:
                     - chipyard-<< pipeline.parameters.chipyard-cache-version >>-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-<< pipeline.parameters.verilator-cache-version >>-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building << parameters.config-key >> Config using Verilator
                 command: .circleci/do-rtl-build.sh << parameters.config-key >>
@@ -160,9 +154,6 @@ commands:
             - restore_cache:
                 keys:
                     - << parameters.config-key >>config-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-<< pipeline.parameters.verilator-cache-version >>-{{ checksum "CHIPYARD.hash" }}
 
     firesim-workload-build:
         description: "Build a FireSim workload"
@@ -200,11 +191,8 @@ jobs:
             - restore_cache:
                 keys:
                     - chipyard-<< pipeline.parameters.chipyard-cache-version >>-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-<< pipeline.parameters.verilator-cache-version >>-{{ checksum "CHIPYARD.hash" }}
             - run:
-                name: Build Verilator and checkout submodules
+                name: Setup build environment
                 command: |
                     .circleci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
@@ -212,10 +200,6 @@ jobs:
                 key: chipyard-<< pipeline.parameters.chipyard-cache-version >>-{{ checksum "CHIPYARD.hash" }}
                 paths:
                     - "/home/riscvuser/chipyard"
-            - save_cache:
-                key: verilator-<< pipeline.parameters.verilator-cache-version >>-{{ checksum "CHIPYARD.hash" }}
-                paths:
-                    - "/home/riscvuser/verilator"
     run-scala-checkstyle:
         executor: main-env
         steps:
@@ -518,7 +502,7 @@ workflows:
 
             - install-esp-toolchain
 
-            # Build verilator
+            # Setup build environment
             - prepare-build-environment
 
             # Run generic syntax checking

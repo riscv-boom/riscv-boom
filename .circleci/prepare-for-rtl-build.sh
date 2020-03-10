@@ -1,7 +1,8 @@
 #!/bin/bash
 
 #-------------------------------------------------------------
-# build verilator and init submodules with chipyard hash given by riscv-boom
+# init submodules with chipyard hash given by riscv-boom and
+# use right boom version
 #
 # run location: circle ci docker image
 #-------------------------------------------------------------
@@ -19,7 +20,7 @@ trap clean EXIT
 run_script $SCRIPT_DIR/clean-old-files.sh $CI_DIR
 
 # check to see if both dirs exist
-if [ ! -d "$LOCAL_VERILATOR_DIR" ] && [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then
+if [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then
     cd $HOME
 
     git clone --progress --verbose https://github.com/ucb-bar/chipyard.git chipyard
@@ -35,22 +36,4 @@ if [ ! -d "$LOCAL_VERILATOR_DIR" ] && [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then
     # move the pull request riscv-boom repo into chipyard
     rm -rf $LOCAL_CHIPYARD_DIR/generators/boom
     cp -r $LOCAL_CHECKOUT_DIR $LOCAL_CHIPYARD_DIR/generators/boom/
-
-    # set stricthostkeychecking to no (must happen before rsync)
-    run "echo \"Ping $SERVER\""
-
-    clean
-
-    run "mkdir -p $REMOTE_CHIPYARD_DIR"
-    copy $LOCAL_CHIPYARD_DIR/ $SERVER:$REMOTE_CHIPYARD_DIR
-
-    run "make -j$NPROC -C $REMOTE_SIM_DIR VERILATOR_INSTALL_DIR=$REMOTE_VERILATOR_DIR verilator_install"
-
-    # copy so that circleci can cache
-    mkdir -p $LOCAL_CHIPYARD_DIR
-    mkdir -p $LOCAL_VERILATOR_DIR
-    copy $SERVER:$REMOTE_CHIPYARD_DIR/  $LOCAL_CHIPYARD_DIR
-    copy $SERVER:$REMOTE_VERILATOR_DIR/ $LOCAL_VERILATOR_DIR
-
-    cp -r $LOCAL_VERILATOR_DIR/install/bin/* $LOCAL_VERILATOR_DIR/install/share/verilator/bin/.
 fi
