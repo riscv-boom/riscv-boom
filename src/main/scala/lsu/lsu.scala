@@ -1268,6 +1268,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   }
 
   val dmem_resp_fired = WireInit(widthMap(w => false.B))
+  val dmem_resp_wb_cols = io.dmem.resp.map(r => Mux(r.valid, r.bits.uop.pdst_col, 0.U)).reduce(_|_)
+  var forward_wb_cols = 0.U
 
   for (w <- 0 until memWidth) {
     // Handle nacks
@@ -1338,6 +1340,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       }
     }
 
+    val forward_wb_col = WireInit(0.U)
 
     when (dmem_resp_fired(w) && wb_forward_valid(w))
     {
@@ -1350,6 +1353,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       val stq_e       = stq(wb_forward_stq_idx(w))
       val data_ready  = stq_e.bits.data.valid
       val live        = !IsKilledByBranch(io.core.brupdate, forward_uop)
+      val can_wb_irf  = !(forward_uop.pdst_col & (dmem_resp_wb_cols | forward_wb_cols)).orR
       val storegen = new freechips.rocketchip.rocket.StoreGen(
                                 stq_e.bits.uop.mem_size, stq_e.bits.addr.bits,
                                 stq_e.bits.data.bits, coreDataBytes)
@@ -1358,14 +1362,16 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                 wb_forward_ld_addr(w),
                                 storegen.data, false.B, coreDataBytes)
 
-      io.core.exe(w).iresp.valid := (forward_uop.dst_rtype === RT_FIX) && data_ready && live
+      io.core.exe(w).iresp.valid := (forward_uop.dst_rtype === RT_FIX) && data_ready && live && can_wb_irf
       io.core.exe(w).fresp.valid := (forward_uop.dst_rtype === RT_FLT) && data_ready && live
       io.core.exe(w).iresp.bits.uop  := forward_uop
       io.core.exe(w).fresp.bits.uop  := forward_uop
       io.core.exe(w).iresp.bits.data := loadgen.data
       io.core.exe(w).fresp.bits.data := loadgen.data
 
-      when (data_ready && live) {
+      forward_wb_col := Mux(io.core.exe(w).iresp.valid, forward_uop.pdst_col, 0.U)
+
+      when (data_ready && live && (can_wb_irf || forward_uop.dst_rtype === RT_FLT)) {
         ldq(f_idx).bits.succeeded := data_ready
         ldq(f_idx).bits.forward_std_val := true.B
         ldq(f_idx).bits.forward_stq_idx := wb_forward_stq_idx(w)
@@ -1379,6 +1385,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     } .elsewhen (io.core.exe(w).fresp.valid && io.core.exe(w).fresp.bits.uop.uses_ldq) {
       succeeding_loads(io.core.exe(w).fresp.bits.uop.ldq_idx) := true.B
     }
+
+    forward_wb_cols = forward_wb_cols | forward_wb_col
   }
 
   for (w <- 0 until memWidth) {
