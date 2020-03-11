@@ -87,22 +87,25 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     dis_uops_setup(w).prs3_busy := false.B
   }
 
+  val dis_reqs = Transpose(io.dis_uops.map(uop => uop.bits.pdst_col & Fill(coreWidth, uop.valid)))
   val dis_uops = Wire(Vec(coreWidth, Vec(columnDispatchWidth, new MicroOp)))
   val dis_vals = Wire(Vec(coreWidth, Vec(columnDispatchWidth, Bool())))
-
-  require (columnDispatchWidth == coreWidth) // TODO implement an arbitration / compaction mechanism
+  val dis_gnts = Wire(Vec(coreWidth, UInt(coreWidth.W)))
 
   for (w <- 0 until coreWidth) {
-    dis_uops(w) := dis_uops_setup
+    val dis_sels = SelectFirstN(dis_reqs(w), columnDispatchWidth)
+
+    for (d <- 0 until columnDispatchWidth) {
+      dis_uops(w)(d) := Mux1H(dis_sels(d), dis_uops_setup)
+      dis_vals(w)(d) := dis_sels(d).orR
+    }
+
+    val col_rdys = (0 until columnDispatchWidth).map(d => PopCount(slots(w).map(_.valid)) +& d.U < numSlotsPerColumn.U)
+    dis_gnts(w) := dis_sels zip col_rdys map { case (s,r) => Mux(r, s, 0.U) } reduce(_|_)
   }
 
-  dis_vals := Transpose(VecInit(io.dis_uops.map(uop => VecInit((uop.bits.pdst_col & Fill(coreWidth, uop.valid)).asBools))))
-
-  val col_readys = Transpose(VecInit((0 until coreWidth).map(w =>
-    VecInit((0 until columnDispatchWidth).map(k => PopCount(slots(w).map(_.valid)) +& k.U < numSlotsPerColumn.U)).asUInt)))
-
   for (w <- 0 until coreWidth) {
-    io.dis_uops(w).ready := (io.dis_uops(w).bits.pdst_col & col_readys(w)).orR
+    io.dis_uops(w).ready := (dis_gnts.reduce(_|_))(w)
   }
 
   //----------------------------------------------------------------------------------------------------
