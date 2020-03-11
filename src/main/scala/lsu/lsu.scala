@@ -1394,6 +1394,14 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       !(io.core.exe(w).iresp.valid && io.core.exe(w).iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop(w).ldq_idx))
   }
 
+  // Check for writeback collisions
+  var writeback_columns = 0.U
+  for (w <- 0 until memWidth) {
+    val pipe_slot_writeback_column = Mux(io.core.exe(w).iresp.valid, io.core.exe(w).iresp.bits.uop.pdst_col, 0.U)
+    assert (!(writeback_columns & pipe_slot_writeback_column), "[lsu] Two loads trying to write the same column")
+    writeback_columns = writeback_columns | pipe_slot_writeback_column
+  }
+
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // Kill speculated entries on branch mispredict
