@@ -26,6 +26,20 @@ case object BoomCrossingKey extends Field[Seq[RocketCrossingParams]](List(Rocket
 // BOOM Configs
 // ---------------------
 
+class WithBoomCommitLogPrintf extends Config((site, here, up) => {
+  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
+    b.copy(core = b.core.copy(enableCommitLogPrintf = true))
+  }
+})
+
+
+class WithBoomBranchPrintf extends Config((site, here, up) => {
+  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
+    b.copy(core = b.core.copy(enableBranchPrintf = true))
+  }
+})
+
+
 /**
  * Enables RV32 version of the core
  */
@@ -357,7 +371,7 @@ class WithCS152DefaultBooms extends Config((site, here, up) => {
         // DO NOT CHANGE BELOW
         enableBranchPrintf = true,
         decodeWidth = coreWidth,
-        numFetchBufferEntries = coreWidth * 4,
+        numFetchBufferEntries = coreWidth * 8,
         numDCacheBanks = memWidth,
         issueParams = Seq(
           IssueParams(issueWidth=memWidth,  numEntries=nIssueSlots, iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
