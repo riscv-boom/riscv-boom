@@ -28,6 +28,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val dis_uops = Flipped(Vec(coreWidth, DecoupledIO(new MicroOp)))
     val iss_uops = Output(Vec(coreWidth, Valid(new MicroOp)))
 
+    val dis_valids = Input(Vec(coreWidth, Bool()))
+
     val slow_wakeups = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
     val load_wakeups = Input(Vec(memWidth   , Valid(UInt(ipregSz.W))))
     val load_nacks   = Input(Vec(memWidth   , Bool()))
@@ -87,7 +89,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     dis_uops_setup(w).prs3_busy := false.B
   }
 
-  val dis_reqs = Transpose(io.dis_uops.map(uop => uop.bits.pdst_col & Fill(coreWidth, uop.valid)))
+  val dis_reqs = Transpose(io.dis_uops zip io.dis_valids map { case (u,v) => Mux(v, u.bits.pdst_col, 0.U) })
   val dis_uops = Wire(Vec(coreWidth, Vec(columnDispatchWidth, new MicroOp)))
   val dis_vals = Wire(Vec(coreWidth, Vec(columnDispatchWidth, Bool())))
   val dis_gnts = Wire(Vec(coreWidth, UInt(coreWidth.W)))
@@ -97,7 +99,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
     for (d <- 0 until columnDispatchWidth) {
       dis_uops(w)(d) := Mux1H(dis_sels(d), dis_uops_setup)
-      dis_vals(w)(d) := dis_sels(d).orR
+      dis_vals(w)(d) := Mux1H(dis_sels(d), io.dis_uops.map(_.valid))
     }
 
     val col_rdys = (0 until columnDispatchWidth).map(d => PopCount(slots(w).map(_.valid)) +& d.U < numSlotsPerColumn.U)
@@ -207,13 +209,14 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     }
 
     // Select the lowest post-compaction free slots for the main dispatch ports
-    val dispatch_slots = SelectFirstN(~compacted_valids.asUInt, numDispatchPorts)
+    val dispatch_slots = SelectFirstN(~compacted_valids.asUInt, numDispatchPorts) zip dis_vals(w) map { case (d,v) =>
+                                                                                                        Mux(v, d, 0.U) }
 
     // Generate the slot writeport muxes
     for (i <- 0 until numSlotsPerColumn) {
       val uop_sel = (0 until max).map(j => comp_sels(i+j)(j)) ++ dispatch_slots.map(d => d(i))
 
-      slots(w)(i).in_uop.bits  := Mux1H(uop_sel,          uops.slice(i+1,i+max+1) ++   dis_uops(w).dropRight(max))
+      slots(w)(i).in_uop.bits  := Mux1H(uop_sel,          uops.slice(i+1,i+max+1) ++ dis_uops(w).dropRight(max))
       slots(w)(i).in_uop.valid := Mux1H(uop_sel, will_be_valid.slice(i+1,i+max+1) ++ dis_vals(w).dropRight(max))
 
       slots(w)(i).clear := !slot_counts(i)(0)
