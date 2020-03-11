@@ -145,7 +145,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   val meta_hazard = RegInit(0.U(2.W))
   when (meta_hazard =/= 0.U) { meta_hazard := meta_hazard + 1.U }
   when (io.meta_write.fire()) { meta_hazard := 1.U }
-  io.probe_rdy   := (meta_hazard === 0.U && state.isOneOf(s_invalid, s_refill_req, s_refill_resp, s_drain_rpq_loads, s_meta_read))
+  io.probe_rdy   := (meta_hazard === 0.U && (state.isOneOf(s_invalid, s_refill_req, s_refill_resp, s_drain_rpq_loads) || (state === s_meta_read && grantack.valid)))
   io.idx.valid := state =/= s_invalid
   io.tag.valid := state =/= s_invalid
   io.way.valid := !state.isOneOf(s_invalid, s_prefetch)
@@ -281,7 +281,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       state := s_meta_read
     }
   } .elsewhen (state === s_meta_read) {
-    io.meta_read.valid := io.prober_idle
+    io.meta_read.valid := io.prober_idle || !grantack.valid
     io.meta_read.bits.idx := req_idx
     io.meta_read.bits.tag := req_tag
     io.meta_read.bits.way_en := req.way_en
