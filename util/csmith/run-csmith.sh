@@ -65,7 +65,7 @@ run_once () {
     # Test RISCV spike version
     if [ $PK == false ]; then
         riscv64-unknown-elf-gcc -w -I./$SRC_DIR -DPREALLOCATE=1 -mcmodel=medany -static -std=gnu99 -O2 -ffast-math -fno-common -o $BASE_NAME.riscv $BASE_NAME.c $SRC_DIR/syscalls.c $SRC_DIR/crt.S -static -nostdlib -nostartfiles -lm -lgcc -T $SRC_DIR/link.ld -I$RISCV/include/csmith-2.4.0
-        timeout --foreground 10s spike $BASE_NAME.riscv 1> $BASE_NAME.spike.out 2> $BASE_NAME.spike.log
+        timeout --foreground 0.1s spike $BASE_NAME.riscv 1> $BASE_NAME.spike.out 2> $BASE_NAME.spike.log
     else
         riscv64-unknown-elf-gcc $BASE_NAME.c -I$RISCV/include/csmith-2.4.0 -o $BASE_NAME.riscv -w
         timeout --foreground 1m spike pk $BASE_NAME.riscv 1> $BASE_NAME.spike.out 2> $BASE_NAME.spike.log
