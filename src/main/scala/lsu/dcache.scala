@@ -803,7 +803,9 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val uncache_resp = Wire(Valid(new BoomDCacheResp))
   uncache_resp.bits     := mshrs.io.resp.bits
   uncache_resp.valid    := mshrs.io.resp.valid
-  mshrs.io.resp.ready := !(cache_resp.map(_.valid).reduce(_&&_)) // We can backpressure the MSHRs, but not cache hits
+  // We can backpressure the MSHRs, but not cache hits
+  mshrs.io.resp.ready := !(cache_resp.map(_.valid).reduce(_&&_)) &&
+                         !(cache_resp.map(resp => Mux(resp.valid, resp.bits.uop.pdst_col, 0.U)).reduce(_|_) & mshrs.io.resp.bits.uop.pdst_col).orR
 
   val resp = WireInit(cache_resp)
   var uncache_responding = false.B
