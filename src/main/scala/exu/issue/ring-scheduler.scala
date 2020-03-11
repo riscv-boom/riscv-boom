@@ -204,7 +204,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     // Which slots might be valid after compaction?
     var compacted_valids = Wire(Vec(numSlotsPerColumn, Bool()))
     for (i <- 0 until numSlotsPerColumn) {
-      compacted_valids(i) := valids(i) && !slot_counts(i)(0) || (0 until max).map(j =>
+      compacted_valids(i) := valids(i) && slot_counts(i)(0) || (0 until max).map(j =>
                              if (i+j+1 < numSlotsPerColumn) comp_sels(i+j)(j) else false.B).reduce(_||_)
     }
 
