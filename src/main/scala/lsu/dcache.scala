@@ -829,11 +829,16 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val uncache_resp = Wire(Valid(new BoomDCacheResp))
   uncache_resp.bits     := mshrs.io.resp.bits
   uncache_resp.valid    := mshrs.io.resp.valid
-  mshrs.io.resp.ready   := !cache_resp(memWidth-1).valid // We can backpressure the MSHRs, but not cache hits
+  mshrs.io.resp.ready := !(cache_resp.map(_.valid).reduce(_&&_)) // We can backpressure the MSHRs, but not cache hits
 
   val resp = WireInit(cache_resp)
-  when (mshrs.io.resp.ready) {
-    resp(memWidth-1) := uncache_resp
+  var uncache_responding = false.B
+  for (w <- 0 until memWidth) {
+    val uncache_respond = !cache_resp(w).valid && !uncache_responding
+    when (uncache_respond) {
+      resp(w) := uncache_resp
+    }
+    uncache_responding = uncache_responding || uncache_respond
   }
 
   for (w <- 0 until memWidth) {
