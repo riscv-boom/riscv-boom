@@ -792,7 +792,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                 s2_data_word(w), s2_sc, wordBytes)
   }
   // Mux between cache responses and uncache responses
-  val cache_resp   = Wire(Vec(memWidth, Valid(new BoomDCacheResp)))
+  val cache_resp = Wire(Vec(memWidth, Valid(new BoomDCacheResp)))
   for (w <- 0 until memWidth) {
     cache_resp(w).valid         := s2_valid(w) && s2_send_resp(w)
     cache_resp(w).bits.uop      := s2_req(w).uop
@@ -804,13 +804,13 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   uncache_resp.bits     := mshrs.io.resp.bits
   uncache_resp.valid    := mshrs.io.resp.valid
   // We can backpressure the MSHRs, but not cache hits
-  mshrs.io.resp.ready := !(cache_resp.map(_.valid).reduce(_&&_)) &&
-                         !(cache_resp.map(resp => Mux(resp.valid, resp.bits.uop.pdst_col, 0.U)).reduce(_|_) & mshrs.io.resp.bits.uop.pdst_col).orR
+  val mshrs_can_wb = !(cache_resp.map(resp => Mux(resp.valid, resp.bits.uop.pdst_col, 0.U)).reduce(_|_) & mshrs.io.resp.bits.uop.pdst_col).orR
+  mshrs.io.resp.ready := !(cache_resp.map(_.valid).reduce(_&&_)) && mshrs_can_wb
 
   val resp = WireInit(cache_resp)
   var uncache_responding = false.B
   for (w <- 0 until memWidth) {
-    val uncache_respond = !cache_resp(w).valid && !uncache_responding
+    val uncache_respond = !cache_resp(w).valid && !uncache_responding && mshrs_can_wb
     when (uncache_respond) {
       resp(w) := uncache_resp
     }
