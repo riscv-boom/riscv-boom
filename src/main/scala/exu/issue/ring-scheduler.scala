@@ -99,7 +99,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   dis_vals := Transpose(VecInit(io.dis_uops.map(uop => VecInit((uop.bits.pdst_col & Fill(coreWidth, uop.valid)).asBools))))
 
   val col_readys = Transpose(VecInit((0 until coreWidth).map(w =>
-    VecInit((0 until columnDispatchWidth).map(k => PopCount(slots(w).map(_.valid)) + k.U < numSlotsPerColumn.U)).asUInt)))
+    VecInit((0 until columnDispatchWidth).map(k => PopCount(slots(w).map(_.valid)) +& k.U < numSlotsPerColumn.U)).asUInt)))
 
   for (w <- 0 until coreWidth) {
     io.dis_uops(w).ready := (io.dis_uops(w).bits.pdst_col & col_readys(w)).orR
