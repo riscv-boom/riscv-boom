@@ -206,7 +206,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     val update = Input(Valid(new BranchPredictionUpdate))
   })
 
-  val banked_predictors = Seq.fill(nBanks) { Module(new NullBranchPredictorBank) }
+  val banked_predictors = Seq.fill(nBanks) { Module(if (useBPD) new ComposedBranchPredictorBank else new NullBranchPredictorBank) }
   val banked_lhist_providers = Seq.fill(nBanks) { Module(new NullLocalBranchPredictorBank) }
 
   if (nBanks == 1) {
