@@ -8,7 +8,7 @@ package boom.common
 import chisel3._
 import chisel3.util.{RRArbiter, Queue}
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ListBuffer}
 
 import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
@@ -16,7 +16,7 @@ import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalModuleTree, LogicalTreeNode, RocketLogicalTreeNode, ICacheLogicalTreeNode}
 import freechips.rocketchip.rocket._
-import freechips.rocketchip.subsystem.RocketCrossingParams
+import freechips.rocketchip.subsystem.{RocketCrossingParams}
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
@@ -47,13 +47,13 @@ case class BoomTileParams(
   icache: Option[ICacheParams] = Some(ICacheParams()),
   dcache: Option[DCacheParams] = Some(DCacheParams()),
   btb: Option[BTBParams] = Some(BTBParams()),
-  dataScratchpadBytes: Int = 0,
   trace: Boolean = false,
   name: Option[String] = Some("boom_tile"),
   hartId: Int = 0,
   beuAddr: Option[BigInt] = None,
   blockerCtrlAddr: Option[BigInt] = None,
-  boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
+  boundaryBuffers: Boolean = false, // if synthesized with hierarchical PnR, cut feed-throughs?
+  dromajoParams: Option[DromajoParams] = None
   ) extends TileParams
 {
   require(icache.isDefined)
@@ -78,19 +78,12 @@ class BoomTile(
 {
 
   // Private constructor ensures altered LazyModule.p is used implicitly
-  def this(params: BoomTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: LogicalTreeNode)
-    (implicit p: Parameters) = this(params, crossing.crossingType, lookup, p, logicalTreeNode)
+  def this(params: BoomTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: LogicalTreeNode)(implicit p: Parameters) =
+    this(params.copy(dromajoParams = Some(DromajoParams(Some(p(BootROMParams)), p(ExtMem), p(CLINTKey), p(PLICKey)))), crossing.crossingType, lookup, p, logicalTreeNode)
 
   val intOutwardNode = IntIdentityNode()
-  val slaveNode = TLIdentityNode()
   val masterNode = visibilityNode
-
-  val dtim_adapter = tileParams.dcache.flatMap { d => d.scratch.map(s =>
-    LazyModule(new ScratchpadSlavePort(AddressSet.misaligned(s, d.dataScratchpadBytes-1),
-                                       xBytes,
-                                       tileParams.core.useAtomics && !tileParams.core.useAtomicsOnlyForIO)))
-  }
-  dtim_adapter.foreach(lm => connectTLSlave(lm.node, xBytes))
+  val slaveNode = TLIdentityNode()
 
   val bus_error_unit = boomParams.beuAddr map { a =>
     val beu = LazyModule(new BusErrorUnit(new L1BusErrors, BusErrorUnitParams(a), logicalTreeNode))
@@ -109,13 +102,6 @@ class BoomTile(
   // TODO: this doesn't block other masters, e.g. RoCCs
   tlOtherMastersNode := tile_master_blocker.map { _.node := tlMasterXbar.node } getOrElse { tlMasterXbar.node }
   masterNode :=* tlOtherMastersNode
-  DisableMonitors { implicit p => tlSlaveXbar.node :*= slaveNode }
-
-  val dtimProperty = dtim_adapter.map(d => Map(
-    "sifive,dtim" -> d.device.asProperty)).getOrElse(Nil)
-
-  val itimProperty = tileParams.icache.flatMap(_.itimAddr.map(i => Map(
-    "sifive,itim" -> frontend.icache.device.asProperty))).getOrElse(Nil)
 
   val cpuDevice: SimpleDevice = new SimpleDevice("cpu", Seq("ucb-bar,boom0", "riscv")) {
     override def parent = Some(ResourceAnchors.cpus)
@@ -124,9 +110,7 @@ class BoomTile(
       Description(name, mapping ++
                         cpuProperties ++
                         nextLevelCacheProperty ++
-                        tileProperties ++
-                        dtimProperty ++
-                        itimProperty)
+                        tileProperties)
     }
   }
 
@@ -172,7 +156,7 @@ class BoomTile(
       mtvecWritable       = boomParams.core.mtvecWritable
     )
   )
-  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen))
+  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, None, p(XLen))
 
   override lazy val module = new BoomTileModuleImp(this)
 
@@ -187,7 +171,7 @@ class BoomTile(
   tlMasterXbar.node := frontend.masterNode
 
   private val deviceOpt = None
-  val iCacheLogicalTreeNode = new ICacheLogicalTreeNode(deviceOpt, tileParams.icache.get)
+  val iCacheLogicalTreeNode = new BoomICacheLogicalTreeNode(frontend.icache, deviceOpt, tileParams.icache.get)
 
   // ROCC
   val roccs = p(BuildRoCC).map(_(p))

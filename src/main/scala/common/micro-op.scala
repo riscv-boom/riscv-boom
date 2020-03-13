@@ -16,7 +16,6 @@ import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
 
-import boom.bpu.BranchPredInfo
 import boom.exu.FUConstants
 
 /**
@@ -52,34 +51,25 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val iw_p1_poisoned   = Bool()
   val iw_p2_poisoned   = Bool()
 
-  val allocate_brtag   = Bool()                      // does this allocate a branch tag? (is branch or JR but not JAL)
-  val is_br_or_jmp     = Bool()                      // is this micro-op a (branch or jump) vs a regular PC+4 inst?
-  val is_jump          = Bool()                      // is this a jump? (jal or jalr)
+  val is_br            = Bool()                      // is this micro-op a (branch) vs a regular PC+4 inst?
+  val is_jalr          = Bool()                      // is this a jump? (jal or jalr)
   val is_jal           = Bool()                      // is this a JAL (doesn't include JR)? used for branch unit
-  val is_ret           = Bool()                      // is jalr with rd=x0, rs1=x1? (i.e., a return)
-  val is_call          = Bool()                      //
+  val is_sfb           = Bool()                      // is this a sfb or in the shadow of a sfb
+
   val br_mask          = UInt(maxBrCount.W)  // which branches are we being speculated under?
   val br_tag           = UInt(brTagSz.W)
 
-  val br_prediction    = new BranchPredInfo
-
-
-  // stat tracking of committed instructions
-  val stat_brjmp_mispredicted = Bool()                 // number of mispredicted branches/jmps
-  val stat_btb_made_pred      = Bool()                 // the BTB made a prediction (even if BPD overrided it)
-  val stat_btb_mispredicted   = Bool()                 //
-  val stat_bpd_made_pred      = Bool()                 // the BPD made the prediction
-  val stat_bpd_mispredicted   = Bool()                 // denominator: all committed branches
-
   // Index into FTQ to figure out our fetch PC.
   val ftq_idx          = UInt(log2Ceil(ftqSz).W)
-  // Index in fetch bundle.
-  val cfi_idx          = UInt(log2Ceil(fetchWidth).W)
   // This inst straddles two fetch packets
   val edge_inst        = Bool()
   // Low-order bits of our own PC. Combine with ftq[ftq_idx] to get PC.
   // Aligned to a cache-line size, as that is the greater fetch granularity.
+  // TODO: Shouldn't this be aligned to fetch-width size?
   val pc_lob           = UInt(log2Ceil(icBlockBytes).W)
+
+  // Was this a branch that was predicted taken?
+  val taken            = Bool()
 
   val imm_packed       = UInt(LONGEST_IMM_SZ.W) // densely pack the imm in decode...
                                               // then translate and sign-extend in execute
@@ -92,10 +82,12 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val prs1             = UInt(maxPregSz.W)
   val prs2             = UInt(maxPregSz.W)
   val prs3             = UInt(maxPregSz.W)
+  val ppred            = UInt(log2Ceil(ftqSz).W)
 
   val prs1_busy        = Bool()
   val prs2_busy        = Bool()
   val prs3_busy        = Bool()
+  val ppred_busy       = Bool()
   val stale_pdst       = UInt(maxPregSz.W)
   val exception        = Bool()
   val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity
@@ -113,11 +105,18 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
                                                      // drain, clear fetcha fter it (tell ROB to un-ready until empty)
   val flush_on_commit  = Bool()                      // some instructions need to flush the pipeline behind them
 
+  // Preditation
+  def is_sfb_br        = is_br && is_sfb && enableSFBOpt.B // Does this write a predicate
+  def is_sfb_shadow    = !is_br && is_sfb && enableSFBOpt.B // Is this predicated
+  val ldst_is_rs1      = Bool() // If this is set and we are predicated off, copy rs1 to dst,
+                                // else copy rs2 to dst
+
   // logical specifiers (only used in Decode->Rename), except rollback (ldst)
   val ldst             = UInt(lregSz.W)
   val lrs1             = UInt(lregSz.W)
   val lrs2             = UInt(lregSz.W)
   val lrs3             = UInt(lregSz.W)
+
   val ldst_val         = Bool()              // is there a destination? invalid for stores, rd==x0, etc.
   val dst_rtype        = UInt(2.W)
   val lrs1_rtype       = UInt(2.W)
@@ -137,16 +136,21 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val bp_debug_if      = Bool()             // Breakpoint
   val bp_xcpt_if       = Bool()             // Breakpoint
 
-  // purely debug information
-  val debug_wdata      = UInt(xLen.W)
-  val debug_events     = new DebugStageEvents
 
+  // What prediction structure provides the prediction FROM this op
+  val debug_fsrc       = UInt(BSRC_SZ.W)
+  // What prediction structure provides the prediction TO this op
+  val debug_tsrc       = UInt(BSRC_SZ.W)
+
+  // Do we allocate a branch tag for this?
+  // SFB branches don't get a mask, they get a predicate bit
+  def allocate_brtag   = (is_br && !is_sfb) || is_jalr
 
   // Does this register write-back
   def rf_wen           = dst_rtype =/= RT_X
 
   // Is it possible for this uop to misspeculate, preventing the commit of subsequent uops?
-  def unsafe           = uses_ldq || (uses_stq && !is_fence) || (is_br_or_jmp && !is_jal)
+  def unsafe           = uses_ldq || (uses_stq && !is_fence) || is_br || is_jalr
 
   def fu_code_is(_fu: UInt) = (fu_code & _fu) =/= 0.U
 }
@@ -170,13 +174,5 @@ class CtrlSignals extends Bundle()
   val is_std      = Bool()
 }
 
-/**
- * Debug stage events for Fetch stage
- */
-class DebugStageEvents extends Bundle()
-{
-  // Track the sequence number of each instruction fetched.
-  val fetch_seq        = UInt(32.W)
-}
 
 

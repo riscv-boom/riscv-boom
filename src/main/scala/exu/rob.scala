@@ -61,7 +61,7 @@ class RobIo(
   val rob_head_idx = Output(UInt(robAddrSz.W))
 
   // Handle Branch Misspeculations
-  val brinfo = Input(new BrResolutionInfo())
+  val brupdate = Input(new BrUpdateInfo())
 
   // Write-back Stage
   // (Update of ROB)
@@ -83,7 +83,6 @@ class RobIo(
 
   val fflags = Flipped(Vec(numFpuPorts, new ValidIO(new FFlagsResp())))
   val lxcpt = Flipped(new ValidIO(new Exception())) // LSU
-  val bxcpt = Flipped(new ValidIO(new Exception())) // BRU
 
   // Commit stage (free resources; also used for rollback).
   val commit = Output(new CommitSignals())
@@ -106,8 +105,9 @@ class RobIo(
   val empty = Output(Bool())
   val ready = Output(Bool()) // ROB is busy unrolling rename state...
 
-  // pass out debug information to high-level printf
-  val debug = Output(new DebugRobSignals())
+  // Stall the frontend if we know we will redirect the PC
+  val flush_frontend = Output(Bool())
+
 
   val debug_tsc = Input(UInt(xLen.W))
 }
@@ -117,13 +117,19 @@ class RobIo(
  */
 class CommitSignals(implicit p: Parameters) extends BoomBundle
 {
-  val valids     = Vec(retireWidth, Bool())
-  val uops       = Vec(retireWidth, new MicroOp())
-  val fflags     = Valid(UInt(5.W))
+  val valids      = Vec(retireWidth, Bool()) // These instructions may not correspond to an architecturally executed insn
+  val arch_valids = Vec(retireWidth, Bool())
+  val uops        = Vec(retireWidth, new MicroOp())
+  val fflags      = Valid(UInt(5.W))
+
+  // These come a cycle later
+  val debug_insts = Vec(retireWidth, UInt(32.W))
 
   // Perform rollback of rename state (in conjuction with commit.uops).
   val rbk_valids = Vec(retireWidth, Bool())
   val rollback   = Bool()
+
+  val debug_wdata = Vec(retireWidth, UInt(xLen.W))
 }
 
 /**
@@ -227,6 +233,9 @@ class Rob(
   val rob_pnr_lsb  = RegInit(0.U((1 max log2Ceil(coreWidth)).W))
   val rob_pnr_idx  = if (coreWidth == 1) rob_pnr  else Cat(rob_pnr , rob_pnr_lsb)
 
+  val com_idx = Mux(rob_state === s_rollback, rob_tail, rob_head)
+
+
   val maybe_full   = RegInit(false.B)
   val full         = Wire(Bool())
   val empty        = Wire(Bool())
@@ -249,6 +258,7 @@ class Rob(
   val r_xcpt_val       = RegInit(false.B)
   val r_xcpt_uop       = Reg(new MicroOp())
   val r_xcpt_badvaddr  = Reg(UInt(coreMaxAddrBits.W))
+  io.flush_frontend := r_xcpt_val
 
   //--------------------------------------------------
   // Utility
@@ -283,19 +293,32 @@ class Rob(
   // Contains all information the PNR needs to find the oldest instruction which can't be safely speculated past.
   val rob_unsafe_masked = WireInit(VecInit(Seq.fill(numRobRows << log2Ceil(coreWidth)){false.B}))
 
+  // Used for trace port, for debug purposes only
+  val rob_debug_inst_mem   = SyncReadMem(numRobRows, Vec(coreWidth, UInt(32.W)))
+  val rob_debug_inst_wmask = WireInit(VecInit(0.U(coreWidth.W).asBools))
+  val rob_debug_inst_wdata = Wire(Vec(coreWidth, UInt(32.W)))
+  rob_debug_inst_mem.write(rob_tail, rob_debug_inst_wdata, rob_debug_inst_wmask)
+  val rob_debug_inst_rdata = rob_debug_inst_mem.read(rob_head, will_commit.reduce(_||_))
+
   for (w <- 0 until coreWidth) {
     def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
 
     // one bank
     val rob_val       = RegInit(VecInit(Seq.fill(numRobRows){false.B}))
-    val rob_bsy       = Mem(numRobRows, Bool())
+    val rob_bsy       = Reg(Vec(numRobRows, Bool()))
     val rob_unsafe    = Mem(numRobRows, Bool())
     val rob_uop       = Reg(Vec(numRobRows, new MicroOp()))
     val rob_exception = Mem(numRobRows, Bool())
+    val rob_predicated = Reg(Vec(numRobRows, Bool())) // Was this instruction predicated out?
     val rob_fflags    = Mem(numRobRows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
+
+    val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
 
     //-----------------------------------------------
     // Dispatch: Add Entry to ROB
+
+    rob_debug_inst_wmask(w) := io.enq_valids(w)
+    rob_debug_inst_wdata(w) := io.enq_uops(w).debug_inst
 
     when (io.enq_valids(w)) {
       rob_val(rob_tail)       := true.B
@@ -304,8 +327,8 @@ class Rob(
       rob_unsafe(rob_tail)    := io.enq_uops(w).unsafe
       rob_uop(rob_tail)       := io.enq_uops(w)
       rob_exception(rob_tail) := io.enq_uops(w).exception
+      rob_predicated(rob_tail)   := false.B
       rob_fflags(rob_tail)    := 0.U
-      rob_uop(rob_tail).stat_brjmp_mispredicted := false.B
 
       assert (rob_val(rob_tail) === false.B, "[rob] overwriting a valid entry.")
       assert ((io.enq_uops(w).rob_idx >> log2Ceil(coreWidth)) === rob_tail)
@@ -323,11 +346,7 @@ class Rob(
       when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx))) {
         rob_bsy(row_idx)      := false.B
         rob_unsafe(row_idx)   := false.B
-        if (O3PIPEVIEW_PRINTF) {
-          printf("%d; O3PipeView:complete:%d\n",
-            rob_uop(row_idx).debug_events.fetch_seq,
-            io.debug_tsc)
-        }
+        rob_predicated(row_idx)  := wb_resp.bits.predicated
       }
       // TODO check that fflags aren't overwritten
       // TODO check that the wb is to a valid ROB entry, give it a time stamp
@@ -344,11 +363,6 @@ class Rob(
         rob_bsy(cidx)    := false.B
         assert (rob_val(cidx) === true.B, "[rob] store writing back to invalid entry.")
         assert (rob_bsy(cidx) === true.B, "[rob] store writing back to a not-busy entry.")
-
-        if (O3PIPEVIEW_PRINTF) {
-          printf("%d; O3PipeView:complete:%d\n",
-            rob_uop(GetRowIdx(clr_rob_idx.bits)).debug_events.fetch_seq, io.debug_tsc)
-        }
       }
     }
     for (clr <- io.lsu_clr_unsafe) {
@@ -358,13 +372,6 @@ class Rob(
       }
     }
 
-    when (io.brinfo.valid && MatchBank(GetBankIdx(io.brinfo.rob_idx))) {
-      rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_brjmp_mispredicted := io.brinfo.mispredict
-      rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_btb_mispredicted   := io.brinfo.btb_mispredict
-      rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_btb_made_pred      := io.brinfo.btb_made_pred
-      rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_bpd_mispredicted   := io.brinfo.bpd_mispredict
-      rob_uop(GetRowIdx(io.brinfo.rob_idx)).stat_bpd_made_pred      := io.brinfo.bpd_made_pred
-    }
 
     //-----------------------------------------------
     // Accruing fflags
@@ -387,12 +394,6 @@ class Rob(
           "An instruction marked as safe is causing an exception")
       }
     }
-    when (io.bxcpt.valid && MatchBank(GetBankIdx(io.bxcpt.bits.uop.rob_idx))) {
-      rob_exception(GetRowIdx(io.bxcpt.bits.uop.rob_idx)) := true.B
-      assert(rob_unsafe(GetRowIdx(io.bxcpt.bits.uop.rob_idx)),
-        "An instruction marked as safe is causing an exception")
-
-    }
     can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)
 
     //-----------------------------------------------
@@ -401,16 +402,23 @@ class Rob(
     // Can this instruction commit? (the check for exceptions/rob_state happens later).
     can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
 
-    val com_idx = Wire(UInt())
-    com_idx := rob_head
-    when (rob_state === s_rollback) {
-      com_idx := rob_tail
-    }
 
     // use the same "com_uop" for both rollback AND commit
     // Perform Commit
     io.commit.valids(w) := will_commit(w)
+    io.commit.arch_valids(w) := will_commit(w) && !rob_predicated(com_idx)
     io.commit.uops(w)   := rob_uop(com_idx)
+    io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
+
+    // We unbusy branches in b1, but its easier to mark the taken/provider src in b2,
+    // when the branch might be committing
+    when (io.brupdate.b2.mispredict &&
+      MatchBank(GetBankIdx(io.brupdate.b2.uop.rob_idx)) &&
+      GetRowIdx(io.brupdate.b2.uop.rob_idx) === com_idx) {
+      io.commit.uops(w).debug_fsrc := BSRC_C
+      io.commit.uops(w).taken      := io.brupdate.b2.taken
+    }
+
 
     // Don't attempt to rollback the tail's row when the rob is full.
     val rbk_row = rob_state === s_rollback && !full
@@ -440,16 +448,25 @@ class Rob(
     // Kill speculated entries on branch mispredict
     for (i <- 0 until numRobRows) {
       val br_mask = rob_uop(i).br_mask
-      val entry_match = rob_val(i) && maskMatch(io.brinfo.mask, br_mask)
 
       //kill instruction if mispredict & br mask match
-      when (io.brinfo.valid && io.brinfo.mispredict && entry_match) {
+      when (IsKilledByBranch(io.brupdate, br_mask))
+      {
         rob_val(i) := false.B
         rob_uop(i.U).debug_inst := BUBBLE
-      } .elsewhen (io.brinfo.valid && !io.brinfo.mispredict && entry_match) {
+      } .elsewhen (rob_val(i)) {
         // clear speculation bit even on correct speculation
-        rob_uop(i).br_mask := (br_mask & ~io.brinfo.mask)
+        rob_uop(i).br_mask := GetNewBrMask(io.brupdate, br_mask)
       }
+    }
+
+
+    // Debug signal to figure out which prediction structure
+    // or core resolved a branch correctly
+    when (io.brupdate.b2.mispredict &&
+      MatchBank(GetBankIdx(io.brupdate.b2.uop.rob_idx))) {
+      rob_uop(GetRowIdx(io.brupdate.b2.uop.rob_idx)).debug_fsrc := BSRC_C
+      rob_uop(GetRowIdx(io.brupdate.b2.uop.rob_idx)).taken      := io.brupdate.b2.taken
     }
 
     // -----------------------------------------------
@@ -489,7 +506,7 @@ class Rob(
     for (i <- 0 until numWakeupPorts) {
       val rob_idx = io.wb_resps(i).bits.uop.rob_idx
       when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
-        rob_uop(GetRowIdx(rob_idx)).debug_wdata := io.debug_wb_wdata(i)
+        rob_debug_wdata(GetRowIdx(rob_idx)) := io.debug_wb_wdata(i)
       }
       val temp_uop = rob_uop(GetRowIdx(rob_idx))
 
@@ -503,20 +520,8 @@ class Rob(
                temp_uop.ldst_val && temp_uop.pdst =/= io.wb_resps(i).bits.uop.pdst),
                "[rob] writeback (" + i + ") occurred to the wrong pdst.")
     }
-    io.commit.uops(w).debug_wdata := rob_uop(rob_head).debug_wdata
+    io.commit.debug_wdata(w) := rob_debug_wdata(rob_head)
 
-    //--------------------------------------------------
-    // Debug: handle passing out signals to printf in dpath
-
-    if (DEBUG_PRINTF_ROB) {
-      for (i <- 0 until numRobRows) {
-        debug_entry(w + i*coreWidth).valid     := rob_val(i)
-        debug_entry(w + i*coreWidth).busy      := rob_bsy(i.U)
-        debug_entry(w + i*coreWidth).unsafe    := rob_unsafe(i.U)
-        debug_entry(w + i*coreWidth).uop       := rob_uop(i.U)
-        debug_entry(w + i*coreWidth).exception := rob_exception(i.U)
-      }
-    }
   } //for (w <- 0 until coreWidth)
 
   // **************************************************************************
@@ -531,7 +536,7 @@ class Rob(
   // Finally, don't throw an exception if there are instructions in front of
   // it that want to commit (only throw exception when head of the bundle).
 
-  var block_commit = (rob_state =/= s_normal) && (rob_state =/= s_wait_till_empty) || RegNext(exception_thrown)
+  var block_commit = (rob_state =/= s_normal) && (rob_state =/= s_wait_till_empty) || RegNext(exception_thrown) || RegNext(RegNext(exception_thrown))
   var will_throw_exception = false.B
   var block_xcpt   = false.B
 
@@ -573,18 +578,16 @@ class Rob(
   val flush_uop = Mux(exception_thrown, com_xcpt_uop, Mux1H(flush_commit_mask, io.commit.uops))
 
   // delay a cycle for critical path considerations
-  io.flush.valid          := RegNext(flush_val, init=false.B)
-  io.flush.bits.ftq_idx   := RegNext(flush_uop.ftq_idx)
-  io.flush.bits.pc_lob    := RegNext(flush_uop.pc_lob)
-  io.flush.bits.edge_inst := RegNext(flush_uop.edge_inst)
-  io.flush.bits.is_rvc    := RegNext(flush_uop.is_rvc)
-  io.flush.bits.flush_typ := RegNext(FlushTypes.getType(flush_val,
-                                                        exception_thrown && !is_mini_exception,
-                                                        flush_commit && flush_uop.uopc === uopERET,
-                                                        refetch_inst))
+  io.flush.valid          := flush_val
+  io.flush.bits.ftq_idx   := flush_uop.ftq_idx
+  io.flush.bits.pc_lob    := flush_uop.pc_lob
+  io.flush.bits.edge_inst := flush_uop.edge_inst
+  io.flush.bits.is_rvc    := flush_uop.is_rvc
+  io.flush.bits.flush_typ := FlushTypes.getType(flush_val,
+                                                exception_thrown && !is_mini_exception,
+                                                flush_commit && flush_uop.uopc === uopERET,
+                                                refetch_inst)
 
-  val com_lsu_misspec = RegNext(exception_thrown && io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING)
-  assert (!(com_lsu_misspec && !io.flush.valid), "[rob] pipeline flush not be exercised during a LSU misspeculation")
 
   // -----------------------------------------------
   // FP Exceptions
@@ -596,8 +599,7 @@ class Rob(
   for (w <- 0 until coreWidth) {
     fflags_val(w) :=
       io.commit.valids(w) &&
-      io.commit.uops(w).fp_val &&
-      !(io.commit.uops(w).uses_ldq || io.commit.uops(w).uses_stq)
+      io.commit.uops(w).fp_val
 
     fflags(w) := Mux(fflags_val(w), rob_head_fflags(w), 0.U)
 
@@ -626,18 +628,14 @@ class Rob(
   }
 
   when (!(io.flush.valid || exception_thrown) && rob_state =/= s_rollback) {
-    when (io.lxcpt.valid || io.bxcpt.valid) {
-      val load_is_older =
-        (io.lxcpt.valid && !io.bxcpt.valid) ||
-        (io.lxcpt.valid && io.bxcpt.valid &&
-        IsOlder(io.lxcpt.bits.uop.rob_idx, io.bxcpt.bits.uop.rob_idx, rob_head_idx))
-      val new_xcpt_uop = Mux(load_is_older, io.lxcpt.bits.uop, io.bxcpt.bits.uop)
+    when (io.lxcpt.valid) {
+      val new_xcpt_uop = io.lxcpt.bits.uop
 
       when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_head_idx)) {
         r_xcpt_val              := true.B
         next_xcpt_uop           := new_xcpt_uop
-        next_xcpt_uop.exc_cause := Mux(io.lxcpt.valid, io.lxcpt.bits.cause, io.bxcpt.bits.cause)
-        r_xcpt_badvaddr         := Mux(io.lxcpt.valid, io.lxcpt.bits.badvaddr, io.bxcpt.bits.badvaddr)
+        next_xcpt_uop.exc_cause := io.lxcpt.bits.cause
+        r_xcpt_badvaddr         := io.lxcpt.bits.badvaddr
       }
     } .elsewhen (!r_xcpt_val && enq_xcpts.reduce(_|_)) {
       val idx = enq_xcpts.indexWhere{i: Bool => i}
@@ -647,17 +645,12 @@ class Rob(
       next_xcpt_uop   := io.enq_uops(idx)
       r_xcpt_badvaddr := AlignPCToBoundary(io.xcpt_fetch_pc, icBlockBytes) | io.enq_uops(idx).pc_lob
 
-      assert(!(usingCompressed.B && (io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR),
-        "when using RVC, JAL exceptions should not be seen")
-      when (!usingCompressed.B && (io.enq_uops(idx).uopc === uopJAL) && !io.enq_uops(idx).exc_cause.orR) {
-        r_xcpt_badvaddr := 0.U
-      }
     }
   }
 
   r_xcpt_uop         := next_xcpt_uop
-  r_xcpt_uop.br_mask := GetNewBrMask(io.brinfo, next_xcpt_uop)
-  when (io.flush.valid || IsKilledByBranch(io.brinfo, next_xcpt_uop)) {
+  r_xcpt_uop.br_mask := GetNewBrMask(io.brupdate, next_xcpt_uop)
+  when (io.flush.valid || IsKilledByBranch(io.brupdate, next_xcpt_uop)) {
     r_xcpt_val := false.B
   }
 
@@ -761,8 +754,8 @@ class Rob(
   } .elsewhen (rob_state === s_rollback && (rob_tail === rob_head) && !maybe_full) {
     // Rollback an entry
     rob_tail_lsb := rob_head_lsb
-  } .elsewhen (io.brinfo.mispredict) {
-    rob_tail     := WrapInc(GetRowIdx(io.brinfo.rob_idx), numRobRows)
+  } .elsewhen (io.brupdate.b2.mispredict) {
+    rob_tail     := WrapInc(GetRowIdx(io.brupdate.b2.uop.rob_idx), numRobRows)
     rob_tail_lsb := 0.U
   } .elsewhen (io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall) {
     rob_tail     := WrapInc(rob_tail, numRobRows)
@@ -789,7 +782,7 @@ class Rob(
   // I.E. at least one entry will be empty when in a steady state of dispatching and committing a row each cycle.
   // TODO should we add an extra 'parity bit' onto the ROB pointers to simplify this logic?
 
-  maybe_full := !rob_deq && (rob_enq || maybe_full) || io.brinfo.mispredict
+  maybe_full := !rob_deq && (rob_enq || maybe_full) || io.brupdate.b1.mispredict_mask =/= 0.U
   full       := rob_tail === rob_head && maybe_full
   empty      := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
 
@@ -810,7 +803,8 @@ class Rob(
         rob_state := s_normal
       }
       is (s_normal) {
-        when (RegNext(exception_thrown)) {
+        // Delay rollback 2 cycles so branch mispredictions can drain
+        when (RegNext(RegNext(exception_thrown))) {
           rob_state := s_rollback
         } .otherwise {
           for (w <- 0 until coreWidth) {
@@ -871,114 +865,6 @@ class Rob(
                                         !will_commit.reduce(_||_))
 
 
-  //--------------------------------------------------
-  // Handle passing out signals to printf in dpath
-
-  io.debug.state    := rob_state
-  io.debug.rob_head := rob_head
-  io.debug.rob_pnr := rob_pnr
-  io.debug.xcpt_val := r_xcpt_val
-  io.debug.xcpt_uop := r_xcpt_uop
-  io.debug.xcpt_badvaddr := r_xcpt_badvaddr
-
-  if (DEBUG_PRINTF_ROB) {
-    printf("ROB:\n")
-    printf("    Xcpt: V:%c Cause:0x%x RobIdx:%d BMsk:0x%x BadVAddr:0x%x\n",
-      BoolToChar(r_xcpt_val, 'E'),
-      io.debug.xcpt_uop.exc_cause,
-      io.debug.xcpt_uop.rob_idx,
-      io.debug.xcpt_uop.br_mask,
-      io.debug.xcpt_badvaddr)
-
-    var r_idx = 0
-    // scalastyle:off
-    for (i <- 0 until (numRobEntries/coreWidth)) {
-      val row = if (coreWidth == 1) r_idx else (r_idx >> log2Ceil(coreWidth))
-      val r_head = rob_head
-      val r_tail = rob_tail
-
-      printf("    ROB[%d]: %c %c (",
-        row.U(robAddrSz.W),
-        Mux(r_head === row.U && r_tail === row.U, Str("B"),
-          Mux(r_head === row.U, Str("H"),
-            Mux(r_tail === row.U, Str("T"), Str(" ")))),
-        Mux(rob_pnr === row.U, Str("P"), Str(" ")))
-
-      if (coreWidth == 1) {
-        printf("(%c)(%c)(%c) 0x%x [DASM(%x)] %c ",
-          BoolToChar( debug_entry(r_idx+0).valid, 'V'),
-          BoolToChar(  debug_entry(r_idx+0).busy, 'B'),
-          BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
-          debug_entry(r_idx+0).uop.debug_pc(31,0),
-          debug_entry(r_idx+0).uop.debug_inst,
-          BoolToChar(debug_entry(r_idx+0).exception, 'E'))
-      } else if (coreWidth == 2) {
-        val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid
-        printf("(%c%c)(%c%c)(%c%c) 0x%x %x [DASM(%x)][DASM(%x)" + "] %c,%c %d,%d ",
-          BoolToChar( debug_entry(r_idx+0).valid, 'V'),
-          BoolToChar( debug_entry(r_idx+1).valid, 'V'),
-          BoolToChar(  debug_entry(r_idx+0).busy, 'B'),
-          BoolToChar(  debug_entry(r_idx+1).busy, 'B'),
-          BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
-          BoolToChar(debug_entry(r_idx+1).unsafe, 'U'),
-          debug_entry(r_idx+0).uop.debug_pc(31,0),
-          debug_entry(r_idx+1).uop.debug_pc(15,0),
-          debug_entry(r_idx+0).uop.debug_inst,
-          debug_entry(r_idx+1).uop.debug_inst,
-          BoolToChar(debug_entry(r_idx+0).exception, 'E'),
-          BoolToChar(debug_entry(r_idx+1).exception, 'E'),
-          debug_entry(r_idx+0).uop.ftq_idx,
-          debug_entry(r_idx+1).uop.ftq_idx)
-      } else if (coreWidth == 4) {
-        val row_is_val = debug_entry(r_idx+0).valid || debug_entry(r_idx+1).valid || debug_entry(r_idx+2).valid || debug_entry(r_idx+3).valid
-        printf("(%c%c%c%c)(%c%c%c%c)(%c%c%c%c) 0x%x %x %x %x [DASM(%x)][DASM(%x)][DASM(%x)][DASM(%x)" + "]%c%c%c%c",
-          BoolToChar(debug_entry(r_idx+0).valid,  'V'),
-          BoolToChar(debug_entry(r_idx+1).valid,  'V'),
-          BoolToChar(debug_entry(r_idx+2).valid,  'V'),
-          BoolToChar(debug_entry(r_idx+3).valid,  'V'),
-          BoolToChar(debug_entry(r_idx+0).busy,   'B'),
-          BoolToChar(debug_entry(r_idx+1).busy,   'B'),
-          BoolToChar(debug_entry(r_idx+2).busy,   'B'),
-          BoolToChar(debug_entry(r_idx+3).busy,   'B'),
-          BoolToChar(debug_entry(r_idx+0).unsafe, 'U'),
-          BoolToChar(debug_entry(r_idx+1).unsafe, 'U'),
-          BoolToChar(debug_entry(r_idx+2).unsafe, 'U'),
-          BoolToChar(debug_entry(r_idx+3).unsafe, 'U'),
-          debug_entry(r_idx+0).uop.debug_pc(23,0),
-          debug_entry(r_idx+1).uop.debug_pc(15,0),
-          debug_entry(r_idx+2).uop.debug_pc(15,0),
-          debug_entry(r_idx+3).uop.debug_pc(15,0),
-          debug_entry(r_idx+0).uop.debug_inst,
-          debug_entry(r_idx+1).uop.debug_inst,
-          debug_entry(r_idx+2).uop.debug_inst,
-          debug_entry(r_idx+3).uop.debug_inst,
-          BoolToChar(debug_entry(r_idx+0).exception, 'E'),
-          BoolToChar(debug_entry(r_idx+1).exception, 'E'),
-          BoolToChar(debug_entry(r_idx+2).exception, 'E'),
-          BoolToChar(debug_entry(r_idx+3).exception, 'E'))
-      } else {
-        println("  BOOM's Chisel printf does not support commit_width >= " + coreWidth)
-      }
-
-      var temp_idx = r_idx
-      for (w <- 0 until coreWidth) {
-        printf("(d:%c p%d, bm:%x sdt:%d) ",
-          Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FIX, Str("X"),
-            Mux(debug_entry(temp_idx).uop.dst_rtype === RT_PAS, Str("C"),
-              Mux(debug_entry(temp_idx).uop.dst_rtype === RT_FLT, Str("f"),
-                Mux(debug_entry(temp_idx).uop.dst_rtype === RT_X, Str("-"), Str("?"))))),
-          debug_entry(temp_idx).uop.pdst,
-          debug_entry(temp_idx).uop.br_mask,
-          debug_entry(temp_idx).uop.stale_pdst)
-        temp_idx = temp_idx + 1
-      }
-
-      r_idx = r_idx + coreWidth
-
-      printf("\n")
-    }
-    // scalastyle:off
-  }
 
   override def toString: String = BoomCoreStringPrefix(
     "==ROB==",
