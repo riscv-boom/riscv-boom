@@ -18,7 +18,6 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 import freechips.rocketchip.rocket.RVCExpander
 
-
 /**
  * Mixin for issue queue types
  */

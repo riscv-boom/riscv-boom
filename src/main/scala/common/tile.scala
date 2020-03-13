@@ -22,6 +22,8 @@ import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
+import testchipip.{ExtendedTracedInstruction}
+
 import boom.exu._
 import boom.ifu._
 import boom.lsu._
@@ -35,7 +37,7 @@ import boom.util.{BoomCoreStringPrefix}
  * @param dcache d$ params
  * @param btb btb params
  * @param dataScratchpadBytes ...
- * @param trace ...
+ * @param trace enable traceport
  * @param hcfOnUncorrectable ...
  * @param name name of tile
  * @param hartId hardware thread id
@@ -177,6 +179,12 @@ class BoomTile(
   val roccs = p(BuildRoCC).map(_(p))
   roccs.map(_.atlNode).foreach { atl => tlMasterXbar.node :=* atl }
   roccs.map(_.tlNode).foreach { tl => tlOtherMastersNode :=* tl }
+
+  // Extended Traceport
+  println(s"Multiple: ${boomParams.core.retireWidth} ${tileParams.core.retireWidth}")
+  val extTraceSourceNode = BundleBridgeSource(() => Vec(tileParams.core.retireWidth, new ExtendedTracedInstruction()))
+  val extTraceNode = BundleBroadcast[Vec[ExtendedTracedInstruction]](Some("trace"))
+  extTraceNode := extTraceSourceNode
 }
 
 /**
@@ -206,7 +214,8 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   }
 
   // Pass through various external constants and reports
-  outer.traceSourceNode.bundle <> core.io.trace
+  outer.extTraceSourceNode.bundle <> core.io.trace
+  outer.traceSourceNode.bundle <> DontCare
   outer.bpwatchSourceNode.bundle <> DontCare // core.io.bpwatch
   core.io.hartid := constants.hartid
   outer.dcache.module.io.hartid := constants.hartid

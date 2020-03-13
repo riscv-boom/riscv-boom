@@ -39,6 +39,8 @@ import freechips.rocketchip.rocket.{Causes, PRV}
 import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle}
 import freechips.rocketchip.devices.tilelink.{PLICConsts, CLINTConsts}
 
+import testchipip.{ExtendedTracedInstruction}
+
 import boom.common._
 import boom.ifu.{GlobalHistory, HasBoomFrontendParameters}
 import boom.exu.FUConstants._
@@ -60,8 +62,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     val rocc = Flipped(new freechips.rocketchip.tile.RoCCCoreIO())
     val lsu = Flipped(new boom.lsu.LSUCoreIO)
     val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
-    val trace = Output(Vec(coreParams.retireWidth,
-      new freechips.rocketchip.rocket.TracedInstruction))
+    val trace = Output(Vec(coreParams.retireWidth, new ExtendedTracedInstruction))
     val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
   }
   //**********************************
@@ -144,7 +145,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val int_iss_wakeups  = Wire(Vec(numIntIssueWakeupPorts, Valid(new ExeUnitResp(xLen))))
   val int_ren_wakeups  = Wire(Vec(numIntRenameWakeupPorts, Valid(new ExeUnitResp(xLen))))
   val pred_wakeup  = Wire(Valid(new ExeUnitResp(1)))
-  
+
   require (exe_units.length == issue_units.map(_.issueWidth).sum)
 
   //***********************************
@@ -1503,11 +1504,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     exe_units.rocc_unit.io.status            := csr.io.status
 
     for (w <- 0 until coreWidth) {
-       exe_units.rocc_unit.io.rocc.dis_rocc_vals(w) := (
-         dis_fire(w) &&
-         dis_uops(w).uopc === uopROCC &&
-         !dis_uops(w).exception
-       )
+      exe_units.rocc_unit.io.rocc.dis_rocc_vals(w) := (
+        dis_fire(w) &&
+        dis_uops(w).uopc === uopROCC &&
+        !dis_uops(w).exception
+      )
     }
   }
 
@@ -1527,7 +1528,15 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       io.trace(w).iaddr      := Sext(iaddr, xLen)
 
       // use debug_insts instead of uop.debug_inst to use the rob's debug_inst_mem
-      io.trace(w).insn       := rob.io.commit.debug_insts(w)
+      def getInst(uop: MicroOp, inst: UInt): UInt = {
+        Mux(uop.is_rvc, Cat(0.U(16.W), inst(15,0)), inst)
+      }
+      io.trace(w).insn       := getInst(RegNext(rob.io.commit.uops(w)), rob.io.commit.debug_insts(w))
+
+      def getWdata(uop: MicroOp): UInt = {
+        Mux((uop.dst_rtype === RT_FIX && uop.ldst =/= 0.U) || (uop.dst_rtype === RT_FLT), uop.debug_wdata, 0.U(xLen.W))
+      }
+      io.trace(w).wdata      := RegNext(getWdata(rob.io.commit.uops(w)))
 
       // Comment out this assert because it blows up FPGA synth-asserts
       // This tests correctedness of the debug_inst mem
