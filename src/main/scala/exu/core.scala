@@ -1398,6 +1398,15 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
     debug_ghist := new_ghist
   }
+  if (DISPATCH_PRINTF) {
+    for (w <- 0 until coreWidth) {
+      when (dis_fire(w)) {
+        printf("D 0x%x DASM(%x)\n",
+          Sext(dis_uops(w).debug_pc(vaddrBits-1,0), xLen),
+          Mux(dis_uops(w).is_rvc, dis_uops(w).debug_inst(15,0), dis_uops(w).debug_inst))
+      }
+    }
+  }
 
   // enable Dromajo cosimulation
   if (DROMAJO_COSIM_ENABLE) {
