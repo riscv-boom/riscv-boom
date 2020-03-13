@@ -118,7 +118,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
     iss_sels(w) := PriorityEncoderOH(col_reqs)
     sel_uops(w) := Mux1H(iss_sels(w), col_uops)
-    sel_vals(w) := iss_sels(w).reduce(_||_)
+    sel_vals(w) := col_reqs.reduce(_||_)
   }
 
   //----------------------------------------------------------------------------------------------------
