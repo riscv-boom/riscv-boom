@@ -461,8 +461,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // FTQ GetPC Port Arbitration
 
-  val jmp_pc_req  = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
-  val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  val jmp_pc_req   = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  val xcpt_pc_req  = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
   val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
 
   val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 3))
