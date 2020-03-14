@@ -89,8 +89,8 @@ class RingIssueSlot(implicit p: Parameters)
     val fwu_prs1 = do_fwu && !uop.busy_operand_sel
     val fwu_prs2 = do_fwu &&  uop.busy_operand_sel
 
-    val lwu_prs1_hits = VecInit(lwu.map(wu => wu.bits === uop.prs1 && wu.valid))
-    val lwu_prs2_hits = VecInit(lwu.map(wu => wu.bits === uop.prs2 && wu.valid))
+    val lwu_prs1_hits = VecInit(lwu.map(wu => wu.bits === uop.prs1 && wu.valid && uop.lrs1_rtype === RT_FIX))
+    val lwu_prs2_hits = VecInit(lwu.map(wu => wu.bits === uop.prs2 && wu.valid && uop.lrs2_rtype === RT_FIX))
     val lwu_prs1 = lwu_prs1_hits.reduce(_||_)
     val lwu_prs2 = lwu_prs2_hits.reduce(_||_)
 
