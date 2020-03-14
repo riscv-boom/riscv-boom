@@ -99,7 +99,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   dis_vals := Transpose(VecInit(io.dis_uops.map(uop => VecInit((uop.bits.pdst_col & Fill(coreWidth, uop.valid)).asBools))))
 
   val col_readys = Transpose(VecInit((0 until coreWidth).map(w =>
-    VecInit((0 until columnDispatchWidth).map(k => PopCount(slots(w).map(_.valid)) + k.U < numSlotsPerColumn.U)).asUInt)))
+    VecInit((0 until columnDispatchWidth).map(k => PopCount(slots(w).map(_.valid)) +& k.U < numSlotsPerColumn.U)).asUInt)))
 
   for (w <- 0 until coreWidth) {
     io.dis_uops(w).ready := (io.dis_uops(w).bits.pdst_col & col_readys(w)).orR
@@ -118,7 +118,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
     iss_sels(w) := PriorityEncoderOH(col_reqs)
     sel_uops(w) := Mux1H(iss_sels(w), col_uops)
-    sel_vals(w) := iss_sels(w).reduce(_||_)
+    sel_vals(w) := col_reqs.reduce(_||_)
   }
 
   //----------------------------------------------------------------------------------------------------
@@ -171,6 +171,11 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   for (w <- 0 until coreWidth) {
     io.iss_uops(w).bits  := sel_uops(w)
     io.iss_uops(w).valid := do_issue(w)
+
+    assert (PopCount(sel_uops(w).prs1_status) === 1.U || sel_uops(w).lrs1_rtype === RT_X || !do_issue(w),
+            "Operand status should be one-hot at issue")
+    assert (PopCount(sel_uops(w).prs2_status) === 1.U || sel_uops(w).lrs2_rtype === RT_X || !do_issue(w),
+            "Operand status should be one-hot at issue")
   }
 
   //----------------------------------------------------------------------------------------------------

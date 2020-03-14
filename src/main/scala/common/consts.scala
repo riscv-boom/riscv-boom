@@ -388,7 +388,10 @@ trait ExcCauseConstants
   val MINI_EXCEPTION_MEM_ORDERING = 16.U
   // an instruction needs to be replayed (e.g., I$ asks for a replay)
   val MINI_EXCEPTION_REPLAY = 17.U
+  // unblock a store when it's blocked by nonstop loads
+  val MINI_EXCEPTION_STORE_BLOCKED = 18.U
 
   require (!freechips.rocketchip.rocket.Causes.all.contains(16))
   require (!freechips.rocketchip.rocket.Causes.all.contains(17))
+  require (!freechips.rocketchip.rocket.Causes.all.contains(18))
 }

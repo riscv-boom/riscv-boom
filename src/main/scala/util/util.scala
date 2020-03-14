@@ -397,8 +397,7 @@ object IsOlder
 object MaskLower
 {
   def apply(in: UInt) = {
-    val n = in.getWidth
-    (0 until n).map(i => in >> i.U).reduce(_|_)
+    VecInit(in.asBools.scanRight(false.B)((b,m) => m || b).dropRight(1)).asUInt
   }
 }
 
@@ -408,8 +407,7 @@ object MaskLower
 object MaskUpper
 {
   def apply(in: UInt) = {
-    val n = in.getWidth
-    (0 until n).map(i => (in << i.U)(n-1,0)).reduce(_|_)
+    VecInit(in.asBools.scanLeft(false.B)((m,b) => m || b).takeRight(in.getWidth)).asUInt
   }
 }
 
@@ -436,25 +434,25 @@ object MaskAbove
 }
 
 /**
- * Transpose a matrix of Chisel Vecs.
+ * Transpose a matrix of Chisel Data.
  */
 object Transpose
 {
   // General Data matrix
-  def apply[T <: chisel3.Data](in: Vec[Vec[T]]) = {
+  def apply[T <: chisel3.Data](in: Seq[Seq[T]]) = {
     val n = in(0).size
     VecInit((0 until n).map(i => VecInit(in.map(row => row(i)))))
   }
 
   // Row major UInt bit matrix
-  def apply(in: => Vec[UInt]) = {
+  def apply(in: => Seq[UInt]) = {
     val n = in(0).getWidth
     VecInit((0 until n).map(i => VecInit(in.map(row => row(i))).asUInt))
   }
 }
 
 /**
-  * N-wide one-hot priority encoder.
+ * N-wide one-hot priority encoder.
  */
 object SelectFirstN
 {
@@ -465,6 +463,31 @@ object SelectFirstN
     for (i <- 0 until n) {
       sels(i) := PriorityEncoderOH(mask)
       mask = mask & ~sels(i)
+    }
+
+    sels
+  }
+}
+
+/**
+ * N-wide one-hot priority encoder for circular queue.
+ */
+object AgeSelectFirstN
+{
+  def apply(in: UInt, head: UInt, n: Int): Vec[UInt] = {
+    require(in.getWidth == head.getWidth)
+
+    val k = in.getWidth
+    val vec = Cat(in,in)
+    val mask = MaskUpper(Cat(0.U(k.W),head))
+    var masked = vec & mask
+
+    val sels = Wire(Vec(n, UInt(k.W)))
+
+    for (i <- 0 until n) {
+      val sel = PriorityEncoderOH(masked)
+      sels(i) := sel(2*k-1,k) | sel(k-1,0)
+      masked = masked & ~sel
     }
 
     sels

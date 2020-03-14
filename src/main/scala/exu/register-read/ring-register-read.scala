@@ -33,7 +33,7 @@ class RingRegisterReadIO
   val exe_reqs = Vec(coreWidth, new DecoupledIO(new FuncUnitReq(xLen)))
 
   val kill     = Input(Bool())
-  val brupdate= Input(new BrUpdateInfo)
+  val brupdate = Input(new BrUpdateInfo)
 }
 
 /**

@@ -398,7 +398,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val prober = Module(new BoomProbeUnit)
   val mshrs = Module(new BoomMSHRFile)
   mshrs.io.clear_all    := io.lsu.force_order
-  mshrs.io.brupdate       := io.lsu.brupdate
+  mshrs.io.brupdate     := io.lsu.brupdate
   mshrs.io.exception    := io.lsu.exception
   mshrs.io.rob_pnr_idx  := io.lsu.rob_pnr_idx
   mshrs.io.rob_head_idx := io.lsu.rob_head_idx
@@ -477,6 +477,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   dataReadArb.io.in(0).bits.req(0).addr   := mshrs.io.replay.bits.addr
   dataReadArb.io.in(0).bits.req(0).way_en := mshrs.io.replay.bits.way_en
   dataReadArb.io.in(0).bits.valid         := widthMap(w => (w == 0).B)
+
+  io.lsu.replay_wb_col := Mux(mshrs.io.replay.valid && isRead(replay_req(0).uop.mem_cmd), replay_req(0).uop.pdst_col, 0.U)
 
   // -----------
   // MSHR Meta read
@@ -790,7 +792,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                 s2_data_word(w), s2_sc, wordBytes)
   }
   // Mux between cache responses and uncache responses
-  val cache_resp   = Wire(Vec(memWidth, Valid(new BoomDCacheResp)))
+  val cache_resp = Wire(Vec(memWidth, Valid(new BoomDCacheResp)))
   for (w <- 0 until memWidth) {
     cache_resp(w).valid         := s2_valid(w) && s2_send_resp(w)
     cache_resp(w).bits.uop      := s2_req(w).uop
@@ -801,12 +803,14 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val uncache_resp = Wire(Valid(new BoomDCacheResp))
   uncache_resp.bits     := mshrs.io.resp.bits
   uncache_resp.valid    := mshrs.io.resp.valid
-  mshrs.io.resp.ready := !(cache_resp.map(_.valid).reduce(_&&_)) // We can backpressure the MSHRs, but not cache hits
+  // We can backpressure the MSHRs, but not cache hits
+  val mshrs_can_wb = !(cache_resp.map(resp => Mux(resp.valid, resp.bits.uop.pdst_col, 0.U)).reduce(_|_) & mshrs.io.resp.bits.uop.pdst_col).orR
+  mshrs.io.resp.ready := !(cache_resp.map(_.valid).reduce(_&&_)) && mshrs_can_wb
 
   val resp = WireInit(cache_resp)
   var uncache_responding = false.B
   for (w <- 0 until memWidth) {
-    val uncache_respond = !cache_resp(w).valid && !uncache_responding
+    val uncache_respond = !cache_resp(w).valid && !uncache_responding && mshrs_can_wb
     when (uncache_respond) {
       resp(w) := uncache_resp
     }

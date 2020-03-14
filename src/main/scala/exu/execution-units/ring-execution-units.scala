@@ -77,9 +77,11 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // Instantiate the ExecutionUnits
 
   private val column_exe_units = ArrayBuffer[ExecutionUnit]()
-  private val shared_exe_units = ArrayBuffer[ExecutionUnit]()
+  private val memory_exe_units = ArrayBuffer[ExecutionUnit]()
+  private val unique_exe_units = ArrayBuffer[ExecutionUnit]()
 
-  def exe_units = column_exe_units ++ shared_exe_units
+  def shared_exe_units = memory_exe_units ++ unique_exe_units
+  def exe_units        = column_exe_units ++ shared_exe_units
 
   //----------------------------------------------------------------------------------------------------
   // Getters
@@ -149,29 +151,36 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     column_exe_units += alu
   }
 
-  // Generate memory access units. Only 1 supported for now
-  require (memWidth == 1)
+  // Generate memory access units
   for (w <- 0 until memWidth) {
     val mem_unit = Module(new ALUExeUnit(
       hasAlu = false,
       hasMem = true))
     mem_unit.suggestName("mem_unit_" + w)
     mem_unit.io.ll_iresp.ready := DontCare
-    shared_exe_units += mem_unit
+    memory_exe_units += mem_unit
   }
 
   // Jump unit
   val jmp_unit = Module(new ALUExeUnit(hasJmp = true))
   jmp_unit.suggestName("jmp_unit")
-  shared_exe_units += jmp_unit
+  unique_exe_units += jmp_unit
 
-  // Put remaining functional units in a shared execution unit
+  // Put remaining (infrequently used) functional units in a single execution unit
   val misc_unit = Module(new ALUExeUnit(hasMul  = true,
                                         hasDiv  = true,
                                         hasCSR  = true,
                                         hasIfpu = usingFPU))
   misc_unit.suggestName("misc_unit")
-  shared_exe_units += misc_unit
+  unique_exe_units += misc_unit
+
+  // Hookup I/O common to all units
+  for (eu <- exe_units) {
+    eu.io.brupdate := io.brupdate
+    eu.io.kill     := io.kill
+
+    if (eu.writesIrf) eu.io.iresp.ready := DontCare
+  }
 
   //----------------------------------------------------------------------------------------------------
   // Generator string output
@@ -210,15 +219,15 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     val req = io.exe_reqs(w).bits
     val k = (coreWidth + w - 1) % coreWidth
 
-    rs1_data(w) := RegNext(Mux(req.uop.prs1_bypass_alu , column_exe_units(k).io.bypass.data(0),
+    rs1_data(w) := RegNext(Mux(req.uop.prs1_bypass_alu, column_exe_units(k).io.bypass.data(0),
                            Mux(req.uop.prs1_bypass_mem.reduce(_||_),
-                         Mux1H(req.uop.prs1_bypass_mem , mem_units.map(_.io.ll_iresp.bits.data)),
-                           Mux(req.uop.prs1_bypass_gen , io.exe_resps(k).bits.data,
+                         Mux1H(req.uop.prs1_bypass_mem, mem_units.map(_.io.ll_iresp.bits.data)),
+                           Mux(req.uop.prs1_bypass_gen, io.exe_resps(k).bits.data,
                                                          req.rs1_data))))
-    rs2_data(w) := RegNext(Mux(req.uop.prs2_bypass_alu , column_exe_units(k).io.bypass.data(0),
+    rs2_data(w) := RegNext(Mux(req.uop.prs2_bypass_alu, column_exe_units(k).io.bypass.data(0),
                            Mux(req.uop.prs2_bypass_mem.reduce(_||_),
-                         Mux1H(req.uop.prs2_bypass_mem , mem_units.map(_.io.ll_iresp.bits.data)),
-                           Mux(req.uop.prs2_bypass_gen , io.exe_resps(k).bits.data,
+                         Mux1H(req.uop.prs2_bypass_mem, mem_units.map(_.io.ll_iresp.bits.data)),
+                           Mux(req.uop.prs2_bypass_gen, io.exe_resps(k).bits.data,
                                                          req.rs2_data))))
   }
 
@@ -234,31 +243,29 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   //----------------------------------------------------------------------------------------------------
   // Req -> EU crossbar
 
-  val xbarSize = shared_exe_units.length + 1
-  val col_sels = Transpose(VecInit(exe_reqs.map(req => req.bits.uop.eu_code & Fill(xbarSize, req.valid))))
-
-  // Hookup column units
+  // Hookup column ALUs
   for (w <- 0 until coreWidth) {
     column_exe_units(w).io.req.bits    := exe_reqs(w).bits
-    column_exe_units(w).io.req.valid   := col_sels(0)(w)
-
-    column_exe_units(w).io.brupdate    := io.brupdate
-    column_exe_units(w).io.kill        := io.kill
-
-    column_exe_units(w).io.iresp.ready := DontCare
+    column_exe_units(w).io.req.valid   := exe_reqs(w).valid && exe_reqs(w).bits.uop.eu_code(0)
   }
 
-  // Hookup shared units
-  for ((i,eu) <- (1 until xbarSize) zip shared_exe_units) {
-    eu.io.req.bits  := Mux1H(col_sels(i), exe_reqs.map(_.bits))
-    eu.io.req.valid := col_sels(i).orR
+  // Hookup memory units (any number suppported)
+  val mem_reqs = VecInit(exe_reqs.map(req => req.bits.uop.eu_code(1) && req.valid))
+  val mem_sels = mem_reqs.scanLeft(1.U(memWidth.W)) ((s,r) => Mux(r, s << 1, s)(memWidth-1,0)).dropRight(1)
+  val mem_gnts = Transpose(mem_sels).map(s => s & mem_reqs.asUInt)
+  for ((mem,gnt) <- mem_units zip mem_gnts) {
+    mem.io.req.bits  := Mux1H(gnt, exe_reqs.map(_.bits))
+    mem.io.req.valid := gnt.orR
+  }
+  assert (PopCount(mem_reqs) <= memWidth.U, "[exe] too many requests to the memory units")
 
-    assert (PopCount(col_sels(i)) <= 1.U, "[exe] shared unit request crossbar collision on port " + i)
+  // Hookup remaining shared units (FUs in this set should be unique)
+  val unq_gnts = Transpose(VecInit(exe_reqs.map(req => req.bits.uop.eu_code(3,2) & Fill(2, req.valid))))
+  for ((eu,gnt) <- unique_exe_units zip unq_gnts) {
+    eu.io.req.bits  := Mux1H(gnt, exe_reqs.map(_.bits))
+    eu.io.req.valid := gnt.orR
 
-    eu.io.brupdate := io.brupdate
-    eu.io.kill   := io.kill
-
-    if (eu.writesIrf) eu.io.iresp.ready := DontCare
+    assert (PopCount(gnt) <= 1.U, "[exe] multiple grants to a unique execution unit")
   }
 
   //----------------------------------------------------------------------------------------------------
@@ -268,7 +275,9 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     shared_exe_units.filter(_.writesIrf).map(eu => eu.io.iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.iresp.valid))))
 
   for (w <- 0 until coreWidth) {
-    io.exe_resps(w).bits  := Mux1H(fast_eu_sels(w), Seq(column_exe_units(w).io.iresp.bits) ++ shared_exe_units.filter(_.writesIrf).map(_.io.iresp.bits))
+    io.exe_resps(w).bits  := Mux1H(fast_eu_sels(w),
+                                   Seq(column_exe_units(w).io.iresp.bits) ++
+                                   shared_exe_units.filter(_.writesIrf).map(_.io.iresp.bits))
     io.exe_resps(w).valid := fast_eu_sels(w).orR
 
     assert (PopCount(fast_eu_sels(w)) <= 1.U, "[exe] writeback crossbar collision on port " + w)
@@ -285,8 +294,8 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   val slow_eu_rdys = Transpose(VecInit(slow_eu_reqs.map(r => ~MaskAbove(r))))
 
   for (w <- 0 until coreWidth) {
-    io.ll_resps(w).bits  := PriorityMux(slow_eu_reqs(w), shared_exe_units.filter(_.writesLlIrf).map(_.io.ll_iresp.bits) ++
-                                        fpiu_resp)
+    io.ll_resps(w).bits  := PriorityMux(slow_eu_reqs(w),
+                                        shared_exe_units.filter(_.writesLlIrf).map(_.io.ll_iresp.bits) ++ fpiu_resp)
     io.ll_resps(w).valid := slow_eu_reqs(w).orR
   }
 

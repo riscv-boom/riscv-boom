@@ -61,11 +61,16 @@ class RegisterReadArbiter(implicit p: Parameters) extends IssueArbiter
 
 class ExecutionArbiter(implicit p: Parameters) extends IssueArbiter
 {
-  val shared_exe_reqs = Transpose(VecInit((0 until coreWidth).map(w => io.uops(w).shared_eu_code)))
-  val shared_exe_gnts = Transpose(VecInit(shared_exe_reqs.map(r => Grant(r))))
+  val mem_reqs = VecInit((io.reqs zip io.uops) map { case (r,u) => r && u.eu_code(1) })
+  val mem_gnts = AgeSelectFirstN(mem_reqs.asUInt, pri, memWidth)
+
+  val unq_reqs = Transpose(VecInit((0 until coreWidth).map(w => io.uops(w).eu_code(3,2) & Fill(2, io.reqs(w)))))
+  val unq_gnts = unq_reqs.map(r => Grant(r))
+
+  val gnts = mem_gnts.reduce(_|_) | unq_gnts.reduce(_|_)
 
   for (w <- 0 until coreWidth) {
-    io.gnts(w) := shared_exe_gnts(w).orR || !io.uops(w).shared_eu_code.orR && io.reqs(w)
+    io.gnts(w) := gnts(w) || !io.uops(w).shared_eu_code.orR && io.reqs(w)
   }
 }
 

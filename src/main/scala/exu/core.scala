@@ -461,8 +461,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // FTQ GetPC Port Arbitration
 
-  val jmp_pc_req  = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
-  val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  val jmp_pc_req   = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  val xcpt_pc_req  = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
   val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
 
   val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 3))
@@ -1218,22 +1218,22 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       io.lsu.debug_stcom(w).idx := rob.io.commit.uops(w).stq_idx
 
       when (rob.io.commit.valids(w)) {
+        val com_uop = rob.io.commit.uops(w)
         printf("%d 0x%x ",
           priv,
-          Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen))
+          Sext(com_uop.debug_pc(vaddrBits-1,0), xLen))
         printf_inst(rob.io.commit.uops(w))
-        when (rob.io.commit.uops(w).dst_rtype === RT_FIX && rob.io.commit.uops(w).ldst =/= 0.U) {
+        when (com_uop.dst_rtype === RT_FIX && com_uop.ldst =/= 0.U) {
           printf(" x%d 0x%x\n",
-            rob.io.commit.uops(w).ldst,
+            com_uop.ldst,
             rob.io.commit.debug_wdata(w))
         } .elsewhen (rob.io.commit.uops(w).dst_rtype === RT_FLT) {
           printf(" f%d 0x%x\n",
-            rob.io.commit.uops(w).ldst,
+            com_uop.ldst,
             rob.io.commit.debug_wdata(w))
-        } .elsewhen (rob.io.commit.uops(w).uses_stq) {
+        } .elsewhen (com_uop.uses_stq && !com_uop.is_fence) {
           val stq_data = io.lsu.debug_stcom(w).data
-          val mem_size = rob.io.commit.uops(w).mem_size
-
+          val mem_size = com_uop.mem_size
           when (mem_size === 3.U) {
             printf(" mem 0x%x 0x%x\n",
               io.lsu.debug_stcom(w).addr,
@@ -1255,7 +1255,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
               io.lsu.debug_stcom(w).addr,
               stq_data(3,0))
           }
-
         } .otherwise {
           printf("\n")
         }
