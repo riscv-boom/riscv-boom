@@ -181,7 +181,6 @@ class BoomTile(
   roccs.map(_.tlNode).foreach { tl => tlOtherMastersNode :=* tl }
 
   // Extended Traceport
-  println(s"Multiple: ${boomParams.core.retireWidth} ${tileParams.core.retireWidth}")
   val extTraceSourceNode = BundleBridgeSource(() => Vec(tileParams.core.retireWidth, new ExtendedTracedInstruction()))
   val extTraceNode = BundleBroadcast[Vec[ExtendedTracedInstruction]](Some("trace"))
   extTraceNode := extTraceSourceNode
