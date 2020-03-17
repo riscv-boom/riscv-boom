@@ -574,7 +574,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   //--------------------------------------------
   // TLB Access
 
-  assert(hella_req.cmd =/= rocket.M_SFENCE,
+  assert(!(hella_state =/= h_ready && hella_req.cmd === rocket.M_SFENCE),
     "SFENCE through hella interface not supported")
 
   val exe_tlb_uop = widthMap(w =>
@@ -1049,7 +1049,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
     val block_addr_matches = widthMap(w => lcam_addr(w) >> blockOffBits === l_addr >> blockOffBits)
     val dword_addr_matches = widthMap(w => block_addr_matches(w) && lcam_addr(w)(blockOffBits-1,3) === l_addr(blockOffBits-1,3))
-    val mask_match = widthMap(w => (l_mask & lcam_mask(w)) === l_mask)
+    val mask_match   = widthMap(w => (l_mask & lcam_mask(w)) === l_mask)
+    val mask_overlap = widthMap(w => (l_mask & lcam_mask(w)).orR)
 
     // Searcher is a store
     for (w <- 0 until memWidth) {
@@ -1067,7 +1068,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                    (l_bits.executed || l_bits.succeeded || forwarding_loads(i))                                                   &&
                    !l_bits.addr_is_virtual                                                                                        &&
                    l_bits.st_dep_mask(lcam_stq_idx(w))                                                                            &&
-                   dword_addr_matches(w)) {
+                   dword_addr_matches(w)                                                                                          &&
+                   mask_overlap(w)) {
         val forwarded_is_older = IsOlder(l_bits.forward_stq_idx, lcam_stq_idx(w), l_bits.youngest_stq_idx)
         // We are older than this load, which overlapped us.
         when (!l_bits.forward_std_val || // If the load wasn't forwarded, it definitely failed
@@ -1080,7 +1082,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                    l_bits.addr.valid          &&
                    !l_bits.addr_is_virtual    &&
                    dword_addr_matches(w)      &&
-                   ((lcam_mask(w) & l_mask) =/= 0.U)) {
+                   mask_overlap(w)) {
         val searcher_is_older = IsOlder(lcam_ldq_idx(w), i.U, ldq_head)
         when (searcher_is_older) {
           when ((l_bits.executed || l_bits.succeeded || forwarding_loads(i)) &&
