@@ -1518,7 +1518,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       io.trace(w).reset      := reset
 
       // Delay the trace so we have a cycle to pull PCs out of the FTQ
-      io.trace(w).valid      := RegNext(rob.io.commit.valids(w))
+      io.trace(w).valid      := RegNext(rob.io.commit.arch_valids(w))
 
       // Recalculate the PC
       io.ifu.debug_ftq_idx(w) := rob.io.commit.uops(w).ftq_idx
@@ -1527,16 +1527,18 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                    - Mux(RegNext(rob.io.commit.uops(w).edge_inst), 2.U, 0.U))(vaddrBits-1,0)
       io.trace(w).iaddr      := Sext(iaddr, xLen)
 
-      // use debug_insts instead of uop.debug_inst to use the rob's debug_inst_mem
       def getInst(uop: MicroOp, inst: UInt): UInt = {
         Mux(uop.is_rvc, Cat(0.U(16.W), inst(15,0)), inst)
       }
-      io.trace(w).insn       := getInst(RegNext(rob.io.commit.uops(w)), rob.io.commit.debug_insts(w))
 
-      def getWdata(uop: MicroOp): UInt = {
-        Mux((uop.dst_rtype === RT_FIX && uop.ldst =/= 0.U) || (uop.dst_rtype === RT_FLT), uop.debug_wdata, 0.U(xLen.W))
+      def getWdata(uop: MicroOp, wdata: UInt): UInt = {
+        Mux((uop.dst_rtype === RT_FIX && uop.ldst =/= 0.U) || (uop.dst_rtype === RT_FLT), wdata, 0.U(xLen.W))
       }
-      io.trace(w).wdata      := RegNext(getWdata(rob.io.commit.uops(w)))
+
+      // use debug_insts instead of uop.debug_inst to use the rob's debug_inst_mem
+      // note: rob.debug_insts comes 1 cycle later
+      io.trace(w).insn       := getInst(RegNext(rob.io.commit.uops(w)), rob.io.commit.debug_insts(w))
+      io.trace(w).wdata      := RegNext(getWdata(rob.io.commit.uops(w), rob.io.commit.debug_wdata(w)))
 
       // Comment out this assert because it blows up FPGA synth-asserts
       // This tests correctedness of the debug_inst mem
