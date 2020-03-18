@@ -92,7 +92,6 @@ case class BoomCoreParams(
   enableCommitLogPrintf: Boolean = false,
   enableBranchPrintf: Boolean = false,
   enableMemtracePrintf: Boolean = false,
-  enableDromajo: Boolean = false,
 
 // DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams
@@ -268,7 +267,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val COMMIT_LOG_PRINTF   = boomParams.enableCommitLogPrintf // dump commit state, for comparision against ISA sim
   val BRANCH_PRINTF       = boomParams.enableBranchPrintf // dump branch predictor results
   val MEMTRACE_PRINTF     = boomParams.enableMemtracePrintf // dump trace of memory accesses to L1D for debugging
-  val DROMAJO_COSIM_ENABLE = boomParams.enableDromajo
 
   //************************************
   // Other Non/Should-not-be sythesizable modules
@@ -280,13 +278,3 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val corePAddrBits = paddrBits
   val corePgIdxBits = pgIdxBits
 }
-
-/**
- * Dromajo simulation parameters
- */
-case class DromajoParams(
-  bootromParams: Option[BootROMParams] = None,
-  extMemParams: Option[MemoryPortParams] = None,
-  clintParams: Option[CLINTParams] = None,
-  plicParams: Option[PLICParams] = None
-)
