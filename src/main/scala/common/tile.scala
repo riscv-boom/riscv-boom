@@ -22,7 +22,7 @@ import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-import testchipip.{ExtendedTracedInstruction}
+import testchipip.{ExtendedTracedInstruction, WithExtendedTraceport}
 
 import boom.exu._
 import boom.ifu._
@@ -76,6 +76,7 @@ class BoomTile(
   extends BaseTile(boomParams, crossing, lookup, q)
   with SinksExternalInterrupts
   with SourcesExternalNotifications
+  with WithExtendedTraceport
 {
 
   // Private constructor ensures altered LazyModule.p is used implicitly
@@ -178,11 +179,6 @@ class BoomTile(
   val roccs = p(BuildRoCC).map(_(p))
   roccs.map(_.atlNode).foreach { atl => tlMasterXbar.node :=* atl }
   roccs.map(_.tlNode).foreach { tl => tlOtherMastersNode :=* tl }
-
-  // Extended Traceport
-  val extTraceSourceNode = BundleBridgeSource(() => Vec(tileParams.core.retireWidth, new ExtendedTracedInstruction()))
-  val extTraceNode = BundleBroadcast[Vec[ExtendedTracedInstruction]](Some("trace"))
-  extTraceNode := extTraceSourceNode
 }
 
 /**
