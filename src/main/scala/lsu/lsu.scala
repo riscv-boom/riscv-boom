@@ -1038,13 +1038,25 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val s1_executing_loads = RegNext(s0_executing_loads)
   val s1_set_execute     = WireInit(s1_executing_loads)
 
-  val forwarding_loads = WireInit(VecInit((0 until numLdqEntries) map (x=>false.B)))
+  val mem_forward_valid   = Wire(Vec(memWidth, Bool()))
+  val mem_forward_ldq_idx = lcam_ldq_idx
+  val mem_forward_ld_addr = lcam_addr
+  val mem_forward_stq_idx = Wire(Vec(memWidth, UInt(log2Ceil(numStqEntries).W)))
+
+  val wb_forward_valid    = RegNext(mem_forward_valid)
+  val wb_forward_ldq_idx  = RegNext(mem_forward_ldq_idx)
+  val wb_forward_ld_addr  = RegNext(mem_forward_ld_addr)
+  val wb_forward_stq_idx  = RegNext(mem_forward_stq_idx)
 
   for (i <- 0 until numLdqEntries) {
     val l_valid = ldq(i).valid
     val l_bits  = ldq(i).bits
     val l_addr  = ldq(i).bits.addr.bits
     val l_mask  = GenByteMask(l_addr, l_bits.uop.mem_size)
+
+    val l_forwarders      = widthMap(w => wb_forward_valid(w) && wb_forward_ldq_idx(w) === i.U)
+    val l_is_forwarding   = l_forwarders.reduce(_||_)
+    val l_forward_stq_idx = Mux(l_is_forwarding, Mux1H(l_forwarders, wb_forward_stq_idx), l_bits.forward_stq_idx)
 
 
     val block_addr_matches = widthMap(w => lcam_addr(w) >> blockOffBits === l_addr >> blockOffBits)
@@ -1065,15 +1077,16 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       } .elsewhen (do_st_search(w)                                                                                                &&
                    l_valid                                                                                                        &&
                    l_bits.addr.valid                                                                                              &&
-                   (l_bits.executed || l_bits.succeeded || forwarding_loads(i))                                                   &&
+                   (l_bits.executed || l_bits.succeeded || l_is_forwarding)                                                       &&
                    !l_bits.addr_is_virtual                                                                                        &&
                    l_bits.st_dep_mask(lcam_stq_idx(w))                                                                            &&
                    dword_addr_matches(w)                                                                                          &&
                    mask_overlap(w)) {
-        val forwarded_is_older = IsOlder(l_bits.forward_stq_idx, lcam_stq_idx(w), l_bits.youngest_stq_idx)
+
+        val forwarded_is_older = IsOlder(l_forward_stq_idx, lcam_stq_idx(w), l_bits.youngest_stq_idx)
         // We are older than this load, which overlapped us.
         when (!l_bits.forward_std_val || // If the load wasn't forwarded, it definitely failed
-          ((l_bits.forward_stq_idx =/= lcam_stq_idx(w)) && forwarded_is_older)) { // If the load forwarded from us, we might be ok
+          ((l_forward_stq_idx =/= lcam_stq_idx(w)) && forwarded_is_older)) { // If the load forwarded from us, we might be ok
           ldq(i).bits.order_fail := true.B
           failed_loads(i)        := true.B
         }
@@ -1085,7 +1098,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                    mask_overlap(w)) {
         val searcher_is_older = IsOlder(lcam_ldq_idx(w), i.U, ldq_head)
         when (searcher_is_older) {
-          when ((l_bits.executed || l_bits.succeeded || forwarding_loads(i)) &&
+          when ((l_bits.executed || l_bits.succeeded || l_is_forwarding) &&
                 !s1_executing_loads(i) && // If the load is proceeding in parallel we don't need to kill it
                 l_bits.observed) {        // Its only a ordering failure if the cache line was observed between the younger load and us
             ldq(i).bits.order_fail := true.B
@@ -1152,13 +1165,11 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val forwarding_idx = widthMap(w => forwarding_age_logic(w).io.forwarding_idx)
 
   // Forward if st-ld forwarding is possible from the writemask and loadmask
-  val mem_forward_valid       = widthMap(w =>
-                                (ldst_forward_matches(w)(forwarding_idx(w))        &&
+  mem_forward_valid       := widthMap(w =>
+                                  (ldst_forward_matches(w)(forwarding_idx(w))        &&
                                  !IsKilledByBranch(io.core.brupdate, lcam_uop(w))    &&
                                  !io.core.exception && !RegNext(io.core.exception)))
-  val mem_forward_ldq_idx     = lcam_ldq_idx
-  val mem_forward_ld_addr     = lcam_addr
-  val mem_forward_stq_idx     = forwarding_idx
+  mem_forward_stq_idx     := forwarding_idx
 
   // Task 3: Clr unsafe bit in ROB for succesful translations
   //         Delay this a cycle to avoid going ahead of the exception broadcast
@@ -1215,15 +1226,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // Writeback Cycle (St->Ld Forwarding Path)
   //-------------------------------------------------------------
   //-------------------------------------------------------------
-
-  val wb_forward_valid    = RegNext(mem_forward_valid)
-  val wb_forward_ldq_idx  = RegNext(mem_forward_ldq_idx)
-  val wb_forward_ld_addr  = RegNext(mem_forward_ld_addr)
-  val wb_forward_stq_idx  = RegNext(mem_forward_stq_idx)
-
-  for (w <- 0 until memWidth) {
-    forwarding_loads(wb_forward_ldq_idx(w)) := wb_forward_valid(w)
-  }
 
   // Handle Memory Responses and nacks
   //----------------------------------
