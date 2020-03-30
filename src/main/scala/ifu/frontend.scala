@@ -73,6 +73,14 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
     }
   }
 
+  def ===(other: GlobalHistory): Bool = {
+    ((old_history === other.old_history) &&
+     (new_saw_branch_not_taken === other.new_saw_branch_not_taken) &&
+     (new_saw_branch_taken === other.new_saw_branch_taken)
+    )
+  }
+  def =/=(other: GlobalHistory): Bool = !(this === other)
+
   def update(branches: UInt, cfi_taken: Bool, cfi_is_br: Bool, cfi_idx: UInt,
     cfi_valid: Bool, addr: UInt,
     cfi_is_call: Bool, cfi_is_ret: Bool): GlobalHistory = {
@@ -475,11 +483,11 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s0_tsrc  := s2_tsrc
     f1_clear := true.B
   } .elsewhen (s2_valid && f3_ready) {
-    when (s1_valid && s1_vpc === f2_predicted_target) {
+    when (s1_valid && s1_vpc === f2_predicted_target && s1_ghist === f2_predicted_ghist) {
       // We trust our prediction of what the global history for the next branch should be
       s2_ghist := f2_predicted_ghist
     }
-    when ((s1_valid && s1_vpc =/= f2_predicted_target) || !s1_valid) {
+    when ((s1_valid && (s1_vpc =/= f2_predicted_target || s1_ghist =/= f2_predicted_ghist)) || !s1_valid) {
       f1_clear := true.B
 
       s0_valid     := !((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay)
@@ -796,12 +804,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     when (f3_redirects.reduce(_||_)) {
       f3_prev_is_half := false.B
     }
-    when (s2_valid && s2_vpc === f3_predicted_target) {
+    when (s2_valid && s2_vpc === f3_predicted_target && s2_ghist === f3_predicted_ghist) {
       f3.io.enq.bits.ghist := f3_predicted_ghist
-    } .elsewhen (!s2_valid && s1_valid && s1_vpc === f3_predicted_target) {
+    } .elsewhen (!s2_valid && s1_valid && s1_vpc === f3_predicted_target && s1_ghist === f3_predicted_ghist) {
       s2_ghist := f3_predicted_ghist
-    } .elsewhen (( s2_valid &&  s2_vpc =/= f3_predicted_target)             ||
-          (!s2_valid &&  s1_valid && s1_vpc =/= f3_predicted_target) ||
+    } .elsewhen (( s2_valid &&  (s2_vpc =/= f3_predicted_target || s2_ghist =/= f3_predicted_ghist)) ||
+          (!s2_valid &&  s1_valid && (s1_vpc =/= f3_predicted_target || s1_ghist =/= f3_predicted_ghist)) ||
           (!s2_valid && !s1_valid)) {
       f2_clear := true.B
       f1_clear := true.B
