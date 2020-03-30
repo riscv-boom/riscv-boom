@@ -34,6 +34,9 @@ extern "C" void predict_target(unsigned long long ip, unsigned long long hist, u
 extern "C" void update_btb(unsigned long long ip, unsigned long long hist, unsigned long long target,
                            unsigned char is_br, unsigned char is_jal)
 {
+  if (!is_br && !is_jal)
+    return;
+
   for (int i = 0; i < BTB_SIZE; i++) {
     if (btb_addrs[i] == ip) {
       btb_targs[i] = target;
