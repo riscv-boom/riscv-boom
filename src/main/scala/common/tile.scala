@@ -61,6 +61,9 @@ case class BoomTileParams(
   require(dcache.isDefined)
 }
 
+// Biancolin: AFAIK we don't use OM, so i did the minimum amount of work to placate the type system
+//class BoomLogicalTreeNode(tile: BoomTile) extends LogicalTreeNode(() => Some(tile.cpuDevice))
+
 /**
  * BOOM tile
  *
@@ -173,7 +176,7 @@ class BoomTile(
       mtvecWritable       = boomParams.core.mtvecWritable
     )
   )
-  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, dtim_adapter, p(XLen))
+  //val boomLogicalTree = new BoomLogicalTreeNode(this)
 
   override lazy val module = new BoomTileModuleImp(this)
 
@@ -187,8 +190,9 @@ class BoomTile(
   val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, hartId))
   tlMasterXbar.node := frontend.masterNode
 
-  private val deviceOpt = None
-  val iCacheLogicalTreeNode = new BoomICacheLogicalTreeNode(frontend.icache, deviceOpt, tileParams.icache.get)
+  //private val deviceOpt = None
+  //val iCacheLogicalTreeNode = new ICacheLogicalTreeNode(frontend.icache, deviceOpt, tileParams.icache.get)
+  //LogicalModuleTree.add(boomLogicalTree, ICacheLogicalTreeNode)
 
   // ROCC
   val roccs = p(BuildRoCC).map(_(p))
