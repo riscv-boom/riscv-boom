@@ -712,7 +712,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
         (offset_from_aligned_pc <= Mux(f3_is_last_bank_in_block, (fetchBytes+bankBytes).U,(2*fetchBytes).U))
       )
       f3_fetch_bundle.sfb_masks(i)       := ~MaskLower(lower_mask) & ~MaskUpper(upper_mask)
-      f3_fetch_bundle.shadowable_mask(i) := brsigs.shadowable && f3_mask(i)
+      f3_fetch_bundle.shadowable_mask(i) := (!(f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if) &&
+                                             f3_bank_mask(b) &&
+                                             (brsigs.shadowable || !f3_mask(i)))
       f3_fetch_bundle.sfb_dests(i)       := offset_from_aligned_pc
 
       // Redirect if
@@ -852,12 +854,10 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // Deal with sfbs
   val f4_shadowable_masks = VecInit((0 until fetchWidth) map { i =>
      f4.io.deq.bits.shadowable_mask.asUInt |
-    ~f4.io.deq.bits.mask |
     ~f4.io.deq.bits.sfb_masks(i)(fetchWidth-1,0)
   })
   val f3_shadowable_masks = VecInit((0 until fetchWidth) map { i =>
     Mux(f4.io.enq.valid, f4.io.enq.bits.shadowable_mask.asUInt, 0.U) |
-    Mux(f4.io.enq.valid, ~f4.io.enq.bits.mask, 0.U) |
     ~f4.io.deq.bits.sfb_masks(i)(2*fetchWidth-1,fetchWidth)
   })
   val f4_sfbs = VecInit((0 until fetchWidth) map { i =>
