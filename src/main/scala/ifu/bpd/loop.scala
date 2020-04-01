@@ -180,7 +180,7 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
 
 
   val columns = Seq.fill(bankWidth) { Module(new LoopBranchPredictorColumn) }
-
+  val mems = Nil // TODO fix
   val f3_meta = Wire(Vec(bankWidth, new LoopMeta))
   override val metaSz = f3_meta.asUInt.getWidth
 

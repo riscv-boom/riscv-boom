@@ -14,6 +14,7 @@ import boom.util.{BoomCoreStringPrefix}
 
 class SwBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
+  val mems = Nil
   for (w <- 0 until bankWidth) {
     val btb_harness = Module(new BTBHarness)
     val pred_harness = Module(new BranchPredictorHarness)

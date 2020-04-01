@@ -60,6 +60,9 @@ class MicroBTBBranchPredictorBank(params: BoomMicroBTBParams)(implicit p: Parame
   val meta     = SyncReadMem(nSets, Vec(bankWidth, UInt(btbMetaSz.W)))
   val btb      = SyncReadMem(nSets, Vec(bankWidth, UInt(btbEntrySz.W)))
 
+  val mems = Seq(("ubtb_meta", nSets, bankWidth * btbMetaSz),
+                 ("ubtb_data", nSets, bankWidth * btbEntrySz))
+
   val s1_req_rbtb  = VecInit(btb.read(s0_idx , s0_valid).map(_.asTypeOf(new MicroBTBEntry)))
   val s1_req_rmeta = VecInit(meta.read(s0_idx, s0_valid).map(_.asTypeOf(new MicroBTBMeta)))
   val s1_req_tag   = s1_idx >> log2Ceil(nSets)

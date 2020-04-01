@@ -48,7 +48,8 @@ class TourneyBranchPredictorBank(params: BoomTourneyBPDParams = BoomTourneyBPDPa
   reset_idx := reset_idx + doing_reset
   when (reset_idx === (nSets-1).U) { doing_reset := false.B }
 
-  val data = Seq.fill(bankWidth) { SyncReadMem(nSets, UInt(2.W)) }
+  val data = Seq.fill(bankWidth) { SyncReadMem(nSets, UInt(2.W)) } // TODO make this masked mem
+  val mems = Seq(("tourney", nSets, 2*bankWidth))
 
   val f1_req_idx = compute_folded_hist(io.f1_ghist, log2Ceil(nSets)) ^ s1_idx
   val s3_req_rdata = RegNext(VecInit(data.map(_.read(f1_req_idx, s1_valid))))

@@ -69,6 +69,8 @@ class BranchPredictionUpdate(implicit p: Parameters) extends BoomBundle()(p)
   val cfi_is_br     = Bool()
   // Was the cfi a jal/jalr?
   val cfi_is_jal  = Bool()
+  // Was the cfi a jalr
+  val cfi_is_jalr = Bool()
   //val cfi_is_ret  = Bool()
 
   val ghist = new GlobalHistory
@@ -102,6 +104,7 @@ class BranchPredictionBankUpdate(implicit p: Parameters) extends BoomBundle()(p)
 
   val cfi_is_br        = Bool()
   val cfi_is_jal       = Bool()
+  val cfi_is_jalr      = Bool()
 
   val ghist            = UInt(globalHistoryLength.W)
   val lhist            = UInt(localHistoryLength.W)
@@ -131,6 +134,8 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
 {
   val metaSz = 0
   def nInputs = 1
+
+  val mems: Seq[Tuple3[String, Int, Int]]
 
   val io = IO(new Bundle {
     val f0_valid = Input(Bool())
@@ -206,8 +211,22 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     val update = Input(Valid(new BranchPredictionUpdate))
   })
 
-  val banked_predictors = Seq.fill(nBanks) { Module(if (useBPD) new ComposedBranchPredictorBank else new NullBranchPredictorBank) }
+  var total_memsize = 0
+  val bpdStr = new StringBuilder
+  bpdStr.append(BoomCoreStringPrefix("==Branch Predictor Memory Sizes==\n"))
+  val banked_predictors = (0 until nBanks) map ( b => {
+    val m = Module(if (useBPD) new ComposedBranchPredictorBank else new NullBranchPredictorBank)
+    for ((n, d, w) <- m.mems) {
+      bpdStr.append(BoomCoreStringPrefix(f"bank$b $n: $d x $w = ${d * w / 8}"))
+      total_memsize = total_memsize + d * w / 8
+    }
+    m
+  })
+  bpdStr.append(BoomCoreStringPrefix(f"Total bpd size: ${total_memsize / 1024} KB\n"))
+  override def toString: String = bpdStr.toString
+
   val banked_lhist_providers = Seq.fill(nBanks) { Module(if (localHistoryNSets > 0) new LocalBranchPredictorBank else new NullLocalBranchPredictorBank) }
+
 
   if (nBanks == 1) {
     banked_lhist_providers(0).io.f0_valid := io.f0_req.valid
@@ -363,6 +382,7 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     banked_predictors(i).io.update.bits.cfi_mispredicted := io.update.bits.cfi_mispredicted
     banked_predictors(i).io.update.bits.cfi_is_br        := io.update.bits.cfi_is_br
     banked_predictors(i).io.update.bits.cfi_is_jal       := io.update.bits.cfi_is_jal
+    banked_predictors(i).io.update.bits.cfi_is_jalr      := io.update.bits.cfi_is_jalr
     banked_predictors(i).io.update.bits.target           := io.update.bits.target
 
     banked_lhist_providers(i).io.update.mispredict := io.update.bits.is_mispredict_update
@@ -450,6 +470,8 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
   }
 }
 
-class NullBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
+class NullBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p) {
+  val mems = Nil
+}
 
 

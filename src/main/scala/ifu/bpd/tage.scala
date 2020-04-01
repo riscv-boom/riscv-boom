@@ -90,6 +90,7 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
   val lo_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
   val table  = SyncReadMem(nRows, Vec(bankWidth, UInt(tageEntrySz.W)))
 
+  val mems = Seq((f"tage_l$histLength", nRows, bankWidth * tageEntrySz))
 
   val s2_tag       = RegNext(s1_tag)
 
@@ -218,15 +219,17 @@ class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implici
                     Mux(u === 3.U, 3.U, u + 1.U)))
   }
 
-  val tables = params.tableInfo map {
+  val tt = params.tableInfo map {
     case (n, l, s) => {
       val t = Module(new TageTable(n, s, l, params.uBitPeriod))
       t.io.f1_req_valid := RegNext(io.f0_valid)
       t.io.f1_req_pc    := RegNext(io.f0_pc)
       t.io.f1_req_ghist := io.f1_ghist
-      t
+      (t, t.mems)
     }
   }
+  val tables = tt.map(_._1)
+  val mems = tt.map(_._2).flatten
 
   val f3_resps = VecInit(tables.map(_.io.f3_resp))
 

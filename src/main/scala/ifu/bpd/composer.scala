@@ -43,4 +43,6 @@ class ComposedBranchPredictorBank(implicit p: Parameters) extends BranchPredicto
     update_meta = update_meta >> c.metaSz
   }
 
+  val mems = components.map(_.mems).flatten
+
 }

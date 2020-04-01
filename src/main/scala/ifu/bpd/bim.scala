@@ -49,6 +49,7 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
 
   val data  = SyncReadMem(nSets, Vec(bankWidth, UInt(2.W)))
 
+  val mems = Seq(("bim", nSets, bankWidth * 2))
 
   val s2_req_rdata    = RegNext(data.read(s0_idx   , s0_valid))
 

@@ -975,5 +975,5 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   override def toString: String =
     (BoomCoreStringPrefix("====Overall Frontend Params====") + "\n"
-    + icache.toString)
+    + icache.toString + bpd.toString)
 }

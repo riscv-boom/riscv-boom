@@ -43,7 +43,7 @@ class HBIMBranchPredictorBank(params: BoomHBIMParams = BoomHBIMParams())(implici
 
 
   val data  = Seq.fill(bankWidth) { SyncReadMem(nSets, UInt(2.W)) }
-
+  val mems = Seq(("hbim", nSets, bankWidth * 2))
   def compute_folded_hist(hist: UInt, l: Int) = {
     val nChunks = (params.histLength + l - 1) / l
     val hist_chunks = (0 until nChunks) map {i =>
