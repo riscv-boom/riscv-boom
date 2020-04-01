@@ -32,12 +32,14 @@ class WithBoomCommitLogPrintf extends Config((site, here, up) => {
   }
 })
 
-
 class WithBoomBranchPrintf extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b =>
     b.copy(core = b.core.copy(enableBranchPrintf = true))
   }
 })
+
+
+
 
 
 /**
@@ -82,13 +84,6 @@ class WithNPerfCounters(n: Int) extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(core = b.core.copy(
     nPerfCounters = n
   ))}
-})
-
-/**
- * Enable tracing
- */
-class WithTrace extends Config((site, here, up) => {
-  case BoomTilesKey => up(BoomTilesKey, site) map { b => b.copy(trace = true) }
 })
 
 /**
