@@ -508,13 +508,13 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     (x.map(_._1).reduce(_||_), PriorityMux(x))
 
   val (xcpt_valid, xcpt_cause) = checkExceptions(List(
-    (io.interrupt,     io.interrupt_cause),
-    (uop.bp_debug_if,  (CSR.debugTriggerCause).U),
-    (uop.bp_xcpt_if,   (Causes.breakpoint).U),
-    (uop.replay_if,    MINI_EXCEPTION_REPLAY),
-    (uop.xcpt_pf_if,   (Causes.fetch_page_fault).U),
-    (uop.xcpt_ae_if,   (Causes.fetch_access).U),
-    (id_illegal_insn,  (Causes.illegal_instruction).U)))
+    (io.interrupt && !io.enq.uop.is_sfb, io.interrupt_cause),  // Disallow interrupts while we are handling a SFB
+    (uop.bp_debug_if,                    (CSR.debugTriggerCause).U),
+    (uop.bp_xcpt_if,                     (Causes.breakpoint).U),
+    (uop.replay_if,                      MINI_EXCEPTION_REPLAY),
+    (uop.xcpt_pf_if,                     (Causes.fetch_page_fault).U),
+    (uop.xcpt_ae_if,                     (Causes.fetch_access).U),
+    (id_illegal_insn,                    (Causes.illegal_instruction).U)))
 
   uop.exception := xcpt_valid
   uop.exc_cause := xcpt_cause

@@ -712,7 +712,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
         (offset_from_aligned_pc <= Mux(f3_is_last_bank_in_block, (fetchBytes+bankBytes).U,(2*fetchBytes).U))
       )
       f3_fetch_bundle.sfb_masks(i)       := ~MaskLower(lower_mask) & ~MaskUpper(upper_mask)
-      f3_fetch_bundle.shadowable_mask(i) := (!(f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if) &&
+      f3_fetch_bundle.shadowable_mask(i) := (!(f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if || bpu.io.debug_if || bpu.io.xcpt_if) &&
                                              f3_bank_mask(b) &&
                                              (brsigs.shadowable || !f3_mask(i)))
       f3_fetch_bundle.sfb_dests(i)       := offset_from_aligned_pc
