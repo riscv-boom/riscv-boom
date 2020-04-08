@@ -24,7 +24,7 @@ import boom.util._
 class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   (implicit p: Parameters) extends BoomModule with IssueUnitConstants
 {
-  val io = IO(new BoomBundle{
+  val io = IO(new BoomBundle {
     val dis_uops = Flipped(Vec(coreWidth, DecoupledIO(new MicroOp)))
     val iss_uops = Output(Vec(coreWidth, Valid(new MicroOp)))
 
@@ -67,7 +67,6 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   //----------------------------------------------------------------------------------------------------
   // Dispatch
 
-  // TODO clean this up
   val dis_uops_setup = Wire(Vec(coreWidth, new MicroOp))
   for (w <- 0 until coreWidth) {
     dis_uops_setup(w) := io.dis_uops(w).bits
