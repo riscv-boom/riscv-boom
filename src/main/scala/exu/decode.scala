@@ -511,7 +511,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     (io.interrupt && !io.enq.uop.is_sfb, io.interrupt_cause),  // Disallow interrupts while we are handling a SFB
     (uop.bp_debug_if,                    (CSR.debugTriggerCause).U),
     (uop.bp_xcpt_if,                     (Causes.breakpoint).U),
-    (uop.replay_if,                      MINI_EXCEPTION_REPLAY),
     (uop.xcpt_pf_if,                     (Causes.fetch_page_fault).U),
     (uop.xcpt_ae_if,                     (Causes.fetch_access).U),
     (id_illegal_insn,                    (Causes.illegal_instruction).U)))

@@ -360,9 +360,6 @@ trait ExcCauseConstants
 {
   // a memory disambigious misspeculation occurred
   val MINI_EXCEPTION_MEM_ORDERING = 16.U
-  // an instruction needs to be replayed (e.g., I$ asks for a replay)
-  val MINI_EXCEPTION_REPLAY = 17.U
 
   require (!freechips.rocketchip.rocket.Causes.all.contains(16))
-  require (!freechips.rocketchip.rocket.Causes.all.contains(17))
 }
