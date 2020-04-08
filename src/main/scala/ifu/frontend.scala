@@ -470,7 +470,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     false.B,
     false.B)
 
-
+  val f2_correct_f1_ghist = s1_ghist =/= f2_predicted_ghist && enableGHistStallRepair.B
 
   when ((s2_valid && !icache.io.resp.valid) ||
         (s2_valid && icache.io.resp.valid && !f3_ready)) {
@@ -483,11 +483,11 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s0_tsrc  := s2_tsrc
     f1_clear := true.B
   } .elsewhen (s2_valid && f3_ready) {
-    when (s1_valid && s1_vpc === f2_predicted_target && s1_ghist === f2_predicted_ghist) {
+    when (s1_valid && s1_vpc === f2_predicted_target && !f2_correct_f1_ghist) {
       // We trust our prediction of what the global history for the next branch should be
       s2_ghist := f2_predicted_ghist
     }
-    when ((s1_valid && (s1_vpc =/= f2_predicted_target || s1_ghist =/= f2_predicted_ghist)) || !s1_valid) {
+    when ((s1_valid && (s1_vpc =/= f2_predicted_target || f2_correct_f1_ghist)) || !s1_valid) {
       f1_clear := true.B
 
       s0_valid     := !((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay)
@@ -799,6 +799,10 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f3_fetch_bundle.cfi_npc_plus4, 4.U, 2.U)
   ras.io.write_idx   := WrapInc(f3_fetch_bundle.ghist.ras_idx, nRasEntries)
 
+
+  val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist && enableGHistStallRepair.B
+  val f3_correct_f2_ghist = s2_ghist =/= f3_predicted_ghist && enableGHistStallRepair.B
+
   when (f3.io.deq.valid && f4_ready) {
     when (f3_fetch_bundle.cfi_is_call && f3_fetch_bundle.cfi_idx.valid) {
       ras.io.write_valid := true.B
@@ -806,12 +810,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     when (f3_redirects.reduce(_||_)) {
       f3_prev_is_half := false.B
     }
-    when (s2_valid && s2_vpc === f3_predicted_target && s2_ghist === f3_predicted_ghist) {
+    when (s2_valid && s2_vpc === f3_predicted_target && !f3_correct_f2_ghist) {
       f3.io.enq.bits.ghist := f3_predicted_ghist
-    } .elsewhen (!s2_valid && s1_valid && s1_vpc === f3_predicted_target && s1_ghist === f3_predicted_ghist) {
+    } .elsewhen (!s2_valid && s1_valid && s1_vpc === f3_predicted_target && !f3_correct_f1_ghist) {
       s2_ghist := f3_predicted_ghist
-    } .elsewhen (( s2_valid &&  (s2_vpc =/= f3_predicted_target || s2_ghist =/= f3_predicted_ghist)) ||
-          (!s2_valid &&  s1_valid && (s1_vpc =/= f3_predicted_target || s1_ghist =/= f3_predicted_ghist)) ||
+    } .elsewhen (( s2_valid &&  (s2_vpc =/= f3_predicted_target || f3_correct_f2_ghist)) ||
+          (!s2_valid &&  s1_valid && (s1_vpc =/= f3_predicted_target || f3_correct_f1_ghist)) ||
           (!s2_valid && !s1_valid)) {
       f2_clear := true.B
       f1_clear := true.B
