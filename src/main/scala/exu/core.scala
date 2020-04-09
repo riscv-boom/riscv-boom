@@ -1430,9 +1430,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   if (p(BoomTilesKey)(0).trace) {
     for (w <- 0 until coreWidth) {
-      io.trace(w).clock      := clock
-      io.trace(w).reset      := reset
-
       // Delay the trace so we have a cycle to pull PCs out of the FTQ
       io.trace(w).valid      := RegNext(rob.io.commit.valids(w))
 
