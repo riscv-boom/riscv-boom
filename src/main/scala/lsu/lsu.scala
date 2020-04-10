@@ -483,6 +483,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                                                   stq_commit_e.bits.data.valid))))
 
   // Can we wakeup a load that was nack'd
+  val block_load_wakeup = WireInit(false.B)
   val can_fire_load_wakeup = widthMap(w =>
                              ( ldq_wakeup_e.valid                                      &&
                                ldq_wakeup_e.bits.addr.valid                            &&
@@ -493,6 +494,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                               !p1_block_load_mask(ldq_wakeup_idx)                      &&
                               !p2_block_load_mask(ldq_wakeup_idx)                      &&
                               !store_needs_order                                       &&
+                              !block_load_wakeup                                       &&
                               (w == memWidth-1).B                                      &&
                               (!ldq_wakeup_e.bits.addr_is_uncacheable || (io.core.commit_load_at_rob_head &&
                                                                           ldq_head === ldq_wakeup_idx &&
@@ -1170,6 +1172,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                  !IsKilledByBranch(io.core.brupdate, lcam_uop(w))    &&
                                  !io.core.exception && !RegNext(io.core.exception)))
   mem_forward_stq_idx     := forwarding_idx
+
+  // Avoid deadlock with a 1-w LSU prioritizing load wakeups > store commits
+  // Wakeups may repeatedly find a st->ld addr conflict and fail to forward,
+  // repeated wakeups may block the store from ever committing
+  // Disallow load wakeups 1 cycle after this happens to allow the stores to drain
+  // On a 2W machine, load wakeups and store commits occupy separate pipelines
+  if (memWidth == 1) {
+    when (RegNext(ldst_addr_matches(0).reduce(_||_) && !mem_forward_valid(0))) {
+      block_load_wakeup := true.B
+    }
+  }
+
 
   // Task 3: Clr unsafe bit in ROB for succesful translations
   //         Delay this a cycle to avoid going ahead of the exception broadcast
