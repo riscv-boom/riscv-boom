@@ -55,6 +55,7 @@ class TourneyBranchPredictorBank(params: BoomTourneyBPDParams = BoomTourneyBPDPa
   val s3_req_rdata = RegNext(VecInit(data.map(_.read(f1_req_idx, s1_valid))))
   val s3_resp = Wire(Vec(bankWidth, Bool()))
 
+  io.resp := io.resp_in(0)
   for (w <- 0 until bankWidth) {
     s3_resp(w) := Mux(s3_req_rdata(w)(1), io.resp_in(1).f3(w).taken, io.resp_in(0).f3(w).taken)  && !doing_reset
     s3_meta.ctrs(w) := s3_req_rdata(w)

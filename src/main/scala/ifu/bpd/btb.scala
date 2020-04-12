@@ -98,12 +98,25 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
     s1_is_br(w)  := !doing_reset && s1_resp(w).valid &&  entry_meta.is_br
     s1_is_jal(w) := !doing_reset && s1_resp(w).valid && !entry_meta.is_br
 
-    io.resp.f2(w).predicted_pc := RegNext(s1_resp(w))
-    io.resp.f2(w).is_br        := RegNext(s1_is_br(w))
-    io.resp.f2(w).is_jal       := RegNext(s1_is_jal(w))
-    io.resp.f2(w).taken        := RegNext(s1_is_jal(w)) || io.resp_in(0).f2(w).taken || RegNext(io.resp_in(0).f1(w).taken)
 
-    io.resp.f3(w)              := RegNext(io.resp.f2(w))
+    io.resp.f2(w) := io.resp_in(0).f2(w)
+    io.resp.f3(w) := io.resp_in(0).f3(w)
+    when (RegNext(s1_hits(w))) {
+      io.resp.f2(w).predicted_pc := RegNext(s1_resp(w))
+      io.resp.f2(w).is_br        := RegNext(s1_is_br(w))
+      io.resp.f2(w).is_jal       := RegNext(s1_is_jal(w))
+      when (RegNext(s1_is_jal(w))) {
+        io.resp.f2(w).taken      := true.B
+      }
+    }
+    when (RegNext(RegNext(s1_hits(w)))) {
+      io.resp.f3(w).predicted_pc := RegNext(io.resp.f2(w).predicted_pc)
+      io.resp.f3(w).is_br        := RegNext(io.resp.f2(w).is_br)
+      io.resp.f3(w).is_jal       := RegNext(io.resp.f2(w).is_jal)
+      when (RegNext(RegNext(s1_is_jal(w)))) {
+        io.resp.f3(w).taken      := true.B
+      }
+    }
   }
 
   val alloc_way = if (nWays > 1) {
