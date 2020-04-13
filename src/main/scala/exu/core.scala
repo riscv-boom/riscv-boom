@@ -286,20 +286,20 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val debug_jals    = Reg(Vec(4, UInt(xLen.W)))
   val debug_jalrs   = Reg(Vec(4, UInt(xLen.W)))
 
-  for (i <- 0 until 4) {
-    debug_brs(i) := debug_brs(i) + PopCount(VecInit((0 until coreWidth) map {i =>
+  for (j <- 0 until 4) {
+    debug_brs(j) := debug_brs(j) + PopCount(VecInit((0 until coreWidth) map {i =>
       rob.io.commit.arch_valids(i) &&
-      (rob.io.commit.uops(i).debug_fsrc === i.U)
+      (rob.io.commit.uops(i).debug_fsrc === j.U) &&
       rob.io.commit.uops(i).is_br
     }))
-    debug_jals(i) := debug_jals(i) + PopCount(VecInit((0 until coreWidth) map {i =>
+    debug_jals(j) := debug_jals(j) + PopCount(VecInit((0 until coreWidth) map {i =>
       rob.io.commit.arch_valids(i) &&
-      (rob.io.commit.uops(i).debug_fsrc === i.U)
+      (rob.io.commit.uops(i).debug_fsrc === j.U) &&
       rob.io.commit.uops(i).is_jal
     }))
-    debug_jalrs(i) := debug_jalrs(i) + PopCount(VecInit((0 until coreWidth) map {i =>
+    debug_jalrs(j) := debug_jalrs(j) + PopCount(VecInit((0 until coreWidth) map {i =>
       rob.io.commit.arch_valids(i) &&
-      (rob.io.commit.uops(i).debug_fsrc === i.U)
+      (rob.io.commit.uops(i).debug_fsrc === j.U) &&
       rob.io.commit.uops(i).is_jalr
     }))
   }
