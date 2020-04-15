@@ -47,6 +47,7 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
 
   val fast_wakeup   = Input(Valid(new FastWakeup))
+  val chain_wakeup  = Input(Valid(new FastWakeup))
   val slow_wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
   val load_wakeups  = Input(Vec(memWidth, Valid(UInt(ipregSz.W))))
   val load_nacks    = Input(Vec(memWidth, Bool()))
@@ -79,6 +80,7 @@ class RingIssueSlot(implicit p: Parameters)
 
   def wakeup(uop: MicroOp,
              fwu: Valid[FastWakeup],
+             cwu: Valid[FastWakeup],
              lwu: Vec[Valid[UInt]],
              swu: Vec[Valid[UInt]],
              ldn: Vec[Bool]): MicroOp = {
@@ -86,9 +88,11 @@ class RingIssueSlot(implicit p: Parameters)
     val woke_uop = Wire(new MicroOp)
     woke_uop := uop
 
-    val do_fwu   = fwu.bits.pdst === uop.busy_operand && fwu.valid
-    val fwu_prs1 = do_fwu && !uop.busy_operand_sel
-    val fwu_prs2 = do_fwu &&  uop.busy_operand_sel
+    val fwu_prs1 = fwu.bits.pdst === uop.prs1 && fwu.valid
+    val fwu_prs2 = fwu.bits.pdst === uop.prs2 && fwu.valid
+
+    val cwu_prs1 = cwu.bits.pdst === uop.prs1 && cwu.valid
+    val cwu_prs2 = cwu.bits.pdst === uop.prs2 && cwu.valid
 
     val lwu_prs1_hits = VecInit(lwu.map(wu => wu.bits === uop.prs1 && wu.valid && uop.lrs1_rtype === RT_FIX))
     val lwu_prs2_hits = VecInit(lwu.map(wu => wu.bits === uop.prs2 && wu.valid && uop.lrs2_rtype === RT_FIX))
@@ -101,11 +105,13 @@ class RingIssueSlot(implicit p: Parameters)
     woke_uop.prs1_status := ( uop.prs1_status >> 1
                             | uop.prs1_status & 1.U
                             | Mux(fwu_prs1, fwu.bits.status, 0.U)
+                            | Mux(cwu_prs1, cwu.bits.status, 0.U)
                             | Mux(lwu_prs1,             2.U, 0.U)
                             | Mux(swu_prs1,             1.U, 0.U) )
     woke_uop.prs2_status := ( uop.prs2_status >> 1
                             | uop.prs2_status & 1.U
                             | Mux(fwu_prs2, fwu.bits.status, 0.U)
+                            | Mux(cwu_prs2, cwu.bits.status, 0.U)
                             | Mux(lwu_prs2,             2.U, 0.U)
                             | Mux(swu_prs2,             1.U, 0.U) )
 
@@ -221,7 +227,7 @@ class RingIssueSlot(implicit p: Parameters)
   }
 
   when (state === s_valid_3) {
-    io.request_chain := p2
+    io.request_chain := slot_uop.prs2_status(1,0).orR
   }
 
   //----------------------------------------------------------------------------------------------------
