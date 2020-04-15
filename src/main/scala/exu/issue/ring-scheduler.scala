@@ -171,34 +171,28 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   chain_arb.io.reqs := chain_vals
   chain_arb.io.fire := DontCare
 
-  val chain_uops_s2 = RegNext(chain_uops)
-  val chain_vals_s2 = RegNext(VecInit((chain_vals.asUInt & chain_arb.io.gnts.asUInt).asBools))
-
-  // Chained operand is always present and non-bypassable
-  chain_uops_s2.prs2_status := 1.U
+  val r_chain_uops = RegNext(chain_uops)
+  val r_chain_vals = RegNext(VecInit(chain_arb.io.gnts.asBools))
 
   //----------------------------------------------------------------------------------------------------
   // Grant, Fast Wakeup, and Issue
 
-  val do_issue = arb_gnts          & ~VecInit(  sel_uops.map(_.load_wakeup_nacked(io.load_nacks))).asUInt
-  val do_chain = chain_arb.io.gnts & ~VecInit(chain_uops.map(_.load_wakeup_nacked(io.load_nacks))).asUInt
+  val do_issue = arb_gnts & ~VecInit(sel_uops.map(_.load_wakeup_nacked(io.load_nacks))).asUInt
 
   // Grant signals
   for (w <- 0 until coreWidth) {
     for (i <- 0 until numSlotsPerColumn) {
-      slots(w)(i).grant := iss_sels(w)(i) && do_issue(w) || chain_sels(w)(i) && do_chain
+      slots(w)(i).grant := iss_sels(w)(i) && do_issue(w) || chain_sels(w)(i) && chain_arb.io.gnts(w)
     }
   }
 
   // Generate fast wakeups
   for (w <- 0 until coreWidth) {
-    val fast_wakeup  =      sel_uops(w).fast_wakeup(do_issue(w))
-    val chain_wakeup = chain_uops_s2(w).fast_wakeup(do_chain(w))
+    val fast_wakeup  = sel_uops(w).fast_wakeup(do_issue(w))
 
     // Broadcast to slots in next column
     for (slot <- slots((w + 1) % coreWidth)) {
       slot.fast_wakeup     := fast_wakeup
-      slot.chain_wakeup    := chain_wakeup
       slot.slow_wakeups(0) := io.slow_wakeups(2*w)
       slot.slow_wakeups(1) := io.slow_wakeups(2*w+1)
     }
@@ -206,6 +200,19 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     // Send to rename (ALU only)
     io.fast_wakeups(w).valid := RegNext(fast_wakeup.valid && fast_wakeup.bits.alu)
     io.fast_wakeups(w).bits  := RegNext(fast_wakeup.bits.pdst)
+  }
+
+  // Generate chained wakeups
+  val chain_xbar_reqs = Transpose(r_chain_uops zip r_chain_vals map { case (u,v) => Mux(v, u.bits.pdst_col, 0.U) })
+  for (w <- 0 until coreWidth) {
+    val chain_uop    = Mux1H(chain_xbar_reqs(w), r_chain_uops)
+    val chain_wakeup = Wire(Valid(UInt(ipregSz.W)))
+    chain_wakeup.bits  := chain_uop.pdst
+    chain_wakeup.valid := chain_xbar_reqs(w).orR
+
+    for (slot <- slots(w)) {
+      slot.chain_wakeup := chain_wakeup
+    }
   }
 
   // Hookup issue output
