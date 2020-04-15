@@ -84,7 +84,9 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     dis_uops_setup(w).prs3_busy := false.B
   }
 
-  val dis_reqs = Transpose(io.dis_uops zip io.dis_valids map { case (u,v) => Mux(v, u.bits.pdst_col, 0.U) })
+  val dis_reqs = Transpose(io.dis_uops zip io.dis_valids map { case (u,v) => Mux(v, u.bits.pdst_col |
+                                                                             Mux(u.bits.prs1_busy && u.bits.prs2_busy,
+                                                                             u.bits.prs1_col, 0.U), 0.U) })
   val dis_uops = Wire(Vec(coreWidth, Vec(columnDispatchWidth, new MicroOp)))
   val dis_vals = Wire(Vec(coreWidth, Vec(columnDispatchWidth, Bool())))
   val dis_gnts = Wire(Vec(coreWidth, UInt(coreWidth.W)))
@@ -93,8 +95,13 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val dis_sels = SelectFirstN(dis_reqs(w), columnDispatchWidth)
 
     for (d <- 0 until columnDispatchWidth) {
-      dis_uops(w)(d) := Mux1H(dis_sels(d), dis_uops_setup)
+      val dis_uop     = Mux1H(dis_sels(d), dis_uops_setup)
+      dis_uops(w)(d) := dis_uop
       dis_vals(w)(d) := Mux1H(dis_sels(d), io.dis_uops.map(_.valid))
+
+      when (!dis_uop.pdst_col(w)) {
+        dis_uops(w)(d).iw_state := s_valid_3
+      }
     }
 
     val col_rdys = (0 until columnDispatchWidth).map(d => PopCount(slots(w).map(_.valid)) +& d.U < numSlotsPerColumn.U)
