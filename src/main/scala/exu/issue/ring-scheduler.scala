@@ -84,9 +84,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     dis_uops_setup(w).prs3_busy := false.B
   }
 
-  val dis_reqs = Transpose(io.dis_uops zip io.dis_valids map { case (u,v) => Mux(v, u.bits.pdst_col |
-                                                                             Mux(u.bits.prs1_busy && u.bits.prs2_busy,
-                                                                             u.bits.prs2_col, 0.U), 0.U) })
+  val dis_reqs = Transpose(io.dis_uops zip io.dis_valids map { case (u,v) =>
+    Mux(v, u.bits.pdst_col | Mux(u.bits.prs1_busy && u.bits.prs2_busy && !u.bits.prs2_load, u.bits.prs2_col, 0.U), 0.U) })
   val dis_uops = Wire(Vec(coreWidth, Vec(columnDispatchWidth, new MicroOp)))
   val dis_vals = Wire(Vec(coreWidth, Vec(columnDispatchWidth, Bool())))
   val dis_gnts = Wire(Vec(coreWidth, UInt(coreWidth.W)))
