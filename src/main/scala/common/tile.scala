@@ -14,7 +14,7 @@ import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalModuleTree, LogicalTreeNode, RocketLogicalTreeNode, ICacheLogicalTreeNode}
+import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalTreeNode }
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.subsystem.{RocketCrossingParams}
 import freechips.rocketchip.tilelink._
@@ -60,9 +60,6 @@ case class BoomTileParams(
   require(icache.isDefined)
   require(dcache.isDefined)
 }
-
-// Biancolin: AFAIK we don't use OM, so i did the minimum amount of work to placate the type system
-//class BoomLogicalTreeNode(tile: BoomTile) extends LogicalTreeNode(() => Some(tile.cpuDevice))
 
 /**
  * BOOM tile
@@ -189,10 +186,6 @@ class BoomTile(
   // Frontend/ICache
   val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, hartId))
   tlMasterXbar.node := frontend.masterNode
-
-  //private val deviceOpt = None
-  //val iCacheLogicalTreeNode = new ICacheLogicalTreeNode(frontend.icache, deviceOpt, tileParams.icache.get)
-  //LogicalModuleTree.add(boomLogicalTree, ICacheLogicalTreeNode)
 
   // ROCC
   val roccs = p(BuildRoCC).map(_(p))
