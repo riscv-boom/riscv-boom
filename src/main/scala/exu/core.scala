@@ -1344,20 +1344,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // TODO: Does anyone want this debugging functionality?
   val coreMonitorBundle = Wire(new CoreMonitorBundle(xLen))
+  coreMonitorBundle := DontCare
   coreMonitorBundle.clock  := clock
   coreMonitorBundle.reset  := reset
-  coreMonitorBundle.hartid := DontCare
-  coreMonitorBundle.timer  := DontCare
-  coreMonitorBundle.valid  := DontCare
-  coreMonitorBundle.pc     := DontCare
-  coreMonitorBundle.wrdst  := DontCare
-  coreMonitorBundle.wrdata := DontCare
-  coreMonitorBundle.wren   := DontCare
-  coreMonitorBundle.rd0src := DontCare
-  coreMonitorBundle.rd0val := DontCare
-  coreMonitorBundle.rd1src := DontCare
-  coreMonitorBundle.rd1val := DontCare
-  coreMonitorBundle.inst   := DontCare
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
