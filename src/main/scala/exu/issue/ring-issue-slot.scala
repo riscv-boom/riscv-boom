@@ -48,7 +48,7 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
 
   val fast_wakeup   = Input(Valid(new FastWakeup))
   val chain_wakeup  = Input(Valid(new FastWakeup))
-  val slow_wakeups  = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
+  val slow_wakeups  = Input(Vec(2       , Valid(UInt(ipregSz.W))))
   val load_wakeups  = Input(Vec(memWidth, Valid(UInt(ipregSz.W))))
   val load_nacks    = Input(Vec(memWidth, Bool()))
 
