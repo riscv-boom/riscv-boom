@@ -37,6 +37,7 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val valid         = Output(Bool())
   val will_be_valid = Output(Bool())
   val request       = Output(Bool())
+  val request_chain = Output(Bool())
   val grant         = Input(Bool())
 
   val fu_avail      = Input(UInt(FUC_SZ.W))
@@ -217,6 +218,10 @@ class RingIssueSlot(implicit p: Parameters)
     io.request := (p1 || p2) && can_request
   } .otherwise {
     io.request := false.B
+  }
+
+  when (state === s_valid_3) {
+    io.request_chain := p2
   }
 
   //----------------------------------------------------------------------------------------------------
