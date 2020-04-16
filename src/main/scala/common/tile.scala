@@ -173,7 +173,6 @@ class BoomTile(
       mtvecWritable       = boomParams.core.mtvecWritable
     )
   )
-  //val boomLogicalTree = new BoomLogicalTreeNode(this)
 
   override lazy val module = new BoomTileModuleImp(this)
 
