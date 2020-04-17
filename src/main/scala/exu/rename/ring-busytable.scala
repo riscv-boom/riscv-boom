@@ -68,10 +68,10 @@ class RingBusyTable(
   val load_table = RegInit(0.U(numPregs.W))
 
   load_table:= ( load_table
-                & ~(io.wb_pdsts zip io.wb_valids) .map {case (pdst, valid) =>
-                     DecodePreg(pdst) & Fill(numPregs, valid)}.reduce(_|_)
+                & ~(io.ren_uops zip io.rebusy_reqs) .map {case (uop, req) =>
+                     DecodePreg(uop.pdst) & Fill(numPregs, req && !uop.uses_ldq)}.reduce(_|_)
                 |  (io.ren_uops zip io.rebusy_reqs) .map {case (uop, req)  =>
-                     DecodePreg(uop.pdst) & Fill(numPregs, req && uop.uses_ldq)}.reduce(_|_)
+                     DecodePreg(uop.pdst) & Fill(numPregs, req &&  uop.uses_ldq)}.reduce(_|_)
                 )
 
 
