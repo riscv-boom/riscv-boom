@@ -195,8 +195,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     // Broadcast to slots in next column
     for (slot <- slots((w + 1) % coreWidth)) {
       slot.fast_wakeup     := fast_wakeup
-      slot.slow_wakeups(0) := io.slow_wakeups(2*w)
-      slot.slow_wakeups(1) := io.slow_wakeups(2*w+1)
+      slot.slow_wakeups(0) := io.slow_wakeups(w)
+      slot.slow_wakeups(1) := io.slow_wakeups(w + coreWidth)
     }
 
     // Send to rename (ALU only)
