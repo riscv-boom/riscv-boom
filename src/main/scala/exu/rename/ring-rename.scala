@@ -68,9 +68,9 @@ class RingRename(implicit p: Parameters) extends BoomModule
     val bypassed_uop = Wire(new MicroOp)
     bypassed_uop := uop
 
-    val bypass_hits_rs1 = (older_uops zip valids) map { case (u,v) => v && u.ldst === uop.lrs1 && u.dst_rtype === rtype }
-    val bypass_hits_rs2 = (older_uops zip valids) map { case (u,v) => v && u.ldst === uop.lrs2 && u.dst_rtype === rtype }
-    val bypass_hits_dst = (older_uops zip valids) map { case (u,v) => v && u.ldst === uop.ldst && u.dst_rtype === rtype }
+    val bypass_hits_rs1 = (older_uops zip valids) map { case (u,v) => v && u.ldst === uop.lrs1 && u.dst_rtype === rtype && u.ldst_val }
+    val bypass_hits_rs2 = (older_uops zip valids) map { case (u,v) => v && u.ldst === uop.lrs2 && u.dst_rtype === rtype && u.ldst_val }
+    val bypass_hits_dst = (older_uops zip valids) map { case (u,v) => v && u.ldst === uop.ldst && u.dst_rtype === rtype && u.ldst_val }
 
     val bypass_sel_rs1 = PriorityEncoderOH(bypass_hits_rs1.reverse).reverse
     val bypass_sel_rs2 = PriorityEncoderOH(bypass_hits_rs2.reverse).reverse
