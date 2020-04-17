@@ -64,13 +64,13 @@ class RingRename(implicit p: Parameters) extends BoomModule
   //----------------------------------------------------------------------------------------------------
   // Helper Functions
 
-  def BypassAllocations(uop: MicroOp, older_uops: Seq[MicroOp], alloc_reqs: Seq[Bool]): MicroOp = {
+  def BypassAllocations(uop: MicroOp, older_uops: Seq[MicroOp], valids: Seq[Bool]): MicroOp = {
     val bypassed_uop = Wire(new MicroOp)
     bypassed_uop := uop
 
-    val bypass_hits_rs1 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs1 }
-    val bypass_hits_rs2 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs2 }
-    val bypass_hits_dst = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.ldst }
+    val bypass_hits_rs1 = (older_uops zip valids) map { case (u,v) => v && u.ldst === uop.lrs1 && u.dst_rtype === rtype }
+    val bypass_hits_rs2 = (older_uops zip valids) map { case (u,v) => v && u.ldst === uop.lrs2 && u.dst_rtype === rtype }
+    val bypass_hits_dst = (older_uops zip valids) map { case (u,v) => v && u.ldst === uop.ldst && u.dst_rtype === rtype }
 
     val bypass_sel_rs1 = PriorityEncoderOH(bypass_hits_rs1.reverse).reverse
     val bypass_sel_rs2 = PriorityEncoderOH(bypass_hits_rs2.reverse).reverse
@@ -192,13 +192,11 @@ class RingRename(implicit p: Parameters) extends BoomModule
       r_valid := false.B
     } .elsewhen (ren2_ready) {
       r_valid := ren1_fire(w)
-      next_uop := ren1_uops(w)
+      r_uop   := GetNewUopAndBrMask(BypassAllocations(ren1_uops(w), ren2_uops, ren2_valids), io.brupdate)
     } .otherwise {
       r_valid := r_valid && !ren2_fire(w) // clear bit if uop gets dispatched
-      next_uop := r_uop
+      r_uop   := io.ren2_uops(w)
     }
-
-    r_uop := GetNewUopAndBrMask(BypassAllocations(next_uop, ren2_uops, ren2_alloc_reqs), io.brupdate)
 
     ren2_valids(w) := r_valid
     ren2_uops(w)   := r_uop
@@ -276,7 +274,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
     io.ren_stalls(w) := (ren2_uops(w).dst_rtype === rtype) && !can_allocate
 
     val bypassed_uop = Wire(new MicroOp)
-    if (w > 0) bypassed_uop := BypassAllocations(ren2_uops(w), ren2_uops.slice(0,w), ren2_alloc_reqs.slice(0,w))
+    if (w > 0) bypassed_uop := BypassAllocations(ren2_uops(w), ren2_uops.slice(0,w), ren2_valids.slice(0,w))
     else       bypassed_uop := ren2_uops(w)
 
     io.ren2_uops(w) := GetNewUopAndBrMask(bypassed_uop, io.brupdate)
