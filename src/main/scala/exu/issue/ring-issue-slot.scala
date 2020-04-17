@@ -91,7 +91,6 @@ class RingIssueSlot(implicit p: Parameters)
     val fwu_prs1 = fwu.bits.pdst === uop.prs1 && fwu.valid
     val fwu_prs2 = fwu.bits.pdst === uop.prs2 && fwu.valid
 
-    val cwu_prs1 = cwu.bits === uop.prs1 && cwu.valid
     val cwu_prs2 = cwu.bits === uop.prs2 && cwu.valid
 
     val lwu_prs1_hits = VecInit(lwu.map(wu => wu.bits === uop.prs1 && wu.valid && uop.lrs1_rtype === RT_FIX))
@@ -105,7 +104,6 @@ class RingIssueSlot(implicit p: Parameters)
     woke_uop.prs1_status := ( uop.prs1_status >> 1
                             | uop.prs1_status & 1.U
                             | Mux(fwu_prs1, fwu.bits.status, 0.U)
-                            | Mux(cwu_prs1,             1.U, 0.U)
                             | Mux(lwu_prs1,             2.U, 0.U)
                             | Mux(swu_prs1,             1.U, 0.U) )
     woke_uop.prs2_status := ( uop.prs2_status >> 1
@@ -148,7 +146,7 @@ class RingIssueSlot(implicit p: Parameters)
 
   val slot_uop = RegInit(NullMicroOp)
   val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, io.out_uop)
-  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.load_wakeups, io.slow_wakeups, io.load_nacks)
+  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.chain_wakeup, io.load_wakeups, io.slow_wakeups, io.load_nacks)
 
   val p1 = slot_uop.prs1_ready
   val p2 = slot_uop.prs2_ready
@@ -181,8 +179,7 @@ class RingIssueSlot(implicit p: Parameters)
 
   when (io.kill) {
     next_state := s_invalid
-  } .elsewhen ((io.grant && (state === s_valid_1)) ||
-    (io.grant && (state === s_valid_2) && p1 && p2)) {
+  } .elsewhen (io.grant && ((state === s_valid_1) || (state === s_valid_2) && p1 && p2 || (state === s_valid_3))) {
     next_state := s_invalid
   } .elsewhen (io.grant && (state === s_valid_2)) {
     next_state := s_valid_1
@@ -228,6 +225,8 @@ class RingIssueSlot(implicit p: Parameters)
 
   when (state === s_valid_3) {
     io.request_chain := slot_uop.prs2_status(1,0).orR
+  } .otherwise {
+    io.request_chain := false.B
   }
 
   //----------------------------------------------------------------------------------------------------

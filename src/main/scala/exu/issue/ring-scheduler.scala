@@ -107,8 +107,10 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     dis_gnts(w) := dis_sels zip col_rdys map { case (s,r) => Mux(r, s, 0.U) } reduce(_|_)
   }
 
+  val dis_stalls = dis_reqs zip dis_gnts map { case (r,g) => r & ~g } reduce(_|_)
+
   for (w <- 0 until coreWidth) {
-    io.dis_uops(w).ready := (dis_gnts.reduce(_|_))(w)
+    io.dis_uops(w).ready := !dis_stalls(w)
   }
 
   //----------------------------------------------------------------------------------------------------
@@ -135,11 +137,11 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   val chain_vals = Wire(Vec(coreWidth, Bool()))
 
   for (w <- 0 until coreWidth) {
-    val chain_reqs = slots(w).map(_.chain_request)
-    val chain_uops = slots(w).map(_.uop)
+    val chain_reqs = slots(w).map(_.request_chain)
+    val col_uops   = slots(w).map(_.uop)
 
     chain_sels(w) := PriorityEncoderOH(chain_reqs)
-    chain_uops(w) := Mux1H(chain_sels(w), chain_uops)
+    chain_uops(w) := Mux1H(chain_sels(w), col_uops)
     chain_vals(w) := chain_reqs.reduce(_||_)
   }
 
@@ -172,7 +174,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   chain_arb.io.fire := DontCare
 
   val r_chain_uops = RegNext(chain_uops)
-  val r_chain_vals = RegNext(VecInit(chain_arb.io.gnts.asBools))
+  val r_chain_vals = RegNext(chain_arb.io.gnts)
 
   //----------------------------------------------------------------------------------------------------
   // Grant, Fast Wakeup, and Issue
@@ -203,11 +205,11 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   }
 
   // Generate chained wakeups
-  val chain_xbar_reqs = Transpose(r_chain_uops zip r_chain_vals map { case (u,v) => Mux(v, u.bits.pdst_col, 0.U) })
+  val chain_xbar_reqs = Transpose(r_chain_uops zip r_chain_vals map { case (u,v) => Mux(v, u.pdst_col, 0.U) })
   for (w <- 0 until coreWidth) {
     val chain_uop    = Mux1H(chain_xbar_reqs(w), r_chain_uops)
     val chain_wakeup = Wire(Valid(UInt(ipregSz.W)))
-    chain_wakeup.bits  := chain_uop.pdst
+    chain_wakeup.bits  := chain_uop.prs2
     chain_wakeup.valid := chain_xbar_reqs(w).orR
 
     for (slot <- slots(w)) {
