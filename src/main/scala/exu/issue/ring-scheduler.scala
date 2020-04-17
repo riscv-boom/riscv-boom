@@ -30,9 +30,10 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
     val dis_valids = Input(Vec(coreWidth, Bool()))
 
-    val slow_wakeups = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
-    val load_wakeups = Input(Vec(memWidth   , Valid(UInt(ipregSz.W))))
-    val load_nacks   = Input(Vec(memWidth   , Bool()))
+    val slow_wakeups = Input(Vec(2*coreWidth, Valid(UInt(ipregSz.W))))
+    val load_wakeups = Input(Vec(   memWidth, Valid(UInt(ipregSz.W))))
+    val   ll_wakeups = Input(Vec(   memWidth, Valid(UInt(ipregSz.W))))
+    val load_nacks   = Input(Vec(   memWidth, Bool()))
 
     val fast_wakeups = Output(Vec(coreWidth , Valid(UInt(ipregSz.W))))
 
@@ -54,6 +55,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   for (w <- 0 until coreWidth) {
     for (i <- 0 until numSlotsPerColumn) {
       slots(w)(i).load_wakeups := io.load_wakeups
+      slots(w)(i).ll_wakeups   := io.ll_wakeups
       slots(w)(i).load_nacks   := io.load_nacks
 
       slots(w)(i).brupdate := io.brupdate

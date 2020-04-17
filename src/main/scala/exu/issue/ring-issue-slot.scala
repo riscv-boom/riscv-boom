@@ -51,6 +51,7 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val slow_wakeups  = Input(Vec(2       , Valid(UInt(ipregSz.W))))
   val load_wakeups  = Input(Vec(memWidth, Valid(UInt(ipregSz.W))))
   val load_nacks    = Input(Vec(memWidth, Bool()))
+  val ll_wakeups    = Input(Vec(memWidth, Valid(UInt(ipregSz.W))))
 
   val in_uop        = Flipped(Valid(new MicroOp)) // Received from dispatch or another slot during compaction
   val out_uop       = Output(new MicroOp) // The updated slot uop; will be shifted upwards in a collasping queue
@@ -81,8 +82,9 @@ class RingIssueSlot(implicit p: Parameters)
   def wakeup(uop: MicroOp,
              fwu: Valid[FastWakeup],
              cwu: Valid[UInt],
-             lwu: Vec[Valid[UInt]],
              swu: Vec[Valid[UInt]],
+             lwu: Vec[Valid[UInt]],
+             llw: Vec[Valid[UInt]],
              ldn: Vec[Bool]): MicroOp = {
 
     val woke_uop = Wire(new MicroOp)
@@ -98,8 +100,8 @@ class RingIssueSlot(implicit p: Parameters)
     val lwu_prs1 = lwu_prs1_hits.reduce(_||_)
     val lwu_prs2 = lwu_prs2_hits.reduce(_||_)
 
-    val swu_prs1 = swu.map(wu => wu.bits === uop.prs1 && wu.valid).reduce(_||_)
-    val swu_prs2 = swu.map(wu => wu.bits === uop.prs2 && wu.valid).reduce(_||_)
+    val swu_prs1 = (swu ++ llw).map(wu => wu.bits === uop.prs1 && wu.valid).reduce(_||_)
+    val swu_prs2 = (swu ++ llw).map(wu => wu.bits === uop.prs2 && wu.valid).reduce(_||_)
 
     woke_uop.prs1_status := ( uop.prs1_status >> 1
                             | uop.prs1_status & 1.U
@@ -146,7 +148,7 @@ class RingIssueSlot(implicit p: Parameters)
 
   val slot_uop = RegInit(NullMicroOp)
   val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, io.out_uop)
-  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.chain_wakeup, io.load_wakeups, io.slow_wakeups, io.load_nacks)
+  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.chain_wakeup, io.slow_wakeups, io.load_wakeups, io.ll_wakeups, io.load_nacks)
 
   val p1 = slot_uop.prs1_ready
   val p2 = slot_uop.prs2_ready
