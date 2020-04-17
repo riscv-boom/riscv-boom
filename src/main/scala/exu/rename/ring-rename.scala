@@ -89,6 +89,9 @@ class RingRename(implicit p: Parameters) extends BoomModule
     bypassed_uop.prs1_busy := uop.prs1_busy || do_bypass_rs1
     bypassed_uop.prs2_busy := uop.prs2_busy || do_bypass_rs2
 
+    when (do_bypass_rs1) { bypassed_uop.prs1_load := Mux1H(bypass_sel_rs1, older_uops.map(_.uses_ldq)) }
+    when (do_bypass_rs2) { bypassed_uop.prs2_load := Mux1H(bypass_sel_rs2, older_uops.map(_.uses_ldq)) }
+
     bypassed_uop
   }
 
@@ -252,7 +255,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
   // Freelist outputs.
   for ((uop, w) <- ren2_uops.zipWithIndex) {
     val preg = Mux1H(col_gnts(w), freelists.map(_.io.alloc_pregs(w).bits))
-    uop.pdst := Cat(OHToUInt(col_gnts(w)), Mux(uop.ldst =/= 0.U, preg, 0.U))
+    uop.pdst := Cat(OHToUInt(col_gnts(w)), Mux(uop.ldst_val, preg, 0.U))
   }
 
   assert (ren2_alloc_reqs zip ren2_uops map {case (r,u) => !r || u.pdst_spec =/= 0.U} reduce (_&&_),
