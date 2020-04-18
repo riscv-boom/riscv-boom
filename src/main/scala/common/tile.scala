@@ -145,35 +145,6 @@ class BoomTile(
     else TLBuffer(BufferParams.flow, BufferParams.none, BufferParams.none, BufferParams.none, BufferParams.none)
   }
 
-  val fakeRocketParams = RocketTileParams(
-    dcache = boomParams.dcache,
-    hartId = boomParams.hartId,
-    name   = boomParams.name,
-    btb    = boomParams.btb,
-    core = RocketCoreParams(
-      bootFreqHz          = boomParams.core.bootFreqHz,
-      useVM               = boomParams.core.useVM,
-      useUser             = boomParams.core.useUser,
-      useDebug            = boomParams.core.useDebug,
-      useAtomics          = boomParams.core.useAtomics,
-      useAtomicsOnlyForIO = boomParams.core.useAtomicsOnlyForIO,
-      useCompressed       = boomParams.core.useCompressed,
-      useSCIE             = boomParams.core.useSCIE,
-      mulDiv              = boomParams.core.mulDiv,
-      fpu                 = boomParams.core.fpu,
-      nLocalInterrupts    = boomParams.core.nLocalInterrupts,
-      nPMPs               = boomParams.core.nPMPs,
-      nBreakpoints        = boomParams.core.nBreakpoints,
-      nPerfCounters       = boomParams.core.nPerfCounters,
-      haveBasicCounters   = boomParams.core.haveBasicCounters,
-      misaWritable        = boomParams.core.misaWritable,
-      haveCFlush          = boomParams.core.haveCFlush,
-      nL2TLBEntries       = boomParams.core.nL2TLBEntries,
-      mtvecInit           = boomParams.core.mtvecInit,
-      mtvecWritable       = boomParams.core.mtvecWritable
-    )
-  )
-
   override lazy val module = new BoomTileModuleImp(this)
 
   // DCache
