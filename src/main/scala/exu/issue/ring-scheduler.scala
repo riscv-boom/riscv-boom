@@ -233,7 +233,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   //----------------------------------------------------------------------------------------------------
   // Compaction and Dispatch Ports
 
-  val numCompactionPorts = 1 // Hardwire to 1, but leave the more general generator for now. Just in case.
+  val numCompactionPorts = 1
   val numDispatchPorts   = columnDispatchWidth - numCompactionPorts
 
   for (w <- 0 until coreWidth) {
@@ -261,7 +261,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
     // Generate the slot writeport muxes
     for (i <- 0 until numSlotsPerColumn) {
-      val uop_sel = (0 until max).map(j => comp_sels(i+j)(j)) ++ dispatch_slots.map(d => d(i))
+      var uop_sel = (0 until max).map(j => comp_sels(i+j)(j))
+      if (numDispatchPorts > 0) uop_sel = uop_sel ++ dispatch_slots.map(d => d(i))
 
       slots(w)(i).in_uop.bits  := Mux1H(uop_sel,          uops.slice(i+1,i+max+1) ++ dis_uops(w).dropRight(max))
       slots(w)(i).in_uop.valid := Mux1H(uop_sel, will_be_valid.slice(i+1,i+max+1) ++ dis_vals(w).dropRight(max))
