@@ -1009,7 +1009,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // Load incoming and load retries go through both
 
   val lcam_addr  = widthMap(w => Mux(fired_stad_incoming(w) || fired_sta_incoming(w) || fired_sta_retry(w),
-                                     RegNext(exe_tlb_paddr(w)), mem_paddr(w)))
+                                     RegNext(exe_tlb_paddr(w)),
+                                     Mux(fired_release(w), RegNext(io.dmem.release.bits.address),
+                                         mem_paddr(w))))
   val lcam_uop   = widthMap(w => Mux(do_st_search(w), mem_stq_e(w).bits.uop,
                                  Mux(do_ld_search(w), mem_ldq_e(w).bits.uop, NullMicroOp)))
 

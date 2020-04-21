@@ -14,7 +14,7 @@ import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalModuleTree, LogicalTreeNode, RocketLogicalTreeNode, ICacheLogicalTreeNode}
+import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalTreeNode }
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.subsystem.{RocketCrossingParams}
 import freechips.rocketchip.tilelink._
@@ -54,7 +54,7 @@ case class BoomTileParams(
   hartId: Int = 0,
   beuAddr: Option[BigInt] = None,
   blockerCtrlAddr: Option[BigInt] = None,
-  boundaryBuffers: Boolean = false, // if synthesized with hierarchical PnR, cut feed-throughs?
+  boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
   ) extends TileParams
 {
   require(icache.isDefined)
@@ -130,36 +130,6 @@ class BoomTile(
     else TLBuffer(BufferParams.flow, BufferParams.none, BufferParams.none, BufferParams.none, BufferParams.none)
   }
 
-  val fakeRocketParams = RocketTileParams(
-    dcache = boomParams.dcache,
-    hartId = boomParams.hartId,
-    name   = boomParams.name,
-    btb    = boomParams.btb,
-    core = RocketCoreParams(
-      bootFreqHz          = boomParams.core.bootFreqHz,
-      useVM               = boomParams.core.useVM,
-      useUser             = boomParams.core.useUser,
-      useDebug            = boomParams.core.useDebug,
-      useAtomics          = boomParams.core.useAtomics,
-      useAtomicsOnlyForIO = boomParams.core.useAtomicsOnlyForIO,
-      useCompressed       = boomParams.core.useCompressed,
-      useSCIE             = boomParams.core.useSCIE,
-      mulDiv              = boomParams.core.mulDiv,
-      fpu                 = boomParams.core.fpu,
-      nLocalInterrupts    = boomParams.core.nLocalInterrupts,
-      nPMPs               = boomParams.core.nPMPs,
-      nBreakpoints        = boomParams.core.nBreakpoints,
-      nPerfCounters       = boomParams.core.nPerfCounters,
-      haveBasicCounters   = boomParams.core.haveBasicCounters,
-      misaWritable        = boomParams.core.misaWritable,
-      haveCFlush          = boomParams.core.haveCFlush,
-      nL2TLBEntries       = boomParams.core.nL2TLBEntries,
-      mtvecInit           = boomParams.core.mtvecInit,
-      mtvecWritable       = boomParams.core.mtvecWritable
-    )
-  )
-  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, None, p(XLen))
-
   override lazy val module = new BoomTileModuleImp(this)
 
   // DCache
@@ -171,9 +141,6 @@ class BoomTile(
   // Frontend/ICache
   val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, hartId))
   tlMasterXbar.node := frontend.masterNode
-
-  private val deviceOpt = None
-  val iCacheLogicalTreeNode = new BoomICacheLogicalTreeNode(frontend.icache, deviceOpt, tileParams.icache.get)
 
   // ROCC
   val roccs = p(BuildRoCC).map(_(p))

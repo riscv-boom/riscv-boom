@@ -173,7 +173,7 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
     }
 
     when (doing_reset) {
-      entries(reset_idx) := (0.U).asTypeOf(new LoopEntry) 
+      entries(reset_idx) := (0.U).asTypeOf(new LoopEntry)
    }
 
   }
@@ -212,4 +212,3 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
   io.f3_meta := f3_meta.asUInt
 
 }
-

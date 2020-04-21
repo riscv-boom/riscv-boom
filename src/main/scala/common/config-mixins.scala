@@ -334,14 +334,14 @@ class WithCS152BaselineBooms extends Config((site, here, up) => {
         issueParams = Seq(
           IssueParams(issueWidth=memWidth,  numEntries=8,  iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
           IssueParams(issueWidth=coreWidth, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=coreWidth),
-          IssueParams(issueWidth=1,         numEntries=4,  iqType=IQT_FP.litValue , dispatchWidth=coreWidth)),
+          IssueParams(issueWidth=1,         numEntries=4,  iqType=IQT_FP.litValue , dispatchWidth=coreWidth))
         // DO NOT CHANGE ABOVE
       ),
       dcache = Some(DCacheParams(
         rowBits=site(SystemBusKey).beatBytes*8,
         nSets=64, // CS152: Change me (must be pow2, 2-64)
         nWays=4,  // CS152: Change me (1-8)
-        nMSHRs=2, // CS152: Change me (1+)
+        nMSHRs=2  // CS152: Change me (1+)
       ))
     )
   }}
@@ -372,14 +372,14 @@ class WithCS152DefaultBooms extends Config((site, here, up) => {
         issueParams = Seq(
           IssueParams(issueWidth=memWidth,  numEntries=nIssueSlots, iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
           IssueParams(issueWidth=coreWidth, numEntries=nIssueSlots, iqType=IQT_INT.litValue, dispatchWidth=coreWidth),
-          IssueParams(issueWidth=1,         numEntries=nIssueSlots, iqType=IQT_FP.litValue , dispatchWidth=coreWidth)),
+          IssueParams(issueWidth=1,         numEntries=nIssueSlots, iqType=IQT_FP.litValue , dispatchWidth=coreWidth))
         // DO NOT CHANGE ABOVE
       ),
       dcache = Some(DCacheParams(
         rowBits=site(SystemBusKey).beatBytes*8,
         nSets=64, // CS152: Change me (must be pow2, 2-64)
         nWays=4,  // CS152: Change me (1-8)
-        nMSHRs=2, // CS152: Change me (1+)
+        nMSHRs=2  // CS152: Change me (1+)
       ))
     )
   }}

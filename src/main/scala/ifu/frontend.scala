@@ -853,7 +853,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val fb  = Module(new FetchBuffer)
   val ftq = Module(new FetchTargetQueue)
 
-  // When we mispredict, we need to repair 
+  // When we mispredict, we need to repair
 
   // Deal with sfbs
   val f4_shadowable_masks = VecInit((0 until fetchWidth) map { i =>

@@ -395,9 +395,9 @@ class ALUExeUnit(
   if (writesIrf) {
     io.iresp.valid     := iresp_fu_units.map(_.io.resp.valid).reduce(_|_)
     io.iresp.bits.uop  := PriorityMux(iresp_fu_units.map(f =>
-      (f.io.resp.valid, f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
+      (f.io.resp.valid, f.io.resp.bits.uop)))
     io.iresp.bits.data := PriorityMux(iresp_fu_units.map(f =>
-      (f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
+      (f.io.resp.valid, f.io.resp.bits.data)))
     io.iresp.bits.predicated := PriorityMux(iresp_fu_units.map(f =>
       (f.io.resp.valid, f.io.resp.bits.predicated)))
 
@@ -512,8 +512,8 @@ class FPUExeUnit(
   io.fresp.valid       := fu_units.map(_.io.resp.valid).reduce(_|_) &&
                           !(fpu.io.resp.valid && fpu.io.resp.bits.uop.fu_code_is(FU_F2I))
   io.fresp.bits.uop    := PriorityMux(fu_units.map(f => (f.io.resp.valid,
-                                                         f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
-  io.fresp.bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
+                                                         f.io.resp.bits.uop)))
+  io.fresp.bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data)))
   io.fresp.bits.fflags := Mux(fpu_resp_val, fpu_resp_fflags, fdiv_resp_fflags)
 
   // Outputs (Write Port #1) -- FpToInt Queuing Unit -----------------------
