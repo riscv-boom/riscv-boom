@@ -7,7 +7,7 @@ version: 2
 jobs:
     install-riscv-toolchain:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -31,7 +31,7 @@ jobs:
                     - "/home/riscvuser/riscv-tools-install"
     install-esp-toolchain:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -55,7 +55,7 @@ jobs:
                     - "/home/riscvuser/esp-tools-install"
     prepare-build-environment:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -78,7 +78,7 @@ jobs:
                     - "/home/riscvuser/chipyard"
     run-scala-checkstyle:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -89,7 +89,7 @@ jobs:
                 command: make checkstyle
     prepare-smallboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -118,7 +118,7 @@ jobs:
                     - "/home/riscvuser/chipyard"
     prepare-mediumboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -147,7 +147,7 @@ jobs:
                     - "/home/riscvuser/chipyard"
     prepare-largeboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -176,7 +176,7 @@ jobs:
                     - "/home/riscvuser/chipyard"
     prepare-megaboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -205,7 +205,7 @@ jobs:
                     - "/home/riscvuser/chipyard"
     prepare-smallrv32boomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -234,7 +234,7 @@ jobs:
                     - "/home/riscvuser/chipyard"
     prepare-hwachaboomconfig:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -263,7 +263,7 @@ jobs:
                     - "/home/riscvuser/chipyard"
     smallboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -285,7 +285,7 @@ jobs:
                 no_output_timeout: 30m
     smallboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -306,7 +306,7 @@ jobs:
                 command: .circleci/run-tests.sh smallboom
     mediumboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -328,7 +328,7 @@ jobs:
                 no_output_timeout: 30m
     mediumboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -349,7 +349,7 @@ jobs:
                 command: .circleci/run-tests.sh mediumboom
     largeboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -371,7 +371,7 @@ jobs:
                 no_output_timeout: 30m
     largeboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -392,7 +392,7 @@ jobs:
                 command: .circleci/run-tests.sh largeboom
     megaboomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -414,7 +414,7 @@ jobs:
                 no_output_timeout: 30m
     megaboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -436,7 +436,7 @@ jobs:
                 no_output_timeout: 30m
     smallrv32boomconfig-run-csmith-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -458,7 +458,7 @@ jobs:
                 no_output_timeout: 30m
     smallrv32boomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
@@ -479,7 +479,7 @@ jobs:
                 command: .circleci/run-tests.sh rv32boom
     hwachaboomconfig-run-riscv-tests:
         docker:
-            - image: riscvboom/riscvboom-images:0.0.12
+            - image: ucbbar/chipyard-image:1.0.0
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
             TERM: dumb
