@@ -67,11 +67,8 @@ jobs:
             - restore_cache:
                 keys:
                     - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
-                name: Build Verilator and checkout submodules
+                name: Checkout submodules
                 command: |
                     .circleci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
@@ -79,10 +76,6 @@ jobs:
                 key: chipyard-v13-{{ checksum "CHIPYARD.hash" }}
                 paths:
                     - "/home/riscvuser/chipyard"
-            - save_cache:
-                key: verilator-v13-{{ checksum "CHIPYARD.hash" }}
-                paths:
-                    - "/home/riscvuser/verilator"
     run-scala-checkstyle:
         docker:
             - image: riscvboom/riscvboom-images:0.0.12
@@ -115,9 +108,6 @@ jobs:
             - restore_cache:
                 keys:
                     - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh smallboom
@@ -147,9 +137,6 @@ jobs:
             - restore_cache:
                 keys:
                     - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building MediumBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh mediumboom
@@ -179,9 +166,6 @@ jobs:
             - restore_cache:
                 keys:
                     - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building LargeBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh largeboom
@@ -211,9 +195,6 @@ jobs:
             - restore_cache:
                 keys:
                     - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building MegaBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh megaboom
@@ -243,9 +224,6 @@ jobs:
             - restore_cache:
                 keys:
                     - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building SmallRV32BoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh rv32boom
@@ -275,9 +253,6 @@ jobs:
             - restore_cache:
                 keys:
                     - chipyard-v13-{{ checksum "CHIPYARD.hash" }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Building HwachaBoomConfig using Verilator
                 command: .circleci/do-rtl-build.sh hwachaboom
@@ -304,9 +279,6 @@ jobs:
             - restore_cache:
                 keys:
                     - smallboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh smallboom 50
@@ -329,9 +301,6 @@ jobs:
             - restore_cache:
                 keys:
                     - smallboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallBoomConfig riscv tests
                 command: .circleci/run-tests.sh smallboom
@@ -353,9 +322,6 @@ jobs:
             - restore_cache:
                 keys:
                     - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run MediumBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh mediumboom 50
@@ -378,9 +344,6 @@ jobs:
             - restore_cache:
                 keys:
                     - mediumboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run MediumBoomConfig riscv tests
                 command: .circleci/run-tests.sh mediumboom
@@ -402,9 +365,6 @@ jobs:
             - restore_cache:
                 keys:
                     - largeboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run LargeBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh largeboom 40
@@ -427,9 +387,6 @@ jobs:
             - restore_cache:
                 keys:
                     - largeboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run LargeBoomConfig riscv tests
                 command: .circleci/run-tests.sh largeboom
@@ -451,9 +408,6 @@ jobs:
             - restore_cache:
                 keys:
                     - megaboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run MegaBoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh megaboom 40
@@ -476,9 +430,6 @@ jobs:
             - restore_cache:
                 keys:
                     - megaboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run MegaBoomConfig riscv tests
                 command: .circleci/run-tests.sh megaboom
@@ -501,9 +452,6 @@ jobs:
             - restore_cache:
                 keys:
                     - smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallRV32BoomConfig csmith tests
                 command: .circleci/build-run-csmith-tests.sh rv32boom 50
@@ -526,9 +474,6 @@ jobs:
             - restore_cache:
                 keys:
                     - smallrv32boomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run SmallRV32BoomConfig riscv tests
                 command: .circleci/run-tests.sh rv32boom
@@ -550,9 +495,6 @@ jobs:
             - restore_cache:
                 keys:
                     - hwachaboomconfig-{{ .Branch }}-{{ .Revision }}
-            - restore_cache:
-                keys:
-                    - verilator-v13-{{ checksum "CHIPYARD.hash" }}
             - run:
                 name: Run HwachaBoomConfig riscv tests
                 command: .circleci/run-tests.sh hwachaboom
@@ -566,7 +508,7 @@ workflows:
             - install-riscv-toolchain
             - install-esp-toolchain
 
-            # Build verilator
+            # Prepare chipyard directory
             - prepare-build-environment
 
             # Run generic syntax checking
