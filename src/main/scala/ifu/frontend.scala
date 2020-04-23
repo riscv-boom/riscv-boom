@@ -492,7 +492,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // --------------------------------------------------------
   val f3_clear = WireInit(false.B)
   val f3 = withReset(reset.toBool || f3_clear) {
-    Module(new Queue(new FrontendResp, 1, pipe=true, flow=false)) }
+    Module(new ElasticReg(new FrontendResp)) }
 
   // Queue up the bpd resp as well, incase f4 backpressures f3
   // This is "flow" because the response (enq) arrives in f3, not f2
