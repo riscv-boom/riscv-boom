@@ -494,6 +494,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3 = withReset(reset.toBool || f3_clear) {
     Module(new ElasticReg(new FrontendResp)) }
 
+  val f3_valid = f3.io.deq.valid
+  val f3_vpc   = f3.io.deq.bits.pc
+
   // Queue up the bpd resp as well, incase f4 backpressures f3
   // This is "flow" because the response (enq) arrives in f3, not f2
   val f3_bpd_resp = withReset(reset.toBool || f3_clear) {
@@ -723,50 +726,62 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       f3.io.enq.bits.ghist := f3_predicted_ghist
     } .elsewhen (!s2_valid && s1_valid && s1_vpc === f3_predicted_target) {
       s2_ghist := f3_predicted_ghist
-    } .elsewhen (( s2_valid &&  s2_vpc =/= f3_predicted_target)             ||
-          (!s2_valid &&  s1_valid && s1_vpc =/= f3_predicted_target) ||
-          (!s2_valid && !s1_valid)) {
-      f2_clear := true.B
-      f1_clear := true.B
-
-      s0_valid     := !(f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if)
-      s0_vpc       := f3_predicted_target
-      s0_is_replay := false.B
-      s0_ghist     := f3_predicted_ghist
-      s0_tsrc      := BSRC_3
-
-      f3_fetch_bundle.fsrc := BSRC_3
     }
   }
 
   // -------------------------------------------------------
   // **** F4 ****
   // -------------------------------------------------------
+
   val f4_clear = WireInit(false.B)
   val f4 = withReset(reset.toBool || f4_clear) {
     Module(new Queue(new FetchBundle, 1, pipe=true, flow=false))}
 
+  val f4_valid        = f4.io.deq.valid
+  val f4_fetch_bundle = WireInit(f4.io.deq.bits)
+
+  f4.io.enq.valid := f3.io.deq.valid && !f3_clear
+  f4_ready        := f4.io.enq.ready
+
+  val f4_predicted_target = RegNext(f3_predicted_target)
+  val f4_predicted_ghist  = RegNext(f3_predicted_ghist)
+
+  // Perform redirect
+  when ( f3_valid &&                           f3_vpc =/= f4_predicted_target ||
+        !f3_valid &&  s2_valid &&              s2_vpc =/= f4_predicted_target ||
+        !f3_valid && !s2_valid &&  s1_valid && s1_vpc =/= f4_predicted_target ||
+        !f3_valid && !s2_valid && !s1_valid) {
+    f3_clear := true.B
+    f2_clear := true.B
+    f1_clear := true.B
+
+    s0_valid     := !(f4_fetch_bundle.xcpt_pf_if || f4_fetch_bundle.xcpt_ae_if)
+    s0_vpc       := f4_predicted_target
+    s0_is_replay := false.B
+    s0_ghist     := f4_predicted_ghist
+    s0_tsrc      := BSRC_3
+
+    f4_fetch_bundle.fsrc := BSRC_3
+  }
+
+  // Enqueue fetchbundle to structures
   val fb  = Module(new FetchBuffer(numEntries=numFetchBufferEntries))
   val ftq = Module(new FetchTargetQueue(num_entries=ftqSz))
 
-  f4_ready := f4.io.enq.ready
-  f4.io.enq.valid := f3.io.deq.valid && !f3_clear
   f4.io.enq.bits  := f3_fetch_bundle
   f4.io.deq.ready := fb.io.enq.ready && ftq.io.enq.ready
 
-  fb.io.enq.valid := f4.io.deq.valid && ftq.io.enq.ready
-  fb.io.enq.bits  := f4.io.deq.bits
+  fb.io.enq.valid := f4_valid && ftq.io.enq.ready
+  fb.io.enq.bits  := f4_fetch_bundle
   fb.io.enq.bits.ftq_idx := ftq.io.enq_idx
 
-  ftq.io.enq.valid          := f4.io.deq.valid && fb.io.enq.ready
-  ftq.io.enq.bits           := f4.io.deq.bits
-
+  ftq.io.enq.valid := f4_valid && fb.io.enq.ready
+  ftq.io.enq.bits  := f4_fetch_bundle
 
   bpd.io.update := ftq.io.bpdupdate
   when (ftq.io.ras_update) {
     ras(ftq.io.ras_update_idx) := ftq.io.ras_update_pc
   }
-
 
   // -------------------------------------------------------
   // **** To Core (F5) ****
