@@ -281,18 +281,23 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   var ld_enq_idx = ldq_tail
   var st_enq_idx = stq_tail
 
-  val stq_nonempty = (0 until numStqEntries).map{ i => stq(i).valid }.reduce(_||_) =/= 0.U
+  var ldq_tail_oh = UIntToOH(ldq_tail)(numLdqEntries-1,0)
+  val ldq_head_oh = UIntToOH(ldq_head)(numLdqEntries-1,0)
+  var stq_tail_oh = UIntToOH(stq_tail)(numStqEntries-1,0)
+  val stq_head_oh = UIntToOH(stq_head)(numStqEntries-1,0)
 
-  var ldq_full = Bool()
-  var stq_full = Bool()
+  val stq_nonempty = stq.map(_.valid).reduce(_||_)
 
   for (w <- 0 until coreWidth)
   {
-    ldq_full = WrapInc(ld_enq_idx, numLdqEntries) === ldq_head
+    ldq_tail_oh = RotateLeft(ldq_tail_oh)
+    stq_tail_oh = RotateLeft(stq_tail_oh)
+
+    val ldq_full = (ldq_tail_oh & ldq_head_oh).orR
     io.core.ldq_full(w)    := ldq_full
     io.core.dis_ldq_idx(w) := ld_enq_idx
 
-    stq_full = WrapInc(st_enq_idx, numStqEntries) === stq_head
+    val stq_full = (stq_tail_oh & stq_head_oh).orR
     io.core.stq_full(w)    := stq_full
     io.core.dis_stq_idx(w) := st_enq_idx
 
