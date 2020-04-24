@@ -292,12 +292,17 @@ class Rob(
   // Contains all information the PNR needs to find the oldest instruction which can't be safely speculated past.
   val rob_unsafe_masked = WireInit(VecInit(Seq.fill(numRobRows << log2Ceil(coreWidth)){false.B}))
 
-  // Used for trace port, for debug purposes only
-  val rob_debug_inst_mem   = SyncReadMem(numRobRows, Vec(coreWidth, UInt(32.W)))
+  val rob_debug_inst_rdata = Wire(Vec(coreWidth, UInt(32.W)))
   val rob_debug_inst_wmask = WireInit(VecInit(0.U(coreWidth.W).asBools))
   val rob_debug_inst_wdata = Wire(Vec(coreWidth, UInt(32.W)))
-  rob_debug_inst_mem.write(rob_tail, rob_debug_inst_wdata, rob_debug_inst_wmask)
-  val rob_debug_inst_rdata = rob_debug_inst_mem.read(rob_head, will_commit.reduce(_||_))
+  // Used for trace port, for debug purposes only
+  if (p(BoomTilesKey)(0).trace) {
+    val rob_debug_inst_mem   = SyncReadMem(numRobRows, Vec(coreWidth, UInt(32.W)))
+    rob_debug_inst_mem.write(rob_tail, rob_debug_inst_wdata, rob_debug_inst_wmask)
+    rob_debug_inst_rdata := rob_debug_inst_mem.read(rob_head, will_commit.reduce(_||_))
+  } else {
+    rob_debug_inst_rdata := DontCare
+  }
 
   for (w <- 0 until coreWidth) {
     def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
