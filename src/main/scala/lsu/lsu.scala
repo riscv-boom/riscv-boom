@@ -1280,8 +1280,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         .elsewhen (io.dmem.nack(w).bits.uop.uses_ldq)
       {
         assert(ldq(io.dmem.nack(w).bits.uop.ldq_idx).bits.executed)
-        ldq(io.dmem.nack(w).bits.uop.ldq_idx).bits.executed  := false.B
-        ldq(io.dmem.nack(w).bits.uop.ldq_idx).bits.execute_ignore  := false.B
+        ldq(io.dmem.nack(w).bits.uop.ldq_idx).bits.executed := false.B
+        ldq(io.dmem.nack(w).bits.uop.ldq_idx).bits.execute_ignore := false.B
         nacking_loads(io.dmem.nack(w).bits.uop.ldq_idx) := true.B
       }
         .otherwise
@@ -1350,7 +1350,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       val stq_e       = stq(wb_forward_stq_idx(w))
       val data_ready  = stq_e.bits.data.valid
       val live        = !IsKilledByBranch(io.core.brupdate, forward_uop)
-      val can_wb_irf  = !(forward_uop.pdst_col & (dmem_resp_wb_cols | forward_wb_cols)).orR
+      val can_wb_irf  = (memWidth == 1).B || !(forward_uop.pdst_col & (dmem_resp_wb_cols | forward_wb_cols)).orR
       val storegen = new freechips.rocketchip.rocket.StoreGen(
                                 stq_e.bits.uop.mem_size, stq_e.bits.addr.bits,
                                 stq_e.bits.data.bits, coreDataBytes)
