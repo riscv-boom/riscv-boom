@@ -167,15 +167,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   b1.mispredict_mask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.br_tag).reduce(_|_)
 
   // Find the oldest mispredict and use it to update indices
-  var mispredict_val = false.B
-  var oldest_mispredict = brinfos(0)
-  for (b <- brinfos) {
-    val use_this_mispredict = !mispredict_val ||
-    b.valid && b.mispredict && IsOlder(b.uop.rob_idx, oldest_mispredict.uop.rob_idx, rob.io.rob_head_idx)
-
-    mispredict_val = mispredict_val || (b.valid && b.mispredict)
-    oldest_mispredict = Mux(use_this_mispredict, b, oldest_mispredict)
-  }
+  val live_brinfos      = brinfos.map(br => br.valid && br.mispredict && !IsKilledByBranch(brupdate, br.uop))
+  val oldest_mispredict = Mux1H(live_brinfos, brinfos)
+  val mispredict_val    = live_brinfos.reduce(_||_)
 
   b2.mispredict  := mispredict_val
   b2.cfi_type    := oldest_mispredict.cfi_type
