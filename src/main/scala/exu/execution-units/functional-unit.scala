@@ -477,7 +477,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
  */
 class MemAddrCalcUnit(implicit p: Parameters)
   extends PipelinedFunctionalUnit(
-    numStages = 0,
+    numStages = 1,
     numBypassStages = 0,
     earliestBypassStage = 0,
     dataWidth = 65, // TODO enable this only if FP is enabled?
@@ -493,11 +493,11 @@ class MemAddrCalcUnit(implicit p: Parameters)
 
   val store_data = io.req.bits.rs2_data
 
-  io.resp.bits.addr := effective_address
-  io.resp.bits.data := store_data
+  io.resp.bits.addr := RegNext(effective_address)
+  io.resp.bits.data := RegNext(store_data)
 
   if (dataWidth > 63) {
-    assert (!(io.req.valid && io.req.bits.uop.ctrl.is_std &&
+    assert (!(io.resp.valid && io.resp.bits.uop.ctrl.is_std &&
       io.resp.bits.data(64).asBool === true.B), "65th bit set in MemAddrCalcUnit.")
 
     assert (!(io.req.valid && io.req.bits.uop.ctrl.is_std && io.req.bits.uop.fp_val),
@@ -536,15 +536,15 @@ class MemAddrCalcUnit(implicit p: Parameters)
     (dbg_bp, (CSR.debugTriggerCause).U),
     (bp,     (Causes.breakpoint).U)))
 
-  io.resp.bits.mxcpt.valid := xcpt_val
-  io.resp.bits.mxcpt.bits  := xcpt_cause
+  io.resp.bits.mxcpt.valid := RegNext(xcpt_val)
+  io.resp.bits.mxcpt.bits  := RegNext(xcpt_cause)
   assert (!(ma_ld && ma_st), "Mutually-exclusive exceptions are firing.")
 
-  io.resp.bits.sfence.valid := io.req.valid && io.req.bits.uop.mem_cmd === M_SFENCE
-  io.resp.bits.sfence.bits.rs1 := io.req.bits.uop.mem_size(0)
-  io.resp.bits.sfence.bits.rs2 := io.req.bits.uop.mem_size(1)
-  io.resp.bits.sfence.bits.addr := io.req.bits.rs1_data
-  io.resp.bits.sfence.bits.asid := io.req.bits.rs2_data
+  io.resp.bits.sfence.valid     := RegNext(io.req.valid && io.req.bits.uop.mem_cmd === M_SFENCE)
+  io.resp.bits.sfence.bits.rs1  := RegNext(io.req.bits.uop.mem_size(0))
+  io.resp.bits.sfence.bits.rs2  := RegNext(io.req.bits.uop.mem_size(1))
+  io.resp.bits.sfence.bits.addr := RegNext(io.req.bits.rs1_data)
+  io.resp.bits.sfence.bits.asid := RegNext(io.req.bits.rs2_data)
 }
 
 
