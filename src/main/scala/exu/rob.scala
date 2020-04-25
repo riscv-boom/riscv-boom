@@ -494,8 +494,7 @@ class Rob(
     // debugging write ports that should not be synthesized
     when (will_commit(w)) {
       rob_uop(rob_head).debug_inst := BUBBLE
-    } .elsewhen (rbk_row)
-    {
+    } .elsewhen (rbk_row) {
       rob_uop(rob_tail).debug_inst := BUBBLE
     }
 

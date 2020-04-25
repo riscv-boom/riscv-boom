@@ -107,7 +107,7 @@ class BrResolutionInfo(implicit p: Parameters) extends BoomBundle
   val pc_sel     = UInt(2.W)
 
   val jalr_target = UInt(vaddrBitsExtended.W)
-  val target_offset = SInt()
+  val target_offset = SInt(21.W)
 }
 
 class BrUpdateInfo(implicit p: Parameters) extends BoomBundle
