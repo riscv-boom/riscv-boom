@@ -171,7 +171,7 @@ class WithRingBooms(n: Int, f: Int) extends Config((site, here, up) => {
       ftq = FtqParameters(nEntries=50*n/f),
       fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
-                               nSets=64, nWays=2*n, nMSHRs=n, nTLBEntries=16)),
+                               nSets=64, nWays=2*n, nMSHRs=2, nRPQ=4, nTLBEntries=16)),
     icache = Some(ICacheParams(fetchBytes = 2*f, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=2*n, prefetch=true))
   )}
   case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 2*f)
