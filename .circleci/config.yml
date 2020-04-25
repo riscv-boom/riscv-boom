@@ -27,10 +27,7 @@ parameters:
     largefireboom_coremark:
         type: boolean
         default: false
-    largefireboom_spec17-intspeed:
-        type: boolean
-        default: false
-    largefireboom_spec17-intrate:
+    largefireboom_spec17-intspeed-test-600:
         type: boolean
         default: false
     launchrunfarm_passed:
@@ -369,18 +366,12 @@ jobs:
             - firesim-workload-build:
                 config-key: "largefireboom"
                 workload: "coremark"
-    build-largefireboom-spec17-intspeed:
+    build-largefireboom-spec17-intspeed-test-600:
         executor: main-env
         steps:
             - firesim-workload-build:
                 config-key: "largefireboom"
-                workload: "spec17-intspeed"
-    build-largefireboom-spec17-intrate:
-        executor: main-env
-        steps:
-            - firesim-workload-build:
-                config-key: "largefireboom"
-                workload: "spec17-intrate"
+                workload: "spec17-intspeed-test-600"
     launch-largefireboom-afi-build:
         executor: main-env
         steps:
@@ -434,19 +425,12 @@ jobs:
                         command: |
                             .circleci/firesim-run-workload.sh largefireboom coremark 30m
             - when:
-                condition: << pipeline.parameters.largefireboom_spec17-intspeed >>
+                condition: << pipeline.parameters.largefireboom_spec17-intspeed-test-600 >>
                 steps:
                     - run:
-                        name: Run a LargeFireBoom SPEC17 intspeed workload
+                        name: Run a LargeFireBoom SPEC17 intspeed test input perlbench_s workload
                         command: |
-                            .circleci/firesim-run-workload.sh largefireboom spec17-intspeed 30h
-            - when:
-                condition: << pipeline.parameters.largefireboom_spec17-intrate >>
-                steps:
-                    - run:
-                        name: Run a LargeFireBoom SPEC17 intrate workload
-                        command: |
-                            .circleci/firesim-run-workload.sh largefireboom spec17-intrate 72h
+                            .circleci/firesim-run-workload.sh largefireboom spec17-intspeed-test-600 30h
     largefireboom-workload-finished:
         executor: aws-cli/default
         steps:
@@ -477,19 +461,12 @@ jobs:
                         command: |
                             .circleci/firesim-run-finished.sh largefireboom coremark << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
             - when:
-                condition: << pipeline.parameters.largefireboom_spec17-intspeed >>
+                condition: << pipeline.parameters.largefireboom_spec17-intspeed-test-600 >>
                 steps:
                     - run:
-                        name: SPEC17 intspeed workload finished
+                        name: SPEC17 intspeed test input perlbench_s workload finished
                         command: |
-                            .circleci/firesim-run-finished.sh largefireboom spec17-intspeed << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
-            - when:
-                condition: << pipeline.parameters.largefireboom_spec17-intrate >>
-                steps:
-                    - run:
-                        name: SPEC17 intrate workload finished
-                        command: |
-                            .circleci/firesim-run-finished.sh largefireboom spec17-intrate << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
+                            .circleci/firesim-run-finished.sh largefireboom spec17-intspeed-test-600 << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
 
 # Order and dependencies of jobs to run
 workflows:
@@ -614,20 +591,12 @@ workflows:
                     - build-largefireboom-buildroot
                     - build-largefireboom-fedora
 
-            - build-largefireboom-spec17-intspeed:
+            - build-largefireboom-spec17-intspeed-test-600:
                 requires:
                     - initialize-manager
                     - build-largefireboom-buildroot
                     - build-largefireboom-fedora
                     - build-largefireboom-coremark
-
-            - build-largefireboom-spec17-intrate:
-                requires:
-                    - initialize-manager
-                    - build-largefireboom-buildroot
-                    - build-largefireboom-fedora
-                    - build-largefireboom-coremark
-                    - build-largefireboom-spec17-intspeed
 
     finish-firesim-afi:
         when: << pipeline.parameters.finish-firesim-afi-run >>

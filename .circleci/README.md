@@ -21,7 +21,10 @@ Currently only supports 1 AFI to build and test so that the manager stop procedu
 
 Stop procedure:
 - When an AFI fails, it will go ahead and stop the instance then stop the CI.
-- When all workloads for an AFI have finished, the AFI will stop.
+- When all workloads for an AFI have finished, the manager will stop.
+
+Terminate procedure:
+- The manager instance is never terminated (for debugging purposes). Make sure to terminate if unneeded.
 
 Requirements:
 - Add to CircleCI env. var. `$CI_AWS_DIR` point to the "~" of manager instance

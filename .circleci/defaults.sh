@@ -144,4 +144,3 @@ mapping["hwachaboom"]="CONFIG=HwachaLargeBoomConfig"
 
 declare -A afis
 afis["largefireboom"]="fireboom-singlecore-no-nic-l2-llc4mb-ddr3"
-afis["singlefirerocket"]="firesim-singlecore-no-nic-l2-lbp"
