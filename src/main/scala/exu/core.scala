@@ -879,8 +879,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // enqueue basic load/store info in Decode
   for (w <- 0 until coreWidth) {
-    io.lsu.dis_uops(w).valid := dis_fire(w)
-    io.lsu.dis_uops(w).bits  := dis_uops(w)
+    io.lsu.dis_uops(w).valid := dis_valids(w)
+    io.lsu.dis_uops(w).bits  := dis_uops  (w)
+    io.lsu.dis_fire(w)       := dis_fire  (w)
   }
 
   // tell LSU about committing loads and stores to clear entries

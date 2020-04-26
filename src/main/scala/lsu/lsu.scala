@@ -118,6 +118,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val exe = Vec(memWidth, new LSUExeIO)
 
   val dis_uops    = Flipped(Vec(coreWidth, Valid(new MicroOp)))
+  val dis_fire    = Input (Vec(coreWidth, Bool()))
   val dis_ldq_idx = Output(Vec(coreWidth, UInt(ldqAddrSz.W)))
   val dis_stq_idx = Output(Vec(coreWidth, UInt(stqAddrSz.W)))
 
@@ -268,10 +269,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   //-------------------------------------------------------------
 
   // This is a newer store than existing loads, so clear the bit in all the store dependency masks
-  for (i <- 0 until numLdqEntries)
-  {
-    when (clear_store)
-    {
+  for (i <- 0 until numLdqEntries) {
+    when (clear_store) {
       ldq(i).bits.st_dep_mask := ldq(i).bits.st_dep_mask & ~(1.U << stq_head)
     }
   }
@@ -287,6 +286,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   val stq_nonempty = stq.map(_.valid).reduce(_||_)
 
+  var ldq_tail_next = ldq_tail
+  var stq_tail_next = stq_tail
+
   for (w <- 0 until coreWidth)
   {
     ldq_tail_oh = RotateLeft(ldq_tail_oh)
@@ -300,26 +302,27 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     io.core.stq_full(w)    := stq_full
     io.core.dis_stq_idx(w) := st_enq_idx
 
-    val dis_ld_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.uses_ldq
-    val dis_st_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.uses_stq
-    when (dis_ld_val)
-    {
-      ldq(ld_enq_idx).valid                := true.B
-      ldq(ld_enq_idx).bits.uop             := io.core.dis_uops(w).bits
-      ldq(ld_enq_idx).bits.youngest_stq_idx  := st_enq_idx
-      ldq(ld_enq_idx).bits.st_dep_mask     := next_live_store_mask
+    val dis_ld_fire = io.core.dis_fire(w) && io.core.dis_uops(w).bits.uses_ldq
+    val dis_st_fire = io.core.dis_fire(w) && io.core.dis_uops(w).bits.uses_stq
 
-      ldq(ld_enq_idx).bits.addr.valid      := false.B
-      ldq(ld_enq_idx).bits.executed        := false.B
-      ldq(ld_enq_idx).bits.succeeded       := false.B
-      ldq(ld_enq_idx).bits.order_fail      := false.B
-      ldq(ld_enq_idx).bits.observed        := false.B
-      ldq(ld_enq_idx).bits.forward_std_val := false.B
+    when (dis_ld_fire)
+    {
+      ldq(ld_enq_idx).valid                 := true.B
+      ldq(ld_enq_idx).bits.uop              := io.core.dis_uops(w).bits
+      ldq(ld_enq_idx).bits.youngest_stq_idx := st_enq_idx
+      ldq(ld_enq_idx).bits.st_dep_mask      := next_live_store_mask
+
+      ldq(ld_enq_idx).bits.addr.valid       := false.B
+      ldq(ld_enq_idx).bits.executed         := false.B
+      ldq(ld_enq_idx).bits.succeeded        := false.B
+      ldq(ld_enq_idx).bits.order_fail       := false.B
+      ldq(ld_enq_idx).bits.observed         := false.B
+      ldq(ld_enq_idx).bits.forward_std_val  := false.B
 
       assert (ld_enq_idx === io.core.dis_uops(w).bits.ldq_idx, "[lsu] mismatch enq load tag.")
       assert (!ldq(ld_enq_idx).valid, "[lsu] Enqueuing uop is overwriting ldq entries")
     }
-      .elsewhen (dis_st_val)
+      .elsewhen (dis_st_fire)
     {
       stq(st_enq_idx).valid           := true.B
       stq(st_enq_idx).bits.uop        := io.core.dis_uops(w).bits
@@ -332,22 +335,28 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       assert (!stq(st_enq_idx).valid, "[lsu] Enqueuing uop is overwriting stq entries")
     }
 
+    next_live_store_mask = Mux(dis_st_fire, next_live_store_mask | (1.U << st_enq_idx),
+                                            next_live_store_mask)
+
+    val dis_ld_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.uses_ldq
+    val dis_st_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.uses_stq
+
     ld_enq_idx = Mux(dis_ld_val, WrapInc(ld_enq_idx, numLdqEntries),
                                  ld_enq_idx)
-
-    next_live_store_mask = Mux(dis_st_val, next_live_store_mask | (1.U << st_enq_idx),
-                                           next_live_store_mask)
     st_enq_idx = Mux(dis_st_val, WrapInc(st_enq_idx, numStqEntries),
                                  st_enq_idx)
 
-    assert(!(dis_ld_val && dis_st_val), "A UOP is trying to go into both the LDQ and the STQ")
+    ldq_tail_next = Mux(dis_ld_fire, ld_enq_idx, ldq_tail_next)
+    stq_tail_next = Mux(dis_st_fire, st_enq_idx, stq_tail_next)
+
+    assert(!(dis_ld_fire && dis_st_fire), "A UOP is trying to go into both the LDQ and the STQ")
   }
 
-  ldq_tail := ld_enq_idx
-  stq_tail := st_enq_idx
+  ldq_tail := ldq_tail_next
+  stq_tail := stq_tail_next
 
-  io.dmem.force_order   := io.core.fence_dmem
-  io.core.fencei_rdy    := !stq_nonempty && io.dmem.ordered
+  io.dmem.force_order := io.core.fence_dmem
+  io.core.fencei_rdy  := !stq_nonempty && io.dmem.ordered
 
 
   //-------------------------------------------------------------
