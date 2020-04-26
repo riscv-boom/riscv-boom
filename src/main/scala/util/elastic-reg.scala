@@ -8,6 +8,11 @@ package boom.util
 import chisel3._
 import chisel3.util._
 
+import freechips.rocketchip.config.{Parameters}
+
+import boom.common._
+import boom.exu.{BrUpdateInfo}
+
 /**
  * Implements the same interface as chisel3.util.Queue.
  * Effectively a two-entry Queue.
@@ -54,4 +59,38 @@ object ElasticReg
     q.io.enq <> enq
     q.io.deq
   }
+}
+
+class MicroOpElasticReg(implicit p: Parameters) extends BoomModule
+{
+  val entries = 2
+  val io = IO(new BoomBundle {
+    val enq = Flipped(DecoupledIO(new MicroOp))
+    val deq = DecoupledIO(new MicroOp)
+
+    val brupdate = Input(new BrUpdateInfo)
+    val kill     = Input(Bool())
+  })
+
+  private val valid = RegInit(VecInit(Seq.fill(entries) { false.B }))
+  private val uops  = Reg(Vec(entries, new MicroOp))
+
+  for (i <- 0 until entries) {
+    def paddedValid(i: Int) = if (i == -1) true.B else if (i == entries) false.B else valid(i)
+
+    val sel_uop  = if (i == entries-1) io.enq.bits else Mux(valid(i+1), uops(i+1), io.enq.bits)
+    val next_uop = GetNewUopAndBrMask(sel_uop, io.brupdate)
+    val wen = Mux(io.deq.ready,
+                  paddedValid(i+1) || io.enq.fire() && ((i == 0).B || valid(i)),
+                  io.enq.fire() && paddedValid(i-1) && !valid(i))
+    when (wen) { uops(i) := next_uop }
+
+    valid(i) := Mux(io.deq.ready,
+                    paddedValid(i+1) || io.enq.fire() && ((i == 0).B || valid(i)),
+                    io.enq.fire() && paddedValid(i-1) || valid(i)) && !io.kill && !IsKilledByBranch(io.brupdate, next_uop)
+  }
+
+  io.enq.ready := !valid(entries-1)
+  io.deq.valid := valid(0)
+  io.deq.bits  := uops.head
 }
