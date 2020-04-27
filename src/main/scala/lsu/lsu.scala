@@ -284,7 +284,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   var stq_tail_oh = UIntToOH(stq_tail)(numStqEntries-1,0)
   val stq_head_oh = UIntToOH(stq_head)(numStqEntries-1,0)
 
-  val stq_nonempty = stq.map(_.valid).reduce(_||_)
+  val stq_nonempty = stq_head =/= stq_tail
 
   var ldq_tail_next = ldq_tail
   var stq_tail_next = stq_tail
