@@ -166,7 +166,7 @@ class WithRingBooms(n: Int, f: Int) extends Config((site, here, up) => {
       numFpPhysRegisters = 32 + 12*n,
       numLdqEntries = 4*n,
       numStqEntries = 4*n,
-      maxBrCount = 4*n,
+      maxBrCount = 2*n,
       numFetchBufferEntries = 8*n,
       ftq = FtqParameters(nEntries=50*n/f),
       fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
