@@ -289,6 +289,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   var ldq_tail_next = ldq_tail
   var stq_tail_next = stq_tail
 
+  var dis_live_store_mask = next_live_store_mask
+
   for (w <- 0 until coreWidth)
   {
     ldq_tail_oh = RotateLeft(ldq_tail_oh)
@@ -309,8 +311,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     {
       ldq(ld_enq_idx).valid                 := true.B
       ldq(ld_enq_idx).bits.uop              := io.core.dis_uops(w).bits
+      ldq(ld_enq_idx).bits.uop.pdst         := DontCare
       ldq(ld_enq_idx).bits.youngest_stq_idx := st_enq_idx
-      ldq(ld_enq_idx).bits.st_dep_mask      := next_live_store_mask
+      ldq(ld_enq_idx).bits.st_dep_mask      := dis_live_store_mask
 
       ldq(ld_enq_idx).bits.addr.valid       := false.B
       ldq(ld_enq_idx).bits.executed         := false.B
@@ -326,6 +329,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     {
       stq(st_enq_idx).valid           := true.B
       stq(st_enq_idx).bits.uop        := io.core.dis_uops(w).bits
+      stq(st_enq_idx).bits.uop.pdst   := DontCare
       stq(st_enq_idx).bits.addr.valid := false.B
       stq(st_enq_idx).bits.data.valid := false.B
       stq(st_enq_idx).bits.committed  := false.B
@@ -335,9 +339,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       assert (!stq(st_enq_idx).valid, "[lsu] Enqueuing uop is overwriting stq entries")
     }
 
-    next_live_store_mask = Mux(dis_st_fire, next_live_store_mask | (1.U << st_enq_idx),
-                                            next_live_store_mask)
-
     val dis_ld_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.uses_ldq
     val dis_st_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.uses_stq
 
@@ -345,6 +346,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                  ld_enq_idx)
     st_enq_idx = Mux(dis_st_val, WrapInc(st_enq_idx, numStqEntries),
                                  st_enq_idx)
+
+    dis_live_store_mask  = Mux(dis_st_val , dis_live_store_mask  | UIntToOH(st_enq_idx),
+                                            dis_live_store_mask)
+    next_live_store_mask = Mux(dis_st_fire, dis_live_store_mask, next_live_store_mask)
 
     ldq_tail_next = Mux(dis_ld_fire, ld_enq_idx, ldq_tail_next)
     stq_tail_next = Mux(dis_st_fire, st_enq_idx, stq_tail_next)
