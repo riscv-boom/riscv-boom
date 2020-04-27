@@ -158,7 +158,7 @@ class WithRingBooms(n: Int, f: Int) extends Config((site, here, up) => {
       decodeWidth = n,
       numRobEntries = 25*n,
       issueParams = Seq(
-        IssueParams(issueWidth=n, numEntries=8*n, iqType=IQT_INT.litValue, dispatchWidth=n),
+        IssueParams(issueWidth=n, numEntries=8*n, iqType=IQT_INT.litValue, dispatchWidth=2),
         IssueParams(issueWidth=1, numEntries=4*n, iqType=IQT_FP.litValue , dispatchWidth=n)),
       memWidth = (n+1)/2,
       numDCacheBanks = (n+1)/2,

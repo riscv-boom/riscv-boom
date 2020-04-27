@@ -28,6 +28,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val dis_uops = Flipped(Vec(coreWidth, DecoupledIO(new MicroOp)))
     val iss_uops = Output(Vec(coreWidth, Valid(new MicroOp)))
 
+    val dis_valids = Input(Vec(coreWidth, Bool()))
+
     val slow_wakeups = Input(Vec(coreWidth*2, Valid(UInt(ipregSz.W))))
     val load_wakeups = Input(Vec(memWidth   , Valid(UInt(ipregSz.W))))
     val load_nacks   = Input(Vec(memWidth   , Bool()))
@@ -87,22 +89,25 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     dis_uops_setup(w).prs3_busy := false.B
   }
 
+  val dis_reqs = Transpose(io.dis_uops zip io.dis_valids map { case (u,v) => Mux(v, u.bits.pdst_col, 0.U) })
   val dis_uops = Wire(Vec(coreWidth, Vec(columnDispatchWidth, new MicroOp)))
   val dis_vals = Wire(Vec(coreWidth, Vec(columnDispatchWidth, Bool())))
-
-  require (columnDispatchWidth == coreWidth) // TODO implement an arbitration / compaction mechanism
+  val dis_gnts = Wire(Vec(coreWidth, UInt(coreWidth.W)))
 
   for (w <- 0 until coreWidth) {
-    dis_uops(w) := dis_uops_setup
+    val dis_sels = SelectFirstN(dis_reqs(w), columnDispatchWidth)
+
+    for (d <- 0 until columnDispatchWidth) {
+      dis_uops(w)(d) := Mux1H(dis_sels(d), dis_uops_setup)
+      dis_vals(w)(d) := Mux1H(dis_sels(d), io.dis_uops.map(_.valid))
+    }
+
+    val col_rdys = (0 until columnDispatchWidth).map(d => PopCount(slots(w).map(_.valid)) +& d.U < numSlotsPerColumn.U)
+    dis_gnts(w) := dis_sels zip col_rdys map { case (s,r) => Mux(r, s, 0.U) } reduce(_|_)
   }
 
-  dis_vals := Transpose(VecInit(io.dis_uops.map(uop => VecInit((uop.bits.pdst_col & Fill(coreWidth, uop.valid)).asBools))))
-
-  val col_readys = Transpose(VecInit((0 until coreWidth).map(w =>
-    VecInit((0 until columnDispatchWidth).map(k => PopCount(slots(w).map(_.valid)) +& k.U < numSlotsPerColumn.U)).asUInt)))
-
   for (w <- 0 until coreWidth) {
-    io.dis_uops(w).ready := (io.dis_uops(w).bits.pdst_col & col_readys(w)).orR
+    io.dis_uops(w).ready := (dis_gnts.reduce(_|_))(w)
   }
 
   //----------------------------------------------------------------------------------------------------
@@ -179,27 +184,42 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   }
 
   //----------------------------------------------------------------------------------------------------
-  // Compaction
+  // Compaction and Dispatch Ports
+
+  val numCompactionPorts = 1 // Hardwire to 1, but leave the more general generator for now. Just in case.
+  val numDispatchPorts   = columnDispatchWidth - numCompactionPorts
 
   for (w <- 0 until coreWidth) {
-    val valids = slots(w).map(_.valid) ++ dis_vals(w)
-    val uops = slots(w).map(_.out_uop) ++ dis_uops(w)
-    val next_valids = slots(w).map(_.will_be_valid) ++ dis_vals(w)
+    val valids        = slots(w).map(_.valid)         ++ dis_vals(w).takeRight(numCompactionPorts)
+    val uops          = slots(w).map(_.out_uop)       ++ dis_uops(w).takeRight(numCompactionPorts)
+    val will_be_valid = slots(w).map(_.will_be_valid) ++ Seq.fill(numCompactionPorts) (true.B)
 
-    val max = columnDispatchWidth
+    val max = numCompactionPorts
     def Inc(count: UInt, inc: Bool) = Mux(inc && !count(max), count << 1, count)(max,0)
 
-    val counts = valids.scanLeft(1.U((max+1).W))((c,v) => Inc(c,!v))
-    val sels = (counts zip valids).map { case (c,v) => c(max,1) & Fill(max,v) }
-                .takeRight(numSlotsPerColumn + max - 1)
+    val slot_counts = valids.dropRight(max).scanLeft(1.U((max+1).W)) ((c,v) => Inc(c,!v))
+    val sel_counts  = slot_counts ++ Seq.fill(max-1)(slot_counts.last)
+    val comp_sels   = (sel_counts zip valids).map{ case (c,v) => c(max,1) & Fill(max,v) }
+                        .takeRight(numSlotsPerColumn + max - 1)
 
+    // Which slots might be valid after compaction?
+    var compacted_valids = Wire(Vec(numSlotsPerColumn, Bool()))
     for (i <- 0 until numSlotsPerColumn) {
-      val uop_sel = (0 until max).map(j => sels(i+j)(j))
+      compacted_valids(i) := valids(i) && slot_counts(i)(0) || (0 until max).map(j =>
+                             if (i+j+1 < numSlotsPerColumn) comp_sels(i+j)(j) else false.B).reduce(_||_)
+    }
 
-      slots(w)(i).in_uop.bits  := Mux1H(uop_sel, uops.slice(i+1,i+max+1))
-      slots(w)(i).in_uop.valid := Mux1H(uop_sel, next_valids.slice(i+1,i+max+1))
+    // Select the lowest post-compaction free slots for the main dispatch ports
+    val dispatch_slots = SelectFirstN(~compacted_valids.asUInt, numDispatchPorts)
 
-      slots(w)(i).clear := !counts(i)(0)
+    // Generate the slot writeport muxes
+    for (i <- 0 until numSlotsPerColumn) {
+      val uop_sel = (0 until max).map(j => comp_sels(i+j)(j)) ++ dispatch_slots.map(d => d(i))
+
+      slots(w)(i).in_uop.bits  := Mux1H(uop_sel,          uops.slice(i+1,i+max+1) ++ dis_uops(w).dropRight(max))
+      slots(w)(i).in_uop.valid := Mux1H(uop_sel, will_be_valid.slice(i+1,i+max+1) ++ dis_vals(w).dropRight(max))
+
+      slots(w)(i).clear := !slot_counts(i)(0)
     }
   }
 }
