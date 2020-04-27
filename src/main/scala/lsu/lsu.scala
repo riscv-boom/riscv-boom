@@ -1035,8 +1035,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // We translated a store last cycle
   val do_st_search = widthMap(w => (fired_stad_incoming(w) || fired_sta_incoming(w) || fired_sta_retry(w)) && !mem_tlb_miss(w))
   // We translated a load last cycle
-  val do_ld_search = widthMap(w => ((fired_load_incoming(w) || fired_load_retry(w)) && !mem_tlb_miss(w)) ||
-                     fired_load_wakeup(w))
+  val do_ld_search = widthMap(w => ((fired_load_incoming(w) || fired_load_retry(w)) && !mem_tlb_miss(w)) || fired_load_wakeup(w))
   // We are making a local line visible to other harts
   val do_release_search = widthMap(w => fired_release(w))
 
@@ -1100,22 +1099,24 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         // This load has been observed, so if a younger load to the same address has not
         // executed yet, this load must be squashed
         ldq(i).bits.observed := true.B
-      } .elsewhen (do_st_search(w)                     &&
-                   l_valid                             &&
-                   l_bits.addr.valid                   &&
-                   l_bits.executed                     &&
-                   !executing_loads(i)                 &&
-                   !l_bits.addr_is_virtual             &&
-                   l_bits.st_dep_mask(lcam_stq_idx(w)) &&
-                   dword_addr_matches(w)               &&
-                   mask_overlap(w)) {
+      }
+      when (do_st_search(w)                     &&
+            l_valid                             &&
+            l_bits.addr.valid                   &&
+            l_bits.executed                     &&
+            !executing_loads(i)                 &&
+            !l_bits.addr_is_virtual             &&
+            l_bits.st_dep_mask(lcam_stq_idx(w)) &&
+            dword_addr_matches(w)               &&
+            mask_overlap(w)) {
         ldq(i).bits.order_fail := true.B
-      } .elsewhen (do_ld_search(w)            &&
-                   l_valid                    &&
-                   l_bits.addr.valid          &&
-                   !l_bits.addr_is_virtual    &&
-                   dword_addr_matches(w)      &&
-                   mask_overlap(w)) {
+      }
+      when (do_ld_search(w)         &&
+            l_valid                 &&
+            l_bits.addr.valid       &&
+            !l_bits.addr_is_virtual &&
+            dword_addr_matches(w)   &&
+            mask_overlap(w)) {
         val searcher_is_older = IsOlder(lcam_ldq_idx(w), i.U, ldq_head)
         when (searcher_is_older) {
           when (l_bits.executed     &&
