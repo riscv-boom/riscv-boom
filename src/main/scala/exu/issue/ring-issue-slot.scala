@@ -147,7 +147,7 @@ class RingIssueSlot(implicit p: Parameters)
   val next_lrs2_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
 
   val slot_uop = RegInit(NullMicroOp)
-  val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, io.out_uop)
+  val next_uop = Mux(!is_valid || io.clear, io.in_uop.bits, io.out_uop)
   val woke_uop = wakeup(next_uop, io.fast_wakeup, io.chain_wakeup, io.slow_wakeups, io.load_wakeups, io.ll_wakeups, io.load_nacks)
 
   val p1 = slot_uop.prs1_ready
