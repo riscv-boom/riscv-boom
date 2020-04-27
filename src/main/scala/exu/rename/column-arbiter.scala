@@ -56,11 +56,11 @@ class ColumnArbiter(implicit p: Parameters) extends BoomModule
       val prs1_do_bypass = uop.bits.lrs1 === bp_uop.bits.ldst && bp_uop.bits.writes_irf && bp_uop.valid
       val prs2_do_bypass = uop.bits.lrs2 === bp_uop.bits.ldst && bp_uop.bits.writes_irf && bp_uop.valid
 
-      prs1_col = Mux(prs1_do_bypass, bp_col, prs1_col)
-      prs2_col = Mux(prs2_do_bypass, bp_col, prs2_col)
+      prs1_col  = Mux(prs1_do_bypass, bp_col, prs1_col)
+      prs2_col  = Mux(prs2_do_bypass, bp_col, prs2_col)
 
-      prs1_busy = prs1_busy || prs1_do_bypass && !bp_uop.bits.uses_ldq
-      prs2_busy = prs2_busy || prs2_do_bypass && !bp_uop.bits.uses_ldq
+      prs1_busy = Mux(prs1_do_bypass, !bp_uop.bits.uses_ldq, prs1_busy)
+      prs2_busy = Mux(prs2_do_bypass, !bp_uop.bits.uses_ldq, prs2_busy)
     }
 
     val pdst_col = PickColumn(prs1_col,

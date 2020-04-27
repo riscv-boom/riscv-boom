@@ -82,7 +82,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     fp_pipeline.io.wb_pdsts  := DontCare
   }
 
-  val numFpWakeupPorts   = if (usingFPU) fp_pipeline.io.wakeups.length else 0
+  val numFpWakeupPorts = if (usingFPU) fp_pipeline.io.wakeups.length else 0
 
   val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
   val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
@@ -102,8 +102,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                            coreWidth * 2 + numFpWakeupPorts,
                            numFpWakeupPorts))
 
-  val wakeups          = Wire(Vec(coreWidth*2, Valid(UInt(ipregSz.W)))) // 'Slow' wakeups
-  wakeups := DontCare
+  val slow_wakeups     = Wire(Vec(2*coreWidth, Valid(UInt(ipregSz.W))))
+  slow_wakeups        := DontCare
 
   //***********************************
   // Pipeline State Registers and Wires
@@ -730,22 +730,22 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // TODO don't need this anymore with the separate long-latency ports
   for (w <- 0 until coreWidth) {
     val wbresp = exe_units.io.exe_resps(w)
-    wakeups(w).bits  := wbresp.bits.uop.pdst
-    wakeups(w).valid := (  wbresp.valid
-                        && wbresp.bits.uop.rf_wen
-                        && wbresp.bits.uop.dst_rtype === RT_FIX )
+    slow_wakeups(w).bits  := wbresp.bits.uop.pdst
+    slow_wakeups(w).valid := (  wbresp.valid
+                             && wbresp.bits.uop.rf_wen
+                             && wbresp.bits.uop.dst_rtype === RT_FIX )
   }
 
   // Generate slow wakeup signals from long-latency writeback ports.
   for (w <- 0 until coreWidth) {
     val wbresp = exe_units.io.ll_resps(w)
-    wakeups(w+coreWidth).bits  := wbresp.bits.uop.pdst
-    wakeups(w+coreWidth).valid := (  wbresp.valid
-                                  && wbresp.bits.uop.rf_wen
-                                  && wbresp.bits.uop.dst_rtype === RT_FIX )
+    slow_wakeups(w+coreWidth).bits  := wbresp.bits.uop.pdst
+    slow_wakeups(w+coreWidth).valid := (  wbresp.valid
+                                       && wbresp.bits.uop.rf_wen
+                                       && wbresp.bits.uop.dst_rtype === RT_FIX )
   }
 
-  rename_stage.io.wakeups := scheduler.io.fast_wakeups ++ wakeups
+  rename_stage.io.wakeups := scheduler.io.fast_wakeups ++ slow_wakeups
 
   if (usingFPU) {
     for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
@@ -767,7 +767,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   scheduler.io.fu_avail := exe_units.io.fu_avail & ~(Fill(FUC_SZ, RegNext(idiv_issued)) & FU_DIV)
 
   // Send slow wakeups to scheduler
-  scheduler.io.slow_wakeups := wakeups
+  scheduler.io.slow_wakeups := slow_wakeups
+  scheduler.io.ll_wakeups   := exe_units.io.ll_wakeups
 
   // Load-hit speculation
   scheduler.io.load_wakeups := io.lsu.spec_load_wakeups

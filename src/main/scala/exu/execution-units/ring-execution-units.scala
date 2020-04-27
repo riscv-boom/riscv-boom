@@ -29,15 +29,20 @@ import FUConstants._
 class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BoomBundle {
-    // I/O used by all units
-    val exe_reqs  = Vec(coreWidth, Flipped(DecoupledIO(new FuncUnitReq(xLen))))
-    val exe_resps = Output(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
-    val ll_resps  = Output(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
+    //-------------------------
+    // Common I/O
+    val exe_reqs   = Vec(coreWidth, Flipped(DecoupledIO(new FuncUnitReq(xLen))))
+    val exe_resps  = Output(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
+    val ll_resps   = Output(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
+    val ll_wakeups = Output(Vec( memWidth, Valid(UInt(ipregSz.W))))
 
-    val brupdate  = Input(new BrUpdateInfo)
-    val kill      = Input(Bool())
+    val brupdate   = Input(new BrUpdateInfo)
+    val kill       = Input(Bool())
 
-    val fu_avail  = Output(UInt(FUC_SZ.W))
+    val fu_avail   = Output(UInt(FUC_SZ.W))
+
+    //-------------------------
+    // Misc I/O
 
     // ALU branch resolution info
     val brinfos = Output(Vec(coreWidth, new BrResolutionInfo))
@@ -307,6 +312,12 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     io.from_fpu.ready := (slow_eu_rdys.last & io.from_fpu.bits.uop.pdst_col).orR
   } else {
     io.from_fpu.ready := DontCare
+  }
+
+  // Hookup the long latency wakeup ports for loads
+  for (w <- 0 until memWidth) {
+    io.ll_wakeups(w).bits  := mem_units(w).io.ll_iresp.bits.uop.pdst
+    io.ll_wakeups(w).valid := mem_units(w).io.ll_iresp.valid
   }
 
   //----------------------------------------------------------------------------------------------------

@@ -85,3 +85,13 @@ class WritebackArbiter(implicit p: Parameters) extends IssueArbiter
     wb_table(w) := Mux(io.fire(w), wb_table(w) | latency, wb_table(w)) >> 1
   }
 }
+
+class ChainedWakeupArbiter(implicit p: Parameters) extends IssueArbiter
+{
+  val column_wakeup_reqs = Transpose(VecInit((0 until coreWidth).map(w => Mux(io.reqs(w), io.uops(w).pdst_col, 0.U))))
+  val column_wakeup_gnts = Transpose(VecInit(column_wakeup_reqs.map(r => Grant(r))))
+
+  for (w <- 0 until coreWidth) {
+    io.gnts(w) := column_wakeup_gnts(w).orR
+  }
+}
