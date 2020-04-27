@@ -1090,7 +1090,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     val mask_match   = widthMap(w => (l_mask & lcam_mask(w)) === l_mask)
     val mask_overlap = widthMap(w => (l_mask & lcam_mask(w)).orR)
 
-    // Searcher is a store
     for (w <- 0 until memWidth) {
       when (do_release_search(w) &&
             l_valid              &&
@@ -1125,10 +1124,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
             ldq(i).bits.order_fail := true.B
           }
         } .elsewhen (lcam_ldq_idx(w) =/= i.U) {
-          // The load is older, and either it hasn't executed or it was nacked
+          // The load is older and hasn't executed
           // we need to kill ourselves, and prevent forwarding
-          val older_nacked = nacking_loads(i)
-          when (!l_bits.executed || older_nacked) {
+          when (!l_bits.executed) {
             io.dmem.s1_kill(w)                 := RegNext(dmem_req_fire(w))
             ldq(lcam_ldq_idx(w)).bits.executed := false.B
             can_forward(w)                     := false.B
