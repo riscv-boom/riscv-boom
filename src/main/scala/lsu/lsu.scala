@@ -145,7 +145,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   // Tell the IQs that the load we speculated last cycle was misspeculated
   val spec_load_nacks   = Output(Vec(memWidth, Bool()))
 
-  val brupdate       = Input(new BrUpdateInfo)
+  val brupdate     = Input(new BrUpdateInfo)
   val rob_pnr_idx  = Input(UInt(robAddrSz.W))
   val rob_head_idx = Input(UInt(robAddrSz.W))
   val exception    = Input(Bool())
@@ -1433,32 +1433,34 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   var temp_ldq_head        = ldq_head
   for (w <- 0 until coreWidth)
   {
-    val commit_store = io.core.commit.valids(w) && io.core.commit.uops(w).uses_stq
-    val commit_load  = io.core.commit.valids(w) && io.core.commit.uops(w).uses_ldq
-    val idx = Mux(commit_store, temp_stq_commit_head, temp_ldq_head)
+    val commit_store = RegNext(io.core.commit.valids(w) && io.core.commit.uops(w).uses_stq)
+    val commit_load  = RegNext(io.core.commit.valids(w) && io.core.commit.uops(w).uses_ldq)
+    val st_idx = temp_stq_commit_head
+    val ld_idx = temp_ldq_head
     when (commit_store)
     {
-      stq(idx).bits.committed := true.B
-    } .elsewhen (commit_load) {
-      assert (ldq(idx).valid, "[lsu] trying to commit an un-allocated load entry.")
-      assert ((ldq(idx).bits.executed || ldq(idx).bits.forward_std_val) && ldq(idx).bits.succeeded ,
+      stq(st_idx).bits.committed := true.B
+    }
+    when (commit_load) {
+      assert (ldq(ld_idx).valid, "[lsu] trying to commit an un-allocated load entry.")
+      assert ((ldq(ld_idx).bits.executed || ldq(ld_idx).bits.forward_std_val) && ldq(ld_idx).bits.succeeded ,
         "[lsu] trying to commit an un-executed load entry.")
 
-      ldq(idx).valid                 := false.B
-      ldq(idx).bits.addr.valid       := false.B
-      ldq(idx).bits.executed         := false.B
-      ldq(idx).bits.succeeded        := false.B
-      ldq(idx).bits.order_fail       := false.B
-      ldq(idx).bits.forward_std_val  := false.B
+      ldq(ld_idx).valid                := false.B
+      ldq(ld_idx).bits.addr.valid      := false.B
+      ldq(ld_idx).bits.executed        := false.B
+      ldq(ld_idx).bits.succeeded       := false.B
+      ldq(ld_idx).bits.order_fail      := false.B
+      ldq(ld_idx).bits.forward_std_val := false.B
 
     }
 
     if (MEMTRACE_PRINTF) {
       when (commit_store || commit_load) {
-        val uop    = Mux(commit_store, stq(idx).bits.uop, ldq(idx).bits.uop)
-        val addr   = Mux(commit_store, stq(idx).bits.addr.bits, ldq(idx).bits.addr.bits)
-        val stdata = Mux(commit_store, stq(idx).bits.data.bits, 0.U)
-        val wbdata = Mux(commit_store, stq(idx).bits.debug_wb_data, ldq(idx).bits.debug_wb_data)
+        val uop    = Mux(commit_store, stq(st_idx).bits.uop, ldq(ld_idx).bits.uop)
+        val addr   = Mux(commit_store, stq(st_idx).bits.addr.bits, ldq(ld_idx).bits.addr.bits)
+        val stdata = Mux(commit_store, stq(st_idx).bits.data.bits, 0.U)
+        val wbdata = Mux(commit_store, stq(st_idx).bits.debug_wb_data, ldq(ld_idx).bits.debug_wb_data)
         printf("MT %x %x %x %x %x %x %x\n",
           io.core.tsc_reg, uop.uopc, uop.mem_cmd, uop.mem_size, addr, stdata, wbdata)
       }
