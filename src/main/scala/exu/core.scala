@@ -137,12 +137,12 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // brmask contains masks for rapidly clearing mispredicted instructions
   // brindices contains indices to reset pointers for allocated structures
   //           brindices is delayed a cycle
-  val brupdate  = Wire(new BrUpdateInfo)
-  val b1        = Wire(new BrUpdateMasks)
-  val b2        = Reg(new BrResolutionInfo)
+  val brupdate = Wire(new BrUpdateInfo)
+  val b1       = Wire(new BrUpdateMasks)
+  val b2       = Wire(new BrResolutionInfo)
 
-  brupdate.b1 := b1
-  brupdate.b2 := b2
+  brupdate.b1 := RegNext(b1)
+  brupdate.b2 := RegNext(b2)
 
   for (w <- 0 until coreWidth) {
     brinfos(w)       := exe_units.io.brinfos(w)
@@ -151,20 +151,25 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   brinfos(coreWidth)       := exe_units.io.jmp_brinfo
   brinfos(coreWidth).valid := exe_units.io.jmp_brinfo.valid && !rob.io.flush.valid
 
-  b1.resolve_mask := brinfos.map(x => x.valid << x.uop.br_tag).reduce(_|_)
+  b1.resolve_mask    := brinfos.map(x => x.valid << x.uop.br_tag).reduce(_|_)
   b1.mispredict_mask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.br_tag).reduce(_|_)
 
   // Find the oldest mispredict and use it to update indices
-  val live_brinfos      = brinfos.map(br => br.valid && br.mispredict && !IsKilledByBranch(brupdate, br.uop))
+  val brupdate_early    = Wire(new BrUpdateInfo)
+  brupdate_early.b1    := b1
+  brupdate_early.b2    := DontCare
+
+  val live_brinfos      = brinfos.map(br => br.valid && br.mispredict && !IsKilledByBranch(brupdate_early, br.uop))
   val oldest_mispredict = Mux1H(live_brinfos, brinfos)
   val mispredict_val    = live_brinfos.reduce(_||_)
 
-  b2.mispredict  := mispredict_val
-  b2.cfi_type    := oldest_mispredict.cfi_type
-  b2.taken       := oldest_mispredict.taken
-  b2.pc_sel      := oldest_mispredict.pc_sel
-  b2.uop         := UpdateBrMask(brupdate, oldest_mispredict.uop)
-  b2.jalr_target := RegNext(exe_units.io.jmp_brinfo.jalr_target)
+  b2.valid         := DontCare
+  b2.mispredict    := mispredict_val
+  b2.cfi_type      := oldest_mispredict.cfi_type
+  b2.taken         := oldest_mispredict.taken
+  b2.pc_sel        := oldest_mispredict.pc_sel
+  b2.uop           := UpdateBrMask(brupdate, oldest_mispredict.uop)
+  b2.jalr_target   := RegNext(exe_units.io.jmp_brinfo.jalr_target)
   b2.target_offset := oldest_mispredict.target_offset
 
   val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftq_idx
