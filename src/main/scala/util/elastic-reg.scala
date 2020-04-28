@@ -94,3 +94,52 @@ class MicroOpElasticReg(implicit p: Parameters) extends BoomModule
   io.deq.valid := valid(0)
   io.deq.bits  := uops.head
 }
+
+class MicroOpPipelineRegister(implicit p: Parameters) extends BoomModule
+{
+  val entries = 2
+  val io = IO(new BoomBundle {
+    val enq = new BoomBundle {
+      val uops   = Input(Vec(coreWidth, new MicroOp))
+      val valids = Input(Vec(coreWidth, Bool()))
+      val ready  = Output(Bool())
+    }
+    val deq = new BoomBundle {
+      val uops   = Output(Vec(coreWidth, new MicroOp))
+      val valids = Output(Vec(coreWidth, Bool()))
+      val stalls = Input (Vec(coreWidth, Bool()))
+    }
+
+    val brupdate = Input(new BrUpdateInfo)
+    val kill     = Input(Bool())
+  })
+
+  private val valids = RegInit(VecInit(Seq.fill(entries) { VecInit(Seq.fill(coreWidth) { false.B }) }))
+  private val uops   = Reg(Vec(entries, Vec(coreWidth, new MicroOp)))
+
+  def paddedValid (i: Int) = if (i == -1) true.B else if (i == entries) false.B else valids(i).reduce(_||_)
+
+  val enq_fire  = io.enq.ready && io.enq.valids.reduce(_||_)
+  val deq_ready = !io.deq.stalls.last
+
+  for (i <- 0 until entries) {
+    val sel_valids  = if (i == entries-1) io.enq.valids else Mux(paddedValid(i+1), valids(i+1), io.enq.valids)
+    val sel_uops    = if (i == entries-1) io.enq.uops   else Mux(paddedValid(i+1),   uops(i+1), io.enq.uops)
+    val next_uops   = sel_uops.map(uop => GetNewUopAndBrMask(uop, io.brupdate))
+    var next_valids = Mux(io.kill, VecInit((0.U(coreWidth.W)).asBools), sel_valids)
+
+    val wen = Mux(deq_ready,
+                  paddedValid(i+1) || enq_fire && ((i == 0).B || paddedValid(i)),
+                  enq_fire && paddedValid(i-1) && !paddedValid(i))
+    when (wen) {
+      uops  (i) := next_uops
+      valids(i) := next_valids
+    } .elsewhen (i.U === 0.U) {
+      valids(i) := (valids(i).asUInt & io.deq.stalls.asUInt).asBools
+    }
+  }
+
+  io.enq.ready  := !paddedValid(entries-1)
+  io.deq.valids := valids(0)
+  io.deq.uops   :=   uops(0)
+}
