@@ -111,8 +111,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     val deq = Flipped(Valid(UInt(idx_sz.W)))
 
     // Give PC info to BranchUnit.
-    val get_ftq_pc = Vec(2, new GetPCFromFtqIO())
-
+    val get_ftq_pc = Vec(4, new GetPCFromFtqIO())
 
     // Used to regenerate PC for trace port stuff in FireSim
     // Don't tape this out, this blows up the FTQ
@@ -341,7 +340,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   // **** Core Read PCs ****
   //-------------------------------------------------------------
 
-  for (i <- 0 until 2) {
+  for (i <- 0 until 4) {
     val idx = io.get_ftq_pc(i).ftq_idx
     val next_idx = WrapInc(idx, num_entries)
     val next_is_enq = (next_idx === enq_ptr) && io.enq.fire()

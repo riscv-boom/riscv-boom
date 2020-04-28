@@ -125,7 +125,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val dec_uops   = Wire(Vec(coreWidth, new MicroOp))
   val dec_fire   = Wire(Vec(coreWidth, Bool()))
   val dec_ready  = Wire(Bool())
-  val dec_xcpts  = Wire(Vec(coreWidth, Bool()))
 
   // Rename2/Allocation stage
   val ren_valids = Wire(Vec(coreWidth, Bool()))
@@ -468,7 +467,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // FTQ GetPC Port Arbitration
 
   val jmp_pc_req   = Wire(Decoupled(UInt(ftqSz.W)))
-  val xcpt_pc_req  = Wire(Decoupled(UInt(ftqSz.W)))
   val flush_pc_req = Wire(Decoupled(UInt(ftqSz.W)))
 
   val ftq_arb = Module(new Arbiter(UInt(ftqSz.W), 3))
@@ -477,7 +475,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // Decoding exceptions come from youngest
   ftq_arb.io.in(0) <> flush_pc_req
   ftq_arb.io.in(1) <> jmp_pc_req
-  ftq_arb.io.in(2) <> xcpt_pc_req
 
   // Hookup FTQ
   io.ifu.get_pc(0).ftq_idx := ftq_arb.io.out.bits
@@ -494,12 +491,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   exe_units.io.get_ftq_pc.next_val := io.ifu.get_pc(0).next_val
   exe_units.io.get_ftq_pc.next_pc  := io.ifu.get_pc(0).next_pc
 
-  // Frontend Exception Requests
-  val xcpt_idx = PriorityEncoder(dec_xcpts)
-  xcpt_pc_req.valid    := dec_xcpts.reduce(_||_)
-  xcpt_pc_req.bits     := dec_uops(xcpt_idx).ftq_idx
-  rob.io.xcpt_fetch_pc := io.ifu.get_pc(0).pc
-
   flush_pc_req.valid   := rob.io.flush.valid
   flush_pc_req.bits    := rob.io.flush.bits.ftq_idx
 
@@ -510,15 +501,11 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // Decode/Rename1 pipeline logic
 
-  dec_xcpts := dec_uops zip dec_valids map {case (u,v) => u.exception && v}
-  val dec_xcpt_stall = dec_xcpts.reduce(_||_) && !xcpt_pc_req.ready
-  // stall fetch/dcode because we ran out of branch tags
   val branch_mask_full = Wire(Vec(coreWidth, Bool()))
 
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
                       (  !ren_ready
-                      || dec_xcpt_stall
                       || branch_mask_full(w)
                       || brupdate.b1.mispredict_mask =/= 0.U
                       || brupdate.b2.mispredict
@@ -725,6 +712,12 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
                                w.U(log2Ceil(coreWidth).W))
     }
   }
+
+  // Dispatching exceptions need to give the rob a PC
+  val dis_xcpts = dis_uops zip dis_valids map { case (u,v) => u.exception && v }
+  io.ifu.get_pc(2).ftq_idx := Mux1H(dis_xcpts, dis_uops).ftq_idx
+  rob.io.xcpt_fetch_pc := io.ifu.get_pc(2).pc
+
 
   //-------------------------------------------------------------
   // RoCC allocation logic
