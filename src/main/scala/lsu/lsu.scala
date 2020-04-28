@@ -1176,12 +1176,24 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   mem_forward_stq_idx     := forwarding_idx
 
   // Avoid deadlock with a 1-w LSU prioritizing load wakeups > store commits
-  // Wakeups may repeatedly find a st->ld addr conflict and fail to forward,
-  // repeated wakeups may block the store from ever committing
-  // Disallow load wakeups 1 cycle after this happens to allow the stores to drain
-  // On a 2W machine, load wakeups and store commits occupy separate pipelines
+  // On a 2W machine, load wakeups and store commits occupy separate pipelines,
+  // so only add this logic for 1-w LSU
   if (memWidth == 1) {
+    // Wakeups may repeatedly find a st->ld addr conflict and fail to forward,
+    // repeated wakeups may block the store from ever committing
+    // Disallow load wakeups 1 cycle after this happens to allow the stores to drain
     when (RegNext(ldst_addr_matches(0).reduce(_||_) && !mem_forward_valid(0))) {
+      block_load_wakeup := true.B
+    }
+
+    // If stores remain blocked for 15 cycles, block load wakeups to get a store through
+    val store_blocked_counter = Reg(UInt(4.W))
+    when (will_fire_store_commit(0) || !can_fire_store_commit(0)) {
+      store_blocked_counter := 0.U
+    } .elsewhen (can_fire_store_commit(0) && !will_fire_store_commit(0)) {
+      store_blocked_counter := Mux(store_blocked_counter === 15.U, store_blocked_counter + 1.U, 15.U)
+    }
+    when (store_blocked_counter === 15.U) {
       block_load_wakeup := true.B
     }
   }
