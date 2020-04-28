@@ -110,7 +110,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     val deq = Flipped(Valid(UInt(idx_sz.W)))
 
     // Give PC info to BranchUnit.
-    val get_ftq_pc = Vec(2, new GetPCFromFtqIO)
+    val get_ftq_pc = Vec(3, new GetPCFromFtqIO)
 
     // Get PCs for debug tracing
     val get_pc_debug = Vec(coreWidth, new GetPCFromFtqIO)
@@ -271,18 +271,23 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
   // **** Core Read PCs ****
   //-------------------------------------------------------------
 
-  for (i <- 0 until 2) {
+  for (i <- 0 until 3) {
     val idx = io.get_ftq_pc(i).ftq_idx
-    val next_idx = WrapInc(idx, num_entries)
-    val next_is_enq = (next_idx === enq_ptr) && io.enq.fire()
-    val next_pc = Mux(next_is_enq, io.enq.bits.pc, pcs(next_idx))
-    val get_entry = ram(idx)
-    val next_entry = ram(next_idx)
-    io.get_ftq_pc(i).entry    := RegNext(get_entry)
-    io.get_ftq_pc(i).pc       := RegNext(pcs(idx))
-    io.get_ftq_pc(i).next_pc  := RegNext(next_pc)
-    io.get_ftq_pc(i).next_val := RegNext(next_idx =/= enq_ptr || next_is_enq)
-    io.get_ftq_pc(i).com_pc   := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))
+    if (i < 2) {
+      val next_idx = WrapInc(idx, num_entries)
+      val next_is_enq = (next_idx === enq_ptr) && io.enq.fire()
+      val next_pc = Mux(next_is_enq, io.enq.bits.pc, pcs(next_idx))
+      val get_entry = ram(idx)
+      val next_entry = ram(next_idx)
+      io.get_ftq_pc(i).entry    := RegNext(get_entry)
+      io.get_ftq_pc(i).pc       := RegNext(pcs(idx))
+      io.get_ftq_pc(i).next_pc  := RegNext(next_pc)
+      io.get_ftq_pc(i).next_val := RegNext(next_idx =/= enq_ptr || next_is_enq)
+      io.get_ftq_pc(i).com_pc   := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))
+    } else {
+      io.get_ftq_pc(i) := DontCare
+      io.get_ftq_pc(i).pc := pcs(idx)
+    }
   }
 
   //-------------------------------------------------------------

@@ -241,7 +241,7 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   val fetchpacket       = Flipped(new DecoupledIO(new FetchBufferResp))
 
   // 1 for xcpt/jalr/auipc/flush
-  val get_pc            = Flipped(Vec(2, new GetPCFromFtqIO))
+  val get_pc            = Flipped(Vec(3, new GetPCFromFtqIO))
   val get_pc_debug      = Flipped(Vec(coreWidth, new GetPCFromFtqIO))
 
   // Breakpoint info
