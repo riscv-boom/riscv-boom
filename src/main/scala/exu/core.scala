@@ -508,8 +508,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                       || brupdate.b2.mispredict
                       || io.ifu.redirect_flush))
 
-  val dec_stalls = dec_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
-  dec_fire := (0 until coreWidth).map(w => dec_valids(w) && !dec_stalls(w))
+  val dec_stall = dec_hazards.reduce(_||_)
+  dec_fire := (0 until coreWidth).map(w => dec_valids(w) && !dec_stall)
 
   // all decoders are empty and ready for new instructions
   dec_ready := dec_fire.last
