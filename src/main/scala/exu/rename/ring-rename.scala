@@ -274,7 +274,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
     val can_allocate = (col_gnts(w) & VecInit(freelists.map(_.io.alloc_pregs(w).valid)).asUInt).orR
 
     // Push back against Decode stage if Rename1 can't proceed.
-    io.ren_stalls(w) := (ren2_uops(w).dst_rtype === rtype) && !can_allocate
+    io.ren_stalls(w) := ren2_valids(w) && (ren2_uops(w).dst_rtype === rtype) && !can_allocate
 
     val bypassed_uop = Wire(new MicroOp)
     if (w > 0) bypassed_uop := BypassAllocations(ren2_uops(w), ren2_uops.slice(0,w), ren2_valids.slice(0,w))

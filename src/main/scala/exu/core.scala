@@ -117,7 +117,13 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val dec_xcpts  = Wire(Vec(coreWidth, Bool()))
   val ren_stalls = Wire(Vec(coreWidth, Bool()))
 
-  // Rename2/Dispatch stage
+  // Rename2/Allocation stage
+  val ren_valids = Wire(Vec(coreWidth, Bool()))
+  val ren_uops   = Wire(Vec(coreWidth, new MicroOp))
+  val ren_fire   = Wire(Vec(coreWidth, Bool()))
+  val ren_ready  = Wire(Bool())
+
+  // Dispatch stage
   val dis_valids = Wire(Vec(coreWidth, Bool()))
   val dis_uops   = Wire(Vec(coreWidth, new MicroOp))
   val dis_fire   = Wire(Vec(coreWidth, Bool()))
@@ -125,7 +131,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Issue Stage/Register Read
   val iss_valids = Wire(Vec(coreWidth, Bool()))
-  val iss_uops   = Wire(Vec(coreWidth, new MicroOp()))
+  val iss_uops   = Wire(Vec(coreWidth, new MicroOp))
 
   // --------------------------------------
   // Dealing with branch resolutions
@@ -464,7 +470,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val xcpt_pc_req  = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
   val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
 
-  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 3))
+  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 2))
 
   // Order by the oldest. Flushes come from the oldest instructions in pipe
   // Decoding exceptions come from youngest
@@ -507,7 +513,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
-                      (  !dis_ready
+                      (  !ren_ready
                       || rob.io.commit.rollback
                       || dec_xcpt_stall
                       || branch_mask_full(w)
@@ -558,8 +564,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   rename_stage.io.dec_fire := dec_fire
   rename_stage.io.dec_uops := dec_uops
 
-  rename_stage.io.dis_fire := dis_fire
-  rename_stage.io.dis_ready := dis_ready
+  rename_stage.io.dis_fire  := ren_fire
+  rename_stage.io.dis_ready := ren_ready
 
   rename_stage.io.com_valids := rob.io.commit.valids
   rename_stage.io.com_uops := rob.io.commit.uops
@@ -575,8 +581,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     fp_rename_stage.io.dec_fire := dec_fire
     fp_rename_stage.io.dec_uops := dec_uops
 
-    fp_rename_stage.io.dis_fire := dis_fire
-    fp_rename_stage.io.dis_ready := dis_ready
+    fp_rename_stage.io.dis_fire := ren_fire
+    fp_rename_stage.io.dis_ready := ren_ready
 
     fp_rename_stage.io.com_valids := rob.io.commit.valids
     fp_rename_stage.io.com_uops := rob.io.commit.uops
@@ -585,10 +591,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
 
   // Outputs
-  dis_uops := rename_stage.io.ren2_uops
-  dis_valids := rename_stage.io.ren2_mask
-  ren_stalls := rename_stage.io.ren_stalls
-
+  ren_uops   := rename_stage.io.ren2_uops
+  ren_valids := rename_stage.io.ren2_mask
+  ren_ready  := !ren_stalls.reduce(_||_)
 
   /**
    * TODO This is a bit nasty, but it's currently necessary to
@@ -601,20 +606,21 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     val f_stall = if (usingFPU) fp_rename_stage.io.ren_stalls(w) else false.B
 
     // lrs1 can "pass through" to prs1. Used solely to index the csr file.
-    dis_uops(w).prs1 := Mux(dis_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1,
-                        Mux(dis_uops(w).lrs1_rtype === RT_FIX, i_uop.prs1, dis_uops(w).lrs1))
-    dis_uops(w).prs2 := Mux(dis_uops(w).lrs2_rtype === RT_FLT, f_uop.prs2, i_uop.prs2)
-    dis_uops(w).prs3 := f_uop.prs3
-    dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype  === RT_FLT, f_uop.pdst, i_uop.pdst)
-    dis_uops(w).stale_pdst := Mux(dis_uops(w).dst_rtype === RT_FLT, f_uop.stale_pdst, i_uop.stale_pdst)
+    ren_uops(w).prs1 := Mux(ren_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1,
+                        Mux(ren_uops(w).lrs1_rtype === RT_FIX, i_uop.prs1, ren_uops(w).lrs1))
+    ren_uops(w).prs2 := Mux(ren_uops(w).lrs2_rtype === RT_FLT, f_uop.prs2, i_uop.prs2)
+    ren_uops(w).prs3 := f_uop.prs3
+    ren_uops(w).pdst := Mux(ren_uops(w).dst_rtype === RT_FLT, f_uop.pdst, i_uop.pdst)
+    ren_uops(w).stale_pdst := Mux(ren_uops(w).dst_rtype === RT_FLT, f_uop.stale_pdst, i_uop.stale_pdst)
 
-    dis_uops(w).prs1_busy := i_uop.prs1_busy && (dis_uops(w).lrs1_rtype === RT_FIX) ||
-                             f_uop.prs1_busy && (dis_uops(w).lrs1_rtype === RT_FLT)
-    dis_uops(w).prs2_busy := i_uop.prs2_busy && (dis_uops(w).lrs2_rtype === RT_FIX) ||
-                             f_uop.prs2_busy && (dis_uops(w).lrs2_rtype === RT_FLT)
-    dis_uops(w).prs3_busy := f_uop.prs3_busy && dis_uops(w).frs3_en
+    ren_uops(w).prs1_busy := i_uop.prs1_busy && (ren_uops(w).lrs1_rtype === RT_FIX) ||
+                             f_uop.prs1_busy && (ren_uops(w).lrs1_rtype === RT_FLT)
+    ren_uops(w).prs2_busy := i_uop.prs2_busy && (ren_uops(w).lrs2_rtype === RT_FIX) ||
+                             f_uop.prs2_busy && (ren_uops(w).lrs2_rtype === RT_FLT)
+    ren_uops(w).prs3_busy := f_uop.prs3_busy && ren_uops(w).frs3_en
 
     ren_stalls(w) := rename_stage.io.ren_stalls(w) || f_stall
+    ren_fire(w)   := ren_valids(w) && ren_ready && dis_ready
   }
 
   //-------------------------------------------------------------
@@ -624,7 +630,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   //-------------------------------------------------------------
-  // Rename2/Dispatch pipeline logic
+  // Dispatch pipeline logic
 
   val dis_prior_slot_valid = dis_valids.scanLeft(false.B) ((s,v) => s || v)
   val dis_prior_slot_unique = (dis_uops zip dis_valids).scanLeft(false.B) {case (s,(u,v)) => s || v && u.is_unique}
@@ -641,7 +647,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val dis_hazards = (0 until coreWidth).map(w =>
                       dis_valids(w) &&
                       (  !rob.io.ready
-                      || ren_stalls(w)
                       || io.lsu.ldq_full(w) && dis_uops(w).uses_ldq
                       || io.lsu.stq_full(w) && dis_uops(w).uses_stq
                       || !dispatcher.io.ren_uops(w).ready
@@ -653,12 +658,26 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                       || brupdate.b2.mispredict
                       || io.ifu.redirect_flush))
 
-
   io.lsu.fence_dmem := (dis_valids zip wait_for_empty_pipeline).map {case (v,w) => v && w} .reduce(_||_)
 
   val dis_stalls = dis_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
   dis_fire := dis_valids zip dis_stalls map {case (v,s) => v && !s}
   dis_ready := !dis_stalls.last
+
+  //-------------------------------------------------------------
+  // Dispatch pipeline registers
+
+  val r_dis_uops = Module(new MicroOpPipelineRegister)
+
+  r_dis_uops.io.brupdate   := brupdate
+  r_dis_uops.io.kill       := io.ifu.redirect_flush
+
+  r_dis_uops.io.enq.uops   := ren_uops
+  r_dis_uops.io.enq.valids := ren_fire
+  r_dis_uops.io.deq.stalls := dis_stalls
+
+  dis_uops   := r_dis_uops.io.deq.uops
+  dis_valids := r_dis_uops.io.deq.valids
 
   //-------------------------------------------------------------
   // LDQ/STQ Allocation Logic
