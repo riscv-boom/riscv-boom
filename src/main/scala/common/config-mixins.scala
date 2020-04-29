@@ -162,6 +162,7 @@ class WithRingBooms(n: Int, f: Int) extends Config((site, here, up) => {
         IssueParams(issueWidth=1, numEntries=4*n, iqType=IQT_FP.litValue , dispatchWidth=n)),
       memWidth = 1,
       numDCacheBanks = 1,
+      enableFastLoadUse = false,
       numIntPhysRegisters = 32 + 17*n,
       numFpPhysRegisters = 32 + 12*n,
       numLdqEntries = 4*n,
