@@ -160,7 +160,7 @@ class RingIssueSlot(implicit p: Parameters)
 
   when (io.kill) {
     state := s_invalid
-  } .elsewhen (io.in_uop.valid) {
+  } .elsewhen (io.clear || !is_valid) {
     state := io.in_uop.bits.iw_state
   } .elsewhen (io.clear) {
     state := s_invalid
@@ -206,10 +206,6 @@ class RingIssueSlot(implicit p: Parameters)
   // we compact it into an other entry
   when (IsKilledByBranch(io.brupdate, slot_uop)) {
     next_state := s_invalid
-  }
-
-  when (!io.in_uop.valid) {
-    slot_uop.br_mask := next_br_mask
   }
 
   //----------------------------------------------------------------------------------------------------
