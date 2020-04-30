@@ -649,7 +649,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   val dis_stalls = dis_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
   dis_fire := dis_valids zip dis_stalls map {case (v,s) => v && !s}
-  dis_ready := !dis_stalls.last
 
   //-------------------------------------------------------------
   // Dispatch pipeline registers
@@ -665,6 +664,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   dis_uops   := r_dis_uops.io.deq.uops
   dis_valids := r_dis_uops.io.deq.valids
+  dis_ready  := r_dis_uops.io.enq.ready
 
   //-------------------------------------------------------------
   // LDQ/STQ Allocation Logic
