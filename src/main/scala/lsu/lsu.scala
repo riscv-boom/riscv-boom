@@ -296,13 +296,19 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val ldq_enq_entries = Wire(Vec(coreWidth, Valid(new LDQEntry)))
   val stq_enq_entries = Wire(Vec(coreWidth, Valid(new STQEntry)))
 
+  var ldq_full_tail = UIntToOH(ldq_tail)(numLdqEntries-1,0)
+  var stq_full_tail = UIntToOH(stq_tail)(numStqEntries-1,0)
+
   for (w <- 0 until coreWidth)
   {
-    val ldq_full = (RotateLeft(ldq_tail_oh) & ldq_head_oh).orR
+    ldq_full_tail = RotateLeft(ldq_full_tail)
+    stq_full_tail = RotateLeft(stq_full_tail)
+
+    val ldq_full = (ldq_full_tail & ldq_head_oh).orR
     io.core.ldq_full(w)    := ldq_full
     io.core.dis_ldq_idx(w) := OHToUInt(ldq_tail_oh)
 
-    val stq_full = (RotateLeft(stq_tail_oh) & stq_head_oh).orR
+    val stq_full = (stq_full_tail & stq_head_oh).orR
     io.core.stq_full(w)    := stq_full
     io.core.dis_stq_idx(w) := OHToUInt(stq_tail_oh)
 
