@@ -499,10 +499,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                ( ldq_retry_e.valid                            &&
                                  ldq_retry_e.bits.addr.valid                  &&
                                  ldq_retry_e.bits.addr_is_virtual             &&
-                                RegNext(dtlb.io.miss_rdy)                     &&
-                                !store_needs_order                            &&
-                                (w == memWidth-1).B                           && // TODO: Is this best scheduling?
-                                !ldq_retry_e.bits.order_fail))
+                                 RegNext(dtlb.io.miss_rdy)                    &&
+                                 !store_needs_order                           &&
+                                 (w == memWidth-1).B                          && // TODO: Is this best scheduling?
+                                 !ldq_retry_e.bits.order_fail))
 
   // Can we retry a store addrgen that missed in the TLB
   // - Weird edge case when sta_retry and std_incoming for same entry in same cycle. Delay this
@@ -549,7 +549,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val can_fire_hella_wakeup    = WireInit(widthMap(w => false.B)) // This is assigned to in the hellashim controller
 
   //---------------------------------------------------------
-  // Controller logic. Arbitrate which request actually fires
+  // Scheduling cycle (S0)
 
   val exe_tlb_valid = Wire(Vec(memWidth, Bool()))
 
@@ -603,7 +603,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     } .elsewhen (will_fire_load_retry(w)) {
       block_load_mask(RegNext(ldq_retry_idx))      := true.B
     }
-    exe_tlb_valid(w) := !tlb_avail
+    exe_tlb_valid(w) := RegNext(!tlb_avail)
   }
 
   assert((memWidth == 1).B ||
@@ -619,12 +619,32 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   require(memWidth <= 2)
 
   //--------------------------------------------
-  // TLB Access
+  // TLB Access Cycle (S1)
+
+  val s1_ldq_incoming_e = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, ldq_incoming_e(w))))
+  val s1_stq_incoming_e = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, stq_incoming_e(w))))
+  val s1_ldq_wakeup_e   = RegNext(UpdateBrMask(io.core.brupdate, ldq_wakeup_e))
+  val s1_ldq_retry_e    = RegNext(UpdateBrMask(io.core.brupdate, ldq_retry_e))
+  val s1_stq_retry_e    = RegNext(UpdateBrMask(io.core.brupdate, stq_retry_e))
+
+  val exe_req_killed    = widthMap(w => IsKilledByBranch(io.core.brupdate, exe_req(w).bits.uop))
+  val s1_load_incoming  = widthMap(w => RegNext(will_fire_load_incoming(w) && !exe_req_killed(w)))
+  val s1_stad_incoming  = widthMap(w => RegNext(will_fire_stad_incoming(w) && !exe_req_killed(w)))
+  val s1_sta_incoming   = widthMap(w => RegNext(will_fire_sta_incoming (w) && !exe_req_killed(w)))
+  val s1_std_incoming   = widthMap(w => RegNext(will_fire_std_incoming (w) && !exe_req_killed(w)))
+  val s1_sfence         = RegNext(will_fire_sfence)
+  val s1_release        = RegNext(will_fire_release)
+  val s1_load_retry     = widthMap(w => RegNext(will_fire_load_retry   (w) && !IsKilledByBranch(io.core.brupdate, ldq_retry_e.bits.uop)))
+  val s1_sta_retry      = widthMap(w => RegNext(will_fire_sta_retry    (w) && !IsKilledByBranch(io.core.brupdate, stq_retry_e.bits.uop)))
+  val s1_store_commit   = RegNext(will_fire_store_commit)
+  val s1_load_wakeup    = widthMap(w => RegNext(will_fire_load_wakeup  (w) && !IsKilledByBranch(io.core.brupdate, ldq_wakeup_e.bits.uop)))
+  val s1_hella_incoming = RegNext(will_fire_hella_incoming)
+  val s1_hella_wakeup   = RegNext(will_fire_hella_wakeup)
 
   assert(!(hella_state =/= h_ready && hella_req.cmd === rocket.M_SFENCE),
     "SFENCE through hella interface not supported")
 
-  val exe_tlb_uop = widthMap(w =>
+  val exe_tlb_uop = RegNext(widthMap(w =>
                     Mux(will_fire_load_incoming (w) ||
                         will_fire_stad_incoming (w) ||
                         will_fire_sta_incoming  (w) ||
@@ -632,26 +652,26 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                     Mux(will_fire_load_retry    (w)  , ldq_retry_e.bits.uop,
                     Mux(will_fire_sta_retry     (w)  , stq_retry_e.bits.uop,
                     Mux(will_fire_hella_incoming(w)  , NullMicroOp,
-                                                       NullMicroOp)))))
+                                                       NullMicroOp))))))
 
-  val exe_tlb_vaddr = widthMap(w =>
-                    Mux(will_fire_load_incoming (w) ||
-                        will_fire_stad_incoming (w) ||
-                        will_fire_sta_incoming  (w)  , exe_req(w).bits.addr,
-                    Mux(will_fire_sfence        (w)  , exe_req(w).bits.sfence.bits.addr,
-                    Mux(will_fire_load_retry    (w)  , ldq_retry_e.bits.addr.bits,
-                    Mux(will_fire_sta_retry     (w)  , stq_retry_e.bits.addr.bits,
-                    Mux(will_fire_hella_incoming(w)  , hella_req.addr,
-                                                       0.U))))))
+  val exe_tlb_vaddr = RegNext(widthMap(w =>
+                      Mux(will_fire_load_incoming (w) ||
+                          will_fire_stad_incoming (w) ||
+                          will_fire_sta_incoming  (w)  , exe_req(w).bits.addr,
+                      Mux(will_fire_sfence        (w)  , exe_req(w).bits.sfence.bits.addr,
+                      Mux(will_fire_load_retry    (w)  , ldq_retry_e.bits.addr.bits,
+                      Mux(will_fire_sta_retry     (w)  , stq_retry_e.bits.addr.bits,
+                      Mux(will_fire_hella_incoming(w)  , hella_req.addr,
+                                                         0.U)))))))
 
   val exe_sfence = WireInit((0.U).asTypeOf(Valid(new rocket.SFenceReq)))
   for (w <- 0 until memWidth) {
     when (will_fire_sfence(w)) {
-      exe_sfence := exe_req(w).bits.sfence
+      exe_sfence := RegNext(exe_req(w).bits.sfence)
     }
   }
 
-  val exe_size   = widthMap(w =>
+  val exe_size   = RegNext(widthMap(w =>
                    Mux(will_fire_load_incoming (w) ||
                        will_fire_stad_incoming (w) ||
                        will_fire_sta_incoming  (w) ||
@@ -659,8 +679,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                        will_fire_load_retry    (w) ||
                        will_fire_sta_retry     (w)  , exe_tlb_uop(w).mem_size,
                    Mux(will_fire_hella_incoming(w)  , hella_req.size,
-                                                      0.U)))
-  val exe_cmd    = widthMap(w =>
+                                                      0.U))))
+  val exe_cmd    = RegNext(widthMap(w =>
                    Mux(will_fire_load_incoming (w) ||
                        will_fire_stad_incoming (w) ||
                        will_fire_sta_incoming  (w) ||
@@ -668,14 +688,14 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                        will_fire_load_retry    (w) ||
                        will_fire_sta_retry     (w)  , exe_tlb_uop(w).mem_cmd,
                    Mux(will_fire_hella_incoming(w)  , hella_req.cmd,
-                                                      0.U)))
+                                                      0.U))))
 
-  val exe_passthr= widthMap(w =>
-                   Mux(will_fire_hella_incoming(w)  , hella_req.phys,
-                                                      false.B))
-  val exe_kill   = widthMap(w =>
-                   Mux(will_fire_hella_incoming(w)  , io.hellacache.s1_kill,
-                                                      false.B))
+  val exe_passthr = RegNext(widthMap(w =>
+                    Mux(will_fire_hella_incoming(w), hella_req.phys,
+                                                     false.B)))
+  val exe_kill    = widthMap(w =>
+                    Mux(       s1_hella_incoming(w), io.hellacache.s1_kill,
+                                                     false.B))
   for (w <- 0 until memWidth) {
     dtlb.io.req(w).valid            := exe_tlb_valid(w)
     dtlb.io.req(w).bits.vaddr       := exe_tlb_vaddr(w)
@@ -794,7 +814,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
     io.dmem.s1_kill(w) := false.B
 
-    when (will_fire_load_incoming(w)) {
+    when (s1_load_incoming(w)) {
       // First pipe's request will be killed by the replay anyways,
       // but need to check for writeback collisions on the other pipes.
       dmem_req(w).valid      := !exe_tlb_miss(w) && !exe_tlb_uncacheable(w) &&
@@ -805,7 +825,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       ldq(ldq_incoming_idx(w)).bits.executed := dmem_req_fire(w)
       assert(!ldq_incoming_e(w).bits.executed)
 
-    } .elsewhen (will_fire_load_retry(w)) {
+    } .elsewhen (s1_load_retry(w)) {
       dmem_req(w).valid      := !exe_tlb_miss(w) && !exe_tlb_uncacheable(w) &&
                                 !((w > 0).B && (exe_tlb_uop(w).pdst_col & load_wb_cols).orR)
       dmem_req(w).bits.addr  := exe_tlb_paddr(w)
@@ -813,21 +833,21 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
       ldq(RegNext(ldq_retry_idx)).bits.executed := dmem_req_fire(w)
       assert(!ldq_retry_e.bits.executed)
-    } .elsewhen (will_fire_store_commit(w)) {
-      dmem_req(w).valid         := true.B
-      dmem_req(w).bits.addr     := stq_commit_e.bits.addr.bits
-      dmem_req(w).bits.data     := (new freechips.rocketchip.rocket.StoreGen(
-                                    stq_commit_e.bits.uop.mem_size, 0.U,
-                                    stq_commit_e.bits.data.bits,
+    } .elsewhen (s1_store_commit(w)) {
+      dmem_req(w).valid      := true.B
+      dmem_req(w).bits.addr  := RegNext(stq_commit_e.bits.addr.bits)
+      dmem_req(w).bits.data  := (new freechips.rocketchip.rocket.StoreGen(
+                                    RegNext(stq_commit_e.bits.uop.mem_size), 0.U,
+                                    RegNext(stq_commit_e.bits.data.bits),
                                     coreDataBytes)).data
-      dmem_req(w).bits.uop      := stq_commit_e.bits.uop
+      dmem_req(w).bits.uop   := RegNext(stq_commit_e.bits.uop)
 
-      stq_execute_head          := Mux(dmem_req_fire(w),
-                                       WrapInc(stq_execute_head, numStqEntries),
-                                       stq_execute_head)
+      stq_execute_head       := Mux(dmem_req_fire(w),
+                                    WrapInc(stq_execute_head, numStqEntries),
+                                    stq_execute_head)
 
       stq(stq_execute_head).bits.succeeded := false.B
-    } .elsewhen (will_fire_load_wakeup(w)) {
+    } .elsewhen (s1_load_wakeup(w)) {
       dmem_req(w).valid      := !((w > 0).B && (ldq_wakeup_e.bits.uop.pdst_col & load_wb_cols).orR)
       dmem_req(w).bits.addr  := ldq_wakeup_e.bits.addr.bits
       dmem_req(w).bits.uop   := ldq_wakeup_e.bits.uop
@@ -835,7 +855,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       ldq(RegNext(ldq_wakeup_idx)).bits.executed := dmem_req_fire(w)
 
       assert(!ldq_wakeup_e.bits.executed && !ldq_wakeup_e.bits.addr_is_virtual)
-    } .elsewhen (will_fire_hella_incoming(w)) {
+    } .elsewhen (s1_hella_incoming(w)) {
       assert(hella_state === h_s1)
 
       dmem_req(w).valid               := !io.hellacache.s1_kill && (!exe_tlb_miss(w) || hella_req.phys)
@@ -851,7 +871,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
       hella_paddr := exe_tlb_paddr(w)
     }
-      .elsewhen (will_fire_hella_wakeup(w))
+      .elsewhen (s1_hella_wakeup(w))
     {
       assert(hella_state === h_replay)
       dmem_req(w).valid               := true.B
@@ -868,22 +888,22 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
     //-------------------------------------------------------------
     // Write Addr into the LAQ/SAQ
-    when (will_fire_load_incoming(w) || will_fire_load_retry(w))
+    when (s1_load_incoming(w) || s1_load_retry(w))
     {
-      val ldq_idx = Mux(will_fire_load_incoming(w), ldq_incoming_idx(w), RegNext(ldq_retry_idx))
+      val ldq_idx = Mux(s1_load_incoming(w), ldq_incoming_idx(w), RegNext(ldq_retry_idx))
       ldq(ldq_idx).bits.addr.valid          := true.B
       ldq(ldq_idx).bits.addr.bits           := Mux(exe_tlb_miss(w), exe_tlb_vaddr(w), exe_tlb_paddr(w))
       ldq(ldq_idx).bits.uop.pdst            := exe_tlb_uop(w).pdst
       ldq(ldq_idx).bits.addr_is_virtual     := exe_tlb_miss(w)
       ldq(ldq_idx).bits.addr_is_uncacheable := exe_tlb_uncacheable(w) && !exe_tlb_miss(w)
 
-      assert(!(will_fire_load_incoming(w) && ldq_incoming_e(w).bits.addr.valid),
+      assert(!(s1_load_incoming(w) && ldq_incoming_e(w).bits.addr.valid),
         "[lsu] Incoming load is overwriting a valid address")
     }
 
-    when (will_fire_sta_incoming(w) || will_fire_stad_incoming(w) || will_fire_sta_retry(w))
+    when (s1_sta_incoming(w) || s1_stad_incoming(w) || s1_sta_retry(w))
     {
-      val stq_idx = Mux(will_fire_sta_incoming(w) || will_fire_stad_incoming(w),
+      val stq_idx = Mux(s1_sta_incoming(w) || s1_stad_incoming(w),
         stq_incoming_idx(w), RegNext(stq_retry_idx))
 
       stq(stq_idx).bits.addr.valid := !pf_st(w) // Prevent AMOs from executing!
@@ -891,7 +911,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       stq(stq_idx).bits.uop.pdst   := exe_tlb_uop(w).pdst // Needed for AMOs
       stq(stq_idx).bits.addr_is_virtual := exe_tlb_miss(w)
 
-      assert(!(will_fire_sta_incoming(w) && stq_incoming_e(w).bits.addr.valid),
+      assert(!(s1_sta_incoming(w) && stq_incoming_e(w).bits.addr.valid),
         "[lsu] Incoming store is overwriting a valid address")
 
     }
@@ -899,15 +919,15 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     //-------------------------------------------------------------
     // Write data into the STQ
     if (w == 0)
-      io.core.fp_stdata.ready := !will_fire_std_incoming(w) && !will_fire_stad_incoming(w)
+      io.core.fp_stdata.ready := !s1_std_incoming(w) && !s1_stad_incoming(w)
     val fp_stdata_fire = io.core.fp_stdata.fire() && (w == 0).B
-    when (will_fire_std_incoming(w) || will_fire_stad_incoming(w) || fp_stdata_fire)
+    when (s1_std_incoming(w) || s1_stad_incoming(w) || fp_stdata_fire)
     {
-      val sidx = Mux(will_fire_std_incoming(w) || will_fire_stad_incoming(w),
+      val sidx = Mux(s1_std_incoming(w) || s1_stad_incoming(w),
         stq_incoming_idx(w),
         io.core.fp_stdata.bits.uop.stq_idx)
       stq(sidx).bits.data.valid := true.B
-      stq(sidx).bits.data.bits  := Mux(will_fire_std_incoming(w) || will_fire_stad_incoming(w),
+      stq(sidx).bits.data.bits  := Mux(s1_std_incoming(w) || s1_stad_incoming(w),
         exe_req(w).bits.data,
         io.core.fp_stdata.bits.data)
 
@@ -924,48 +944,45 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
-  // Cache Access Cycle (Mem)
+  // Cache Access Cycle (S2)
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // Note the DCache may not have accepted our request
 
-  val exe_req_killed = widthMap(w => IsKilledByBranch(io.core.brupdate, exe_req(w).bits.uop))
-  val stdf_killed = IsKilledByBranch(io.core.brupdate, io.core.fp_stdata.bits.uop)
+  val s1_req_killed = widthMap(w => IsKilledByBranch(io.core.brupdate, RegNext(UpdateBrMask(io.core.brupdate, exe_req(w).bits.uop))))
+  val stdf_killed   = IsKilledByBranch(io.core.brupdate, io.core.fp_stdata.bits.uop)
 
-  val fired_load_incoming  = widthMap(w => RegNext(will_fire_load_incoming(w) && !exe_req_killed(w)))
-  val fired_stad_incoming  = widthMap(w => RegNext(will_fire_stad_incoming(w) && !exe_req_killed(w)))
-  val fired_sta_incoming   = widthMap(w => RegNext(will_fire_sta_incoming (w) && !exe_req_killed(w)))
-  val fired_std_incoming   = widthMap(w => RegNext(will_fire_std_incoming (w) && !exe_req_killed(w)))
-  val fired_stdf_incoming  = RegNext(will_fire_stdf_incoming && !stdf_killed)
-  val fired_sfence         = RegNext(will_fire_sfence)
-  val fired_release        = RegNext(will_fire_release)
-  val fired_load_retry     = widthMap(w => RegNext(will_fire_load_retry   (w) && !IsKilledByBranch(io.core.brupdate, ldq_retry_e.bits.uop)))
-  val fired_sta_retry      = widthMap(w => RegNext(will_fire_sta_retry    (w) && !IsKilledByBranch(io.core.brupdate, stq_retry_e.bits.uop)))
-  val fired_store_commit   = RegNext(will_fire_store_commit)
-  val fired_load_wakeup    = widthMap(w => RegNext(will_fire_load_wakeup  (w) && !IsKilledByBranch(io.core.brupdate, ldq_wakeup_e.bits.uop)))
-  val fired_hella_incoming = RegNext(will_fire_hella_incoming)
-  val fired_hella_wakeup   = RegNext(will_fire_hella_wakeup)
+  val s2_load_incoming  = widthMap(w => RegNext(s1_load_incoming(w) && !s1_req_killed(w)))
+  val s2_stad_incoming  = widthMap(w => RegNext(s1_stad_incoming(w) && !s1_req_killed(w)))
+  val s2_sta_incoming   = widthMap(w => RegNext(s1_sta_incoming (w) && !s1_req_killed(w)))
+  val s2_std_incoming   = widthMap(w => RegNext(s1_std_incoming (w) && !s1_req_killed(w)))
+  val s2_stdf_incoming  = RegNext(will_fire_stdf_incoming && !stdf_killed)
+  val s2_sfence         = RegNext(s1_sfence)
+  val s2_release        = RegNext(s1_release)
+  val s2_load_retry     = widthMap(w => RegNext(s1_load_retry (w) && !IsKilledByBranch(io.core.brupdate, ldq_retry_e.bits.uop)))
+  val s2_sta_retry      = widthMap(w => RegNext(s1_sta_retry  (w) && !IsKilledByBranch(io.core.brupdate, stq_retry_e.bits.uop)))
+  val s2_store_commit   = RegNext(will_fire_store_commit)
+  val s2_load_wakeup    = widthMap(w => RegNext(s1_load_wakeup(w) && !IsKilledByBranch(io.core.brupdate, ldq_wakeup_e.bits.uop)))
+  val s2_hella_incoming = RegNext(will_fire_hella_incoming)
+  val s2_hella_wakeup   = RegNext(will_fire_hella_wakeup)
 
-  val mem_incoming_uop     = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, exe_req(w).bits.uop)))
-  val mem_ldq_incoming_e   = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, ldq_incoming_e(w))))
-  val mem_stq_incoming_e   = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, stq_incoming_e(w))))
-  val mem_ldq_wakeup_e     = RegNext(UpdateBrMask(io.core.brupdate, ldq_wakeup_e))
-  val mem_ldq_retry_e      = RegNext(UpdateBrMask(io.core.brupdate, ldq_retry_e))
-  val mem_stq_retry_e      = RegNext(UpdateBrMask(io.core.brupdate, stq_retry_e))
-  val mem_ldq_e            = widthMap(w =>
-                             Mux(fired_load_incoming(w), mem_ldq_incoming_e(w),
-                             Mux(fired_load_retry   (w), mem_ldq_retry_e,
-                             Mux(fired_load_wakeup  (w), mem_ldq_wakeup_e, (0.U).asTypeOf(Valid(new LDQEntry))))))
-  val mem_stq_e            = widthMap(w =>
-                             Mux(fired_stad_incoming(w) ||
-                                 fired_sta_incoming (w), mem_stq_incoming_e(w),
-                             Mux(fired_sta_retry    (w), mem_stq_retry_e, (0.U).asTypeOf(Valid(new STQEntry)))))
-  val mem_stdf_uop         = RegNext(UpdateBrMask(io.core.brupdate, io.core.fp_stdata.bits.uop))
+  val s2_incoming_uop   = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, RegNext(UpdateBrMask(io.core.brupdate, exe_req(w).bits.uop)))))
+  val s2_stq_incoming_e = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, s1_stq_incoming_e(w))))
+  val s2_stq_retry_e    = RegNext(UpdateBrMask(io.core.brupdate, s1_stq_retry_e))
+  val s2_ldq_e          = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate,
+                          Mux(s1_load_incoming(w), s1_ldq_incoming_e(w),
+                          Mux(s1_load_retry   (w), s1_ldq_retry_e,
+                          Mux(s1_load_wakeup  (w), s1_ldq_wakeup_e, (0.U).asTypeOf(Valid(new LDQEntry))))))))
+  val s2_stq_e          = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate,
+                          Mux(s1_stad_incoming(w) ||
+                              s1_sta_incoming (w), s1_stq_incoming_e(w),
+                          Mux(s1_sta_retry    (w), s1_stq_retry_e, (0.U).asTypeOf(Valid(new STQEntry)))))))
+  val mem_stdf_uop      = RegNext(UpdateBrMask(io.core.brupdate, io.core.fp_stdata.bits.uop))
 
 
-  val mem_tlb_miss             = RegNext(exe_tlb_miss)
-  val mem_tlb_uncacheable      = RegNext(exe_tlb_uncacheable)
-  val mem_paddr                = RegNext(widthMap(w => dmem_req(w).bits.addr))
+  val mem_tlb_miss        = RegNext(exe_tlb_miss)
+  val mem_tlb_uncacheable = RegNext(exe_tlb_uncacheable)
+  val mem_paddr           = RegNext(widthMap(w => dmem_req(w).bits.addr))
 
   // Task 1: Clr ROB busy bit
   val clr_bsy_valid   = RegInit(widthMap(w => false.B))
@@ -978,41 +995,41 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     clr_bsy_brmask  (w) := 0.U
 
 
-    when (fired_stad_incoming(w)) {
-      clr_bsy_valid   (w) := mem_stq_incoming_e(w).valid           &&
+    when (s2_stad_incoming(w)) {
+      clr_bsy_valid   (w) := s2_stq_incoming_e(w).valid           &&
                             !mem_tlb_miss(w)                       &&
-                            !mem_stq_incoming_e(w).bits.uop.is_amo &&
-                            !IsKilledByBranch(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
-      clr_bsy_rob_idx (w) := mem_stq_incoming_e(w).bits.uop.rob_idx
-      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
-    } .elsewhen (fired_sta_incoming(w)) {
-      clr_bsy_valid   (w) := mem_stq_incoming_e(w).valid            &&
-                             mem_stq_incoming_e(w).bits.data.valid  &&
+                            !s2_stq_incoming_e(w).bits.uop.is_amo &&
+                            !IsKilledByBranch(io.core.brupdate, s2_stq_incoming_e(w).bits.uop)
+      clr_bsy_rob_idx (w) := s2_stq_incoming_e(w).bits.uop.rob_idx
+      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brupdate, s2_stq_incoming_e(w).bits.uop)
+    } .elsewhen (s2_sta_incoming(w)) {
+      clr_bsy_valid   (w) := s2_stq_incoming_e(w).valid            &&
+                             s2_stq_incoming_e(w).bits.data.valid  &&
                             !mem_tlb_miss(w)                        &&
-                            !mem_stq_incoming_e(w).bits.uop.is_amo  &&
-                            !IsKilledByBranch(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
-      clr_bsy_rob_idx (w) := mem_stq_incoming_e(w).bits.uop.rob_idx
-      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
-    } .elsewhen (fired_std_incoming(w)) {
-      clr_bsy_valid   (w) := mem_stq_incoming_e(w).valid                 &&
-                             mem_stq_incoming_e(w).bits.addr.valid       &&
-                            !mem_stq_incoming_e(w).bits.addr_is_virtual  &&
-                            !mem_stq_incoming_e(w).bits.uop.is_amo       &&
-                            !IsKilledByBranch(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
-      clr_bsy_rob_idx (w) := mem_stq_incoming_e(w).bits.uop.rob_idx
-      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
-    } .elsewhen (fired_sfence(w)) {
+                            !s2_stq_incoming_e(w).bits.uop.is_amo  &&
+                            !IsKilledByBranch(io.core.brupdate, s2_stq_incoming_e(w).bits.uop)
+      clr_bsy_rob_idx (w) := s2_stq_incoming_e(w).bits.uop.rob_idx
+      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brupdate, s2_stq_incoming_e(w).bits.uop)
+    } .elsewhen (s2_std_incoming(w)) {
+      clr_bsy_valid   (w) := s2_stq_incoming_e(w).valid                 &&
+                             s2_stq_incoming_e(w).bits.addr.valid       &&
+                            !s2_stq_incoming_e(w).bits.addr_is_virtual  &&
+                            !s2_stq_incoming_e(w).bits.uop.is_amo       &&
+                            !IsKilledByBranch(io.core.brupdate, s2_stq_incoming_e(w).bits.uop)
+      clr_bsy_rob_idx (w) := s2_stq_incoming_e(w).bits.uop.rob_idx
+      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brupdate, s2_stq_incoming_e(w).bits.uop)
+    } .elsewhen (s2_sfence(w)) {
       clr_bsy_valid   (w) := (w == 0).B // SFence proceeds down all paths, only allow one to clr the rob
-      clr_bsy_rob_idx (w) := mem_incoming_uop(w).rob_idx
-      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brupdate, mem_incoming_uop(w))
-    } .elsewhen (fired_sta_retry(w)) {
-      clr_bsy_valid   (w) := mem_stq_retry_e.valid            &&
-                             mem_stq_retry_e.bits.data.valid  &&
+      clr_bsy_rob_idx (w) := s2_incoming_uop(w).rob_idx
+      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brupdate, s2_incoming_uop(w))
+    } .elsewhen (s2_sta_retry(w)) {
+      clr_bsy_valid   (w) := s2_stq_retry_e.valid            &&
+                             s2_stq_retry_e.bits.data.valid  &&
                             !mem_tlb_miss(w)                  &&
-                            !mem_stq_retry_e.bits.uop.is_amo  &&
-                            !IsKilledByBranch(io.core.brupdate, mem_stq_retry_e.bits.uop)
-      clr_bsy_rob_idx (w) := mem_stq_retry_e.bits.uop.rob_idx
-      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brupdate, mem_stq_retry_e.bits.uop)
+                            !s2_stq_retry_e.bits.uop.is_amo  &&
+                            !IsKilledByBranch(io.core.brupdate, s2_stq_retry_e.bits.uop)
+      clr_bsy_rob_idx (w) := s2_stq_retry_e.bits.uop.rob_idx
+      clr_bsy_brmask  (w) := GetNewBrMask(io.core.brupdate, s2_stq_retry_e.bits.uop)
     }
 
     io.core.clr_bsy(w).valid := clr_bsy_valid(w) &&
@@ -1027,7 +1044,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   stdf_clr_bsy_valid   := false.B
   stdf_clr_bsy_rob_idx := 0.U
   stdf_clr_bsy_brmask  := 0.U
-  when (fired_stdf_incoming) {
+  when (s2_stdf_incoming) {
     val s_idx = mem_stdf_uop.stq_idx
     stdf_clr_bsy_valid   := stq(s_idx).valid                 &&
                             stq(s_idx).bits.addr.valid       &&
@@ -1052,35 +1069,35 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // We have the opportunity to kill a request we sent last cycle. Use it wisely!
 
   // We translated a store last cycle
-  val do_st_search = widthMap(w => (fired_stad_incoming(w) || fired_sta_incoming(w) || fired_sta_retry(w)) && !mem_tlb_miss(w))
+  val do_st_search = widthMap(w => (s2_stad_incoming(w) || s2_sta_incoming(w) || s2_sta_retry(w)) && !mem_tlb_miss(w))
   // We translated a load last cycle
-  val do_ld_search = widthMap(w => ((fired_load_incoming(w) || fired_load_retry(w)) && !mem_tlb_miss(w)) || fired_load_wakeup(w))
+  val do_ld_search = widthMap(w => ((s2_load_incoming(w) || s2_load_retry(w)) && !mem_tlb_miss(w)) || s2_load_wakeup(w))
   // We are making a local line visible to other harts
-  val do_release_search = widthMap(w => fired_release(w))
+  val do_release_search = widthMap(w => s2_release(w))
 
   // Store addrs don't go to memory yet, get it from the TLB response
   // Load wakeups don't go through TLB, get it through memory
   // Load incoming and load retries go through both
 
-  val lcam_addr  = widthMap(w => Mux(fired_stad_incoming(w) || fired_sta_incoming(w) || fired_sta_retry(w),
+  val lcam_addr  = widthMap(w => Mux(s2_stad_incoming(w) || s2_sta_incoming(w) || s2_sta_retry(w),
                                      RegNext(exe_tlb_paddr(w)), mem_paddr(w)))
-  val lcam_uop   = widthMap(w => Mux(do_st_search(w), mem_stq_e(w).bits.uop,
-                                 Mux(do_ld_search(w), mem_ldq_e(w).bits.uop, NullMicroOp)))
+  val lcam_uop   = widthMap(w => Mux(do_st_search(w), s2_stq_e(w).bits.uop,
+                                 Mux(do_ld_search(w), s2_ldq_e(w).bits.uop, NullMicroOp)))
 
   val lcam_mask  = widthMap(w => GenByteMask(lcam_addr(w), lcam_uop(w).mem_size))
-  val lcam_st_dep_mask = widthMap(w => mem_ldq_e(w).bits.st_dep_mask)
-  val lcam_is_release = widthMap(w => fired_release(w))
+  val lcam_st_dep_mask = widthMap(w => s2_ldq_e(w).bits.st_dep_mask)
+  val lcam_is_release = widthMap(w => s2_release(w))
   val lcam_ldq_idx  = widthMap(w =>
-                      Mux(fired_load_incoming(w), mem_incoming_uop(w).ldq_idx,
-                      Mux(fired_load_wakeup  (w), RegNext(RegNext(ldq_wakeup_idx)),
-                      Mux(fired_load_retry   (w), RegNext(RegNext(ldq_retry_idx )), 0.U))))
+                      Mux(s2_load_incoming(w), s2_incoming_uop(w).ldq_idx,
+                      Mux(s2_load_wakeup  (w), RegNext(RegNext(ldq_wakeup_idx)),
+                      Mux(s2_load_retry   (w), RegNext(RegNext(ldq_retry_idx )), 0.U))))
   val lcam_stq_idx  = widthMap(w =>
-                      Mux(fired_stad_incoming(w) ||
-                          fired_sta_incoming (w), mem_incoming_uop(w).stq_idx,
-                      Mux(fired_sta_retry    (w), RegNext(RegNext(stq_retry_idx )), 0.U)))
+                      Mux(s2_stad_incoming(w) ||
+                          s2_sta_incoming (w), s2_incoming_uop(w).stq_idx,
+                      Mux(s2_sta_retry    (w), RegNext(RegNext(stq_retry_idx )), 0.U)))
 
   val can_forward = WireInit(widthMap(w =>
-    Mux(fired_load_incoming(w) || fired_load_retry(w), !mem_tlb_uncacheable(w),
+    Mux(s2_load_incoming(w) || s2_load_retry(w), !mem_tlb_uncacheable(w),
       !ldq(lcam_ldq_idx(w)).bits.addr_is_uncacheable)))
 
   // Mask of stores which we conflict on address with
@@ -1207,7 +1224,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   //         Delay this a cycle to avoid going ahead of the exception broadcast
   //         The unsafe bit is cleared on the first translation, so no need to fire for load wakeups
   for (w <- 0 until memWidth) {
-    io.core.clr_unsafe(w).valid := RegNext((do_st_search(w) || do_ld_search(w)) && !fired_load_wakeup(w))
+    io.core.clr_unsafe(w).valid := RegNext((do_st_search(w) || do_ld_search(w)) && !s2_load_wakeup(w))
     io.core.clr_unsafe(w).bits  := RegNext(lcam_uop(w).rob_idx)
   }
 
@@ -1250,11 +1267,11 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   // Task 4: Speculatively wakeup loads 1 cycle before they come back
   for (w <- 0 until memWidth) {
-    io.core.spec_load_wakeups(w).valid := enableFastLoadUse.B          &&
-                                          fired_load_incoming(w)       &&
-                                          !mem_incoming_uop(w).fp_val  &&
-                                          mem_incoming_uop(w).ldst_val
-    io.core.spec_load_wakeups(w).bits  := mem_incoming_uop(w).pdst
+    io.core.spec_load_wakeups(w).valid := enableFastLoadUse.B         &&
+                                          s2_load_incoming(w)         &&
+                                          !s2_incoming_uop(w).fp_val &&
+                                          s2_incoming_uop(w).ldst_val
+    io.core.spec_load_wakeups(w).bits  := s2_incoming_uop(w).pdst
   }
   // TODO: Do this on retry? Wakeup?
 
@@ -1385,7 +1402,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   for (w <- 0 until memWidth) {
     io.core.spec_load_nacks(w) := RegNext(io.core.spec_load_wakeups(w).valid) &&
-      !(io.core.exe(w).iresp.valid && io.core.exe(w).iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop(w).ldq_idx))
+      !(io.core.exe(w).iresp.valid && io.core.exe(w).iresp.bits.uop.ldq_idx === RegNext(s2_incoming_uop(w).ldq_idx))
   }
 
   // Check for writeback collisions
