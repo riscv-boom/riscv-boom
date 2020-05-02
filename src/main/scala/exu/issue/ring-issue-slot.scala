@@ -211,7 +211,7 @@ class RingIssueSlot(implicit p: Parameters)
   //----------------------------------------------------------------------------------------------------
   // Request Logic
 
-  val can_request = (io.fu_avail & slot_uop.fu_code).orR
+  val can_request = true.B //(io.fu_avail & slot_uop.fu_code).orR
 
   when (state === s_valid_1) {
     io.request := p1 && p2 && can_request
