@@ -169,7 +169,7 @@ class WithRingBooms(n: Int, f: Int) extends Config((site, here, up) => {
       numStqEntries = 4*n,
       maxBrCount = 2*n,
       numFetchBufferEntries = 8*n,
-      ftq = FtqParameters(nEntries=50*n/f),
+      ftq = FtqParameters(nEntries=100/4),
       fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
     dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
                                nSets=64, nWays=2*n, nMSHRs=2, nRPQ=4, nTLBEntries=16)),
