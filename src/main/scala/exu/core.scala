@@ -359,7 +359,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
                                  RegNext(RegNext(csr.io.evec)),
                                  csr.io.evec)
     } .otherwise {
-      val flush_pc = (AlignPCToBoundary(io.ifu.get_pc(0).pc, icBlockBytes)
+      val flush_pc = (AlignPCToBoundary(io.ifu.get_pc(1).pc, icBlockBytes)
                       + RegNext(rob.io.flush.bits.pc_lob)
                       - Mux(RegNext(rob.io.flush.bits.edge_inst), 2.U, 0.U))
       val flush_pc_next = flush_pc + Mux(RegNext(rob.io.flush.bits.is_rvc), 2.U, 4.U)
@@ -369,7 +369,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     }
     io.ifu.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
   } .elsewhen (brupdate.b2.mispredict && !RegNext(rob.io.flush.valid)) {
-    val block_pc = AlignPCToBoundary(io.ifu.get_pc(1).pc, icBlockBytes)
+    val block_pc = AlignPCToBoundary(io.ifu.get_pc(2).pc, icBlockBytes)
     val uop_maybe_pc = block_pc | brupdate.b2.uop.pc_lob
     val npc = uop_maybe_pc + Mux(brupdate.b2.uop.is_rvc || brupdate.b2.uop.edge_inst, 2.U, 4.U)
     val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
@@ -384,7 +384,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     val use_same_ghist = (brupdate.b2.cfi_type === CFI_BR &&
                           !brupdate.b2.taken &&
                           bankAlign(block_pc) === bankAlign(npc))
-    val ftq_entry = io.ifu.get_pc(1).entry
+    val ftq_entry = io.ifu.get_pc(2).entry
     val cfi_idx = (brupdate.b2.uop.pc_lob ^
       Mux(ftq_entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
     val ftq_ghist = io.ifu.get_pc(1).ghist
@@ -394,7 +394,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       brupdate.b2.cfi_type === CFI_BR,
       cfi_idx,
       true.B,
-      io.ifu.get_pc(1).pc,
+      io.ifu.get_pc(2).pc,
       ftq_entry.cfi_is_call && ftq_entry.cfi_idx.bits === cfi_idx,
       ftq_entry.cfi_is_ret  && ftq_entry.cfi_idx.bits === cfi_idx)
 
@@ -466,36 +466,20 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // FTQ GetPC Port Arbitration
 
-  val jmp_pc_req   = Wire(Decoupled(UInt(ftqSz.W)))
-  val flush_pc_req = Wire(Decoupled(UInt(ftqSz.W)))
-
-  val ftq_arb = Module(new Arbiter(UInt(ftqSz.W), 3))
-
-  // Order by the oldest. Flushes come from the oldest instructions in pipe
-  // Decoding exceptions come from youngest
-  ftq_arb.io.in(0) <> flush_pc_req
-  ftq_arb.io.in(1) <> jmp_pc_req
-
-  // Hookup FTQ
-  io.ifu.get_pc(0).ftq_idx := ftq_arb.io.out.bits
-  ftq_arb.io.out.ready  := true.B
-
   // Jump Unit Requests
   val iss_jmp = iss_uops zip iss_valids map { case (u,v) => u.fu_code === FU_JMP && v }
-  jmp_pc_req.valid                 := RegNext(iss_jmp.reduce(_||_))
-  jmp_pc_req.bits                  := RegNext(Mux1H(iss_jmp, iss_uops.map(_.ftq_idx)))
-
+  io.ifu.get_pc(0).ftq_idx         := RegNext(Mux1H(iss_jmp, iss_uops.map(_.ftq_idx)))
   exe_units.io.get_ftq_pc          := DontCare
   exe_units.io.get_ftq_pc.pc       := io.ifu.get_pc(0).pc
   exe_units.io.get_ftq_pc.entry    := io.ifu.get_pc(0).entry
   exe_units.io.get_ftq_pc.next_val := io.ifu.get_pc(0).next_val
   exe_units.io.get_ftq_pc.next_pc  := io.ifu.get_pc(0).next_pc
 
-  flush_pc_req.valid   := rob.io.flush.valid
-  flush_pc_req.bits    := rob.io.flush.bits.ftq_idx
+  // Flush requests
+  io.ifu.get_pc(1).ftq_idx := rob.io.flush.bits.ftq_idx
 
   // Mispredict requests (to get the correct target)
-  io.ifu.get_pc(1).ftq_idx := oldest_mispredict_ftq_idx
+  io.ifu.get_pc(2).ftq_idx := oldest_mispredict_ftq_idx
 
 
   //-------------------------------------------------------------
@@ -715,8 +699,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   // Dispatching exceptions need to give the rob a PC
   val dis_xcpts = dis_uops zip dis_valids map { case (u,v) => u.exception && v }
-  io.ifu.get_pc(2).ftq_idx := Mux1H(dis_xcpts, dis_uops).ftq_idx
-  rob.io.xcpt_fetch_pc := io.ifu.get_pc(2).pc
+  io.ifu.get_pc(3).ftq_idx := Mux1H(dis_xcpts, dis_uops).ftq_idx
+  rob.io.xcpt_fetch_pc := io.ifu.get_pc(3).pc
 
 
   //-------------------------------------------------------------
@@ -859,7 +843,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   csr.io.exception := RegNext(rob.io.com_xcpt.valid)
   // csr.io.pc used for setting EPC during exception or CSR.io.trace.
 
-  csr.io.pc        := (boom.util.AlignPCToBoundary(io.ifu.get_pc(0).com_pc, icBlockBytes)
+  csr.io.pc        := (boom.util.AlignPCToBoundary(io.ifu.get_pc(1).com_pc, icBlockBytes)
                      + RegNext(rob.io.com_xcpt.bits.pc_lob)
                      - Mux(RegNext(rob.io.com_xcpt.bits.edge_inst), 2.U, 0.U))
   // Cause not valid for for CALL or BREAKPOINTs (CSRFile will override it).
