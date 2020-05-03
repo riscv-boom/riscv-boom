@@ -110,7 +110,7 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     val deq = Flipped(Valid(UInt(idx_sz.W)))
 
     // Give PC info to BranchUnit.
-    val get_ftq_pc = Vec(3, new GetPCFromFtqIO)
+    val get_ftq_pc = Vec(4, new GetPCFromFtqIO)
 
     // Get PCs for debug tracing
     val get_pc_debug = Vec(coreWidth, new GetPCFromFtqIO)
@@ -271,9 +271,9 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
   // **** Core Read PCs ****
   //-------------------------------------------------------------
 
-  for (i <- 0 until 3) {
+  for (i <- 0 until 4) {
     val idx = io.get_ftq_pc(i).ftq_idx
-    if (i < 2) {
+    if (i < 3) {
       val next_idx = WrapInc(idx, num_entries)
       val next_is_enq = (next_idx === enq_ptr) && io.enq.fire()
       val next_pc = Mux(next_is_enq, io.enq.bits.pc, pcs(next_idx))
