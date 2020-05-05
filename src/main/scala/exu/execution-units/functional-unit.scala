@@ -54,29 +54,6 @@ object FUConstants
 }
 import FUConstants._
 
-/**
- * Class to tell the FUDecoders what units it needs to support
- *
- * @param alu support alu unit?
- * @param bru support br unit?
- * @param mem support mem unit?
- * @param muld support multiple div unit?
- * @param fpu support FP unit?
- * @param csr support csr writing unit?
- * @param fdiv support FP div unit?
- * @param ifpu support int to FP unit?
- */
-class SupportedFuncUnits(
-  val alu: Boolean  = false,
-  val jmp: Boolean  = false,
-  val mem: Boolean  = false,
-  val muld: Boolean = false,
-  val fpu: Boolean  = false,
-  val csr: Boolean  = false,
-  val fdiv: Boolean = false,
-  val ifpu: Boolean = false)
-{
-}
 
 
 /**

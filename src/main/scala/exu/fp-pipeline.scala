@@ -72,7 +72,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
                          ))
   val fregister_read = Module(new RegisterRead(
                          issue_unit.issueWidth,
-                         exe_units.withFilter(_.readsFrf).map(_.supportedFuncUnits),
+                         exe_units.withFilter(_.readsFrf).map(identity),
                          exe_units.numFrfReadPorts,
                          exe_units.withFilter(_.readsFrf).map(x => 3),
                          0, // No bypass for FP
@@ -119,7 +119,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     iss_uops(i) := issue_unit.io.iss_uops(i)
 
     var fu_types = exe_units(i).io.fu_types
-    if (exe_units(i).supportedFuncUnits.fdiv) {
+    if (exe_units(i).hasFdiv) {
       val fdiv_issued = iss_valids(i) && iss_uops(i).fu_code_is(FU_FDV)
       fu_types = fu_types & RegNext(~Mux(fdiv_issued, FU_FDV, 0.U))
     }

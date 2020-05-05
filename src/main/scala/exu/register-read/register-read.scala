@@ -24,16 +24,10 @@ import boom.util._
  * interfaces with the issue window on the enqueue side, and the execution
  * pipelines on the dequeue side.
  *
- * @param issueWidth total issue width from all issue queues
- * @param supportedUnitsArray seq of SupportedFuncUnits classes indicating what the functional units do
- * @param numTotalReadPorts number of read ports
- * @param numReadPortsArray execution units read port sequence
- * @param numTotalBypassPorts number of bypass ports out of the execution units
- * @param registerWidth size of register in bits
  */
 class RegisterRead(
   issueWidth: Int,
-  supportedUnitsArray: Seq[SupportedFuncUnits],
+  exe_units: Seq[ExecutionUnit],
   numTotalReadPorts: Int,
   numReadPortsArray: Seq[Int],
                         // each exe_unit must tell us how many max
@@ -77,7 +71,7 @@ class RegisterRead(
   // hook up inputs
 
   for (w <- 0 until issueWidth) {
-    val rrd_decode_unit = Module(new RegisterReadDecode(supportedUnitsArray(w)))
+    val rrd_decode_unit = Module(new RegisterReadDecode(exe_units(w)))
     rrd_decode_unit.io.iss_valid := io.iss_valids(w)
     rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
 

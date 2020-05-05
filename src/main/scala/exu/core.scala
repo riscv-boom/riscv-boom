@@ -132,7 +132,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                                                                    (if (usingRoCC) 1 else 0)))
   val iregister_read   = Module(new RegisterRead(
                            issue_units.map(_.issueWidth).sum,
-                           exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits),
+                           exe_units.withFilter(_.readsIrf).map(identity),
                            numIrfReadPorts,
                            exe_units.withFilter(_.readsIrf).map(x => 2),
                            exe_units.numTotalBypassPorts,
@@ -911,7 +911,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     var fu_types = exe_units(w).io.fu_types
     val exe_unit = exe_units(w)
     if (exe_unit.readsIrf) {
-      if (exe_unit.supportedFuncUnits.muld) {
+      if (exe_unit.hasMul || exe_unit.hasDiv) {
         // Supress just-issued divides from issuing back-to-back, since it's an iterative divider.
         // But it takes a cycle to get to the Exe stage, so it can't tell us it is busy yet.
         val idiv_issued = iss_valids(iss_idx) && iss_uops(iss_idx).fu_code_is(FU_DIV)

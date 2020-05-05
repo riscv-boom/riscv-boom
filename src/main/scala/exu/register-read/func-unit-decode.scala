@@ -302,9 +302,8 @@ object FDivRRdDecode extends RRdDecodeConstants
 /**
  * Register read decoder
  *
- * @param supportedUnits indicate what functional units are being used
  */
-class RegisterReadDecode(supportedUnits: SupportedFuncUnits)(implicit p: Parameters) extends BoomModule
+class RegisterReadDecode(exe_unit: ExecutionUnit)(implicit p: Parameters) extends BoomModule
   with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
   val io = IO(new BoomBundle {
@@ -320,13 +319,13 @@ class RegisterReadDecode(supportedUnits: SupportedFuncUnits)(implicit p: Paramet
   io.rrd_uop   := io.iss_uop
 
   var dec_table = AluRRdDecode.table
-  if (supportedUnits.jmp) dec_table ++= JmpRRdDecode.table
-  if (supportedUnits.mem) dec_table ++= MemRRdDecode.table
-  if (supportedUnits.muld) dec_table ++= MulDivRRdDecode.table
-  if (supportedUnits.csr) dec_table ++= CsrRRdDecode.table
-  if (supportedUnits.fpu) dec_table ++= FpuRRdDecode.table
-  if (supportedUnits.fdiv) dec_table ++= FDivRRdDecode.table
-  if (supportedUnits.ifpu) dec_table ++= IfmvRRdDecode.table
+  if (exe_unit.hasJmp) dec_table ++= JmpRRdDecode.table
+  if (exe_unit.hasMem) dec_table ++= MemRRdDecode.table
+  if (exe_unit.hasMul || exe_unit.hasDiv) dec_table ++= MulDivRRdDecode.table
+  if (exe_unit.hasCSR) dec_table ++= CsrRRdDecode.table
+  if (exe_unit.hasFpu) dec_table ++= FpuRRdDecode.table
+  if (exe_unit.hasFdiv) dec_table ++= FDivRRdDecode.table
+  if (exe_unit.hasIfpu) dec_table ++= IfmvRRdDecode.table
   val rrd_cs = Wire(new RRdCtrlSigs()).decode(io.rrd_uop.uopc, dec_table)
 
   // rrd_use_alupipe is unused

@@ -92,7 +92,7 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
 
 
   lazy val jmp_unit_idx = {
-    exe_units.indexWhere(_.hasJmpUnit)
+    exe_units.indexWhere(_.hasJmp)
   }
 
   lazy val rocc_unit = {
@@ -117,7 +117,7 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
     for (w <- 0 until int_width) {
       def is_nth(n: Int): Boolean = w == ((n) % int_width)
       val alu_exe_unit = Module(new ALUExeUnit(
-        hasJmpUnit     = is_nth(0),
+        hasJmp         = is_nth(0),
         hasCSR         = is_nth(1),
         hasRocc        = is_nth(1) && usingRoCC,
         hasMul         = is_nth(2),

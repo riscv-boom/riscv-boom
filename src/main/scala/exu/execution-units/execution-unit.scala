@@ -56,26 +56,6 @@ class FFlagsResp(implicit p: Parameters) extends BoomBundle
 /**
  * Abstract Top level Execution Unit that wraps lower level functional units to make a
  * multi function execution unit.
- *
- * @param readsIrf does this exe unit need a integer regfile port
- * @param writesIrf does this exe unit need a integer regfile port
- * @param readsFrf does this exe unit need a integer regfile port
- * @param writesFrf does this exe unit need a integer regfile port
- * @param writesLlIrf does this exe unit need a integer regfile port
- * @param writesLlFrf does this exe unit need a integer regfile port
- * @param numBypassStages number of bypass ports for the exe unit
- * @param dataWidth width of the data coming out of the exe unit
- * @param bypassable is the exe unit able to be bypassed
- * @param hasMem does the exe unit have a MemAddrCalcUnit
- * @param hasCSR does the exe unit write to the CSRFile
- * @param hasBrUnit does the exe unit have a branch unit
- * @param hasAlu does the exe unit have a alu
- * @param hasFpu does the exe unit have a fpu
- * @param hasMul does the exe unit have a multiplier
- * @param hasDiv does the exe unit have a divider
- * @param hasFdiv does the exe unit have a FP divider
- * @param hasIfpu does the exe unit have a int to FP unit
- * @param hasFpiu does the exe unit have a FP to int unit
  */
 abstract class ExecutionUnit(
   val readsIrf         : Boolean       = false,
@@ -90,7 +70,7 @@ abstract class ExecutionUnit(
   val alwaysBypassable : Boolean       = false,
   val hasMem           : Boolean       = false,
   val hasCSR           : Boolean       = false,
-  val hasJmpUnit       : Boolean       = false,
+  val hasJmp           : Boolean       = false,
   val hasAlu           : Boolean       = false,
   val hasFpu           : Boolean       = false,
   val hasMul           : Boolean       = false,
@@ -122,7 +102,7 @@ abstract class ExecutionUnit(
 
     // only used by the branch unit
     val brinfo     = if (hasAlu) Output(new BrResolutionInfo()) else null
-    val get_ftq_pc = if (hasJmpUnit) Flipped(new GetPCFromFtqIO()) else null
+    val get_ftq_pc = if (hasJmp) Flipped(new GetPCFromFtqIO()) else null
     val status     = Input(new freechips.rocketchip.rocket.MStatus())
 
     // only used by the fpu unit
@@ -165,17 +145,6 @@ abstract class ExecutionUnit(
   require (bypassable || !alwaysBypassable,
     "[execute] an execution unit must be bypassable if it is always bypassable")
 
-  def supportedFuncUnits = {
-    new SupportedFuncUnits(
-      alu = hasAlu,
-      jmp = hasJmpUnit,
-      mem = hasMem,
-      muld = hasMul || hasDiv,
-      fpu = hasFpu,
-      csr = hasCSR,
-      fdiv = hasFdiv,
-      ifpu = hasIfpu)
-  }
 }
 
 /**
@@ -191,7 +160,7 @@ abstract class ExecutionUnit(
  * @param hasMem does the exe unit have a MemAddrCalcUnit
  */
 class ALUExeUnit(
-  hasJmpUnit     : Boolean = false,
+  hasJmp         : Boolean = false,
   hasCSR         : Boolean = false,
   hasAlu         : Boolean = true,
   hasMul         : Boolean = false,
@@ -210,9 +179,9 @@ class ALUExeUnit(
       else if (hasAlu) 1 else 0,
     dataWidth        = p(tile.XLen) + 1,
     bypassable       = hasAlu,
-    alwaysBypassable = hasAlu && !(hasMem || hasJmpUnit || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
+    alwaysBypassable = hasAlu && !(hasMem || hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     hasCSR           = hasCSR,
-    hasJmpUnit       = hasJmpUnit,
+    hasJmp           = hasJmp    ,
     hasAlu           = hasAlu,
     hasMul           = hasMul,
     hasDiv           = hasDiv,
@@ -250,14 +219,14 @@ class ALUExeUnit(
                  Mux(hasMul.B, FU_MUL, 0.U) |
                  Mux(!div_busy && hasDiv.B, FU_DIV, 0.U) |
                  Mux(hasCSR.B, FU_CSR, 0.U) |
-                 Mux(hasJmpUnit.B, FU_JMP, 0.U) |
+                 Mux(hasJmp.B, FU_JMP, 0.U) |
                  Mux(!ifpu_busy && hasIfpu.B, FU_I2F, 0.U) |
                  Mux(hasMem.B, FU_MEM, 0.U)
 
   // ALU Unit -------------------------------
   var alu: ALUUnit = null
   if (hasAlu) {
-    alu = Module(new ALUUnit(isJmpUnit = hasJmpUnit,
+    alu = Module(new ALUUnit(isJmpUnit = hasJmp,
                              numStages = numBypassStages,
                              dataWidth = xLen))
     alu.io.req.valid := (
@@ -283,7 +252,7 @@ class ALUExeUnit(
 
     // branch unit is embedded inside the ALU
     io.brinfo := alu.io.brinfo
-    if (hasJmpUnit) {
+    if (hasJmp) {
       alu.io.get_ftq_pc <> io.get_ftq_pc
     }
   }
