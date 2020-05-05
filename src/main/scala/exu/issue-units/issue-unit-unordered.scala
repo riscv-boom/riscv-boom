@@ -98,50 +98,31 @@ class IssueUnitStatic(
   }
 
   // TODO can we use flatten to get an array of bools on issue_slot(*).request?
-  val lo_request_not_satisfied = Array.fill(numIssueSlots){Bool()}
-  val hi_request_not_satisfied = Array.fill(numIssueSlots){Bool()}
+  val request_not_satisfied = Array.fill(numIssueSlots){Bool()}
 
   for (i <- 0 until numIssueSlots) {
-    lo_request_not_satisfied(i) = issue_slots(i).request
-    hi_request_not_satisfied(i) = issue_slots(i).request_hp
+    request_not_satisfied(i) = issue_slots(i).request
     issue_slots(i).grant := false.B // default
   }
 
   for (w <- 0 until issueWidth) {
     var port_issued = false.B
 
-    // first look for high priority requests
-    for (i <- 0 until numIssueSlots) {
-      val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= 0.U
 
-      when (hi_request_not_satisfied(i) && can_allocate && !port_issued) {
+    // look for low priority requests
+    for (i <- 0 until numIssueSlots) {
+      val can_allocate = (issue_slots(i).out_uop.fu_code & io.fu_types(w)) =/= 0.U
+
+      when (request_not_satisfied(i) && can_allocate && !port_issued) {
         issue_slots(i).grant := true.B
         io.iss_valids(w)     := true.B
-        io.iss_uops(w)       := issue_slots(i).uop
+        io.iss_uops(w)       := issue_slots(i).iss_uop
       }
 
       val port_already_in_use     = port_issued
-      port_issued                 = (hi_request_not_satisfied(i) && can_allocate) | port_issued
-      // deassert lo_request if hi_request is 1.
-      lo_request_not_satisfied(i) = (lo_request_not_satisfied(i) && !hi_request_not_satisfied(i))
-      // if request is 0, stay 0. only stay 1 if request is true and can't allocate
-      hi_request_not_satisfied(i) = (hi_request_not_satisfied(i) && (!can_allocate || port_already_in_use))
-    }
-
-    // now look for low priority requests
-    for (i <- 0 until numIssueSlots) {
-      val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= 0.U
-
-      when (lo_request_not_satisfied(i) && can_allocate && !port_issued) {
-        issue_slots(i).grant := true.B
-        io.iss_valids(w)     := true.B
-        io.iss_uops(w)       := issue_slots(i).uop
-      }
-
-      val port_already_in_use     = port_issued
-      port_issued                 = (lo_request_not_satisfied(i) && can_allocate) | port_issued
+      port_issued                 = (request_not_satisfied(i) && can_allocate) | port_issued
       // if request is 0, stay 0. only stay 1 if request is true and can't allocate or port already in use
-      lo_request_not_satisfied(i) = (lo_request_not_satisfied(i) && (!can_allocate || port_already_in_use))
+      request_not_satisfied(i) = (request_not_satisfied(i) && (!can_allocate || port_already_in_use))
     }
   }
 }

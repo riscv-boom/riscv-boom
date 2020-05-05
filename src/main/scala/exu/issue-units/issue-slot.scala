@@ -34,7 +34,6 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
   val valid         = Output(Bool())
   val will_be_valid = Output(Bool()) // TODO code review, do we need this signal so explicitely?
   val request       = Output(Bool())
-  val request_hp    = Output(Bool())
   val grant         = Input(Bool())
 
   val brupdate        = Input(new BrUpdateInfo())
@@ -47,7 +46,7 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
   val spec_ld_wakeup = Flipped(Vec(memWidth, Valid(UInt(width=maxPregSz.W))))
   val in_uop        = Flipped(Valid(new MicroOp())) // if valid, this WILL overwrite an entry!
   val out_uop   = Output(new MicroOp()) // the updated slot uop; will be shifted upwards in a collasping queue.
-  val uop           = Output(new MicroOp()) // the current Slot's uop. Sent down the pipeline when issued.
+  val iss_uop   = Output(new MicroOp()) // the current Slot's uop. Sent down the pipeline when issued.
 
   val debug = {
     val result = new Bundle {
@@ -239,8 +238,6 @@ class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
   //-------------------------------------------------------------
   // Request Logic
   io.request := is_valid && p1 && p2 && p3 && ppred && !io.kill
-  val high_priority = slot_uop.is_br || slot_uop.is_jal || slot_uop.is_jalr
-  io.request_hp := io.request && high_priority
 
   when (state === s_valid_1) {
     io.request := p1 && p2 && p3 && ppred && !io.kill
@@ -252,9 +249,9 @@ class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
 
   //assign outputs
   io.valid := is_valid
-  io.uop := slot_uop
-  io.uop.iw_p1_poisoned := p1_poisoned
-  io.uop.iw_p2_poisoned := p2_poisoned
+  io.iss_uop := slot_uop
+  io.iss_uop.iw_p1_poisoned := p1_poisoned
+  io.iss_uop.iw_p2_poisoned := p2_poisoned
 
   // micro-op will vacate due to grant.
   val may_vacate = io.grant && ((state === s_valid_1) || (state === s_valid_2) && p1 && p2 && ppred)
@@ -278,11 +275,11 @@ class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
     when (p1 && p2 && ppred) {
       ; // send out the entire instruction as one uop
     } .elsewhen (p1 && ppred) {
-      io.uop.uopc := slot_uop.uopc
-      io.uop.lrs2_rtype := RT_X
+      io.iss_uop.uopc := slot_uop.uopc
+      io.iss_uop.lrs2_rtype := RT_X
     } .elsewhen (p2 && ppred) {
-      io.uop.uopc := uopSTD
-      io.uop.lrs1_rtype := RT_X
+      io.iss_uop.uopc := uopSTD
+      io.iss_uop.lrs1_rtype := RT_X
     }
   }
 

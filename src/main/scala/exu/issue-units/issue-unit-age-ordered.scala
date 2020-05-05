@@ -113,12 +113,12 @@ class IssueUnitCollapsing(
     var uop_issued = false.B
 
     for (w <- 0 until issueWidth) {
-      val can_allocate = (issue_slots(i).uop.fu_code & io.fu_types(w)) =/= 0.U
+      val can_allocate = (issue_slots(i).out_uop.fu_code & io.fu_types(w)) =/= 0.U
 
       when (requests(i) && !uop_issued && can_allocate && !port_issued(w)) {
         issue_slots(i).grant := true.B
         io.iss_valids(w) := true.B
-        io.iss_uops(w) := issue_slots(i).uop
+        io.iss_uops(w) := issue_slots(i).iss_uop
       }
       val was_port_issued_yet = port_issued(w)
       port_issued(w) = (requests(i) && !uop_issued && can_allocate) | port_issued(w)
