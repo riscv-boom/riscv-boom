@@ -279,7 +279,6 @@ trait ScalarOpConstants
     val cs = Wire(new boom.common.CtrlSignals())
     cs             := DontCare // Overridden in the following lines
     cs.br_type     := BR_N
-    cs.csr_cmd     := freechips.rocketchip.rocket.CSR.N
 
     uop.ctrl := cs
     uop

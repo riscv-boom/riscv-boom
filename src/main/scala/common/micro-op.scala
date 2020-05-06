@@ -104,6 +104,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val is_unique        = Bool()                      // only allow this instruction in the pipeline, wait for STQ to
                                                      // drain, clear fetcha fter it (tell ROB to un-ready until empty)
   val flush_on_commit  = Bool()                      // some instructions need to flush the pipeline behind them
+  val csr_cmd          = UInt(freechips.rocketchip.rocket.CSR.SZ.W)
+
 
   // Preditation
   def is_sfb_br        = is_br && is_sfb && enableSFBOpt.B // Does this write a predicate
@@ -167,7 +169,6 @@ class CtrlSignals extends Bundle()
   val imm_sel     = UInt(IS_X.getWidth.W)
   val op_fcn      = UInt(freechips.rocketchip.rocket.ALU.SZ_ALU_FN.W)
   val fcn_dw      = Bool()
-  val csr_cmd     = UInt(freechips.rocketchip.rocket.CSR.SZ.W)
 }
 
 

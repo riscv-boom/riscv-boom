@@ -991,7 +991,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val csr_exe_unit = exe_units.csr_unit
 
   // for critical path reasons, we aren't zero'ing this out if resp is not valid
-  val csr_rw_cmd = csr_exe_unit.io.iresp.bits.uop.ctrl.csr_cmd
+  val csr_rw_cmd = csr_exe_unit.io.iresp.bits.uop.csr_cmd
   val wb_wdata = csr_exe_unit.io.iresp.bits.data
 
   csr.io.rw.addr        := csr_exe_unit.io.iresp.bits.uop.csr_addr
@@ -1142,7 +1142,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
       def wbIsValid(rtype: UInt) =
         wbresp.valid && wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype === rtype
-      val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N
+      val wbReadsCSR = wbresp.bits.uop.csr_cmd =/= freechips.rocketchip.rocket.CSR.N
 
       iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
       iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
@@ -1227,7 +1227,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         f_cnt += 1
       }
       if (eu.hasCSR) {
-        rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
+        rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
           csr.io.rw.rdata,
           data)
       } else {

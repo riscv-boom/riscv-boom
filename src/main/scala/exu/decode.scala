@@ -11,7 +11,7 @@ import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.RVCExpander
-import freechips.rocketchip.rocket.{CSR,Causes}
+import freechips.rocketchip.rocket.{CSR, Causes, DecodeLogic}
 import freechips.rocketchip.util.{uintToBitPat,UIntIsOneOf}
 
 import FUConstants._
@@ -46,6 +46,8 @@ abstract trait DecodeConstants
 }
 // scalastyle:on
 
+
+
 /**
  * Decoded control signals
  */
@@ -75,7 +77,6 @@ class CtrlSigs extends Bundle
   val inst_unique     = Bool()
   val flush_on_commit = Bool()
   val csr_cmd         = UInt(freechips.rocketchip.rocket.CSR.SZ.W)
-  val rocc            = Bool()
 
   def decode(inst: UInt, table: Iterable[(BitPat, List[BitPat])]) = {
     val decoder = freechips.rocketchip.rocket.DecodeLogic(inst, XDecode.decode_default, table)
@@ -85,7 +86,6 @@ class CtrlSigs extends Bundle
           is_fence, is_fencei, mem_cmd, wakeup_delay, bypassable,
           is_br, is_sys_pc2epc, inst_unique, flush_on_commit, csr_cmd)
       sigs zip decoder map {case(s,d) => s := d}
-      rocc := false.B
       this
   }
 }
@@ -496,7 +496,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
 
   val id_illegal_insn = !cs_legal ||
     cs.fp_val && io.csr_decode.fp_illegal || // TODO check for illegal rm mode: (io.fpu.illegal_rm)
-    cs.rocc && io.csr_decode.rocc_illegal ||
+    cs.uopc === uopROCC && io.csr_decode.rocc_illegal ||
     cs.is_amo && !io.status.isa('a'-'a')  ||
     (cs.fp_val && !cs.fp_single) && !io.status.isa('d'-'a') ||
     csr_en && (io.csr_decode.read_illegal || !csr_ren && io.csr_decode.write_illegal) ||
@@ -527,10 +527,15 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   // x-registers placed in 0-31, f-registers placed in 32-63.
   // This allows us to straight-up compare register specifiers and not need to
   // verify the rtypes (e.g., bypassing in rename).
-  uop.ldst       := inst(RD_MSB,RD_LSB)
-  uop.lrs1       := inst(RS1_MSB,RS1_LSB)
-  uop.lrs2       := inst(RS2_MSB,RS2_LSB)
-  uop.lrs3       := inst(RS3_MSB,RS3_LSB)
+  val LDST = inst(RD_MSB,RD_LSB)
+  val LRS1 = inst(RS1_MSB,RS1_LSB)
+  val LRS2 = inst(RS2_MSB,RS2_LSB)
+  val LRS3 = inst(RS3_MSB,RS3_LSB)
+
+  uop.ldst       := LDST
+  uop.lrs1       := LRS1
+  uop.lrs2       := LRS2
+  uop.lrs3       := LRS3
 
   uop.ldst_val   := cs.dst_type =/= RT_X && !(uop.ldst === 0.U && uop.dst_rtype === RT_FIX)
   uop.dst_rtype  := cs.dst_type
@@ -542,11 +547,11 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   // SFB optimization
   when (uop.is_sfb_shadow && cs.rs2_type === RT_X) {
     uop.lrs2_rtype  := RT_FIX
-    uop.lrs2        := inst(RD_MSB,RD_LSB)
+    uop.lrs2        := LDST
     uop.ldst_is_rs1 := false.B
-  } .elsewhen (uop.is_sfb_shadow && cs.uopc === uopADD && inst(RS1_MSB,RS1_LSB) === 0.U) {
+  } .elsewhen (uop.is_sfb_shadow && cs.uopc === uopADD && LRS1 === 0.U) {
     uop.uopc        := uopMOV
-    uop.lrs1        := inst(RD_MSB, RD_LSB)
+    uop.lrs1        := LDST
     uop.ldst_is_rs1 := true.B
   }
   when (uop.is_sfb_br) {
@@ -558,7 +563,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   uop.fp_single  := cs.fp_single // TODO use this signal instead of the FPU decode's table signal?
 
   uop.mem_cmd    := cs.mem_cmd
-  uop.mem_size   := Mux(cs.mem_cmd.isOneOf(M_SFENCE, M_FLUSH_ALL), Cat(uop.lrs2 =/= 0.U, uop.lrs1 =/= 0.U), inst(13,12))
+  uop.mem_size   := Mux(cs.mem_cmd.isOneOf(M_SFENCE, M_FLUSH_ALL), Cat(LRS2 =/= 0.U, LRS1 =/= 0.U), inst(13,12))
   uop.mem_signed := !inst(14)
   uop.uses_ldq   := cs.uses_ldq
   uop.uses_stq   := cs.uses_stq
@@ -591,6 +596,13 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   //                       (uop.ldst === RA)
 
   //-------------------------------------------------------------
+
+
+  uop.csr_cmd := cs.csr_cmd
+  when ((cs.csr_cmd === CSR.S || cs.csr_cmd === CSR.C) && LRS1 === 0.U) {
+    uop.csr_cmd := CSR.R
+  }
+
 
   io.deq.uop := uop
 }
