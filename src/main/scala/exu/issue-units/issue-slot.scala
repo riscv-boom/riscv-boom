@@ -213,9 +213,7 @@ class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
   io.iss_uop.iw_p2_poisoned := p2_poisoned
 
   // micro-op will vacate due to grant.
-  val may_vacate = io.grant && valid && p1 && p2 && ppred
-  val squash_grant = io.ldspec_miss && (p1_poisoned || p2_poisoned)
-  io.will_be_valid := valid && (!may_vacate || squash_grant)
+  io.will_be_valid := next_valid
 
   io.valid              := valid
   io.out_uop            := slot_uop

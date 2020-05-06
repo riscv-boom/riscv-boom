@@ -280,9 +280,6 @@ trait ScalarOpConstants
     cs             := DontCare // Overridden in the following lines
     cs.br_type     := BR_N
     cs.csr_cmd     := freechips.rocketchip.rocket.CSR.N
-    cs.is_load     := false.B
-    cs.is_sta      := false.B
-    cs.is_std      := false.B
 
     uop.ctrl := cs
     uop

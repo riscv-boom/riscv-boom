@@ -335,9 +335,6 @@ class RegisterReadDecode(exe_unit: ExecutionUnit)(implicit p: Parameters) extend
   io.rrd_uop.ctrl.imm_sel := rrd_cs.imm_sel
   io.rrd_uop.ctrl.op_fcn  := rrd_cs.op_fcn.asUInt
   io.rrd_uop.ctrl.fcn_dw  := rrd_cs.fcn_dw.asBool
-  io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD
-  io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG
-  io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype === RT_FIX)
 
   when (io.rrd_uop.uopc === uopAMO_AG || (io.rrd_uop.uopc === uopLD && io.rrd_uop.mem_cmd === M_XLR)) {
     io.rrd_uop.imm_packed := 0.U

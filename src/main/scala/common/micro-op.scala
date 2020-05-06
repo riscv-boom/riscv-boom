@@ -168,9 +168,6 @@ class CtrlSignals extends Bundle()
   val op_fcn      = UInt(freechips.rocketchip.rocket.ALU.SZ_ALU_FN.W)
   val fcn_dw      = Bool()
   val csr_cmd     = UInt(freechips.rocketchip.rocket.CSR.SZ.W)
-  val is_load     = Bool()   // will invoke TLB address lookup
-  val is_sta      = Bool()   // will invoke TLB address lookup
-  val is_std      = Bool()
 }
 
 

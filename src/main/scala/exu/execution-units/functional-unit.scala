@@ -468,18 +468,6 @@ class MemAddrCalcUnit(implicit p: Parameters)
   io.resp.bits.addr := effective_address
   io.resp.bits.data := store_data
 
-  if (dataWidth > 63) {
-    assert (!(io.req.valid && io.req.bits.uop.ctrl.is_std &&
-      io.resp.bits.data(64).asBool === true.B), "65th bit set in MemAddrCalcUnit.")
-
-    assert (!(io.req.valid && io.req.bits.uop.ctrl.is_std && io.req.bits.uop.fp_val),
-      "FP store-data should now be going through a different unit.")
-  }
-
-  assert (!(io.req.bits.uop.fp_val && io.req.valid && io.req.bits.uop.uopc =/=
-          uopLD && io.req.bits.uop.uopc =/= uopSTA),
-          "[maddrcalc] assert we never get store data in here.")
-
   // Handle misaligned exceptions
   val size = io.req.bits.uop.mem_size
   val misaligned =
