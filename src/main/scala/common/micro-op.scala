@@ -169,7 +169,6 @@ class CtrlSignals extends Bundle()
   val op2_sel     = UInt(OP2_X.getWidth.W)
   val imm_sel     = UInt(IS_X.getWidth.W)
   val op_fcn      = UInt(freechips.rocketchip.rocket.ALU.SZ_ALU_FN.W)
-  val fcn_dw      = Bool()
 }
 
 
