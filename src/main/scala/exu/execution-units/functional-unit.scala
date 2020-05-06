@@ -580,7 +580,6 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
   ifpu.io.in.bits.in1 := io_req.rs1_data
   val out_double = Pipe(io.req.valid, !fp_ctrl.singleOut, intToFpLatency).bits
 
-//io.resp.bits.data              := box(ifpu.io.out.bits.data, !io.resp.bits.uop.fp_single)
   io.resp.bits.data              := box(ifpu.io.out.bits.data, out_double)
   io.resp.bits.fflags.valid      := ifpu.io.out.valid
   io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
