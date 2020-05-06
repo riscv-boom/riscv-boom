@@ -34,18 +34,6 @@ case class IssueParams(
   numEntries: Int = 8,
   iqType: BigInt
 )
-
-/**
- * Constants for knowing about the status of a MicroOp
- */
-trait IssueUnitConstants
-{
-  // invalid  : slot holds no valid uop.
-  // s_valid_1: slot holds a valid uop.
-  // s_valid_2: slot holds a store-like uop that may be broken into two micro-ops.
-  val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(3)
-}
-
 /**
  * What physical register is broadcasting its wakeup?
  * Is the physical register poisoned (aka, was it woken up by a speculative issue)?
@@ -86,18 +74,11 @@ class IssueUnitIO(
   val flush_pipeline   = Input(Bool())
   val ld_miss          = Input(Bool())
 
-  val event_empty      = Output(Bool()) // used by HPM events; is the issue unit empty?
-
   val tsc_reg          = Input(UInt(width=xLen.W))
 }
 
 /**
  * Abstract top level issue unit
- *
- * @param numIssueSlots depth of issue queue
- * @param issueWidth amoutn of operations that can be issued at once
- * @param numWakeupPorts number of wakeup ports for issue unit
- * @param iqType type of issue queue (mem, int, fp)
  */
 abstract class IssueUnit(
   val numIssueSlots: Int,
@@ -107,7 +88,6 @@ abstract class IssueUnit(
   val dispatchWidth: Int)
   (implicit p: Parameters)
   extends BoomModule
-  with IssueUnitConstants
 {
   val io = IO(new IssueUnitIO(issueWidth, numWakeupPorts, dispatchWidth))
 
@@ -120,15 +100,10 @@ abstract class IssueUnit(
     dis_uops(w) := io.dis_uops(w).bits
     dis_uops(w).iw_p1_poisoned := false.B
     dis_uops(w).iw_p2_poisoned := false.B
-    dis_uops(w).iw_state := s_valid_1
 
     if (iqType == IQT_MEM.litValue || iqType == IQT_INT.litValue) {
-      // For StoreAddrGen for Int, or AMOAddrGen, we go to addr gen state
-      when ((io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype === RT_FIX) ||
-             io.dis_uops(w).bits.uopc === uopAMO_AG) {
-        dis_uops(w).iw_state := s_valid_2
-        // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here
-      } .elsewhen (io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype =/= RT_FIX) {
+      // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here
+      when (io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype =/= RT_FIX) {
         dis_uops(w).lrs2_rtype := RT_X
         dis_uops(w).prs2_busy  := false.B
       }
@@ -162,10 +137,6 @@ abstract class IssueUnit(
     issue_slots(i).kill             := io.flush_pipeline
   }
 
-  io.event_empty := !(issue_slots.map(s => s.valid).reduce(_|_))
-
-  val count = PopCount(slots.map(_.io.valid))
-  dontTouch(count)
 
   //-------------------------------------------------------------
 
