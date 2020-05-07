@@ -253,10 +253,15 @@ trait ScalarOpConstants
   val uopWFI       = 105.U(UOPC_SZ.W) // pass uop down the CSR pipeline
   val uopERET      = 106.U(UOPC_SZ.W) // pass uop down the CSR pipeline, also is ERET
   val uopSFENCE    = 107.U(UOPC_SZ.W)
+  val uopSCALL     = 108.U(UOPC_SZ.W)
+  val uopSBREAK    = 109.U(UOPC_SZ.W)
+  val uopSRET      = 110.U(UOPC_SZ.W)
+  val uopMRET      = 111.U(UOPC_SZ.W)
+  val uopDRET      = 112.U(UOPC_SZ.W)
 
-  val uopROCC      = 108.U(UOPC_SZ.W)
+  val uopROCC      = 126.U(UOPC_SZ.W)
 
-  val uopMOV       = 109.U(UOPC_SZ.W) // conditional mov decoded from "add rd, x0, rs2"
+  val uopMOV       = 127.U(UOPC_SZ.W) // conditional mov decoded from "add rd, x0, rs2"
 
   // The Bubble Instruction (Machine generated NOP)
   // Insert (XOR x0,x0,x0) which is different from software compiler

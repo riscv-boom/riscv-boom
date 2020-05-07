@@ -333,12 +333,12 @@ class RegisterReadDecode(exe_unit: ExecutionUnit)(implicit p: Parameters) extend
   io.rrd_uop.ctrl.op1_sel := rrd_cs.op1_sel
   io.rrd_uop.ctrl.op2_sel := rrd_cs.op2_sel
   io.rrd_uop.ctrl.imm_sel := rrd_cs.imm_sel
-  io.rrd_uop.ctrl.op_fcn  := rrd_cs.op_fcn.asUInt
+//  io.rrd_uop.ctrl.op_fcn  := rrd_cs.op_fcn.asUInt
 //  io.rrd_uop.ctrl.fcn_dw  := rrd_cs.fcn_dw.asBool
 
-  when (io.rrd_uop.uopc === uopAMO_AG || (io.rrd_uop.uopc === uopLD && io.rrd_uop.mem_cmd === M_XLR)) {
-    io.rrd_uop.imm_packed := 0.U
-  }
+  // when (io.rrd_uop.uopc === uopAMO_AG || (io.rrd_uop.uopc === uopLD && io.rrd_uop.mem_cmd === M_XLR)) {
+  //   io.rrd_uop.imm_packed := 0.U
+  // }
 
   require (rrd_cs.op_fcn.getWidth == FN_SRA.getWidth)
 

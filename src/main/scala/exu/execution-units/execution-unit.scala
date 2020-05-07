@@ -233,7 +233,7 @@ class ALUExeUnit(
       io.req.valid &&
       (io.req.bits.uop.fu_code === FU_ALU ||
        io.req.bits.uop.fu_code === FU_JMP ||
-      (io.req.bits.uop.fu_code === FU_CSR && io.req.bits.uop.uopc =/= uopROCC)))
+      (io.req.bits.uop.fu_code === FU_CSR && !io.req.bits.uop.is_rocc)))
     //ROCC Rocc Commands are taken by the RoCC unit
 
     alu.io.req.bits.uop      := io.req.bits.uop
@@ -260,7 +260,7 @@ class ALUExeUnit(
   var rocc: RoCCShim = null
   if (hasRocc) {
     rocc = Module(new RoCCShim)
-    rocc.io.req.valid         := io.req.valid && io.req.bits.uop.uopc === uopROCC
+    rocc.io.req.valid         := io.req.valid && io.req.bits.uop.is_rocc
     rocc.io.req.bits          := DontCare
     rocc.io.req.bits.uop      := io.req.bits.uop
     rocc.io.req.bits.kill     := io.req.bits.kill
@@ -494,7 +494,7 @@ class FPUExeUnit(
       entries = dfmaLatency + 3)) // TODO being overly conservative
     queue.io.enq.valid       := (fpu.io.resp.valid &&
                                  fpu.io.resp.bits.uop.fu_code_is(FU_F2I) &&
-                                 fpu.io.resp.bits.uop.uopc =/= uopSTA) // STA means store data gen for floating point
+                                 !fpu.io.resp.bits.uop.uses_stq) // STA means store data gen for floating point
     queue.io.enq.bits.uop    := fpu.io.resp.bits.uop
     queue.io.enq.bits.data   := fpu.io.resp.bits.data
     queue.io.enq.bits.predicated := fpu.io.resp.bits.predicated
@@ -506,7 +506,7 @@ class FPUExeUnit(
 
     val fp_sdq = Module(new BranchKillableQueue(new ExeUnitResp(dataWidth),
       entries = 3)) // Lets us backpressure floating point store data
-    fp_sdq.io.enq.valid      := io.req.valid && io.req.bits.uop.uopc === uopSTA && !IsKilledByBranch(io.brupdate, io.req.bits.uop)
+    fp_sdq.io.enq.valid      := io.req.valid && io.req.bits.uop.uses_stq && !IsKilledByBranch(io.brupdate, io.req.bits.uop)
     fp_sdq.io.enq.bits.uop   := io.req.bits.uop
     fp_sdq.io.enq.bits.data  := ieee(io.req.bits.rs2_data)
     fp_sdq.io.enq.bits.predicated := false.B

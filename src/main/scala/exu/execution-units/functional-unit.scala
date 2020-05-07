@@ -296,7 +296,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
 
   alu.io.in1 := op1_data.asUInt
   alu.io.in2 := op2_data.asUInt
-  alu.io.fn  := uop.ctrl.op_fcn
+  alu.io.fn  := uop.fcn_op
   alu.io.dw  := uop.fcn_dw
 
 
@@ -416,7 +416,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   val r_pred = Reg(Vec(numStages, Bool()))
   val alu_out = Mux(io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data,
     Mux(io.req.bits.uop.ldst_is_rs1, io.req.bits.rs1_data, io.req.bits.rs2_data),
-    Mux(io.req.bits.uop.uopc === uopMOV, io.req.bits.rs2_data, alu.io.out))
+    Mux(io.req.bits.uop.is_mov, io.req.bits.rs2_data, alu.io.out))
   r_val (0) := io.req.valid
   r_data(0) := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
   r_pred(0) := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data
@@ -481,12 +481,13 @@ class MemAddrCalcUnit(implicit p: Parameters)
   bkptu.io.pc     := DontCare
   bkptu.io.ea     := effective_address
 
-  val ma_ld  = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
-  val ma_st  = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned
-  val dbg_bp = io.req.valid && ((io.req.bits.uop.uopc === uopLD  && bkptu.io.debug_ld) ||
-                                (io.req.bits.uop.uopc === uopSTA && bkptu.io.debug_st))
-  val bp     = io.req.valid && ((io.req.bits.uop.uopc === uopLD  && bkptu.io.xcpt_ld) ||
-                                (io.req.bits.uop.uopc === uopSTA && bkptu.io.xcpt_st))
+  val is_fence = io.req.bits.uop.is_fence
+  val ma_ld  = io.req.valid && io.req.bits.uop.uses_ldq && misaligned
+  val ma_st  = io.req.valid && io.req.bits.uop.uses_stq && misaligned && !is_fence
+  val dbg_bp = io.req.valid && ((io.req.bits.uop.uses_ldq && bkptu.io.debug_ld) ||
+                                (io.req.bits.uop.uses_stq && bkptu.io.debug_st && !is_fence))
+  val bp     = io.req.valid && ((io.req.bits.uop.uses_ldq && bkptu.io.xcpt_ld) ||
+                                (io.req.bits.uop.uses_stq && bkptu.io.xcpt_st && !is_fence))
 
   def checkExceptions(x: Seq[(Bool, UInt)]) =
     (x.map(_._1).reduce(_||_), PriorityMux(x))
@@ -636,7 +637,7 @@ class DivUnit(dataWidth: Int)(implicit p: Parameters)
   // request
   div.io.req.valid    := io.req.valid && !this.do_kill
   div.io.req.bits.dw  := io.req.bits.uop.fcn_dw
-  div.io.req.bits.fn  := io.req.bits.uop.ctrl.op_fcn
+  div.io.req.bits.fn  := io.req.bits.uop.fcn_op
   div.io.req.bits.in1 := io.req.bits.rs1_data
   div.io.req.bits.in2 := io.req.bits.rs2_data
   div.io.req.bits.tag := DontCare
@@ -667,7 +668,7 @@ class PipelinedMulUnit(numStages: Int, dataWidth: Int)(implicit p: Parameters)
   val imul = Module(new PipelinedMultiplier(xLen, numStages))
   // request
   imul.io.req.valid    := io.req.valid
-  imul.io.req.bits.fn  := io.req.bits.uop.ctrl.op_fcn
+  imul.io.req.bits.fn  := io.req.bits.uop.fcn_op
   imul.io.req.bits.dw  := io.req.bits.uop.fcn_dw
   imul.io.req.bits.in1 := io.req.bits.rs1_data
   imul.io.req.bits.in2 := io.req.bits.rs2_data

@@ -103,14 +103,14 @@ abstract class IssueUnit(
 
     if (iqType == IQT_MEM.litValue || iqType == IQT_INT.litValue) {
       // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here
-      when (io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype =/= RT_FIX) {
+      when (io.dis_uops(w).bits.uses_stq && io.dis_uops(w).bits.lrs2_rtype =/= RT_FIX) {
         dis_uops(w).lrs2_rtype := RT_X
         dis_uops(w).prs2_busy  := false.B
       }
       dis_uops(w).prs3_busy := false.B
     } else if (iqType == IQT_FP.litValue) {
       // FP "StoreAddrGen" is really storeDataGen, and rs1 is the integer address register
-      when (io.dis_uops(w).bits.uopc === uopSTA) {
+      when (io.dis_uops(w).bits.uses_stq) {
         dis_uops(w).lrs1_rtype := RT_X
         dis_uops(w).prs1_busy  := false.B
       }

@@ -579,7 +579,7 @@ class Rob(
   io.flush.bits.is_rvc    := flush_uop.is_rvc
   io.flush.bits.flush_typ := FlushTypes.getType(flush_val,
                                                 exception_thrown && !is_mini_exception,
-                                                flush_commit && flush_uop.uopc === uopERET,
+                                                flush_commit && flush_uop.is_eret,
                                                 refetch_inst)
 
 

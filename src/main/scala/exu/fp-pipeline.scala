@@ -211,7 +211,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   require (w_cnt == fregfile.io.write_ports.length)
 
   val fpiu_unit = exe_units.fpiu_unit
-  val fpiu_is_sdq = fpiu_unit.io.ll_iresp.bits.uop.uopc === uopSTA
+  val fpiu_is_sdq = fpiu_unit.io.ll_iresp.bits.uop.uses_stq
   io.to_int.valid := fpiu_unit.io.ll_iresp.fire() && !fpiu_is_sdq
   io.to_sdq.valid := fpiu_unit.io.ll_iresp.fire() &&  fpiu_is_sdq
   io.to_int.bits  := fpiu_unit.io.ll_iresp.bits

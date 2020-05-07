@@ -679,8 +679,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val wait_for_rocc = (0 until coreWidth).map(w =>
                         (dis_uops(w).is_fence || dis_uops(w).is_fencei) && (io.rocc.busy || rocc_shim_busy))
   val rxq_full = if (usingRoCC) exe_units.rocc_unit.io.rocc.rxq_full else false.B
-  val block_rocc = (dis_uops zip dis_valids).map{case (u,v) => v && u.uopc === uopROCC}.scanLeft(rxq_full)(_||_)
-  val dis_rocc_alloc_stall = (dis_uops.map(_.uopc === uopROCC) zip block_rocc) map {case (p,r) =>
+  val block_rocc = (dis_uops zip dis_valids).map{case (u,v) => v && u.is_rocc}.scanLeft(rxq_full)(_||_)
+  val dis_rocc_alloc_stall = (dis_uops.map(_.is_rocc) zip block_rocc) map {case (p,r) =>
                                if (usingRoCC) p && r else false.B}
 
   val dis_hazards = (0 until coreWidth).map(w =>
@@ -1415,7 +1415,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     for (w <- 0 until coreWidth) {
       exe_units.rocc_unit.io.rocc.dis_rocc_vals(w) := (
         dis_fire(w) &&
-        dis_uops(w).uopc === uopROCC &&
+        dis_uops(w).is_rocc &&
         !dis_uops(w).exception
       )
     }

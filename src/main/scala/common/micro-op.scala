@@ -51,13 +51,23 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val iw_p1_poisoned   = Bool()
   val iw_p2_poisoned   = Bool()
 
+  val br_mask          = UInt(maxBrCount.W)  // which branches are we being speculated under?
+  val br_tag           = UInt(brTagSz.W)
+
+
+
   val is_br            = Bool()                      // is this micro-op a (branch) vs a regular PC+4 inst?
   val is_jalr          = Bool()                      // is this a jump? (jal or jalr)
   val is_jal           = Bool()                      // is this a JAL (doesn't include JR)? used for branch unit
   val is_sfb           = Bool()                      // is this a sfb or in the shadow of a sfb
+  val is_fence         = Bool()
+  val is_fencei        = Bool()
+  val is_amo           = Bool()
+  val is_eret          = Bool()
+  val is_sys_pc2epc    = Bool()                      // Is a ECall or Breakpoint -- both set EPC to PC.
+  val is_mov           = Bool()                      // is a move uop
+  val is_rocc          = Bool()
 
-  val br_mask          = UInt(maxBrCount.W)  // which branches are we being speculated under?
-  val br_tag           = UInt(brTagSz.W)
 
   // Index into FTQ to figure out our fetch PC.
   val ftq_idx          = UInt(log2Ceil(ftqSz).W)
@@ -95,19 +105,15 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val mem_cmd          = UInt(M_SZ.W)          // sync primitives/cache flushes
   val mem_size         = UInt(2.W)
   val mem_signed       = Bool()
-  val is_fence         = Bool()
-  val is_fencei        = Bool()
-  val is_amo           = Bool()
   val uses_ldq         = Bool()
   val uses_stq         = Bool()
-  val is_sys_pc2epc    = Bool()                      // Is a ECall or Breakpoint -- both set EPC to PC.
   val is_unique        = Bool()                      // only allow this instruction in the pipeline, wait for STQ to
                                                      // drain, clear fetcha fter it (tell ROB to un-ready until empty)
   val flush_on_commit  = Bool()                      // some instructions need to flush the pipeline behind them
   val csr_cmd          = UInt(freechips.rocketchip.rocket.CSR.SZ.W)
 
 
-  // Preditation
+  // Predication
   def is_sfb_br        = is_br && is_sfb && enableSFBOpt.B // Does this write a predicate
   def is_sfb_shadow    = !is_br && is_sfb && enableSFBOpt.B // Is this predicated
   val ldst_is_rs1      = Bool() // If this is set and we are predicated off, copy rs1 to dst,
@@ -126,6 +132,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val frs3_en          = Bool()
 
   val fcn_dw           = Bool()
+  val fcn_op           = UInt(freechips.rocketchip.rocket.ALU.SZ_ALU_FN.W)
 
   // floating point information
   val fp_val           = Bool()             // is a floating-point instruction (F- or D-extension)?
@@ -168,7 +175,6 @@ class CtrlSignals extends Bundle()
   val op1_sel     = UInt(OP1_X.getWidth.W)
   val op2_sel     = UInt(OP2_X.getWidth.W)
   val imm_sel     = UInt(IS_X.getWidth.W)
-  val op_fcn      = UInt(freechips.rocketchip.rocket.ALU.SZ_ALU_FN.W)
 }
 
 

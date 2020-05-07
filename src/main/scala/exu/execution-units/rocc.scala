@@ -91,7 +91,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
 
   assert(PopCount(io.core.dis_rocc_vals) <= 1.U)
   for (w <- 0 until coreWidth) {
-    val enq_this = !enq_val && io.core.dis_rocc_vals(w) && io.core.dis_uops(w).uopc === uopROCC
+    val enq_this = !enq_val && io.core.dis_rocc_vals(w) && io.core.dis_uops(w).is_rocc
     when (enq_this) {
       rocc_idx := w.U
     }
