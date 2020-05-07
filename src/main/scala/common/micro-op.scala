@@ -41,9 +41,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val iq_type          = UInt(IQT_SZ.W)        // which issue unit do we use?
   val fu_code          = UInt(FUConstants.FUC_SZ.W) // which functional unit do we use?
 
-  // What is the next state of this uop in the issue window? useful
-  // for the compacting queue.
-  val iw_state         = UInt(2.W)
   // Has operand 1 or 2 been waken speculatively by a load?
   // Only integer operands are speculaively woken up,
   // so we can ignore p3.

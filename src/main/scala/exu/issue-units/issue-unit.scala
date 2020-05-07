@@ -98,8 +98,32 @@ abstract class IssueUnit(
   val dis_uops = Array.fill(dispatchWidth) {Wire(new MicroOp())}
   for (w <- 0 until dispatchWidth) {
     dis_uops(w) := io.dis_uops(w).bits
-    dis_uops(w).iw_p1_poisoned := false.B
-    dis_uops(w).iw_p2_poisoned := false.B
+
+
+    // Handle wakeups on dispatch
+    for (wakeup <- io.wakeup_ports) {
+      when (wakeup.valid) {
+        when (wakeup.bits.pdst === io.dis_uops(w).bits.prs1) { dis_uops(w).prs1_busy := false.B }
+        when (wakeup.bits.pdst === io.dis_uops(w).bits.prs2) { dis_uops(w).prs2_busy := false.B }
+        when (wakeup.bits.pdst === io.dis_uops(w).bits.prs3) { dis_uops(w).prs3_busy := false.B }
+      }
+    }
+    when (io.pred_wakeup_port.valid && io.pred_wakeup_port.bits === io.dis_uops(w).bits.ppred) {
+      dis_uops(w).ppred_busy := false.B
+    }
+    for (spec_wakeup <- io.spec_ld_wakeup) {
+      when (spec_wakeup.valid) {
+        assert (spec_wakeup.bits =/= 0.U)
+        when (spec_wakeup.bits === io.dis_uops(w).bits.prs1) {
+          dis_uops(w).prs1_busy := false.B
+          dis_uops(w).iw_p1_poisoned := true.B
+        }
+        when (spec_wakeup.bits === io.dis_uops(w).bits.prs2) {
+          dis_uops(w).prs2_busy := false.B
+          dis_uops(w).iw_p2_poisoned := true.B
+        }
+      }
+    }
 
     if (iqType == IQT_MEM.litValue || iqType == IQT_INT.litValue) {
       // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here

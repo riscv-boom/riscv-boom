@@ -115,8 +115,8 @@ class IssueUnitStatic(
 
       when (request_not_satisfied(i) && can_allocate && !port_issued) {
         issue_slots(i).grant := true.B
-        io.iss_valids(w)     := true.B
-        io.iss_uops(w)       := issue_slots(i).iss_uop
+        io.iss_valids(w)     := issue_slots(i).iss_uop.valid
+        io.iss_uops(w)       := issue_slots(i).iss_uop.bits
       }
 
       val port_already_in_use     = port_issued
