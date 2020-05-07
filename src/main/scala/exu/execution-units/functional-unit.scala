@@ -264,6 +264,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
     dataWidth = dataWidth,
     isJmpUnit = isJmpUnit)
   with boom.ifu.HasBoomFrontendParameters
+  with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
   val uop = io.req.bits.uop
 
@@ -277,12 +278,12 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
     val block_pc = AlignPCToBoundary(io.get_ftq_pc.pc, icBlockBytes)
     val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
 
-    op1_data = Mux(uop.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
-               Mux(uop.op1_sel.asUInt === OP1_PC  , Sext(uop_pc, xLen),
-                                                    0.U))
+    op1_data = Mux(uop.op1_sel === OP1_RS1 , io.req.bits.rs1_data,
+               Mux(uop.op1_sel === OP1_PC  , Sext(uop_pc, xLen),
+                                             0.U))
   } else {
-    op1_data = Mux(uop.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
-                                                    0.U)
+    op1_data = Mux(uop.op1_sel === OP1_RS1 , io.req.bits.rs1_data,
+                                             0.U)
   }
 
   // operand 2 select
@@ -314,16 +315,16 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
                 rs1(xLen-1) & ~rs2(xLen-1)).asBool
 
-  val pc_sel = MuxLookup(uop.ctrl.br_type, PC_PLUS4,
-                 Seq(   BR_N   -> PC_PLUS4,
-                        BR_NE  -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
-                        BR_EQ  -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
-                        BR_GE  -> Mux(!br_lt,  PC_BRJMP, PC_PLUS4),
-                        BR_GEU -> Mux(!br_ltu, PC_BRJMP, PC_PLUS4),
-                        BR_LT  -> Mux( br_lt,  PC_BRJMP, PC_PLUS4),
-                        BR_LTU -> Mux( br_ltu, PC_BRJMP, PC_PLUS4),
-                        BR_J   -> PC_BRJMP,
-                        BR_JR  -> PC_JALR
+  val pc_sel = MuxLookup(uop.br_type, PC_PLUS4,
+                 Seq(   B_N   -> PC_PLUS4,
+                        B_NE  -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
+                        B_EQ  -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
+                        B_GE  -> Mux(!br_lt,  PC_BRJMP, PC_PLUS4),
+                        B_GEU -> Mux(!br_ltu, PC_BRJMP, PC_PLUS4),
+                        B_LT  -> Mux( br_lt,  PC_BRJMP, PC_PLUS4),
+                        B_LTU -> Mux( br_ltu, PC_BRJMP, PC_PLUS4),
+                        B_J   -> PC_BRJMP,
+                        B_JR  -> PC_JALR
                         ))
 
   val is_taken = io.req.valid &&

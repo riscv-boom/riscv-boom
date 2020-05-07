@@ -351,6 +351,7 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle
  */
 class DecodeUnit(implicit p: Parameters) extends BoomModule
   with freechips.rocketchip.rocket.constants.MemoryOpConstants
+  with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
   val io = IO(new DecodeUnitIo)
 
@@ -515,6 +516,16 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   } .elsewhen (cs.imm_sel === IS_U || cs.imm_sel === IS_I || cs.imm_sel === IS_S) {
     uop.op2_sel := OP2_IMM
   }
+
+  uop.br_type := Mux(inst === BEQ , B_EQ,
+                 Mux(inst === BNE , B_NE,
+                 Mux(inst === BGE , B_GE,
+                 Mux(inst === BGEU, B_GEU,
+                 Mux(inst === BLT , B_LT,
+                 Mux(inst === BLTU, B_LTU,
+                 Mux(inst === JAL , B_J,
+                 Mux(inst === JALR, B_JR,
+                                    DontCare))))))))
 
 
   io.deq.uop := uop

@@ -57,8 +57,8 @@ class RegisterRead(
     val brupdate = Input(new BrUpdateInfo())
   })
 
-  val rrd_valids       = Wire(Vec(issueWidth, Bool()))
-  val rrd_uops         = Wire(Vec(issueWidth, new MicroOp()))
+  val rrd_valids       = Reg(Vec(issueWidth, Bool()))
+  val rrd_uops         = Reg(Vec(issueWidth, new MicroOp()))
 
   val exe_reg_valids   = RegInit(VecInit(Seq.fill(issueWidth) { false.B }))
   val exe_reg_uops     = Reg(Vec(issueWidth, new MicroOp()))
@@ -71,13 +71,8 @@ class RegisterRead(
   // hook up inputs
 
   for (w <- 0 until issueWidth) {
-    val rrd_decode_unit = Module(new RegisterReadDecode(exe_units(w)))
-    rrd_decode_unit.io.iss_valid := io.iss_valids(w)
-    rrd_decode_unit.io.iss_uop   := io.iss_uops(w)
-
-    rrd_valids(w) := RegNext(rrd_decode_unit.io.rrd_valid &&
-                !IsKilledByBranch(io.brupdate, rrd_decode_unit.io.rrd_uop))
-    rrd_uops(w)   := RegNext(GetNewUopAndBrMask(rrd_decode_unit.io.rrd_uop, io.brupdate))
+    rrd_valids(w) := io.iss_valids(w) && !IsKilledByBranch(io.brupdate, io.iss_uops(w))
+    rrd_uops(w)   := GetNewUopAndBrMask(io.iss_uops(w), io.brupdate)
   }
 
   //-------------------------------------------------------------

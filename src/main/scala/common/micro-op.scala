@@ -40,7 +40,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val debug_pc         = UInt(coreMaxAddrBits.W)
   val iq_type          = UInt(IQT_SZ.W)        // which issue unit do we use?
   val fu_code          = UInt(FUConstants.FUC_SZ.W) // which functional unit do we use?
-  val ctrl             = new CtrlSignals
 
   // What is the next state of this uop in the issue window? useful
   // for the compacting queue.
@@ -55,7 +54,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val br_tag           = UInt(brTagSz.W)
 
 
-
+  val br_type          = UInt(4.W)
   val is_br            = Bool()                      // is this micro-op a (branch) vs a regular PC+4 inst?
   val is_jalr          = Bool()                      // is this a jump? (jal or jalr)
   val is_jal           = Bool()                      // is this a JAL (doesn't include JR)? used for branch unit
@@ -169,16 +168,5 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
   def fu_code_is(_fu: UInt) = (fu_code & _fu) =/= 0.U
 }
-
-/**
- * Control signals within a MicroOp
- *
- * TODO REFACTOR this, as this should no longer be true, as bypass occurs in stage before branch resolution
- */
-class CtrlSignals extends Bundle()
-{
-  val br_type     = UInt(BR_N.getWidth.W)
-}
-
 
 

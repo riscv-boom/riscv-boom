@@ -67,15 +67,15 @@ trait ScalarOpConstants
   val PC_JALR  = 2.U(2.W)  // jump_reg_target
 
   // Branch Type
-  val BR_N   = 0.U(4.W)  // Next
-  val BR_NE  = 1.U(4.W)  // Branch on NotEqual
-  val BR_EQ  = 2.U(4.W)  // Branch on Equal
-  val BR_GE  = 3.U(4.W)  // Branch on Greater/Equal
-  val BR_GEU = 4.U(4.W)  // Branch on Greater/Equal Unsigned
-  val BR_LT  = 5.U(4.W)  // Branch on Less Than
-  val BR_LTU = 6.U(4.W)  // Branch on Less Than Unsigned
-  val BR_J   = 7.U(4.W)  // Jump
-  val BR_JR  = 8.U(4.W)  // Jump Register
+  val B_N   = 0.U(4.W)  // Next
+  val B_NE  = 1.U(4.W)  // Branch on NotEqual
+  val B_EQ  = 2.U(4.W)  // Branch on Equal
+  val B_GE  = 3.U(4.W)  // Branch on Greater/Equal
+  val B_GEU = 4.U(4.W)  // Branch on Greater/Equal Unsigned
+  val B_LT  = 5.U(4.W)  // Branch on Less Than
+  val B_LTU = 6.U(4.W)  // Branch on Less Than Unsigned
+  val B_J   = 7.U(4.W)  // Jump
+  val B_JR  = 8.U(4.W)  // Jump Register
 
   // RS1 Operand Select Signal
   val OP1_RS1 = 0.U(2.W) // Register Source #1
@@ -282,11 +282,6 @@ trait ScalarOpConstants
     uop.pdst       := 0.U
     uop.dst_rtype  := RT_X
 
-    val cs = Wire(new boom.common.CtrlSignals())
-    cs             := DontCare // Overridden in the following lines
-    cs.br_type     := BR_N
-
-    uop.ctrl := cs
     uop
   }
 }
