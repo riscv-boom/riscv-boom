@@ -81,8 +81,14 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // Was this a branch that was predicted taken?
   val taken            = Bool()
 
+  val imm_sel          = UInt(IS_X.getWidth.W)
   val imm_packed       = UInt(LONGEST_IMM_SZ.W) // densely pack the imm in decode...
                                               // then translate and sign-extend in execute
+
+  val op1_sel          = UInt(OP1_X.getWidth.W)
+  val op2_sel          = UInt(OP2_X.getWidth.W)
+
+
   val csr_addr         = UInt(CSR_ADDR_SZ.W)    // only used for critical path reasons in Exe
   val rob_idx          = UInt(robAddrSz.W)
   val ldq_idx          = UInt(ldqAddrSz.W)
@@ -172,9 +178,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 class CtrlSignals extends Bundle()
 {
   val br_type     = UInt(BR_N.getWidth.W)
-  val op1_sel     = UInt(OP1_X.getWidth.W)
-  val op2_sel     = UInt(OP2_X.getWidth.W)
-  val imm_sel     = UInt(IS_X.getWidth.W)
 }
 
 

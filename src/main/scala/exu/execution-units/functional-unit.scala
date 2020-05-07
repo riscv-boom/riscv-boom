@@ -268,7 +268,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   val uop = io.req.bits.uop
 
   // immediate generation
-  val imm_xprlen = ImmGen(uop.imm_packed, uop.ctrl.imm_sel)
+  val imm_xprlen = ImmGen(uop.imm_packed, uop.imm_sel)
 
   // operand 1 select
   var op1_data: UInt = null
@@ -277,20 +277,20 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
     val block_pc = AlignPCToBoundary(io.get_ftq_pc.pc, icBlockBytes)
     val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
 
-    op1_data = Mux(uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
-               Mux(uop.ctrl.op1_sel.asUInt === OP1_PC  , Sext(uop_pc, xLen),
-                                                         0.U))
+    op1_data = Mux(uop.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
+               Mux(uop.op1_sel.asUInt === OP1_PC  , Sext(uop_pc, xLen),
+                                                    0.U))
   } else {
-    op1_data = Mux(uop.ctrl.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
-                                                         0.U)
+    op1_data = Mux(uop.op1_sel.asUInt === OP1_RS1 , io.req.bits.rs1_data,
+                                                    0.U)
   }
 
   // operand 2 select
-  val op2_data = Mux(uop.ctrl.op2_sel === OP2_IMM,  Sext(imm_xprlen.asUInt, xLen),
-                 Mux(uop.ctrl.op2_sel === OP2_IMMC, io.req.bits.uop.prs1(4,0),
-                 Mux(uop.ctrl.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
-                 Mux(uop.ctrl.op2_sel === OP2_NEXT, Mux(uop.is_rvc, 2.U, 4.U),
-                                                    0.U))))
+  val op2_data = Mux(uop.op2_sel === OP2_IMM,  Sext(imm_xprlen.asUInt, xLen),
+                 Mux(uop.op2_sel === OP2_IMMC, io.req.bits.uop.prs1(4,0),
+                 Mux(uop.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
+                 Mux(uop.op2_sel === OP2_NEXT, Mux(uop.is_rvc, 2.U, 4.U),
+                                               0.U))))
 
   val alu = Module(new freechips.rocketchip.rocket.ALU())
 

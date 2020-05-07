@@ -113,6 +113,7 @@ trait ScalarOpConstants
   val IS_B   = 2.U(3.W)  // SB-Type (BR)
   val IS_U   = 3.U(3.W)  // U-Type  (LUI/AUIPC)
   val IS_J   = 4.U(3.W)  // UJ-Type (J/JAL)
+  val IS_N   = 5.U(3.W)  // No immediate
   val IS_X   = BitPat("b???")
 
   // Decode Stage Control Signals

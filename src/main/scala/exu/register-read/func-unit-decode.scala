@@ -330,9 +330,9 @@ class RegisterReadDecode(exe_unit: ExecutionUnit)(implicit p: Parameters) extend
 
   // rrd_use_alupipe is unused
   io.rrd_uop.ctrl.br_type := rrd_cs.br_type
-  io.rrd_uop.ctrl.op1_sel := rrd_cs.op1_sel
-  io.rrd_uop.ctrl.op2_sel := rrd_cs.op2_sel
-  io.rrd_uop.ctrl.imm_sel := rrd_cs.imm_sel
+//  io.rrd_uop.ctrl.op1_sel := rrd_cs.op1_sel
+//  io.rrd_uop.ctrl.op2_sel := rrd_cs.op2_sel
+//  io.rrd_uop.ctrl.imm_sel := rrd_cs.imm_sel
 //  io.rrd_uop.ctrl.op_fcn  := rrd_cs.op_fcn.asUInt
 //  io.rrd_uop.ctrl.fcn_dw  := rrd_cs.fcn_dw.asBool
 
