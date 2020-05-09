@@ -27,7 +27,6 @@ import boom.util._
  */
 class RegisterRead(
   issueWidth: Int,
-  exe_units: Seq[ExecutionUnit],
   numTotalReadPorts: Int,
   numReadPortsArray: Seq[Int],
                         // each exe_unit must tell us how many max
@@ -40,8 +39,7 @@ class RegisterRead(
 {
   val io = IO(new Bundle {
     // issued micro-ops
-    val iss_valids = Input(Vec(issueWidth, Bool()))
-    val iss_uops   = Input(Vec(issueWidth, new MicroOp()))
+    val iss_uops   = Input(Vec(issueWidth, Valid(new MicroOp())))
 
     // interface with register file's read ports
     val rf_read_ports = Flipped(Vec(numTotalReadPorts, new RegisterFileReadPortIO(maxPregSz, registerWidth)))
@@ -71,8 +69,8 @@ class RegisterRead(
   // hook up inputs
 
   for (w <- 0 until issueWidth) {
-    rrd_valids(w) := io.iss_valids(w) && !IsKilledByBranch(io.brupdate, io.iss_uops(w))
-    rrd_uops(w)   := GetNewUopAndBrMask(io.iss_uops(w), io.brupdate)
+    rrd_valids(w) := io.iss_uops(w).valid && !IsKilledByBranch(io.brupdate, io.iss_uops(w).bits)
+    rrd_uops(w)   := GetNewUopAndBrMask(io.iss_uops(w).bits, io.brupdate)
   }
 
   //-------------------------------------------------------------
@@ -99,10 +97,10 @@ class RegisterRead(
     // rrdLatency==1, we need to send read address at end of ISS stage,
     //    in order to get read data back at end of RRD stage.
 
-    val rs1_addr = io.iss_uops(w).prs1
-    val rs2_addr = io.iss_uops(w).prs2
-    val rs3_addr = io.iss_uops(w).prs3
-    val pred_addr = io.iss_uops(w).ppred
+    val rs1_addr = io.iss_uops(w).bits.prs1
+    val rs2_addr = io.iss_uops(w).bits.prs2
+    val rs3_addr = io.iss_uops(w).bits.prs3
+    val pred_addr = io.iss_uops(w).bits.ppred
 
     if (numReadPorts > 0) io.rf_read_ports(idx+0).addr := rs1_addr
     if (numReadPorts > 1) io.rf_read_ports(idx+1).addr := rs2_addr
@@ -114,7 +112,7 @@ class RegisterRead(
     if (numReadPorts > 1) rrd_rs2_data(w) := Mux(RegNext(rs2_addr === 0.U), 0.U, io.rf_read_ports(idx+1).data)
     if (numReadPorts > 2) rrd_rs3_data(w) := Mux(RegNext(rs3_addr === 0.U), 0.U, io.rf_read_ports(idx+2).data)
 
-    if (enableSFBOpt) rrd_pred_data(w) := Mux(RegNext(io.iss_uops(w).is_sfb_shadow), io.prf_read_ports(w).data, false.B)
+    if (enableSFBOpt) rrd_pred_data(w) := Mux(RegNext(io.iss_uops(w).bits.is_sfb_shadow), io.prf_read_ports(w).data, false.B)
 
     val rrd_kill = io.kill || IsKilledByBranch(io.brupdate, rrd_uops(w))
 

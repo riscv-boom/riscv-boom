@@ -21,7 +21,7 @@ import chisel3._
 import chisel3.util._
 
 import freechips.rocketchip.config.{Parameters}
-import freechips.rocketchip.rocket.{BP}
+import freechips.rocketchip.rocket.{BP, SFenceReq}
 import freechips.rocketchip.tile.{XLen, RoCCCoreIO}
 import freechips.rocketchip.tile
 
@@ -58,17 +58,13 @@ class FFlagsResp(implicit p: Parameters) extends BoomBundle
  * multi function execution unit.
  */
 abstract class ExecutionUnit(
-  val readsIrf         : Boolean       = false,
-  val writesIrf        : Boolean       = false,
-  val readsFrf         : Boolean       = false,
-  val writesFrf        : Boolean       = false,
   val writesLlIrf      : Boolean       = false,
   val writesLlFrf      : Boolean       = false,
-  val numBypassStages  : Int,
-  val dataWidth        : Int,
-  val bypassable       : Boolean       = false, // TODO make override def for code clarity
+  val numBypassStages  : Int           = -1,
+  val dataWidth        : Int           = -1,
   val alwaysBypassable : Boolean       = false,
-  val hasMem           : Boolean       = false,
+  val hasAGen          : Boolean       = false,
+  val hasDGen          : Boolean       = false,
   val hasCSR           : Boolean       = false,
   val hasJmp           : Boolean       = false,
   val hasAlu           : Boolean       = false,
@@ -81,17 +77,19 @@ abstract class ExecutionUnit(
   val hasRocc          : Boolean       = false
   )(implicit p: Parameters) extends BoomModule
 {
+  require (numBypassStages >= 0 && dataWidth >= 0)
 
   val io = IO(new Bundle {
     val fu_types = Output(Bits(FUC_SZ.W))
 
     val req      = Flipped(new DecoupledIO(new FuncUnitReq(dataWidth)))
 
-    val iresp    = if (writesIrf)   new DecoupledIO(new ExeUnitResp(dataWidth)) else null
-    val fresp    = if (writesFrf)   new DecoupledIO(new ExeUnitResp(dataWidth)) else null
+    val resp     = Valid(new ExeUnitResp(xLen + 1))
+
     val ll_iresp = if (writesLlIrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
     val ll_fresp = if (writesLlFrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
 
+    val sfence   = if (hasCSR) new Valid(new SFenceReq) else null
 
     val bypass   = Output(Vec(numBypassStages, Valid(new ExeUnitResp(dataWidth))))
     val brupdate = Input(new BrUpdateInfo())
@@ -109,26 +107,20 @@ abstract class ExecutionUnit(
     val fcsr_rm = if (hasFcsr) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
 
     // only used by the mem unit
-    val lsu_io = if (hasMem) Flipped(new boom.lsu.LSUExeIO) else null
-    val bp = if (hasMem) Input(Vec(nBreakpoints, new BP)) else null
+    val agen = if (hasAGen) Output(Valid(new FuncUnitResp(xLen))) else null
+    val dgen = if (hasDGen || hasFpiu) Output(Valid(new ExeUnitResp(xLen))) else null
+    val bp   = if (hasAGen) Input(Vec(nBreakpoints, new BP)) else null
 
     // TODO move this out of ExecutionUnit
-    val com_exception = if (hasMem || hasRocc) Input(Bool()) else null
+    val com_exception = if (hasRocc) Input(Bool()) else null
   })
 
-  if (writesIrf)   {
-    io.iresp.bits.fflags.valid := false.B
-    io.iresp.bits.predicated := false.B
-    assert(io.iresp.ready)
-  }
+  io.resp.bits.fflags.valid := false.B
+  io.resp.bits.predicated := false.B
+
   if (writesLlIrf) {
     io.ll_iresp.bits.fflags.valid := false.B
     io.ll_iresp.bits.predicated := false.B
-  }
-  if (writesFrf)   {
-    io.fresp.bits.fflags.valid := false.B
-    io.fresp.bits.predicated := false.B
-    assert(io.fresp.ready)
   }
   if (writesLlFrf) {
     io.ll_fresp.bits.fflags.valid := false.B
@@ -138,27 +130,70 @@ abstract class ExecutionUnit(
   // TODO add "number of fflag ports", so we can properly account for FPU+Mem combinations
   def hasFFlags     : Boolean = hasFpu || hasFdiv
 
-  require ((hasFpu || hasFdiv) ^ (hasAlu || hasMul || hasMem || hasIfpu),
+  require ((hasFpu || hasFdiv) ^ (hasAlu || hasMul || hasAGen || hasDGen || hasIfpu),
     "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
   def hasFcsr = hasIfpu || hasFpu || hasFdiv
 
-  require (bypassable || !alwaysBypassable,
-    "[execute] an execution unit must be bypassable if it is always bypassable")
+}
+
+class MemExeUnit(
+  hasAGen        : Boolean = false,
+  hasDGen        : Boolean = false)
+  (implicit p: Parameters)
+    extends ExecutionUnit(
+      dataWidth = p(tile.XLen),
+      numBypassStages = 0,
+      alwaysBypassable = false,
+      hasAGen = hasAGen,
+      hasDGen = hasDGen)
+    with freechips.rocketchip.rocket.constants.MemoryOpConstants
+{
+
+  val out_str =
+    BoomCoreStringPrefix("==MemExeUnit==") +
+    (if (hasAGen)  BoomCoreStringPrefix(" - AGen") else "") +
+    (if (hasDGen)  BoomCoreStringPrefix(" - DGen") else "")
+
+  override def toString: String = out_str.toString
+
+
+  // If we issue loads back-to-back endlessly (probably because we are executing some tight loop)
+  // the store buffer will never drain, breaking the memory-model forward-progress guarantee
+  // If we see a large number of loads saturate the LSU, pause for a cycle to let a store drain
+  val loads_saturating = io.req.valid && io.req.bits.uop.uses_ldq
+  val saturating_loads_counter = RegInit(0.U(5.W))
+  when (loads_saturating) { saturating_loads_counter := saturating_loads_counter + 1.U }
+  .otherwise { saturating_loads_counter := 0.U }
+  val pause_mem = RegNext(loads_saturating) && saturating_loads_counter === ~(0.U(5.W))
+
+
+  io.fu_types := Mux(hasAGen.B && !pause_mem, FU_AGEN, 0.U) | Mux(hasDGen.B, FU_DGEN, 0.U)
+
+  assert (!(io.req.valid && io.req.bits.uop.fu_code_is(FU_STORE)))
+  if (hasAGen) {
+    val maddrcalc = Module(new MemAddrCalcUnit)
+    maddrcalc.io.req        <> io.req
+    maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_AGEN)
+    maddrcalc.io.brupdate   <> io.brupdate
+    maddrcalc.io.status     := io.status
+    maddrcalc.io.bp         := io.bp
+    maddrcalc.io.resp.ready := DontCare
+
+    io.agen := maddrcalc.io.resp
+  } else {
+    assert(!(io.req.valid && io.req.bits.uop.fu_code_is(FU_AGEN)))
+  }
+
+  if (hasDGen) {
+    io.dgen.valid     := io.req.valid && io.req.bits.uop.fu_code_is(FU_DGEN)
+    io.dgen.bits.data := io.req.bits.rs1_data
+    io.dgen.bits.uop  := io.req.bits.uop
+  } else {
+    assert(!(io.req.valid && io.req.bits.uop.fu_code_is(FU_DGEN)))
+  }
 
 }
 
-/**
- * ALU execution unit that can have a branch, alu, mul, div, int to FP,
- * and memory unit.
- *
- * @param hasBrUnit does the exe unit have a branch unit
- * @param hasCSR does the exe unit write to the CSRFile
- * @param hasAlu does the exe unit have a alu
- * @param hasMul does the exe unit have a multiplier
- * @param hasDiv does the exe unit have a divider
- * @param hasIfpu does the exe unit have a int to FP unit
- * @param hasMem does the exe unit have a MemAddrCalcUnit
- */
 class ALUExeUnit(
   hasJmp         : Boolean = false,
   hasCSR         : Boolean = false,
@@ -166,36 +201,25 @@ class ALUExeUnit(
   hasMul         : Boolean = false,
   hasDiv         : Boolean = false,
   hasIfpu        : Boolean = false,
-  hasMem         : Boolean = false,
   hasRocc        : Boolean = false)
   (implicit p: Parameters)
   extends ExecutionUnit(
-    readsIrf         = true,
-    writesIrf        = hasAlu || hasMul || hasDiv,
-    writesLlIrf      = hasMem || hasRocc,
-    writesLlFrf      = (hasIfpu || hasMem) && p(tile.TileKey).core.fpu != None,
+    writesLlIrf      = hasRocc,
+    writesLlFrf      = hasIfpu && p(tile.TileKey).core.fpu != None,
     numBypassStages  =
       if (hasAlu && hasMul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
       else if (hasAlu) 1 else 0,
     dataWidth        = p(tile.XLen) + 1,
-    bypassable       = hasAlu,
-    alwaysBypassable = hasAlu && !(hasMem || hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
+    alwaysBypassable = hasAlu && !(hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     hasCSR           = hasCSR,
     hasJmp           = hasJmp    ,
     hasAlu           = hasAlu,
     hasMul           = hasMul,
     hasDiv           = hasDiv,
     hasIfpu          = hasIfpu,
-    hasMem           = hasMem,
     hasRocc          = hasRocc)
   with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
-  require(!(hasRocc && !hasCSR),
-    "RoCC needs to be shared with CSR unit")
-  require(!(hasMem && hasRocc),
-    "We do not support execution unit with both Mem and Rocc writebacks")
-  require(!(hasMem && hasIfpu),
-    "TODO. Currently do not support AluMemExeUnit with FP")
 
   val out_str =
     BoomCoreStringPrefix("==ExeUnit==") +
@@ -203,7 +227,6 @@ class ALUExeUnit(
     (if (hasMul)  BoomCoreStringPrefix(" - Mul") else "") +
     (if (hasDiv)  BoomCoreStringPrefix(" - Div") else "") +
     (if (hasIfpu) BoomCoreStringPrefix(" - IFPU") else "") +
-    (if (hasMem)  BoomCoreStringPrefix(" - Mem") else "") +
     (if (hasRocc) BoomCoreStringPrefix(" - RoCC") else "")
 
   override def toString: String = out_str.toString
@@ -215,13 +238,13 @@ class ALUExeUnit(
   // Specifically the functional units with fast writeback to IRF
   val iresp_fu_units = ArrayBuffer[FunctionalUnit]()
 
-  io.fu_types := Mux(hasAlu.B, FU_ALU, 0.U) |
+  io.fu_types := FU_ALU |
                  Mux(hasMul.B, FU_MUL, 0.U) |
                  Mux(!div_busy && hasDiv.B, FU_DIV, 0.U) |
                  Mux(hasCSR.B, FU_CSR, 0.U) |
                  Mux(hasJmp.B, FU_JMP, 0.U) |
-                 Mux(!ifpu_busy && hasIfpu.B, FU_I2F, 0.U) |
-                 Mux(hasMem.B, FU_MEM, 0.U)
+                 Mux(!ifpu_busy && hasIfpu.B, FU_I2F, 0.U)
+
 
   // ALU Unit -------------------------------
   var alu: ALUUnit = null
@@ -321,12 +344,16 @@ class ALUExeUnit(
   var div: DivUnit = null
   val div_resp_val = WireInit(false.B)
   if (hasDiv) {
+    val divq = Module(new BranchKillableQueue(new FuncUnitReq(xLen), 3))
+    divq.io.enq.valid := (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV) &&
+      !IsKilledByBranch(io.brupdate, io.req.bits.uop))
+    divq.io.enq.bits  := io.req.bits
+    divq.io.brupdate  := io.brupdate
+    divq.io.flush     := io.req.bits.kill
+
     div = Module(new DivUnit(xLen))
     div.io <> DontCare
-    div.io.req.valid           := io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV) && hasDiv.B
-    div.io.req.bits.uop        := io.req.bits.uop
-    div.io.req.bits.rs1_data   := io.req.bits.rs1_data
-    div.io.req.bits.rs2_data   := io.req.bits.rs2_data
+    div.io.req <> divq.io.deq
     div.io.brupdate            := io.brupdate
     div.io.req.bits.kill       := io.req.bits.kill
 
@@ -334,49 +361,35 @@ class ALUExeUnit(
     div.io.resp.ready := !(iresp_fu_units.map(_.io.resp.valid).reduce(_|_))
 
     div_resp_val := div.io.resp.valid
-    div_busy     := !div.io.req.ready ||
-                    (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV))
+    div_busy     := !divq.io.empty
 
     iresp_fu_units += div
   }
 
-  // Mem Unit --------------------------
-  if (hasMem) {
-    require(!hasAlu)
-    val maddrcalc = Module(new MemAddrCalcUnit)
-    maddrcalc.io.req        <> io.req
-    maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
-    maddrcalc.io.brupdate     <> io.brupdate
-    maddrcalc.io.status     := io.status
-    maddrcalc.io.bp         := io.bp
-    maddrcalc.io.resp.ready := DontCare
-    require(numBypassStages == 0)
-
-    io.lsu_io.req := maddrcalc.io.resp
-
-    io.ll_iresp <> io.lsu_io.iresp
-    if (usingFPU) {
-      io.ll_fresp <> io.lsu_io.fresp
-    }
+  if (hasCSR) {
+    io.sfence.valid := io.req.valid && io.req.bits.uop.is_sfence
+    io.sfence.bits.rs1 := io.req.bits.uop.mem_size(0)
+    io.sfence.bits.rs2 := io.req.bits.uop.mem_size(1)
+    io.sfence.bits.addr := io.req.bits.rs1_data
+    io.sfence.bits.asid := io.req.bits.rs2_data
   }
 
   // Outputs (Write Port #0)  ---------------
-  if (writesIrf) {
-    io.iresp.valid     := iresp_fu_units.map(_.io.resp.valid).reduce(_|_)
-    io.iresp.bits.uop  := PriorityMux(iresp_fu_units.map(f =>
-      (f.io.resp.valid, f.io.resp.bits.uop)))
-    io.iresp.bits.data := PriorityMux(iresp_fu_units.map(f =>
-      (f.io.resp.valid, f.io.resp.bits.data)))
-    io.iresp.bits.predicated := PriorityMux(iresp_fu_units.map(f =>
-      (f.io.resp.valid, f.io.resp.bits.predicated)))
+  io.resp.valid     := iresp_fu_units.map(_.io.resp.valid).reduce(_|_)
+  io.resp.bits.uop  := PriorityMux(iresp_fu_units.map(f =>
+    (f.io.resp.valid, f.io.resp.bits.uop)))
+  io.resp.bits.data := PriorityMux(iresp_fu_units.map(f =>
+    (f.io.resp.valid, f.io.resp.bits.data)))
+  io.resp.bits.predicated := PriorityMux(iresp_fu_units.map(f =>
+    (f.io.resp.valid, f.io.resp.bits.predicated)))
 
-    // pulled out for critical path reasons
-    // TODO: Does this make sense as part of the iresp bundle?
-    if (hasAlu) {
-      io.iresp.bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
-      io.iresp.bits.uop.csr_cmd := alu.io.resp.bits.uop.csr_cmd
-    }
+  // pulled out for critical path reasons
+  // TODO: Does this make sense as part of the iresp bundle?
+  if (hasCSR) {
+    io.resp.bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
+    io.resp.bits.uop.csr_cmd := alu.io.resp.bits.uop.csr_cmd
   }
+
 
   assert ((PopCount(iresp_fu_units.map(_.io.resp.valid)) <= 1.U && !div_resp_val) ||
           (PopCount(iresp_fu_units.map(_.io.resp.valid)) <= 2.U && (div_resp_val)),
@@ -397,19 +410,16 @@ class FPUExeUnit(
   )
   (implicit p: Parameters)
   extends ExecutionUnit(
-    readsFrf  = true,
-    writesFrf = true,
     writesLlIrf = hasFpiu,
-    writesIrf = false,
     numBypassStages = 0,
     dataWidth = p(tile.TileKey).core.fpu.get.fLen + 1,
-    bypassable = false,
     hasFpu  = hasFpu,
     hasFdiv = hasFdiv,
-    hasFpiu = hasFpiu) with tile.HasFPUParameters
+    hasFpiu = hasFpiu
+  ) with tile.HasFPUParameters
 {
   val out_str =
-    BoomCoreStringPrefix("==ExeUnit==")
+    BoomCoreStringPrefix("==FpExeUnit==") +
     (if (hasFpu)  BoomCoreStringPrefix("- FPU (Latency: " + dfmaLatency + ")") else "") +
     (if (hasFdiv) BoomCoreStringPrefix("- FDiv/FSqrt") else "") +
     (if (hasFpiu) BoomCoreStringPrefix("- FPIU (writes to Integer RF)") else "")
@@ -478,12 +488,12 @@ class FPUExeUnit(
 
   // Outputs (Write Port #0)  ---------------
 
-  io.fresp.valid       := fu_units.map(_.io.resp.valid).reduce(_|_) &&
+  io.resp.valid       := fu_units.map(_.io.resp.valid).reduce(_|_) &&
                           !(fpu.io.resp.valid && fpu.io.resp.bits.uop.fu_code_is(FU_F2I))
-  io.fresp.bits.uop    := PriorityMux(fu_units.map(f => (f.io.resp.valid,
+  io.resp.bits.uop    := PriorityMux(fu_units.map(f => (f.io.resp.valid,
                                                          f.io.resp.bits.uop)))
-  io.fresp.bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data)))
-  io.fresp.bits.fflags := Mux(fpu_resp_val, fpu_resp_fflags, fdiv_resp_fflags)
+  io.resp.bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data)))
+  io.resp.bits.fflags := Mux(fpu_resp_val, fpu_resp_fflags, fdiv_resp_fflags)
 
   // Outputs (Write Port #1) -- FpToInt Queuing Unit -----------------------
 
@@ -504,24 +514,13 @@ class FPUExeUnit(
 
     assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
 
-    val fp_sdq = Module(new BranchKillableQueue(new ExeUnitResp(dataWidth),
-      entries = 3)) // Lets us backpressure floating point store data
-    fp_sdq.io.enq.valid      := io.req.valid && io.req.bits.uop.uses_stq && !IsKilledByBranch(io.brupdate, io.req.bits.uop)
-    fp_sdq.io.enq.bits.uop   := io.req.bits.uop
-    fp_sdq.io.enq.bits.data  := ieee(io.req.bits.rs2_data)
-    fp_sdq.io.enq.bits.predicated := false.B
-    fp_sdq.io.enq.bits.fflags := DontCare
-    fp_sdq.io.brupdate         := io.brupdate
-    fp_sdq.io.flush          := io.req.bits.kill
+    io.dgen.valid      := RegNext(io.req.valid && io.req.bits.uop.uses_stq && !IsKilledByBranch(io.brupdate, io.req.bits.uop))
+    io.dgen.bits.uop   := RegNext(io.req.bits.uop)
+    io.dgen.bits.data  := RegNext(ieee(io.req.bits.rs2_data))
 
-    assert(!(fp_sdq.io.enq.valid && !fp_sdq.io.enq.ready))
+    io.ll_iresp       <> queue.io.deq
 
-    val resp_arb = Module(new Arbiter(new ExeUnitResp(dataWidth), 2))
-    resp_arb.io.in(0) <> queue.io.deq
-    resp_arb.io.in(1) <> fp_sdq.io.deq
-    io.ll_iresp       <> resp_arb.io.out
-
-    fpiu_busy := !(queue.io.empty && fp_sdq.io.empty)
+    fpiu_busy := !(queue.io.empty)
   }
 
   override def toString: String = out_str.toString

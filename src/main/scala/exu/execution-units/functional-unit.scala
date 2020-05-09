@@ -36,21 +36,24 @@ import boom.util._
 object FUConstants
 {
   // bit mask, since a given execution pipeline may support multiple functional units
-  val FUC_SZ = 10
+  val FUC_SZ = 11
   val FU_X   = BitPat.dontCare(FUC_SZ)
   val FU_ALU =   1.U(FUC_SZ.W)
   val FU_JMP =   2.U(FUC_SZ.W)
-  val FU_MEM =   4.U(FUC_SZ.W)
-  val FU_MUL =   8.U(FUC_SZ.W)
-  val FU_DIV =  16.U(FUC_SZ.W)
-  val FU_CSR =  32.U(FUC_SZ.W)
-  val FU_FPU =  64.U(FUC_SZ.W)
-  val FU_FDV = 128.U(FUC_SZ.W)
-  val FU_I2F = 256.U(FUC_SZ.W)
-  val FU_F2I = 512.U(FUC_SZ.W)
+  val FU_AGEN=   4.U(FUC_SZ.W)
+  val FU_DGEN=   8.U(FUC_SZ.W)
+  val FU_MUL =  16.U(FUC_SZ.W)
+  val FU_DIV =  32.U(FUC_SZ.W)
+  val FU_CSR =  64.U(FUC_SZ.W)
+  val FU_FPU = 128.U(FUC_SZ.W)
+  val FU_FDV = 256.U(FUC_SZ.W)
+  val FU_I2F = 512.U(FUC_SZ.W)
+  val FU_F2I =1024.U(FUC_SZ.W)
 
   // FP stores generate data through FP F2I, and generate address through MemAddrCalc
-  val FU_F2IMEM = 516.U(FUC_SZ.W)
+  val FU_F2IMEM = 1028.U(FUC_SZ.W)
+
+  val FU_STORE  = 12.U(FUC_SZ.W)
 }
 import FUConstants._
 
@@ -87,7 +90,6 @@ class FuncUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundl
   val fflags = new ValidIO(new FFlagsResp)
   val addr = UInt((vaddrBits+1).W) // only for maddr -> LSU
   val mxcpt = new ValidIO(UInt((freechips.rocketchip.rocket.Causes.all.max+2).W)) //only for maddr->LSU
-  val sfence = Valid(new freechips.rocketchip.rocket.SFenceReq) // only for mcalc
 }
 
 /**
@@ -502,11 +504,6 @@ class MemAddrCalcUnit(implicit p: Parameters)
   io.resp.bits.mxcpt.bits  := xcpt_cause
   assert (!(ma_ld && ma_st), "Mutually-exclusive exceptions are firing.")
 
-  io.resp.bits.sfence.valid := io.req.valid && io.req.bits.uop.mem_cmd === M_SFENCE
-  io.resp.bits.sfence.bits.rs1 := io.req.bits.uop.mem_size(0)
-  io.resp.bits.sfence.bits.rs2 := io.req.bits.uop.mem_size(1)
-  io.resp.bits.sfence.bits.addr := io.req.bits.rs1_data
-  io.resp.bits.sfence.bits.asid := io.req.bits.rs2_data
 }
 
 

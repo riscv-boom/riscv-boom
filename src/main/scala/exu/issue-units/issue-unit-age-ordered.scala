@@ -89,19 +89,6 @@ class IssueUnitCollapsing(
 
   //-------------------------------------------------------------
   // Issue Select Logic
-
-  // set default
-  for (w <- 0 until issueWidth) {
-    io.iss_valids(w) := false.B
-    io.iss_uops(w)   := NullMicroOp
-    // unsure if this is overkill
-    io.iss_uops(w).prs1 := 0.U
-    io.iss_uops(w).prs2 := 0.U
-    io.iss_uops(w).prs3 := 0.U
-    io.iss_uops(w).lrs1_rtype := RT_X
-    io.iss_uops(w).lrs2_rtype := RT_X
-  }
-
   val requests = issue_slots.map(s => s.request)
   val port_issued = Array.fill(issueWidth){Bool()}
   for (w <- 0 until issueWidth) {
@@ -113,12 +100,11 @@ class IssueUnitCollapsing(
     var uop_issued = false.B
 
     for (w <- 0 until issueWidth) {
-      val can_allocate = (issue_slots(i).slot_uop.fu_code & io.fu_types(w)) =/= 0.U
+      val can_allocate = (issue_slots(i).iss_uop.bits.fu_code & io.fu_types(w)) =/= 0.U
 
       when (requests(i) && !uop_issued && can_allocate && !port_issued(w)) {
         issue_slots(i).grant := true.B
-        io.iss_valids(w) := issue_slots(i).iss_uop.valid
-        io.iss_uops(w) := issue_slots(i).iss_uop.bits
+        io.iss_uops(w) := issue_slots(i).iss_uop
       }
       val was_port_issued_yet = port_issued(w)
       port_issued(w) = (requests(i) && !uop_issued && can_allocate) | port_issued(w)

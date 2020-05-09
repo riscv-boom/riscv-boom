@@ -50,15 +50,21 @@ class RegisterFileWritePort(val addrWidth: Int, val dataWidth: Int)(implicit p: 
  */
 object WritePort
 {
-  def apply(enq: DecoupledIO[ExeUnitResp], addrWidth: Int, dataWidth: Int, rtype: UInt)
+  def apply(enq: Valid[ExeUnitResp], addrWidth: Int, dataWidth: Int, rtype: UInt)
     (implicit p: Parameters): Valid[RegisterFileWritePort] = {
      val wport = Wire(Valid(new RegisterFileWritePort(addrWidth, dataWidth)))
 
      wport.valid     := enq.valid && enq.bits.uop.dst_rtype === rtype
      wport.bits.addr := enq.bits.uop.pdst
      wport.bits.data := enq.bits.data
-     enq.ready       := true.B
      wport
+  }
+  def apply(enq: DecoupledIO[ExeUnitResp], addrWidth: Int, dataWidth: Int, rtype: UInt)(implicit p: Parameters): Valid[RegisterFileWritePort] = {
+    val v = Wire(Valid(new ExeUnitResp(dataWidth)))
+    v.valid := enq.valid
+    v.bits := enq.bits
+    enq.ready := true.B
+    apply(v, addrWidth, dataWidth, rtype)
   }
 }
 
@@ -114,7 +120,7 @@ class RegisterFileSynthesizable(
 {
   // --------------------------------------------------------------
 
-  val regfile = Mem(numRegisters, UInt(registerWidth.W))
+  val regfile = Reg(Vec(numRegisters, UInt(registerWidth.W)))
 
   // --------------------------------------------------------------
   // Read ports.

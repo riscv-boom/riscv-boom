@@ -157,7 +157,7 @@ class WithSmallBooms extends Config((site, here, up) => {
       decodeWidth = 1,
       numRobEntries = 32,
       issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=8, iqType=IQT_MEM.litValue, dispatchWidth=1),
+        IssueParams(issueWidth=2, numEntries=8, iqType=IQT_MEM.litValue, dispatchWidth=1),
         IssueParams(issueWidth=1, numEntries=8, iqType=IQT_INT.litValue, dispatchWidth=1),
         IssueParams(issueWidth=1, numEntries=8, iqType=IQT_FP.litValue , dispatchWidth=1)),
       numIntPhysRegisters = 52,
@@ -188,7 +188,7 @@ class WithMediumBooms extends Config((site, here, up) => {
       decodeWidth = 2,
       numRobEntries = 64,
       issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=12, iqType=IQT_MEM.litValue, dispatchWidth=2),
+        IssueParams(issueWidth=2, numEntries=12, iqType=IQT_MEM.litValue, dispatchWidth=2),
         IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue, dispatchWidth=2),
         IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=2)),
       numIntPhysRegisters = 80,
@@ -221,7 +221,7 @@ class WithLargeBooms extends Config((site, here, up) => {
       decodeWidth = 3,
       numRobEntries = 96,
       issueParams = Seq(
-        IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=3),
+        IssueParams(issueWidth=2, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=3),
         IssueParams(issueWidth=3, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=3),
         IssueParams(issueWidth=1, numEntries=24, iqType=IQT_FP.litValue , dispatchWidth=3)),
       numIntPhysRegisters = 100,
@@ -255,6 +255,7 @@ class WithMegaBooms extends Config((site, here, up) => {
         IssueParams(issueWidth=2, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=4),
         IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4),
         IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
+      memWidth = 2,
       numIntPhysRegisters = 128,
       numFpPhysRegisters = 128,
       numLdqEntries = 32,
@@ -288,6 +289,7 @@ class WithGigaBooms extends Config((site, here, up) => {
         IssueParams(issueWidth=2, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=5),
         IssueParams(issueWidth=5, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=5),
         IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=5)),
+      memWidth = 2,
       numIntPhysRegisters = 128,
       numFpPhysRegisters = 128,
       numLdqEntries = 32,

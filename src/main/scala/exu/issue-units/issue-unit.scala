@@ -34,17 +34,7 @@ case class IssueParams(
   numEntries: Int = 8,
   iqType: BigInt
 )
-/**
- * What physical register is broadcasting its wakeup?
- * Is the physical register poisoned (aka, was it woken up by a speculative issue)?
- *
- * @param pregSz size of physical destination register
- */
-class IqWakeup(val pregSz: Int) extends Bundle
-{
-  val pdst = UInt(width=pregSz.W)
-  val poisoned = Bool()
-}
+
 
 /**
  * IO bundle to interact with the issue unit
@@ -60,9 +50,8 @@ class IssueUnitIO(
 {
   val dis_uops         = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
-  val iss_valids       = Output(Vec(issueWidth, Bool()))
-  val iss_uops         = Output(Vec(issueWidth, new MicroOp()))
-  val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(maxPregSz))))
+  val iss_uops         = Output(Vec(issueWidth, Valid(new MicroOp())))
+  val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(UInt(maxPregSz.W))))
   val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
 
   val spec_ld_wakeup   = Flipped(Vec(memWidth, Valid(UInt(width=maxPregSz.W))))
@@ -103,9 +92,9 @@ abstract class IssueUnit(
     // Handle wakeups on dispatch
     for (wakeup <- io.wakeup_ports) {
       when (wakeup.valid) {
-        when (wakeup.bits.pdst === io.dis_uops(w).bits.prs1) { dis_uops(w).prs1_busy := false.B }
-        when (wakeup.bits.pdst === io.dis_uops(w).bits.prs2) { dis_uops(w).prs2_busy := false.B }
-        when (wakeup.bits.pdst === io.dis_uops(w).bits.prs3) { dis_uops(w).prs3_busy := false.B }
+        when (wakeup.bits === io.dis_uops(w).bits.prs1) { dis_uops(w).prs1_busy := false.B }
+        when (wakeup.bits === io.dis_uops(w).bits.prs2) { dis_uops(w).prs2_busy := false.B }
+        when (wakeup.bits === io.dis_uops(w).bits.prs3) { dis_uops(w).prs3_busy := false.B }
       }
     }
     when (io.pred_wakeup_port.valid && io.pred_wakeup_port.bits === io.dis_uops(w).bits.ppred) {
@@ -149,7 +138,7 @@ abstract class IssueUnit(
   //-------------------------------------------------------------
   // Issue Table
 
-  val slots = for (i <- 0 until numIssueSlots) yield { val slot = Module(new IssueSlot(numWakeupPorts)); slot }
+  val slots = for (i <- 0 until numIssueSlots) yield { val slot = Module(new IssueSlot(numWakeupPorts, iqType == IQT_MEM.litValue, iqType == IQT_FP.litValue)); slot }
   val issue_slots = VecInit(slots.map(_.io))
 
   for (i <- 0 until numIssueSlots) {
@@ -159,6 +148,11 @@ abstract class IssueUnit(
     issue_slots(i).ldspec_miss      := io.ld_miss
     issue_slots(i).brupdate         := io.brupdate
     issue_slots(i).kill             := io.flush_pipeline
+  }
+
+
+  for (w <- 0 until issueWidth) {
+    io.iss_uops(w).valid := false.B
   }
 
 

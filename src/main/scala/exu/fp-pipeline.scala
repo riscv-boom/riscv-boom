@@ -42,9 +42,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     val dis_uops         = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
     // +1 for recoding.
-    val ll_wports        = Flipped(Vec(memWidth, Decoupled(new ExeUnitResp(fLen+1))))// from memory unit
+    val ll_wports        = Flipped(Vec(memWidth, Valid(new ExeUnitResp(fLen+1))))// from memory unit
     val from_int         = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from integer RF
-    val to_sdq           = Decoupled(new ExeUnitResp(fLen))           // to Load/Store Unit
+    val dgen             = Valid(new ExeUnitResp(fLen))           // to Load/Store Unit
     val to_int           = Decoupled(new ExeUnitResp(xLen))           // to integer RF
 
     val wakeups          = Vec(numWakeupPorts, Valid(new ExeUnitResp(fLen+1)))
@@ -58,35 +58,37 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   //**********************************
   // construct all of the modules
 
-  val exe_units      = new boom.exu.ExecutionUnits(fpu=true)
+  val exe_units      = (0 until fpWidth) map { w =>
+    Module(new FPUExeUnit(hasFpu = true,
+      hasFdiv = usingFDivSqrt && (w==0),
+      hasFpiu = (w==0)))
+  }
+  val numFrfReadPorts = fpWidth * 3
+  val numFrfWritePorts = fpWidth + memWidth
+
   val issue_unit     = Module(new IssueUnitCollapsing(
                          issueParams.find(_.iqType == IQT_FP.litValue).get,
                          numWakeupPorts))
   issue_unit.suggestName("fp_issue_unit")
   val fregfile       = Module(new RegisterFileSynthesizable(numFpPhysRegs,
-                         exe_units.numFrfReadPorts,
-                         exe_units.numFrfWritePorts + memWidth,
+                         numFrfReadPorts,
+                         numFrfWritePorts,
                          fLen+1,
-                         // No bypassing for any FP units, + memWidth for ll_wb
-                         Seq.fill(exe_units.numFrfWritePorts + memWidth){ false }
+                         // No bypassing for any FP units
+                         Seq.fill(numFrfWritePorts){ false }
                          ))
   val fregister_read = Module(new RegisterRead(
                          issue_unit.issueWidth,
-                         exe_units.withFilter(_.readsFrf).map(identity),
-                         exe_units.numFrfReadPorts,
-                         exe_units.withFilter(_.readsFrf).map(x => 3),
+                         numFrfReadPorts,
+                         exe_units.map(x => 3),
                          0, // No bypass for FP
                          0,
                          fLen+1))
 
-  require (exe_units.count(_.readsFrf) == issue_unit.issueWidth)
-  require (exe_units.numFrfWritePorts + numLlPorts == numWakeupPorts)
-
   //*************************************************************
   // Issue window logic
 
-  val iss_valids = Wire(Vec(exe_units.numFrfReaders, Bool()))
-  val iss_uops   = Wire(Vec(exe_units.numFrfReaders, new MicroOp()))
+  val iss_uops   = issue_unit.io.iss_uops
 
   issue_unit.io.tsc_reg := io.debug_tsc_reg
   issue_unit.io.brupdate := io.brupdate
@@ -98,7 +100,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   }
   issue_unit.io.ld_miss := false.B
 
-  require (exe_units.numTotalBypassPorts == 0)
 
   //-------------------------------------------------------------
   // **** Dispatch Stage ****
@@ -115,24 +116,20 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   // Output (Issue)
   for (i <- 0 until issue_unit.issueWidth) {
-    iss_valids(i) := issue_unit.io.iss_valids(i)
-    iss_uops(i) := issue_unit.io.iss_uops(i)
 
     var fu_types = exe_units(i).io.fu_types
     if (exe_units(i).hasFdiv) {
-      val fdiv_issued = iss_valids(i) && iss_uops(i).fu_code_is(FU_FDV)
+      val fdiv_issued = iss_uops(i).valid && iss_uops(i).bits.fu_code_is(FU_FDV)
       fu_types = fu_types & RegNext(~Mux(fdiv_issued, FU_FDV, 0.U))
     }
     issue_unit.io.fu_types(i) := fu_types
 
-    require (exe_units(i).readsFrf)
   }
 
   // Wakeup
   for ((writeback, issue_wakeup) <- io.wakeups zip issue_unit.io.wakeup_ports) {
     issue_wakeup.valid := writeback.valid
-    issue_wakeup.bits.pdst  := writeback.bits.uop.pdst
-    issue_wakeup.bits.poisoned := false.B
+    issue_wakeup.bits  := writeback.bits.uop.pdst
   }
   issue_unit.io.pred_wakeup_port.valid := false.B
   issue_unit.io.pred_wakeup_port.bits := DontCare
@@ -145,7 +142,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   fregister_read.io.rf_read_ports <> fregfile.io.read_ports
   fregister_read.io.prf_read_ports map { port => port.data := false.B }
 
-  fregister_read.io.iss_valids <> iss_valids
   fregister_read.io.iss_uops := iss_uops
 
   fregister_read.io.brupdate := io.brupdate
@@ -157,11 +153,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   exe_units.map(_.io.brupdate := io.brupdate)
 
-  for ((ex,w) <- exe_units.withFilter(_.readsFrf).map(x=>x).zipWithIndex) {
+  for ((ex,w) <- exe_units.zipWithIndex) {
     ex.io.req <> fregister_read.io.exe_reqs(w)
-    require (!ex.bypassable)
   }
-  require (exe_units.numTotalBypassPorts == 0)
 
   //-------------------------------------------------------------
   // **** Writeback Stage ****
@@ -171,7 +165,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
 
   // Hookup load writeback -- and recode FP values.
-  ll_wbarb.io.in(0) <> io.ll_wports(0)
+  ll_wbarb.io.in(0).valid := io.ll_wports(0).valid
+  ll_wbarb.io.in(0).bits  := io.ll_wports(0).bits
   ll_wbarb.io.in(0).bits.data := recode(io.ll_wports(0).bits.data,
                                         io.ll_wports(0).bits.uop.mem_size =/= 2.U)
 
@@ -195,28 +190,17 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     w_cnt += 1
   }
   for (eu <- exe_units) {
-    if (eu.writesFrf) {
-      fregfile.io.write_ports(w_cnt).valid     := eu.io.fresp.valid && eu.io.fresp.bits.uop.rf_wen
-      fregfile.io.write_ports(w_cnt).bits.addr := eu.io.fresp.bits.uop.pdst
-      fregfile.io.write_ports(w_cnt).bits.data := eu.io.fresp.bits.data
-      eu.io.fresp.ready                        := true.B
-      when (eu.io.fresp.valid) {
-        assert(eu.io.fresp.ready, "No backpressuring the FPU")
-        assert(eu.io.fresp.bits.uop.rf_wen, "rf_wen must be high here")
-        assert(eu.io.fresp.bits.uop.dst_rtype === RT_FLT, "wb type must be FLT for fpu")
-      }
-      w_cnt += 1
-    }
+    fregfile.io.write_ports(w_cnt).valid     := eu.io.resp.valid && eu.io.resp.bits.uop.rf_wen
+    fregfile.io.write_ports(w_cnt).bits.addr := eu.io.resp.bits.uop.pdst
+    fregfile.io.write_ports(w_cnt).bits.data := eu.io.resp.bits.data
+    w_cnt += 1
   }
   require (w_cnt == fregfile.io.write_ports.length)
 
-  val fpiu_unit = exe_units.fpiu_unit
-  val fpiu_is_sdq = fpiu_unit.io.ll_iresp.bits.uop.uses_stq
-  io.to_int.valid := fpiu_unit.io.ll_iresp.fire() && !fpiu_is_sdq
-  io.to_sdq.valid := fpiu_unit.io.ll_iresp.fire() &&  fpiu_is_sdq
-  io.to_int.bits  := fpiu_unit.io.ll_iresp.bits
-  io.to_sdq.bits  := fpiu_unit.io.ll_iresp.bits
-  fpiu_unit.io.ll_iresp.ready := io.to_sdq.ready && io.to_int.ready
+  val fpiu_unit = exe_units.find(_.hasFpiu).get
+  io.to_int <> fpiu_unit.io.ll_iresp
+  io.dgen   := fpiu_unit.io.dgen
+
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -236,19 +220,13 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     w_cnt += 1
   }
   for (eu <- exe_units) {
-    if (eu.writesFrf) {
-      val exe_resp = eu.io.fresp
-      val wb_uop = eu.io.fresp.bits.uop
-      val wport = io.wakeups(w_cnt)
-      wport.valid := exe_resp.valid && wb_uop.dst_rtype === RT_FLT
-      wport.bits := exe_resp.bits
+    val exe_resp = eu.io.resp
+    val wb_uop = eu.io.resp.bits.uop
+    val wport = io.wakeups(w_cnt)
+    wport.valid := exe_resp.valid && wb_uop.dst_rtype === RT_FLT
+    wport.bits := exe_resp.bits
 
-      w_cnt += 1
-
-      assert(!(exe_resp.valid && wb_uop.uses_ldq))
-      assert(!(exe_resp.valid && wb_uop.uses_stq))
-      assert(!(exe_resp.valid && wb_uop.is_amo))
-    }
+    w_cnt += 1
   }
 
   for ((wdata, wakeup) <- io.debug_wb_wdata zip io.wakeups) {
@@ -269,8 +247,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   override def toString: String =
     (BoomCoreStringPrefix("===FP Pipeline===") + "\n"
+    + exe_units.map(_.toString).mkString("\n") + "\n"
     + fregfile.toString
     + BoomCoreStringPrefix(
-      "Num Wakeup Ports      : " + numWakeupPorts,
-      "Num Bypass Ports      : " + exe_units.numTotalBypassPorts))
+      "Num Wakeup Ports      : " + numWakeupPorts))
 }

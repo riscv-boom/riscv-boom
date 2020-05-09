@@ -86,16 +86,6 @@ class IssueUnitStatic(
   //-------------------------------------------------------------
   // Issue Select Logic
 
-  for (w <- 0 until issueWidth) {
-    io.iss_valids(w) := false.B
-    io.iss_uops(w)   := NullMicroOp
-    // unsure if this is overkill
-    io.iss_uops(w).prs1 := 0.U
-    io.iss_uops(w).prs2 := 0.U
-    io.iss_uops(w).prs3 := 0.U
-    io.iss_uops(w).lrs1_rtype := RT_X
-    io.iss_uops(w).lrs2_rtype := RT_X
-  }
 
   // TODO can we use flatten to get an array of bools on issue_slot(*).request?
   val request_not_satisfied = Array.fill(numIssueSlots){Bool()}
@@ -111,12 +101,11 @@ class IssueUnitStatic(
 
     // look for low priority requests
     for (i <- 0 until numIssueSlots) {
-      val can_allocate = (issue_slots(i).out_uop.fu_code & io.fu_types(w)) =/= 0.U
+      val can_allocate = (issue_slots(i).iss_uop.bits.fu_code & io.fu_types(w)) =/= 0.U
 
       when (request_not_satisfied(i) && can_allocate && !port_issued) {
         issue_slots(i).grant := true.B
-        io.iss_valids(w)     := issue_slots(i).iss_uop.valid
-        io.iss_uops(w)       := issue_slots(i).iss_uop.bits
+        io.iss_uops(w)       := issue_slots(i).iss_uop
       }
 
       val port_already_in_use     = port_issued

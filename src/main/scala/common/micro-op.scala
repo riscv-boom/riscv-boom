@@ -63,6 +63,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val is_sys_pc2epc    = Bool()                      // Is a ECall or Breakpoint -- both set EPC to PC.
   val is_mov           = Bool()                      // is a move uop
   val is_rocc          = Bool()
+  val is_sfence        = Bool()
 
 
   // Index into FTQ to figure out our fetch PC.
@@ -100,6 +101,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val prs2_busy        = Bool()
   val prs3_busy        = Bool()
   val ppred_busy       = Bool()
+
   val stale_pdst       = UInt(maxPregSz.W)
   val exception        = Bool()
   val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity
@@ -163,7 +165,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // Is it possible for this uop to misspeculate, preventing the commit of subsequent uops?
   def unsafe           = uses_ldq || (uses_stq && !is_fence) || is_br || is_jalr
 
-  def fu_code_is(_fu: UInt) = (fu_code & _fu) =/= 0.U
+  def fu_code_is(_fu: UInt) = (fu_code & _fu) === _fu
 }
 
 
