@@ -54,7 +54,7 @@ class IssueUnitIO(
   val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(UInt(maxPregSz.W))))
   val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
 
-  val spec_ld_wakeup   = Flipped(Vec(memWidth, Valid(UInt(width=maxPregSz.W))))
+  val spec_ld_wakeup   = Flipped(Vec(lsuWidth, Valid(UInt(width=maxPregSz.W))))
 
   // tell the issue unit what each execution pipeline has in terms of functional units
   val fu_types         = Input(Vec(issueWidth, Bits(width=FUC_SZ.W)))

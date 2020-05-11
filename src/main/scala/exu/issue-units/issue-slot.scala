@@ -43,7 +43,7 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
 
   val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(UInt(maxPregSz.W))))
   val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
-  val spec_ld_wakeup = Flipped(Vec(memWidth, Valid(UInt(width=maxPregSz.W))))
+  val spec_ld_wakeup = Flipped(Vec(lsuWidth, Valid(UInt(width=maxPregSz.W))))
 }
 
 class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(implicit p: Parameters)

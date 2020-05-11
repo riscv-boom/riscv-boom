@@ -29,7 +29,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 {
   val fpIssueParams = issueParams.find(_.iqType == IQT_FP.litValue).get
   val dispatchWidth = fpIssueParams.dispatchWidth
-  val numLlPorts = memWidth
+  val numLlPorts = lsuWidth
   val numWakeupPorts = fpIssueParams.issueWidth + numLlPorts
   val fpPregSz = log2Ceil(numFpPhysRegs)
 
@@ -42,7 +42,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     val dis_uops         = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
     // +1 for recoding.
-    val ll_wports        = Flipped(Vec(memWidth, Valid(new ExeUnitResp(fLen+1))))// from memory unit
+    val ll_wports        = Flipped(Vec(lsuWidth, Valid(new ExeUnitResp(fLen+1))))// from memory unit
     val from_int         = Flipped(Decoupled(new ExeUnitResp(fLen+1)))// from integer RF
     val dgen             = Valid(new ExeUnitResp(fLen))           // to Load/Store Unit
     val to_int           = Decoupled(new ExeUnitResp(xLen))           // to integer RF
@@ -64,7 +64,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
       hasFpiu = (w==0)))
   }
   val numFrfReadPorts = fpWidth * 3
-  val numFrfWritePorts = fpWidth + memWidth
+  val numFrfWritePorts = fpWidth + lsuWidth
 
   val issue_unit     = Module(new IssueUnitCollapsing(
                          issueParams.find(_.iqType == IQT_FP.litValue).get,
@@ -94,7 +94,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   issue_unit.io.brupdate := io.brupdate
   issue_unit.io.flush_pipeline := io.flush_pipeline
   // Don't support ld-hit speculation to FP window.
-  for (w <- 0 until memWidth) {
+  for (w <- 0 until lsuWidth) {
     issue_unit.io.spec_ld_wakeup(w).valid := false.B
     issue_unit.io.spec_ld_wakeup(w).bits := 0.U
   }
@@ -183,7 +183,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
 
   var w_cnt = 1
-  for (i <- 1 until memWidth) {
+  for (i <- 1 until lsuWidth) {
     fregfile.io.write_ports(w_cnt) := RegNext(WritePort(io.ll_wports(i), fpregSz, fLen+1, RT_FLT))
     fregfile.io.write_ports(w_cnt).bits.data := RegNext(recode(io.ll_wports(i).bits.data,
                                                                io.ll_wports(i).bits.uop.mem_size =/= 2.U))
@@ -213,7 +213,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   ll_wbarb.io.out.ready := true.B
 
   w_cnt = 1
-  for (i <- 1 until memWidth) {
+  for (i <- 1 until lsuWidth) {
     io.wakeups(w_cnt) := io.ll_wports(i)
     io.wakeups(w_cnt).bits.data := recode(io.ll_wports(i).bits.data,
       io.ll_wports(i).bits.uop.mem_size =/= 2.U)

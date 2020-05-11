@@ -252,10 +252,10 @@ class WithMegaBooms extends Config((site, here, up) => {
       decodeWidth = 4,
       numRobEntries = 128,
       issueParams = Seq(
-        IssueParams(issueWidth=2, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=4),
+        IssueParams(issueWidth=3, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=4),
         IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4),
         IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
-      memWidth = 2,
+      lsuWidth = 2,
       numIntPhysRegisters = 128,
       numFpPhysRegisters = 128,
       numLdqEntries = 32,
@@ -289,7 +289,7 @@ class WithGigaBooms extends Config((site, here, up) => {
         IssueParams(issueWidth=2, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=5),
         IssueParams(issueWidth=5, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=5),
         IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=5)),
-      memWidth = 2,
+      lsuWidth = 2,
       numIntPhysRegisters = 128,
       numFpPhysRegisters = 128,
       numLdqEntries = 32,
@@ -316,7 +316,7 @@ class WithGigaBooms extends Config((site, here, up) => {
 class WithCS152BaselineBooms extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => {
     val coreWidth = 1                     // CS152: Change me (1 to 4)
-    val memWidth = 1                      // CS152: Change me (1 or 2)
+    val lsuWidth = 1                      // CS152: Change me (1 or 2)
     b.copy(
       core = b.core.copy(
         fetchWidth = 4,                   // CS152: Change me (4 or 8)
@@ -332,9 +332,10 @@ class WithCS152BaselineBooms extends Config((site, here, up) => {
         enableBranchPrintf = true,
         decodeWidth = coreWidth,
         numFetchBufferEntries = coreWidth * 8,
-        numDCacheBanks = memWidth,
+        numDCacheBanks = lsuWidth,
+        lsuWidth = lsuWidth,
         issueParams = Seq(
-          IssueParams(issueWidth=memWidth,  numEntries=8,  iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
+          IssueParams(issueWidth=2,         numEntries=8,  iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
           IssueParams(issueWidth=coreWidth, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=coreWidth),
           IssueParams(issueWidth=1,         numEntries=4,  iqType=IQT_FP.litValue , dispatchWidth=coreWidth))
         // DO NOT CHANGE ABOVE
@@ -353,7 +354,7 @@ class WithCS152BaselineBooms extends Config((site, here, up) => {
 class WithCS152DefaultBooms extends Config((site, here, up) => {
   case BoomTilesKey => up(BoomTilesKey, site) map { b => {
     val coreWidth = 3                    // CS152: Change me (1 to 4)
-    val memWidth = 1                     // CS152: Change me (1 or 2)
+    val lsuWidth = 1                     // CS152: Change me (1 or 2)
     val nIssueSlots = 32                 // CS152: Change me (2+)
     b.copy(
       core = b.core.copy(
@@ -370,9 +371,10 @@ class WithCS152DefaultBooms extends Config((site, here, up) => {
         enableBranchPrintf = true,
         decodeWidth = coreWidth,
         numFetchBufferEntries = coreWidth * 8,
-        numDCacheBanks = memWidth,
+        numDCacheBanks = lsuWidth,
+        lsuWidth = lsuWidth,
         issueParams = Seq(
-          IssueParams(issueWidth=memWidth,  numEntries=nIssueSlots, iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
+          IssueParams(issueWidth=2,         numEntries=nIssueSlots, iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
           IssueParams(issueWidth=coreWidth, numEntries=nIssueSlots, iqType=IQT_INT.litValue, dispatchWidth=coreWidth),
           IssueParams(issueWidth=1,         numEntries=nIssueSlots, iqType=IQT_FP.litValue , dispatchWidth=coreWidth))
         // DO NOT CHANGE ABOVE

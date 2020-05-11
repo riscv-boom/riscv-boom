@@ -69,10 +69,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // construct all of the modules
 
   // Only holds integer-registerfile execution units.
-  val mem_exe_units = Seq(
-    Module(new MemExeUnit(hasAGen = memWidth > 1 , hasDGen = true)),
-    Module(new MemExeUnit(hasAGen = true         , hasDGen = true))
-  )
+  val mem_exe_units = (0 until memWidth) map { w =>
+    Module(new MemExeUnit(hasAGen = w >= (memWidth - lsuWidth), hasDGen = true))
+  }
 
   val int_exe_units = (0 until intWidth) map { w =>
     def is_nth(n: Int): Boolean = w == ((n) % intWidth)
@@ -97,9 +96,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   fp_pipeline.io.wb_pdsts  := DontCare
 
 
-  val numIrfWritePorts        = intWidth + memWidth
+  val numIrfWritePorts        = intWidth + lsuWidth
   val numLlIrfWritePorts      = int_exe_units.count(_.writesLlIrf)
-  val numIrfReadPorts         = (2 + intWidth) * 2
+  val numIrfReadPorts         = (memWidth + intWidth) * 2
 
   val numFastWakeupPorts      = intWidth
   val numAlwaysBypassable     = int_exe_units.count(_.alwaysBypassable)
@@ -132,7 +131,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                              bypassableWritePortMask))
   val pregfile         = Module(new RegisterFileSynthesizable(
                             ftqSz,
-                            2 + intWidth,
+                            memWidth + intWidth,
                             1,
                             1,
                             Seq(true))) // The jmp unit is always bypassable
@@ -144,9 +143,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                                                                    1 + // FP2Int
                                                                    (if (usingRoCC) 1 else 0)))
   val iregister_read   = Module(new RegisterRead(
-                           2 + intWidth,
+                           memWidth + intWidth,
                            numIrfReadPorts,
-                           Seq.fill(2 + intWidth) { 2 },
+                           Seq.fill(memWidth + intWidth) { 2 },
                            numTotalBypassPorts,
                            jmp_unit.numBypassStages,
                            xLen))
@@ -245,16 +244,18 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Load/Store Unit & ExeUnits
   val mem_resps = io.lsu.iresp
   var agen_idx = 0
+  var dgen_idx = 0
   for (eu <- mem_exe_units) {
     if (eu.hasAGen) {
       io.lsu.agen(agen_idx) := eu.io.agen
       agen_idx += 1
     }
+    if (eu.hasDGen) {
+      io.lsu.dgen(dgen_idx) := eu.io.dgen
+      dgen_idx += 1
+    }
   }
-  for (i <- 0 until 2) {
-    io.lsu.dgen(i) := mem_exe_units(i).io.dgen
-  }
-  io.lsu.dgen(2) := fp_pipeline.io.dgen
+  io.lsu.dgen(dgen_idx) := fp_pipeline.io.dgen
 
 
 
@@ -482,12 +483,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
 
 
-
-  // for (i <- 0 until memWidth) {
-  //   when (RegNext(io.lsu.sfence.valid)) {
-  //     io.ifu.sfence := RegNext(io.lsu.sfence.bits.uop.sfence)
-  //   }
-  // }
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -812,7 +807,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   int_ren_wakeups(0).valid := ll_wbarb.io.out.fire() && ll_wbarb.io.out.bits.uop.dst_rtype === RT_FIX
   int_ren_wakeups(0).bits  := ll_wbarb.io.out.bits
 
-  for (i <- 1 until memWidth) {
+  for (i <- 1 until lsuWidth) {
     int_iss_wakeups(i).valid := mem_resps(i).valid && mem_resps(i).bits.uop.dst_rtype === RT_FIX
     int_iss_wakeups(i).bits  := mem_resps(i).bits.uop.pdst
 
@@ -1089,7 +1084,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   ll_wbarb.io.in(0).valid := mem_resps(0).valid
   ll_wbarb.io.in(0).bits  := mem_resps(0).bits
 
-  for (i <- 1 until memWidth) {
+  for (i <- 1 until lsuWidth) {
     iregfile.io.write_ports(w_cnt) := WritePort(mem_resps(i), ipregSz, xLen, RT_FIX)
     w_cnt += 1
   }
@@ -1148,7 +1143,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   rob.io.debug_wb_valids(0) := ll_wbarb.io.out.valid && ll_uop.dst_rtype =/= RT_X
   rob.io.debug_wb_wdata(0)  := ll_wbarb.io.out.bits.data
   var cnt = 1
-  for (i <- 1 until memWidth) {
+  for (i <- 1 until lsuWidth) {
     val mem_uop = mem_resps(i).bits.uop
     rob.io.wb_resps(cnt).valid := mem_resps(i).valid && !(mem_uop.uses_stq && !mem_uop.is_amo)
     rob.io.wb_resps(cnt).bits  := mem_resps(i).bits

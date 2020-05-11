@@ -502,11 +502,11 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   with HasL1HellaCacheParameters
 {
   val io = IO(new Bundle {
-    val req  = Flipped(Vec(memWidth, Decoupled(new BoomDCacheReqInternal))) // Req from s2 of DCache pipe
-    val req_is_probe = Input(Vec(memWidth, Bool()))
+    val req  = Flipped(Vec(lsuWidth, Decoupled(new BoomDCacheReqInternal))) // Req from s2 of DCache pipe
+    val req_is_probe = Input(Vec(lsuWidth, Bool()))
     val resp = Decoupled(new BoomDCacheResp)
-    val secondary_miss = Output(Vec(memWidth, Bool()))
-    val block_hit = Output(Vec(memWidth, Bool()))
+    val secondary_miss = Output(Vec(lsuWidth, Bool()))
+    val block_hit = Output(Vec(lsuWidth, Bool()))
 
     val brupdate       = Input(new BrUpdateInfo)
     val exception    = Input(Bool())
@@ -539,7 +539,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   val req     = io.req(req_idx)
   val req_is_probe = io.req_is_probe(0)
 
-  for (w <- 0 until memWidth)
+  for (w <- 0 until lsuWidth)
     io.req(w).ready := false.B
 
   val prefetcher: DataPrefetcher = if (enablePrefetching) Module(new NLPrefetcher)
@@ -581,14 +581,14 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
       lb_read_data := lb.read(lb_read_arb.io.out.bits.lb_addr)
     }
   }
-  def widthMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
+  def widthMap[T <: Data](f: Int => T) = VecInit((0 until lsuWidth).map(f))
 
 
 
 
-  val idx_matches = Wire(Vec(memWidth, Vec(cfg.nMSHRs, Bool())))
-  val tag_matches = Wire(Vec(memWidth, Vec(cfg.nMSHRs, Bool())))
-  val way_matches = Wire(Vec(memWidth, Vec(cfg.nMSHRs, Bool())))
+  val idx_matches = Wire(Vec(lsuWidth, Vec(cfg.nMSHRs, Bool())))
+  val tag_matches = Wire(Vec(lsuWidth, Vec(cfg.nMSHRs, Bool())))
+  val way_matches = Wire(Vec(lsuWidth, Vec(cfg.nMSHRs, Bool())))
 
   val tag_match   = widthMap(w => Mux1H(idx_matches(w), tag_matches(w)))
   val idx_match   = widthMap(w => idx_matches(w).reduce(_||_))
@@ -620,7 +620,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     val mshr = Module(new BoomMSHR)
     mshr.io.id := i.U(log2Ceil(cfg.nMSHRs).W)
 
-    for (w <- 0 until memWidth) {
+    for (w <- 0 until lsuWidth) {
       idx_matches(w)(i) := mshr.io.idx.valid && mshr.io.idx.bits === io.req(w).bits.addr(untagBits-1,blockOffBits)
       tag_matches(w)(i) := mshr.io.tag.valid && mshr.io.tag.bits === io.req(w).bits.addr >> untagBits
       way_matches(w)(i) := mshr.io.way.valid && mshr.io.way.bits === io.req(w).bits.way_en
@@ -680,7 +680,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     when (!mshr.io.req_pri_rdy) {
       io.fence_rdy := false.B
     }
-    for (w <- 0 until memWidth) {
+    for (w <- 0 until lsuWidth) {
       when (!mshr.io.probe_rdy && idx_matches(w)(i) && io.req_is_probe(w)) {
         io.probe_rdy := false.B
       }
@@ -740,7 +740,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   respq.io.enq      <> resp_arb.io.out
   io.resp           <> respq.io.deq
 
-  for (w <- 0 until memWidth) {
+  for (w <- 0 until lsuWidth) {
     io.req(w).ready      := (w.U === req_idx) &&
       Mux(!cacheable, mmio_rdy, sdq_rdy && Mux(idx_match(w), tag_match(w) && sec_rdy, pri_rdy))
     io.secondary_miss(w) := idx_match(w) && way_match(w) && !tag_match(w)

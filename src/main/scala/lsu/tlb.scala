@@ -17,9 +17,9 @@ import boom.util.{BoolToChar, AgePriorityEncoder, IsKilledByBranch, GetNewBrMask
 class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p) {
   require(!instruction)
   val io = IO(new Bundle {
-    val req = Flipped(Vec(memWidth, Decoupled(new TLBReq(lgMaxSize))))
+    val req = Flipped(Vec(lsuWidth, Decoupled(new TLBReq(lgMaxSize))))
     val miss_rdy = Output(Bool())
-    val resp = Output(Vec(memWidth, new TLBResp))
+    val resp = Output(Vec(lsuWidth, new TLBResp))
     val sfence = Input(Valid(new SFenceReq))
     val ptw = new TLBPTWIO
     val kill = Input(Bool())
@@ -116,7 +116,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     }
   }
 
-  def widthMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
+  def widthMap[T <: Data](f: Int => T) = VecInit((0 until lsuWidth).map(f))
 
   val pageGranularityPMPs = pmpGranularity >= (1 << pgIdxBits)
   val sectored_entries = Reg(Vec(cfg.nEntries / cfg.nSectors, new Entry(cfg.nSectors, false, false)))
@@ -147,8 +147,8 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
                 Mux(do_refill, refill_ppn,
                 Mux(vm_enabled(w) && special_entry.nonEmpty.B, special_entry.map(_.ppn(vpn(w))).getOrElse(0.U), io.req(w).bits.vaddr >> pgIdxBits)))
   val mpu_physaddr = widthMap(w => Cat(mpu_ppn(w), io.req(w).bits.vaddr(pgIdxBits-1, 0)))
-  val pmp = Seq.fill(memWidth) { Module(new PMPChecker(lgMaxSize)) }
-  for (w <- 0 until memWidth) {
+  val pmp = Seq.fill(lsuWidth) { Module(new PMPChecker(lgMaxSize)) }
+  for (w <- 0 until lsuWidth) {
     pmp(w).io.addr := mpu_physaddr(w)
     pmp(w).io.size := io.req(w).bits.size
     pmp(w).io.pmp := (io.ptw.pmp: Seq[PMP])
@@ -271,7 +271,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
 
   val sectored_plru = new PseudoLRU(sectored_entries.size)
   val superpage_plru = new PseudoLRU(superpage_entries.size)
-  for (w <- 0 until memWidth) {
+  for (w <- 0 until lsuWidth) {
     when (io.req(w).valid && vm_enabled(w)) {
       when (sector_hits(w).orR) { sectored_plru.access(OHToUInt(sector_hits(w))) }
       when (superpage_hits(w).orR) { superpage_plru.access(OHToUInt(superpage_hits(w))) }
@@ -286,7 +286,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   val multipleHits = widthMap(w => PopCountAtLeast(real_hits(w), 2))
 
   io.miss_rdy := state === s_ready
-  for (w <- 0 until memWidth) {
+  for (w <- 0 until lsuWidth) {
     io.req(w).ready    := true.B
     io.resp(w).pf.ld   := (bad_va(w) && cmd_read(w)) || (pf_ld_array(w) & hits(w)).orR
     io.resp(w).pf.st   := (bad_va(w) && cmd_write_perms(w)) || (pf_st_array(w) & hits(w)).orR
@@ -310,7 +310,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
 
   if (usingVM) {
     val sfence = io.sfence.valid
-    for (w <- 0 until memWidth) {
+    for (w <- 0 until lsuWidth) {
       when (io.req(w).fire() && tlb_miss(w) && state === s_ready) {
         state := s_request
         r_refill_tag := vpn(w)
@@ -334,7 +334,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     }
 
     when (sfence) {
-      for (w <- 0 until memWidth) {
+      for (w <- 0 until lsuWidth) {
         assert(!io.sfence.bits.rs1 || (io.sfence.bits.addr >> pgIdxBits) === vpn(w))
         for (e <- all_entries) {
           when (io.sfence.bits.rs1) { e.invalidateVPN(vpn(w)) }
