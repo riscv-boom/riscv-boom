@@ -69,7 +69,7 @@ class RobIo(
   val wb_resps = Flipped(Vec(numWakeupPorts, Valid(new ExeUnitResp(xLen max fLen+1))))
 
   // Unbusying ports for stores.
-  val lsu_clr_bsy      = Input(Vec(lsuWidth + 1, Valid(UInt(robAddrSz.W))))
+  val lsu_clr_bsy      = Input(Vec(lsuWidth + memWidth + 2, Valid(UInt(robAddrSz.W))))
 
   // Port for unmarking loads/stores as speculation hazards..
   val lsu_clr_unsafe   = Input(Vec(lsuWidth, Valid(UInt(robAddrSz.W))))
