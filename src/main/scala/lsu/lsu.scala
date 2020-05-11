@@ -861,16 +861,39 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val mem_paddr                = RegNext(widthMap(w => dmem_req(w).bits.addr))
 
   // Task 1: Clr ROB busy bit
+
+
+  for (w <- 0 until memWidth) {
+    val stq_idx = Mux(fired_stad_incoming(w) , RegNext(stq_incoming_idx(w)),
+                  Mux(fired_sta_retry(w)     , RegNext(stq_retry_idx),
+                                               RegNext(io.core.dgen(w).bits.uop.stq_idx)))
+    val stq_e   = stq(stq_idx)
+    val clr_valid = (
+      (fired_stad_incoming(w) || fired_sta_retry(w) || RegNext(io.core.dgen(w).valid)) &&
+       stq_e.valid &&
+       stq_e.bits.data.valid &&
+       stq_e.bits.addr.valid &&
+      !stq_e.bits.addr_is_virtual &&
+      !stq_e.bits.uop.is_amo &&
+      !stq_e.bits.cleared &&
+      !io.core.exception &&
+      !IsKilledByBranch(io.core.brupdate, stq_e.bits.uop)
+    )
+    val clr_idx = stq_e.bits.uop.rob_idx
+    when (clr_valid) {
+      stq(stq_idx).bits.cleared := true.B
+    }
+
+    io.core.clr_bsy(w).valid := RegNext(clr_valid) && !io.core.exception
+    io.core.clr_bsy(w).bits  := RegNext(clr_idx)
+  }
+
+
   val stq_clr_idx = RegNext(AgePriorityEncoder((0 until numStqEntries).map(i => {
     val e = stq(i).bits
     e.addr.valid && e.data.valid && !e.addr_is_virtual && !e.cleared
   }), stq_commit_head))
   val stq_clr_e   = stq(stq_clr_idx)
-
-  for (i <- 0 until memWidth) {
-    io.core.clr_bsy(i).valid := false.B
-    io.core.clr_bsy(i).bits  := DontCare
-  }
 
   val clr_bsy_valid = (stq_clr_e.valid                &&
                        stq_clr_e.bits.addr.valid      &&
