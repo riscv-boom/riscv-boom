@@ -74,17 +74,19 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
 
   val int_exe_units = (0 until intWidth) map { w =>
-    def is_nth(n: Int): Boolean = w == ((n) % intWidth)
+    def last = w == intWidth - 1
     Module(new ALUExeUnit(
-      hasJmp         = is_nth(0),
-      hasCSR         = is_nth(1),
-      hasRocc        = is_nth(1) && usingRoCC,
-      hasMul         = is_nth(2),
-      hasDiv         = is_nth(3),
-      hasIfpu        = is_nth(4)))
+      hasJmp         = last,
+      hasCSR         = last,
+      hasRocc        = last && usingRoCC,
+      hasMul         = last,
+      hasDiv         = last,
+      hasIfpu        = last))
   }
 
-  val jmp_unit = int_exe_units(0)
+
+  val jmp_unit_idx = int_exe_units.indexWhere(_.hasJmp)
+  val jmp_unit = int_exe_units(jmp_unit_idx)
 
   // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
   val fp_pipeline = Module(new FpPipeline)
@@ -543,7 +545,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   ftq_arb.io.out.ready  := true.B
 
   // Branch Unit Requests (for JALs) (Should delay issue of JALs if this not ready)
-  val jmp_unit_idx = int_exe_units.indexWhere(_.hasJmp)
   jmp_pc_req.valid := RegNext(int_iss_uops(jmp_unit_idx).valid && int_iss_uops(jmp_unit_idx).bits.fu_code === FU_JMP)
   jmp_pc_req.bits  := RegNext(int_iss_uops(jmp_unit_idx).bits.ftq_idx)
 
