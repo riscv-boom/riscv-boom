@@ -81,6 +81,7 @@ case class BoomCoreParams(
   useAtomics: Boolean = true,
   useDebug: Boolean = true,
   useUser: Boolean = true,
+  useSupervisor: Boolean = false,
   useVM: Boolean = true,
   useCompressed: Boolean = false,
   useSCIE: Boolean = false,
