@@ -75,13 +75,14 @@ class IssueUnitIO(
   val iss_valids       = Output(Vec(issueWidth, Bool()))
   val iss_uops         = Output(Vec(issueWidth, new MicroOp()))
   val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(maxPregSz))))
+  val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
 
-  val spec_ld_wakeup  = Flipped(Valid(UInt(width=maxPregSz.W)))
+  val spec_ld_wakeup   = Flipped(Vec(memWidth, Valid(UInt(width=maxPregSz.W))))
 
   // tell the issue unit what each execution pipeline has in terms of functional units
   val fu_types         = Input(Vec(issueWidth, Bits(width=FUC_SZ.W)))
 
-  val brinfo           = Input(new BrResolutionInfo())
+  val brupdate         = Input(new BrUpdateInfo())
   val flush_pipeline   = Input(Bool())
   val ld_miss          = Input(Bool())
 
@@ -139,6 +140,11 @@ abstract class IssueUnit(
         dis_uops(w).prs1_busy  := false.B
       }
     }
+
+    if (iqType != IQT_INT.litValue) {
+      assert(!(io.dis_uops(w).bits.ppred_busy && io.dis_uops(w).valid))
+      dis_uops(w).ppred_busy := false.B
+    }
   }
 
   //-------------------------------------------------------------
@@ -147,7 +153,19 @@ abstract class IssueUnit(
   val slots = for (i <- 0 until numIssueSlots) yield { val slot = Module(new IssueSlot(numWakeupPorts)); slot }
   val issue_slots = VecInit(slots.map(_.io))
 
+  for (i <- 0 until numIssueSlots) {
+    issue_slots(i).wakeup_ports     := io.wakeup_ports
+    issue_slots(i).pred_wakeup_port := io.pred_wakeup_port
+    issue_slots(i).spec_ld_wakeup   := io.spec_ld_wakeup
+    issue_slots(i).ldspec_miss      := io.ld_miss
+    issue_slots(i).brupdate         := io.brupdate
+    issue_slots(i).kill             := io.flush_pipeline
+  }
+
   io.event_empty := !(issue_slots.map(s => s.valid).reduce(_|_))
+
+  val count = PopCount(slots.map(_.io.valid))
+  dontTouch(count)
 
   //-------------------------------------------------------------
 
@@ -156,47 +174,6 @@ abstract class IssueUnit(
 
   //-------------------------------------------------------------
 
-  if (O3PIPEVIEW_PRINTF) {
-    for (i <- 0 until issueWidth) {
-      // only print stores once!
-      when (io.iss_valids(i) && io.iss_uops(i).uopc =/= uopSTD) {
-         printf("%d; O3PipeView:issue: %d\n",
-           io.iss_uops(i).debug_events.fetch_seq,
-           io.tsc_reg)
-      }
-    }
-  }
-
-
-  if (DEBUG_PRINTF_IQ) {
-    printf(this.getType + " issue slots:\n")
-    for (i <- 0 until numIssueSlots) {
-      printf("    Slot[%d]: " +
-        "V:%c Req:%c Wen:%c P:(%c,%c,%c) PRegs:Dst:(Typ:%c #:%d) Srcs:(%d,%d,%d) " +
-        "[PC:0x%x Inst:DASM(%x) UOPCode:%d] RobIdx:%d BMsk:0x%x Imm:0x%x\n",
-        i.U(log2Ceil(numIssueSlots).W),
-        BoolToChar(       issue_slots(i).valid, 'V'),
-        BoolToChar(     issue_slots(i).request, 'R'),
-        BoolToChar(issue_slots(i).in_uop.valid, 'W'),
-        BoolToChar(    issue_slots(i).debug.p1, '!'),
-        BoolToChar(    issue_slots(i).debug.p2, '!'),
-        BoolToChar(    issue_slots(i).debug.p3, '!'),
-        Mux(issue_slots(i).uop.dst_rtype === RT_FIX, Str("X"),
-          Mux(issue_slots(i).uop.dst_rtype === RT_X, Str("-"),
-            Mux(issue_slots(i).uop.dst_rtype === RT_FLT, Str("f"),
-              Mux(issue_slots(i).uop.dst_rtype === RT_PAS, Str("C"), Str("?"))))),
-        issue_slots(i).uop.pdst,
-        issue_slots(i).uop.prs1,
-        issue_slots(i).uop.prs2,
-        issue_slots(i).uop.prs3,
-        issue_slots(i).uop.debug_pc(31,0),
-        issue_slots(i).uop.debug_inst,
-        issue_slots(i).uop.uopc,
-        issue_slots(i).uop.rob_idx,
-        issue_slots(i).uop.br_mask,
-        issue_slots(i).uop.imm_packed)
-    }
-  }
 
   def getType: String =
     if (iqType == IQT_INT.litValue) "int"

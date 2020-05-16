@@ -22,6 +22,8 @@ import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
+import testchipip.{ExtendedTracedInstruction, WithExtendedTraceport}
+
 import boom.exu._
 import boom.ifu._
 import boom.lsu._
@@ -35,7 +37,7 @@ import boom.util.{BoomCoreStringPrefix}
  * @param dcache d$ params
  * @param btb btb params
  * @param dataScratchpadBytes ...
- * @param trace ...
+ * @param trace enable traceport
  * @param hcfOnUncorrectable ...
  * @param name name of tile
  * @param hartId hardware thread id
@@ -47,14 +49,12 @@ case class BoomTileParams(
   icache: Option[ICacheParams] = Some(ICacheParams()),
   dcache: Option[DCacheParams] = Some(DCacheParams()),
   btb: Option[BTBParams] = Some(BTBParams()),
-  dataScratchpadBytes: Int = 0,
   trace: Boolean = false,
   name: Option[String] = Some("boom_tile"),
   hartId: Int = 0,
   beuAddr: Option[BigInt] = None,
   blockerCtrlAddr: Option[BigInt] = None,
-  boundaryBuffers: Boolean = false, // if synthesized with hierarchical PnR, cut feed-throughs?
-  dromajoParams: Option[DromajoParams] = None
+  boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
   ) extends TileParams
 {
   require(icache.isDefined)
@@ -76,22 +76,16 @@ class BoomTile(
   extends BaseTile(boomParams, crossing, lookup, q)
   with SinksExternalInterrupts
   with SourcesExternalNotifications
+  with WithExtendedTraceport
 {
 
   // Private constructor ensures altered LazyModule.p is used implicitly
   def this(params: BoomTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: LogicalTreeNode)(implicit p: Parameters) =
-    this(params.copy(dromajoParams = Some(DromajoParams(Some(p(BootROMParams)), p(ExtMem), p(CLINTKey), p(PLICKey)))), crossing.crossingType, lookup, p, logicalTreeNode)
+    this(params, crossing.crossingType, lookup, p, logicalTreeNode)
 
   val intOutwardNode = IntIdentityNode()
-  val slaveNode = TLIdentityNode()
   val masterNode = visibilityNode
-
-  val dtim_adapter = tileParams.dcache.flatMap { d => d.scratch.map(s =>
-    LazyModule(new ScratchpadSlavePort(AddressSet.misaligned(s, d.dataScratchpadBytes-1),
-                                       xBytes,
-                                       tileParams.core.useAtomics && !tileParams.core.useAtomicsOnlyForIO)))
-  }
-  dtim_adapter.foreach(lm => connectTLSlave(lm.node, xBytes))
+  val slaveNode = TLIdentityNode()
 
   val bus_error_unit = boomParams.beuAddr map { a =>
     val beu = LazyModule(new BusErrorUnit(new L1BusErrors, BusErrorUnitParams(a), logicalTreeNode))
@@ -110,13 +104,6 @@ class BoomTile(
   // TODO: this doesn't block other masters, e.g. RoCCs
   tlOtherMastersNode := tile_master_blocker.map { _.node := tlMasterXbar.node } getOrElse { tlMasterXbar.node }
   masterNode :=* tlOtherMastersNode
-  DisableMonitors { implicit p => tlSlaveXbar.node :*= slaveNode }
-
-  val dtimProperty = dtim_adapter.map(d => Map(
-    "sifive,dtim" -> d.device.asProperty)).getOrElse(Nil)
-
-  val itimProperty = tileParams.icache.flatMap(_.itimAddr.map(i => Map(
-    "sifive,itim" -> frontend.icache.device.asProperty))).getOrElse(Nil)
 
   val cpuDevice: SimpleDevice = new SimpleDevice("cpu", Seq("ucb-bar,boom0", "riscv")) {
     override def parent = Some(ResourceAnchors.cpus)
@@ -125,9 +112,7 @@ class BoomTile(
       Description(name, mapping ++
                         cpuProperties ++
                         nextLevelCacheProperty ++
-                        tileProperties ++
-                        dtimProperty ++
-                        itimProperty)
+                        tileProperties)
     }
   }
 
@@ -190,7 +175,8 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   }
 
   // Pass through various external constants and reports
-  outer.traceSourceNode.bundle <> core.io.trace
+  outer.extTraceSourceNode.bundle <> core.io.trace
+  outer.traceSourceNode.bundle <> DontCare
   outer.bpwatchSourceNode.bundle <> DontCare // core.io.bpwatch
   core.io.hartid := constants.hartid
   outer.dcache.module.io.hartid := constants.hartid

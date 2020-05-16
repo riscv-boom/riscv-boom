@@ -17,7 +17,7 @@ import freechips.rocketchip.util._
 import freechips.rocketchip.rocket._
 
 import boom.common._
-import boom.exu.BrResolutionInfo
+import boom.exu.BrUpdateInfo
 import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder, UpdateBrMask, AgePriorityEncoder, WrapInc}
 
 class BoomDCacheReqInternal(implicit p: Parameters) extends BoomDCacheReq()(p)
@@ -45,7 +45,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     val req_sec_rdy = Output(Bool())
 
     val clear_prefetch = Input(Bool())
-    val brinfo       = Input(new BrResolutionInfo)
+    val brupdate       = Input(new BrUpdateInfo)
     val exception    = Input(Bool())
     val rob_pnr_idx  = Input(UInt(robAddrSz.W))
     val rob_head_idx = Input(UInt(robAddrSz.W))
@@ -126,7 +126,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
                  !state.isOneOf(s_invalid, s_meta_write_req, s_mem_finish_1, s_mem_finish_2))// Always accept secondary misses
 
   val rpq = Module(new BranchKillableQueue(new BoomDCacheReqInternal, cfg.nRPQ, u => u.uses_ldq, false))
-  rpq.io.brinfo := io.brinfo
+  rpq.io.brupdate := io.brupdate
   rpq.io.flush  := io.exception
   assert(!(state === s_invalid && !rpq.io.empty))
 
@@ -145,7 +145,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   val meta_hazard = RegInit(0.U(2.W))
   when (meta_hazard =/= 0.U) { meta_hazard := meta_hazard + 1.U }
   when (io.meta_write.fire()) { meta_hazard := 1.U }
-  io.probe_rdy   := (meta_hazard === 0.U && state.isOneOf(s_invalid, s_refill_req, s_refill_resp, s_drain_rpq_loads, s_meta_read))
+  io.probe_rdy   := (meta_hazard === 0.U && (state.isOneOf(s_invalid, s_refill_req, s_refill_resp, s_drain_rpq_loads) || (state === s_meta_read && grantack.valid)))
   io.idx.valid := state =/= s_invalid
   io.tag.valid := state =/= s_invalid
   io.way.valid := !state.isOneOf(s_invalid, s_prefetch)
@@ -281,7 +281,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       state := s_meta_read
     }
   } .elsewhen (state === s_meta_read) {
-    io.meta_read.valid := io.prober_idle
+    io.meta_read.valid := io.prober_idle || !grantack.valid
     io.meta_read.bits.idx := req_idx
     io.meta_read.bits.tag := req_tag
     io.meta_read.bits.way_en := req.way_en
@@ -397,7 +397,7 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
     val mem_access = Decoupled(new TLBundleA(edge.bundle))
     val mem_ack    = Flipped(Valid(new TLBundleD(edge.bundle)))
 
-    // We don't need brinfo in here because uncacheable operations are guaranteed non-speculative
+    // We don't need brupdate in here because uncacheable operations are guaranteed non-speculative
   })
 
   def beatOffset(addr: UInt) = addr.extract(beatOffBits-1, wordOffBits)
@@ -508,7 +508,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     val secondary_miss = Output(Vec(memWidth, Bool()))
     val block_hit = Output(Vec(memWidth, Bool()))
 
-    val brinfo       = Input(new BrResolutionInfo)
+    val brupdate       = Input(new BrUpdateInfo)
     val exception    = Input(Bool())
     val rob_pnr_idx  = Input(UInt(robAddrSz.W))
     val rob_head_idx = Input(UInt(robAddrSz.W))
@@ -644,7 +644,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     mshr.io.clear_prefetch := ((io.clear_all && !req.valid)||
       (req.valid && idx_matches(req_idx)(i) && cacheable && !tag_match(req_idx)) ||
       (req_is_probe && idx_matches(req_idx)(i)))
-    mshr.io.brinfo       := io.brinfo
+    mshr.io.brupdate       := io.brupdate
     mshr.io.exception    := io.exception
     mshr.io.rob_pnr_idx  := io.rob_pnr_idx
     mshr.io.rob_head_idx := io.rob_head_idx
@@ -734,7 +734,12 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   TLArbiter.lowestFromSeq(edge, io.mem_acquire, mshrs.map(_.io.mem_acquire) ++ mmios.map(_.io.mem_access))
   TLArbiter.lowestFromSeq(edge, io.mem_finish,  mshrs.map(_.io.mem_finish))
 
-  io.resp           <> resp_arb.io.out
+  val respq = Module(new BranchKillableQueue(new BoomDCacheResp, 4, u => u.uses_ldq, flow = false))
+  respq.io.brupdate := io.brupdate
+  respq.io.flush    := io.exception
+  respq.io.enq      <> resp_arb.io.out
+  io.resp           <> respq.io.deq
+
   for (w <- 0 until memWidth) {
     io.req(w).ready      := (w.U === req_idx) &&
       Mux(!cacheable, mmio_rdy, sdq_rdy && Mux(idx_match(w), tag_match(w) && sec_rdy, pri_rdy))
