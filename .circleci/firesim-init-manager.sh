@@ -120,6 +120,9 @@ EXP
 # expect folder to install to
 # expect yes
 
+# workaround not finding git2u in machine-launch-script
+sudo yum -y install git224
+
 # get chipyard
 cd $REMOTE_AWS_WORK_DIR
 rm -rf $REMOTE_AWS_CHIPYARD_DIR
