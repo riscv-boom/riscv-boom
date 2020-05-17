@@ -6,6 +6,9 @@
 #define MEMSTART 0x80000000
 #define MEMSIZE  0x10000000
 
+static uint64_t tohost;
+static uint64_t fromhost;
+
 uint64_t size_mask(uint64_t data, int memsize) {
   switch (memsize) {
   case 0:
@@ -54,7 +57,7 @@ int arrcmp(uint8_t* mem, uint64_t addr, uint64_t data, int memsize) {
 void handle_load(uint8_t* mem, uint64_t* mem_history, char* mem_val,
                  uint64_t tsc, uint64_t addr, uint64_t stdata, uint64_t wbdata,
                  int memsize) {
-  if (arrcmp(mem, addr, wbdata, memsize)) {
+  if (arrcmp(mem, addr, wbdata, memsize) && addr != fromhost && addr != tohost) {
 
     /* printf("%lx Load differs %d %lx != %lx at %lx\n", */
     /*        tsc, */
@@ -91,7 +94,7 @@ void handle_load(uint8_t* mem, uint64_t* mem_history, char* mem_val,
   }
 }
 
-int main(int argc, char* argv) {
+int main(int argc, char** argv) {
 
   printf("BOOM memtrace utility. 2019. Jerry Zhao\n"
          "\n"
@@ -106,6 +109,8 @@ int main(int argc, char* argv) {
   memset(mem_val, 'N', MEMSIZE);
   uint64_t* mem_history = calloc(MEMSIZE, sizeof(uint64_t));
   uint64_t lct = 0;
+  fromhost = strtoul(argv[1], NULL, 16);
+  tohost = strtoul(argv[2], NULL, 16);
 
   char *lpt = NULL;
   size_t size;
@@ -125,92 +130,81 @@ int main(int argc, char* argv) {
 
     //printf("%lu %d %d %lx %lx %lx\n", tsc, uopc, memsize, addr, stdata, wbdata);
 
-    if (addr > MEMSTART && addr < MEMSTART + MEMSIZE) {
-      switch (uopc) {
-      case 1 :
+    if (addr > MEMSTART && addr < MEMSTART + MEMSIZE && uopc != 42) {
+      switch (memcmd) {
+      case 0 :
         // Loads
         handle_load(mem, mem_history, mem_val,
                     tsc, addr, stdata, wbdata,
                     memsize);
         break;
-      case 2 :
+      case 1 :
         // Stores
         handle_store(mem, mem_history, mem_val,
                      tsc, addr, stdata, wbdata,
                      memsize);
         break;
-      case 67 :
-        // Atomics
-        switch (memcmd) {
-        case 0x4:
-          // Swap
-          handle_load(mem, mem_history, mem_val,
-                      tsc, addr, stdata, wbdata,
-                      memsize);
+      case 0x4:
+        // Swap
+        handle_load(mem, mem_history, mem_val,
+                    tsc, addr, stdata, wbdata,
+                    memsize);
+        handle_store(mem, mem_history, mem_val,
+                     tsc, addr, stdata, wbdata,
+                     memsize);
+        break;
+      case 0x6:
+          // LR
+        handle_load(mem, mem_history, mem_val,
+                    tsc, addr, stdata, wbdata,
+                    memsize);
+        break;
+      case 0x7:
+        // SC
+        if (wbdata == 0) {
           handle_store(mem, mem_history, mem_val,
                        tsc, addr, stdata, wbdata,
                        memsize);
-          break;
-        case 0x6:
-          // LR
-          handle_load(mem, mem_history, mem_val,
-                      tsc, addr, stdata, wbdata,
-                      memsize);
-          break;
-        case 0x7:
-          // SC
-          if (wbdata == 0) {
-            handle_store(mem, mem_history, mem_val,
-                         tsc, addr, stdata, wbdata,
-                         memsize);
-          }
-          break;
-        case 0x8:
-          // amoadd
-          handle_load(mem, mem_history, mem_val,
-                      tsc, addr, stdata, wbdata,
-                      memsize);
-          handle_store(mem, mem_history, mem_val,
-                       tsc, addr, stdata + wbdata, wbdata,
-                       memsize);
-          break;
-        case 0x9:
-          // amoxor
-          handle_load(mem, mem_history, mem_val,
-                      tsc, addr, stdata, wbdata,
-                      memsize);
-          handle_store(mem, mem_history, mem_val,
-                       tsc, addr, stdata ^ wbdata, wbdata,
-                       memsize);
-          break;
-        case 0xa:
-          // amoor
-          handle_load(mem, mem_history, mem_val,
-                      tsc, addr, stdata, wbdata,
-                      memsize);
-          handle_store(mem, mem_history, mem_val,
-                       tsc, addr, stdata | wbdata, wbdata,
-                       memsize);
-          break;
-        case 0xb:
-          // amoand
-          handle_load(mem, mem_history, mem_val,
-                      tsc, addr, stdata, wbdata,
-                      memsize);
-          handle_store(mem, mem_history, mem_val,
-                       tsc, addr, stdata & wbdata, wbdata,
-                       memsize);
-          break;
-        default :
-          printf("bad atomic mem_cmd %x\n", memcmd);
-          exit(0);
         }
         break;
-      case 42:
-        // Fence
+      case 0x8:
+        // amoadd
+        handle_load(mem, mem_history, mem_val,
+                    tsc, addr, stdata, wbdata,
+                    memsize);
+        handle_store(mem, mem_history, mem_val,
+                     tsc, addr, stdata + wbdata, wbdata,
+                     memsize);
+        break;
+      case 0x9:
+        // amoxor
+        handle_load(mem, mem_history, mem_val,
+                    tsc, addr, stdata, wbdata,
+                    memsize);
+        handle_store(mem, mem_history, mem_val,
+                     tsc, addr, stdata ^ wbdata, wbdata,
+                     memsize);
+        break;
+      case 0xa:
+          // amoor
+        handle_load(mem, mem_history, mem_val,
+                    tsc, addr, stdata, wbdata,
+                      memsize);
+        handle_store(mem, mem_history, mem_val,
+                     tsc, addr, stdata | wbdata, wbdata,
+                     memsize);
+        break;
+      case 0xb:
+        // amoand
+        handle_load(mem, mem_history, mem_val,
+                    tsc, addr, stdata, wbdata,
+                    memsize);
+        handle_store(mem, mem_history, mem_val,
+                     tsc, addr, stdata & wbdata, wbdata,
+                     memsize);
         break;
       default :
-        printf("bad opcode %d\n", uopc);
+        printf("bad mem_cmd %x\n", memcmd);
         exit(0);
       }
     }

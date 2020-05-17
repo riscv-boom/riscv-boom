@@ -36,4 +36,6 @@ if [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then
     # move the pull request riscv-boom repo into chipyard
     rm -rf $LOCAL_CHIPYARD_DIR/generators/boom
     cp -r $LOCAL_CHECKOUT_DIR $LOCAL_CHIPYARD_DIR/generators/boom/
+
+    clean
 fi

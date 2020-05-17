@@ -62,7 +62,7 @@ class RenameMapTable(
     val ren_br_tags = Input(Vec(plWidth, Valid(UInt(brTagSz.W))))
 
     // Signals for restoring state following misspeculation.
-    val brinfo      = Input(new BrResolutionInfo)
+    val brupdate      = Input(new BrUpdateInfo)
     val rollback    = Input(Bool())
   })
 
@@ -100,9 +100,9 @@ class RenameMapTable(
     }
   }
 
-  when (io.brinfo.mispredict) {
+  when (io.brupdate.b2.mispredict) {
     // Restore the map table to a branch snapshot.
-    map_table := br_snapshots(io.brinfo.tag)
+    map_table := br_snapshots(io.brupdate.b2.uop.br_tag)
   } .otherwise {
     // Update mappings.
     map_table := remap_table(plWidth)
