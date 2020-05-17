@@ -5,13 +5,13 @@ version: 2.1
 
 # "plugins" to use
 orbs:
-    aws-cli: circleci/aws-cli@0.1.19
+    aws-cli: circleci/aws-cli@1.0.0
 
 # default execution env.s
 executors:
     main-env:
         docker:
-            - image: ucbbar/chipyard-image:1.0.0
+            - image: ucbbar/chipyard-image:1.0.1
         environment:
             JVM_OPTS: -Xmx3200m # Customize the JVM maximum heap limit
 
