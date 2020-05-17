@@ -555,13 +555,13 @@ workflows:
 
     init-firesim:
         # run firesim workflow every thursday
-        triggers:
-            - schedule:
-                cron: "0 0 * * 4"
-                filters:
-                    branches:
-                        only:
-                            - master
+        #triggers:
+        #    - schedule:
+        #        cron: "0 0 * * 4"
+        #        filters:
+        #            branches:
+        #                only:
+        #                    - master
 
         when: << pipeline.parameters.init-firesim-run >>
         jobs:
