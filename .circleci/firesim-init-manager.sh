@@ -15,6 +15,7 @@ SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 echo "$SCRIPT_DIR"
 
 # install rsync
+sudo apt-get update
 sudo apt-get install -y rsync
 
 # get the firesim instance launch script
