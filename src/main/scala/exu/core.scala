@@ -1444,7 +1444,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       // use debug_insts instead of uop.debug_inst to use the rob's debug_inst_mem
       // note: rob.debug_insts comes 1 cycle later
       io.trace(w).insn       := getInst(RegNext(rob.io.commit.uops(w)), rob.io.commit.debug_insts(w))
-      io.trace(w).wdata      := RegNext(getWdata(rob.io.commit.uops(w), rob.io.commit.debug_wdata(w)))
+      io.trace(w).wdata.map { _ := RegNext(getWdata(rob.io.commit.uops(w), rob.io.commit.debug_wdata(w))) }
 
       // Comment out this assert because it blows up FPGA synth-asserts
       // This tests correctedness of the debug_inst mem
