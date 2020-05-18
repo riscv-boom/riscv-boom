@@ -38,8 +38,11 @@ LAUNCHRUNFARM_PASSED=$3
 INFRASETUP_PASSED=$4
 RUNWORKLOAD_PASSED=$5
 
+# TODO: Bump Docker image and remove
 # install rsync
+sudo apt-get update
 sudo apt-get install -y rsync
+# TODO: Bump Docker image and remove
 
 # see if the instance should be stopped
 stop_instance_check () {

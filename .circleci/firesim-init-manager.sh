@@ -14,9 +14,11 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 echo "$SCRIPT_DIR"
 
+# TODO: Bump Docker image and remove
 # install rsync
 sudo apt-get update
 sudo apt-get install -y rsync
+# TODO: Bump Docker image and remove
 
 # get the firesim instance launch script
 git clone --progress --verbose https://github.com/ucb-bar/chipyard.git
@@ -141,6 +143,9 @@ source ./env.sh
 # setup firesim and firemarshal
 chmod 600 $CI_AWS_DIR/firesim.pem
 cd $REMOTE_AWS_FSIM_DIR
+# TODO: Bump FireSim and remove
+echo "source ../../env.sh" >> source-f1-manager.sh
+# TODO: Bump FireSim and remove
 source sourceme-f1-manager.sh
 cd $REMOTE_AWS_MARSHAL_DIR
 ./init-submodules.sh

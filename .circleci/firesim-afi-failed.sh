@@ -22,8 +22,11 @@ source $SCRIPT_DIR/defaults.sh
 CONFIG_KEY=$1
 AFI_NAME=${afis[$1]}
 
+# TODO: Bump Docker image and remove
 # install rsync
+sudo apt-get update
 sudo apt-get install -y rsync
+# TODO: Bump Docker image and remove
 
 # set stricthostkeychecking to no (must happen before rsync)
 run_aws "echo \"Ping $AWS_SERVER\""
