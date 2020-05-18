@@ -14,11 +14,9 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 echo "$SCRIPT_DIR"
 
-# TODO: Bump Docker image and remove
-# install rsync
+# install rsync (since runs on aws executor)
 sudo apt-get update
 sudo apt-get install -y rsync
-# TODO: Bump Docker image and remove
 
 # get the firesim instance launch script
 git clone --progress --verbose https://github.com/ucb-bar/chipyard.git
@@ -28,6 +26,13 @@ git fetch
 git checkout $(cat $HOME/project/CHIPYARD.hash)
 cd sims
 git submodule update --init firesim/
+
+# TODO: Use working FireSim version
+cd firesim
+git checkout 70eaef80506a1a1a4f81f0fd275c2166ceecc6f3
+cd ..
+# TODO: Use working FireSim version
+
 cp firesim/scripts/machine-launch-script.sh $HOME/firesim-instance-launch-script.sh
 
 cd $HOME
