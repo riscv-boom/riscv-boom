@@ -143,9 +143,6 @@ source ./env.sh
 # setup firesim and firemarshal
 chmod 600 $CI_AWS_DIR/firesim.pem
 cd $REMOTE_AWS_FSIM_DIR
-# TODO: Bump FireSim and remove
-echo "source ../../env.sh" >> source-f1-manager.sh
-# TODO: Bump FireSim and remove
 source sourceme-f1-manager.sh
 cd $REMOTE_AWS_MARSHAL_DIR
 ./init-submodules.sh

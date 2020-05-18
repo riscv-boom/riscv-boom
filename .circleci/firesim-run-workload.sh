@@ -53,6 +53,8 @@ cat <<EOF >> $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
 set -ex
 
 # setup firesim
+cd $REMOTE_AWS_CHIPYARD_DIR
+source env.sh
 cd $REMOTE_AWS_FSIM_DIR
 source sourceme-f1-manager.sh
 
