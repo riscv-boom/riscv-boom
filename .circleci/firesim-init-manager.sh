@@ -97,10 +97,6 @@ copy $SERVER:$REMOTE_SPEC $HOME/spec-2017.iso
 copy $HOME/spec-2017.iso $AWS_SERVER:$CI_AWS_DIR/
 rm -rf $HOME/spec-2017.iso
 
-# TODO: unneeded?
-## clear folders older than 30 days
-#run_script_aws $SCRIPT_DIR/clean-old-files.sh $CI_AWS_DIR
-
 SCRIPT_NAME=firesim-manager-setup.sh
 
 # create a script to run
@@ -117,7 +113,7 @@ mkdir -p $SPEC_SRC_DIR
 sudo mount $CI_AWS_DIR/spec-2017.iso $SPEC_SRC_DIR -o loop
 cd $SPEC_SRC_DIR
 
-expect << EXP
+/bin/expect << EXP
 set timeout -1
 spawn ./install.sh
 send -- "$SPEC_DIR\r"
