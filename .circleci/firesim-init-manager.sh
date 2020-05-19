@@ -152,6 +152,13 @@ echo "Checking out Chipyard version: $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)"
 git fetch
 git checkout $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)
 
+# TODO: Use working FireSim version
+git submodule update --init sims/firesim
+cd sims/firesim
+git checkout 6ad2928c94f7ba5ec8286b03c24b0e88edfb7636
+cd ../..
+# TODO: Use working FireSim version
+
 # setup repo
 ./scripts/init-submodules-no-riscv-tools.sh
 ./scripts/build-toolchains.sh ec2fast
