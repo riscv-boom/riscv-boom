@@ -29,7 +29,7 @@ git submodule update --init firesim/
 
 # TODO: Use working FireSim version
 cd firesim
-git checkout 70eaef80506a1a1a4f81f0fd275c2166ceecc6f3
+git checkout 6ad2928c94f7ba5ec8286b03c24b0e88edfb7636
 cd ..
 # TODO: Use working FireSim version
 
@@ -104,6 +104,22 @@ cat <<EOF >> $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
 #!/bin/bash
 
 set -ex
+
+# make sure all items are installed in machine launch
+FOUND_COMPLETE=false
+for i in {1..60}
+do
+    if grep -q "machine launch script completed" /home/centos/machine-launchstatus; then
+        FOUND_COMPLETE=true
+        break
+    fi
+    sleep 30s
+done
+
+if [ \$FOUND_COMPLETE == false ]; then
+    # failed to complete machine setup
+    exit
+fi
 
 mkdir -p $REMOTE_AWS_WORK_DIR
 cd $REMOTE_AWS_WORK_DIR
