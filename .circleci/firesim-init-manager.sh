@@ -31,10 +31,6 @@ cp firesim/scripts/machine-launch-script.sh $HOME/firesim-instance-launch-script
 
 cd $HOME
 
-# add expect to the install
-echo "sudo yum -y install expect" >> firesim-instance-launch-script.sh
-echo "echo \"firesim-ci: installed expect\" >> /home/centos/machine-launchstatus" >> firesim-instance-launch-script.sh
-
 # get the resize root script
 cp $HOME/project/.circleci/firesim-instance-resize-root.json .
 
