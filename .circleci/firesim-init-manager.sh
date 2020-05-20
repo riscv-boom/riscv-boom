@@ -87,7 +87,7 @@ copy $SERVER:$REMOTE_SPEC $HOME/spec-2017.iso
 copy $HOME/spec-2017.iso $AWS_SERVER:$CI_AWS_DIR/
 rm -rf $HOME/spec-2017.iso
 
-SCRIPT_NAME=firesim-manager-setup.sh
+SCRIPT_NAME=firesim-machine-launch.sh
 
 # create a script to run
 cat <<EOF >> $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
@@ -110,6 +110,21 @@ if [ \$FOUND_COMPLETE == false ]; then
     # failed to complete machine setup
     exit
 fi
+EOF
+
+# note: exit after machine-launch complete to match the firesim docs
+
+# execute the script
+chmod +x $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
+run_script_aws $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
+
+SCRIPT_NAME=firesim-manager-setup.sh
+
+# create a script to run
+cat <<EOF >> $LOCAL_CHECKOUT_DIR/$SCRIPT_NAME
+#!/bin/bash
+
+set -ex
 
 mkdir -p $REMOTE_AWS_WORK_DIR
 cd $REMOTE_AWS_WORK_DIR
