@@ -118,7 +118,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 
   // Stores clear busy bit when stdata is received
   // memWidth for incoming addr/datagen, +1 for fp dgen, +1 for clr_head pointer
-  val clr_bsy         = Output(Vec(lsuWidth + memWidth + 2, Valid(UInt(robAddrSz.W))))
+  val clr_bsy         = Output(Vec(lsuWidth, Valid(UInt(robAddrSz.W))))
 
   // Speculatively safe load (barring memory ordering failure)
   val clr_unsafe      = Output(Vec(lsuWidth, Valid(UInt(robAddrSz.W))))
@@ -457,7 +457,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                      !stq_commit_e.bits.uop.is_fence               &&
                                      !mem_xcpt_valid                               &&
                                      !stq_commit_e.bits.uop.exception              &&
-                                      (w == 0).B                                    &&
+                                      (w == 0).B                                   &&
+                                      stq_commit_e.bits.data.valid                 &&
                                       (stq_commit_e.bits.committed || ( stq_commit_e.bits.uop.is_amo      &&
                                                                         stq_commit_e.bits.addr.valid      &&
                                                                        !stq_commit_e.bits.addr_is_virtual &&
@@ -874,25 +875,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // Task 1: Clr ROB busy bit
 
 
-  for (w <- 0 until lsuWidth + memWidth + 1) {
-    val agen_idx = w
-    val dgen_idx = w - lsuWidth
-
+  for (w <- 0 until lsuWidth) {
     val stq_idx = Wire(UInt())
     val stq_clr = Wire(Bool())
-    if (w < lsuWidth) {
-      stq_idx := Mux(fired_store_agen(agen_idx) , RegNext(stq_incoming_idx(agen_idx))
-                                                , RegNext(stq_retry_idx))
-      stq_clr := fired_store_agen(agen_idx) || fired_store_retry(agen_idx)
-    } else {
-      stq_idx := RegNext(io.core.dgen(dgen_idx).bits.uop.stq_idx)
-      stq_clr := RegNext(io.core.dgen(dgen_idx).valid)
-    }
+
+    stq_idx := Mux(fired_store_agen(w) , RegNext(stq_incoming_idx(w))
+                                       , RegNext(stq_retry_idx))
+    stq_clr := fired_store_agen(w) || fired_store_retry(w)
+
     val stq_e   = stq(stq_idx)
     val clr_valid = (
        stq_clr &&
        stq_e.valid &&
-       stq_e.bits.data.valid &&
        stq_e.bits.addr.valid &&
       !stq_e.bits.addr_is_virtual &&
       !stq_e.bits.uop.is_amo &&
@@ -909,33 +903,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
     io.core.clr_bsy(w).valid := RegNext(clr_valid) && !io.core.exception && !IsKilledByBranch(io.core.brupdate, clr_uop)
     io.core.clr_bsy(w).bits  := RegNext(clr_idx)
-  }
-
-
-  val stq_clr_idx = RegNext(AgePriorityEncoder((0 until numStqEntries).map(i => {
-    val e = stq(i).bits
-    e.addr.valid && e.data.valid && !e.addr_is_virtual && !e.cleared
-  }), stq_commit_head))
-  val stq_clr_e   = stq(stq_clr_idx)
-
-  val clr_bsy_valid = (stq_clr_e.valid                &&
-                       stq_clr_e.bits.addr.valid      &&
-                       stq_clr_e.bits.data.valid      &&
-                      !stq_clr_e.bits.uop.is_amo      &&
-                      !stq_clr_e.bits.addr_is_virtual &&
-                      !stq_clr_e.bits.cleared         &&
-                      !IsKilledByBranch(io.core.brupdate, stq_clr_e.bits.uop) &&
-                      !io.core.exception && !RegNext(io.core.exception))
-
-  io.core.clr_bsy(lsuWidth+memWidth+1).valid := (
-    RegNext(clr_bsy_valid) &&
-    !io.core.exception &&
-    !IsKilledByBranch(io.core.brupdate, RegNext(stq_clr_e.bits.uop))
-  )
-  io.core.clr_bsy(lsuWidth+memWidth+1).bits  := RegNext(stq_clr_e.bits.uop.rob_idx)
-
-  when (clr_bsy_valid) {
-    stq(stq_clr_idx).bits.cleared := true.B
   }
 
 
