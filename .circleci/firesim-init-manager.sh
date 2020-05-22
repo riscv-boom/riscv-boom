@@ -155,6 +155,10 @@ git checkout $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)
 ./scripts/init-submodules-no-riscv-tools.sh
 ./scripts/build-toolchains.sh ec2fast
 source ./env.sh
+
+## DEBUG
+printenv &> env.out
+## DEBUG
 ./scripts/firesim-setup.sh --fast
 
 # setup firesim and firemarshal
