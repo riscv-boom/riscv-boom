@@ -168,6 +168,7 @@ commands:
                 name: Build a << parameters.config-key >> << parameters.workload >> workload
                 command: |
                     .circleci/firesim-build-workload.sh << parameters.config-key >> << parameters.workload >>
+                no_output_timeout: 30m
 
 # set of jobs to run
 jobs:
