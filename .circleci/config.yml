@@ -446,6 +446,7 @@ jobs:
                         name: Buildroot workload finished
                         command: |
                             .circleci/firesim-run-finished.sh largefireboom buildroot << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
+                        no_output_timeout: 30m
             - when:
                 condition: << pipeline.parameters.largefireboom_fedora >>
                 steps:
@@ -453,6 +454,7 @@ jobs:
                         name: Fedora workload finished
                         command: |
                             .circleci/firesim-run-finished.sh largefireboom fedora << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
+                        no_output_timeout: 30m
             - when:
                 condition: << pipeline.parameters.largefireboom_coremark >>
                 steps:
@@ -460,6 +462,7 @@ jobs:
                         name: CoreMark workload finished
                         command: |
                             .circleci/firesim-run-finished.sh largefireboom coremark << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
+                        no_output_timeout: 30m
             - when:
                 condition: << pipeline.parameters.largefireboom_spec17-intspeed-test-600 >>
                 steps:
@@ -467,6 +470,7 @@ jobs:
                         name: SPEC17 intspeed test input perlbench_s workload finished
                         command: |
                             .circleci/firesim-run-finished.sh largefireboom spec17-intspeed-test-600 << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
+                        no_output_timeout: 30m
 
 # Order and dependencies of jobs to run
 workflows:

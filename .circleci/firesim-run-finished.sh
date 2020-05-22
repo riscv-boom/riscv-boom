@@ -53,7 +53,7 @@ stop_instance_check () {
         # workloads still running
         echo "[CHECK] workloads still running..."
         cat $HOME/workloads_running
-        if [ ! -s $REMOTE_AWS_WORK_DIR/workloads_running ]; then
+        if [ ! -s $HOME/workloads_running ]; then
             # if all workloads are done... just stop the manager instance
             echo "[CHECK] stop manager instance..."
             MANAGER_ID=$(sed -n '1p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
