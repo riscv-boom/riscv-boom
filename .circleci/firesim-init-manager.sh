@@ -12,7 +12,7 @@
 set -ex
 
 # deal with aws cli 2.0 warnings
-TERM=xterm
+#TERM=xterm
 
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 echo "$SCRIPT_DIR"

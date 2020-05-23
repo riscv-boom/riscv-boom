@@ -337,6 +337,8 @@ jobs:
 
     initialize-manager:
         executor: aws-cli/default
+        environment:
+            TERM: xterm-256color
         steps:
             - ssh-checkout
             - aws-cli/setup
@@ -387,6 +389,8 @@ jobs:
                 no_output_timeout: 240m
     largefireboom-afi-failed:
         executor: aws-cli/default
+        environment:
+            TERM: xterm-256color
         steps:
             - ssh-checkout
             - aws-cli/setup
@@ -434,6 +438,8 @@ jobs:
                             .circleci/firesim-run-workload.sh largefireboom spec17-intspeed-test-600 30h
     largefireboom-workload-finished:
         executor: aws-cli/default
+        environment:
+            TERM: xterm-256color
         steps:
             - ssh-checkout
             - aws-cli/setup
