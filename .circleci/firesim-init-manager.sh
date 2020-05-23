@@ -11,6 +11,9 @@
 # turn echo on and error on earliest command
 set -ex
 
+# deal with aws cli 2.0 warnings
+TERM=xterm
+
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 echo "$SCRIPT_DIR"
 

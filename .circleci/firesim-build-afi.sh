@@ -14,6 +14,9 @@
 # turn echo on and error on earliest command
 set -ex
 
+# deal with aws cli 2.0 warnings
+TERM=xterm
+
 # setup AWS_SERVER variable
 AWS_SERVER=centos@$(sed -n '2p' /tmp/FSIM_MANAGER_INSTANCE_DATA.txt)
 
