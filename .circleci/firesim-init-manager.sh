@@ -41,7 +41,7 @@ cp $HOME/project/.circleci/firesim-instance-resize-root.json .
 aws ec2 run-instances \
     --image-id ami-0e560af290c745f5b \
     --count 1 \
-    --instance-type c5.9xlarge \
+    --instance-type c5.4xlarge \
     --key-name firesim \
     --security-group-ids sg-07a0a7896e773a564 \
     --subnet-id subnet-0f0b813740c8ec84d \
@@ -164,6 +164,10 @@ git checkout $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)
 ./scripts/init-submodules-no-riscv-tools.sh
 ./scripts/build-toolchains.sh ec2fast
 source ./env.sh
+
+# DEBUG
+printenv &> build-env.txt
+# DEBUG
 
 ./scripts/firesim-setup.sh --fast
 
