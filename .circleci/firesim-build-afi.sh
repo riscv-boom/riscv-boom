@@ -68,7 +68,7 @@ set +e
 # DEBUG: switch between override agfi or manually built
 if $USE_CUSTOM_HWDB; then
     # wait for all workloads to build (est. completion time)
-    sleep 30m
+    sleep 45m
 
 else
 
