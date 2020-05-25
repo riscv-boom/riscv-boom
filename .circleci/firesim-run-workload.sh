@@ -28,7 +28,7 @@ source $SCRIPT_DIR/defaults.sh
 
 if [ -v AWS_IP_ADDR_OVERRIDE ]; then
     echo "Reset the \"workloads_running\" file"
-    run_aws "rm $REMOTE_AWS_WORK_DIR/workloads_running"
+    run_aws "rm -f $REMOTE_AWS_WORK_DIR/workloads_running"
 fi
 
 # setup arguments
