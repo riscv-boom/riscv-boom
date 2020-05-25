@@ -13,7 +13,7 @@
 # turn echo on and error on earliest command
 set -ex
 
-# setup AWS_SERVER variable (override with AWS_IP_ADDR_OVERRIDE if defined)
+# DEBUG: setup AWS_SERVER variable (override with AWS_IP_ADDR_OVERRIDE if defined)
 if [ -v AWS_IP_ADDR_OVERRIDE ]; then
     echo "Override AWS IP address with $AWS_IP_ADDR_OVERRIDE"
     AWS_SERVER=centos@$AWS_IP_ADDR_OVERRIDE

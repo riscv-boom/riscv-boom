@@ -31,9 +31,23 @@ run_aws "echo \"Ping $AWS_SERVER\""
 # copy over the configuration collateral
 copy $LOCAL_FSIM_CFGS_DIR/$AFI_NAME $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/
 
-# setup workload variables
-BUILDROOT_CFG=$LOCAL_FSIM_CFGS_DIR/$AFI_NAME/buildroot/firemarshal_config
-FEDORA_CFG=$LOCAL_FSIM_CFGS_DIR/$AFI_NAME/fedora/firemarshal_config
+# DEBUG: use a previously built afi (use the $(CONFIG_KEY)_OVERRIDE name to write the agfi id)
+USE_CUSTOM_HWDB=false
+if [ -v ${CONFIG_KEY}_OVERRIDE ]; then
+    echo "Using a previously built $CONFIG_KEY ($AFI_NAME) AFI"
+
+    HWDB_FILE=$LOCAL_CHECKOUT_DIR/$AFI_NAME
+    echo "[$AFI_NAME]" >> $HWDB_FILE
+    eval "echo \"agfi=\${${CONFIG_KEY}_OVERRIDE}\" >> $HWDB_FILE"
+    echo "deploytripletoverride=None" >> $HWDB_FILE
+    echo "customruntimeconfig=None" >> $HWDB_FILE
+
+    USE_CUSTOM_HWDB=true
+
+    copy $HWDB_FILE $AWS_SERVER:$REMOTE_AWS_FSIM_HWDB_DIR/
+else
+    echo "Building a $CONFIG_KEY ($AFI_NAME) AFI from scratch"
+fi
 
 SCRIPT_NAME=firesim-build-$AFI_NAME-afi.sh
 
@@ -50,6 +64,13 @@ cd $REMOTE_AWS_FSIM_DIR
 source sourceme-f1-manager.sh
 
 set +e
+
+# DEBUG: switch between override agfi or manually built
+if $USE_CUSTOM_HWDB; then
+    # wait for all workloads to build (est. completion time)
+    sleep 30m
+
+else
 
 # build afi
 if firesim buildafi -b $REMOTE_AWS_FSIM_DEPLOY_DIR/$AFI_NAME/config_build.ini -r $REMOTE_AWS_FSIM_DEPLOY_DIR/$AFI_NAME/config_build_recipes.ini; then
@@ -75,6 +96,8 @@ else
 }'
 
     exit 1
+fi
+
 fi
 
 # launch workloads

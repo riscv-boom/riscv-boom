@@ -42,3 +42,8 @@ If the workloads fail to run AND the manager instance stops, you can still run t
     - Add to the CircleCI UI `$AWS_IP_ADDR_OVERRIDE` with the new IP address
     - Re-run the tests
     - REMEMBER TO REMOVE THE ENVIRONMENT VARIABLE ONCE DONE! OTHERWISE THE CI WILL BREAK ON THE WORKLOAD STEPS
+
+You can also re-use a built AFI:
+    - Add to the CircleCI UI `${CONFIG_KEY}_OVERRIDE` with the agfi id (i.e agfi-...) where `${CONFIG_KEY}` is the AFI-type to override
+    - Re-run the tests
+    - REMEMBER TO REMOVE THE ENVIRONMENT VARIABLE ONCE DONE! OTHERWISE THE CI WILL USE A STALE AFI
