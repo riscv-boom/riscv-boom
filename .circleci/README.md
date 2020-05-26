@@ -46,4 +46,6 @@ If the workloads fail to run AND the manager instance stops, you can still run t
 You can also re-use a built AFI:
     - Add to the CircleCI UI `${CONFIG_KEY}_OVERRIDE` with the agfi id (i.e agfi-...) where `${CONFIG_KEY}` is the AFI-type to override
     - Re-run the tests
+    - Note: The 1st infrasetup will take an extremely long time since it is building the RTL/driver for the 1st time
     - REMEMBER TO REMOVE THE ENVIRONMENT VARIABLE ONCE DONE! OTHERWISE THE CI WILL USE A STALE AFI
+
