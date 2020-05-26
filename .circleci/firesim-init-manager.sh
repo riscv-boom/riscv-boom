@@ -60,10 +60,10 @@ aws ec2 describe-instances --instance-ids $(cat $INSTANCE_FILE) &> output.json
 grep PublicIpAddress output.json | sed -r 's/.*PublicIpAddress.*\"(.*)\",.*/\1/' >> $INSTANCE_FILE
 
 # delete the extra 5GB volume
-VOL_ID=$(grep -A 6 "DeviceName.*\/dev\/sdb" output.json | grep "VolumeId" | sed -r 's/.*VolumeId.*\"(.*)\".*/\1/')
-aws ec2 detach-volume --volume-id $VOL_ID
-sleep 1m
-aws ec2 delete-volume --volume-id $VOL_ID
+#VOL_ID=$(grep -A 6 "DeviceName.*\/dev\/sdb" output.json | grep "VolumeId" | sed -r 's/.*VolumeId.*\"(.*)\".*/\1/')
+#aws ec2 detach-volume --volume-id $VOL_ID
+#sleep 1m
+#aws ec2 delete-volume --volume-id $VOL_ID
 
 # setup AWS_SERVER variable
 AWS_SERVER=centos@$(sed -n '2p' $INSTANCE_FILE)
