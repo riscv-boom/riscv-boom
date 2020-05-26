@@ -96,10 +96,22 @@ clean_aws () {
 #############
 
 # make parallelism
-NPROC=8
+# CI_MAKE_NPROC
+ncpu="$(getconf _NPROCESSORS_ONLN || # GNU
+    getconf NPROCESSORS_ONLN || # *BSD, Solaris
+    nproc --all || # Linux
+    sysctl -n hw.ncpu || # *BSD, OS X
+    :)" 2>/dev/null
 
-# verilator version
-VERILATOR_VERSION=v4.028
+case ${ncpu} in
+''|*[!0-9]*) ;; # Ignore non-integer values
+*) export CI_NPROC=${ncpu} ;;
+esac
+
+CI_MAKE_NPROC=${CI_NPROC:-1}
+
+# REMOTE_MAKE_NPROC (chosen based on a 24c system shared with 1 other project)
+REMOTE_MAKE_NPROC=4
 
 # remote variables (on build instance)
 REMOTE_WORK_DIR=$CI_DIR/$CIRCLE_PROJECT_REPONAME-$CIRCLE_BRANCH-$CIRCLE_SHA1-$CIRCLE_JOB

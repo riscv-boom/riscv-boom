@@ -60,10 +60,10 @@ parameters:
     # misc parameters
     tools-cache-version:
         type: string
-        default: "v4"
+        default: "v5"
     chipyard-cache-version:
         type: string
-        default: "v13"
+        default: "v14"
 
 # re-usable commands
 commands:

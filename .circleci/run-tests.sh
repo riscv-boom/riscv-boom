@@ -16,11 +16,11 @@ SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
 run_bmark () {
-    make -j$NPROC run-bmark-tests-fast -C $LOCAL_SIM_DIR $@
+    make -j$CI_MAKE_NPROC run-bmark-tests-fast -C $LOCAL_SIM_DIR $@
 }
 
 run_asm () {
-    make -j$NPROC run-asm-tests-fast -C $LOCAL_SIM_DIR $@
+    make -j$CI_MAKE_NPROC run-asm-tests-fast -C $LOCAL_SIM_DIR $@
 }
 
 run_both () {
@@ -51,7 +51,7 @@ case $1 in
         export RISCV=$LOCAL_ESP_DIR
         export LD_LIBRARY_PATH=$LOCAL_ESP_DIR/lib
         export PATH=$RISCV/bin:$PATH
-        make run-rv64uv-p-asm-tests -j$NPROC -C $LOCAL_SIM_DIR ${mapping[$1]}
+        make run-rv64uv-p-asm-tests -j$CI_MAKE_NPROC -C $LOCAL_SIM_DIR ${mapping[$1]}
         ;;
     *)
         echo "No set of tests for $1. Did you spell it right?"
