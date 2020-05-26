@@ -27,6 +27,6 @@ if [ ! -d "$HOME/$1-install" ]; then
 
     cd $HOME
 
-    # init all submodules including the tools
-    CHIPYARD_DIR="$LOCAL_CHIPYARD_DIR" NPROC=$CI_MAKE_NPROC $LOCAL_CHIPYARD_DIR/scripts/build-toolchains.sh $1
+    # init all submodules including the tools (doesn't use CI_MAKE_PROC due to mem. constraints)
+    CHIPYARD_DIR="$LOCAL_CHIPYARD_DIR" NPROC=8 $LOCAL_CHIPYARD_DIR/scripts/build-toolchains.sh $1
 fi
