@@ -3,9 +3,12 @@ CI Notes
 
 These are the scripts that Circle CI uses to run the tests during a PR.
 
-Note: This uses the Chipyard `ucb-bar/chipyard:dev` branch to run CI.
+Note: This uses the Chipyard `ucb-bar/chipyard:dev` branch to run CI (or other similar commits).
 
-Note: This uses `$SERVER` and `$CI_DIR` which is given in the CircleCI env var setup to specify a server to build on.
+Note: CircleCI env. var. refers to adding a environment variable by navigating to the "Project Settings" in the web UI and adding
+an environment variable in the "Environment Variables" tab.
+
+Note: This uses `$SERVER` and `$CI_DIR` which is given in the CircleCI env. var. setup to specify a server to build on.
 To change these variables you must change the project settings of CircleCI.
 
 Note: You also need to add the private key of the build server to CircleCI and match the fingerprint it gives in the config.yml
@@ -39,12 +42,12 @@ Requirements:
 
 If the workloads fail to run AND the manager instance stops, you can still run tests again:
     - Re-boot the instance (note: the IP address has changed)
-    - Add to the CircleCI UI `$AWS_IP_ADDR_OVERRIDE` with the new IP address
+    - Add the CircleCI env. var. `$AWS_IP_ADDR_OVERRIDE` with the new IP address
     - Re-run the tests
     - REMEMBER TO REMOVE THE ENVIRONMENT VARIABLE ONCE DONE! OTHERWISE THE CI WILL BREAK ON THE WORKLOAD STEPS
 
 You can also re-use a built AFI:
-    - Add to the CircleCI UI `${CONFIG_KEY}_OVERRIDE` with the agfi id (i.e agfi-...) where `${CONFIG_KEY}` is the AFI-type to override
+    - Add the CircleCI env. var. `${CONFIG_KEY}_OVERRIDE` with the agfi id (i.e agfi-...) where `${CONFIG_KEY}` is the AFI-type to override
     - Re-run the tests
     - Note: The 1st infrasetup will take an extremely long time since it is building the RTL/driver for the 1st time
     - REMEMBER TO REMOVE THE ENVIRONMENT VARIABLE ONCE DONE! OTHERWISE THE CI WILL USE A STALE AFI
