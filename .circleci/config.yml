@@ -485,27 +485,15 @@ workflows:
     build-and-test-boom-configs:
         when: << pipeline.parameters.build-and-test-boom-configs-run >>
         jobs:
-            - test-approval:
-                type: approval
-
             # Make the toolchains
-            - install-riscv-toolchain:
-                requires:
-                    - test-approval
-
-            - install-esp-toolchain:
-                requires:
-                    - test-approval
+            - install-riscv-toolchain
+            - install-esp-toolchain
 
             # Setup build environment
-            - prepare-build-environment:
-                requires:
-                    - test-approval
+            - prepare-build-environment
 
             # Run generic syntax checking
-            - run-scala-checkstyle:
-                requires:
-                    - test-approval
+            - run-scala-checkstyle
 
             # Prepare the verilator builds
             - prepare-smallboomconfig:
