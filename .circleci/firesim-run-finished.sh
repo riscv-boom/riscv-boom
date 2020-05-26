@@ -75,7 +75,6 @@ run_aws "echo \"Ping $AWS_SERVER\""
 RESULT_DIR=$CONFIG_KEY-$WORKLOAD_NAME-resultdir
 LOG_DIR=$CONFIG_KEY-$WORKLOAD_NAME-logdir
 
-copy $AWS_SERVER:$REMOTE_AWS_RESULTS_DIR/ $HOME/$RESULT_DIR
 copy $AWS_SERVER:$REMOTE_AWS_FSIM_DEPLOY_DIR/logs/ $HOME/$LOG_DIR
 
 set +e
@@ -103,6 +102,8 @@ else
     stop_instance_check
     exit 1
 fi
+
+copy $AWS_SERVER:$REMOTE_AWS_RESULTS_DIR/ $HOME/$RESULT_DIR
 
 # cannot distinguish between which command run failed so just dump all
 # print the results
