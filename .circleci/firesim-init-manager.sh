@@ -153,7 +153,7 @@ git checkout $(cat $LOCAL_CHECKOUT_DIR/CHIPYARD.hash)
 
 # setup repo
 ./scripts/init-submodules-no-riscv-tools.sh
-./scripts/build-toolchains.sh ec2fast
+NPROC=16 ./scripts/build-toolchains.sh ec2fast
 source ./env.sh
 
 # print out env for debugging
