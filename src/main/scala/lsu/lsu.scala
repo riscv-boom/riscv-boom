@@ -92,6 +92,11 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
   val force_order  = Output(Bool())
   val ordered     = Input(Bool())
 
+  val perf = Input(new Bundle {
+    val acquire = Bool()
+    val release = Bool()
+  })
+
   override def cloneType = new LSUDMemIO().asInstanceOf[this.type]
 }
 
@@ -141,6 +146,12 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val lxcpt       = Output(Valid(new Exception))
 
   val tsc_reg     = Input(UInt())
+
+  val perf        = Output(new Bundle {
+    val acquire = Bool()
+    val release = Bool()
+    val tlbMiss = Bool()
+  })
 }
 
 class LSUIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
@@ -237,6 +248,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     instruction = false, lgMaxSize = log2Ceil(coreDataBytes), rocket.TLBConfig(dcacheParams.nTLBEntries)))
 
   io.ptw <> dtlb.io.ptw
+  io.core.perf.tlbMiss := io.ptw.req.fire()
+  io.core.perf.acquire := io.dmem.perf.acquire
+  io.core.perf.release := io.dmem.perf.release
 
 
   val clear_store     = WireInit(false.B)

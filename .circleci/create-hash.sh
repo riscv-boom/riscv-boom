@@ -1,6 +1,10 @@
 #!/bin/bash
 
+#-------------------------------------------------------------
 # get the hash of riscv-tools
+#
+# run location: circle ci docker image
+#-------------------------------------------------------------
 
 # turn echo on and error on earliest command
 set -ex

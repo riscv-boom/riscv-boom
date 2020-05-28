@@ -1,6 +1,11 @@
 #!/bin/bash
 
-# init submodules with chipyard hash given by riscv-boom
+#-------------------------------------------------------------
+# init submodules with chipyard hash given by riscv-boom and
+# use right boom version
+#
+# run location: circle ci docker image
+#-------------------------------------------------------------
 
 # turn echo on and error on earliest command
 set -ex
@@ -12,7 +17,7 @@ source $SCRIPT_DIR/defaults.sh
 # call clean on exit
 trap clean EXIT
 
-run_script $LOCAL_CHECKOUT_DIR/.circleci/clean-old-files.sh $CI_DIR
+run_script $SCRIPT_DIR/clean-old-files.sh $CI_DIR
 
 # check to see if both dirs exist
 if [ ! -d "$LOCAL_CHIPYARD_DIR" ]; then

@@ -283,6 +283,8 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   val commit = Valid(UInt(ftqSz.W))
 
   val flush_icache = Output(Bool())
+
+  val perf = Input(new FrontendPerfEvents)
 }
 
 /**
@@ -334,6 +336,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   icache.io.invalidate := io.cpu.flush_icache
   val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBEntries)))
   io.ptw <> tlb.io.ptw
+  io.cpu.perf.tlbMiss := io.ptw.req.fire()
+  io.cpu.perf.acquire := icache.io.perf.acquire
 
   // --------------------------------------------------------
   // **** NextPC Select (F0) ****

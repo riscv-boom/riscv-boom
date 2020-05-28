@@ -1,7 +1,13 @@
 #!/bin/bash
 
-# create the different verilator builds of BOOM based on arg
+#-------------------------------------------------------------
+# create the different verilator builds of BOOM
 # the command is the make command string
+#
+# run location: circle ci docker image
+# usage:
+#   $1 - config string
+#-------------------------------------------------------------
 
 # turn echo on and error on earliest command
 set -ex
@@ -42,8 +48,10 @@ fi
 
 # enter the verilator directory and build the specific config on remote server
 run "make -C $REMOTE_SIM_DIR clean"
-run "export RISCV=\"$TOOLS_DIR\"; export LD_LIBRARY_PATH=\"$LD_LIB_DIR\"; \
-     make -C $REMOTE_SIM_DIR JAVA_ARGS=\"-Xmx16G -Xss8M\" ${mapping[$1]}"
+run "export RISCV=\"$TOOLS_DIR\"; \
+     export LD_LIBRARY_PATH=\"$LD_LIB_DIR\"; \
+     export PATH=\"$REMOTE_VERILATOR_DIR/bin:\$PATH\"; \
+     make -C $REMOTE_SIM_DIR -j$REMOTE_MAKE_NPROC JAVA_ARGS=\"-Xmx16G -Xss8M\" ${mapping[$1]}"
 run "rm -rf $REMOTE_CHIPYARD_DIR/project"
 
 # copy back the final build
