@@ -260,11 +260,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     )),
 
     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-//      ("I$ miss",     () => io.ifu.perf.acquire),
-//      ("D$ miss",     () => io.dmem.perf.acquire),
-//      ("D$ release",  () => io.dmem.perf.release),
-//      ("ITLB miss",   () => io.ifu.perf.tlbMiss),
-//      ("DTLB miss",   () => io.dmem.perf.tlbMiss),
+      ("I$ miss",     () => io.ifu.perf.acquire),
+      ("D$ miss",     () => io.lsu.perf.acquire),
+      ("D$ release",  () => io.lsu.perf.release),
+      ("ITLB miss",   () => io.ifu.perf.tlbMiss),
+      ("DTLB miss",   () => io.lsu.perf.tlbMiss),
       ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
   val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
   csr.io.inst foreach { c => c := DontCare }

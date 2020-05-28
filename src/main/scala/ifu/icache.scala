@@ -102,6 +102,10 @@ class ICacheBundle(val outer: ICache) extends BoomBundle()(outer.p)
 
   val resp = Valid(new ICacheResp(outer))
   val invalidate = Input(Bool())
+
+  val perf = Output(new Bundle {
+    val acquire = Bool()
+  })
 }
 
 /**
@@ -351,6 +355,8 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   tl_out.b.ready := true.B
   tl_out.c.valid := false.B
   tl_out.e.valid := false.B
+
+  io.perf.acquire := tl_out.a.fire()
 
   when (!refill_valid) { invalidated := false.B }
   when (refill_fire) { refill_valid := true.B }
