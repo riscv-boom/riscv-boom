@@ -17,7 +17,7 @@ source $SCRIPT_DIR/defaults.sh
 # call clean on exit
 trap clean EXIT
 
-# clean older directories (delete prior directories related to this branch)
+# clean older directories (delete prior directories related to this branch also)
 run_script $SCRIPT_DIR/clean-old-files.sh $CI_DIR
 run "rm -rf $REMOTE_PREFIX*"
 
