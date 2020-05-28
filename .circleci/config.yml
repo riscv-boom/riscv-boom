@@ -194,6 +194,10 @@ jobs:
                 command: |
                     .circleci/prepare-for-rtl-build.sh
                 no_output_timeout: 120m
+            - run:
+                name: Install Verilator to remote
+                command: |
+                    .circleci/install-verilator.sh
             - save_cache:
                 key: chipyard-<< pipeline.parameters.chipyard-cache-version >>-{{ checksum "CHIPYARD.hash" }}
                 paths:
