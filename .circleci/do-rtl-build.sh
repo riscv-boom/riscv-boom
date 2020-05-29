@@ -51,7 +51,9 @@ run "make -C $REMOTE_SIM_DIR clean"
 run "export RISCV=\"$TOOLS_DIR\"; \
      export LD_LIBRARY_PATH=\"$LD_LIB_DIR\"; \
      export PATH=\"$REMOTE_VERILATOR_DIR/bin:\$PATH\"; \
-     make -C $REMOTE_SIM_DIR -j$REMOTE_MAKE_NPROC JAVA_ARGS=\"-Xmx16G -Xss8M\" ${mapping[$1]}"
+     export VERILATOR_ROOT=\"$REMOTE_VERILATOR_DIR\"; \
+     export COURSIER_CACHE=\"$REMOTE_WORK_DIR/.coursier-cache\"; \
+     make -j$REMOTE_MAKE_NPROC -C $REMOTE_SIM_DIR JAVA_ARGS=\"$REMOTE_JAVA_ARGS\" ${mapping[$1]}"
 run "rm -rf $REMOTE_CHIPYARD_DIR/project"
 
 # copy back the final build
