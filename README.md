@@ -7,6 +7,8 @@ We support the FireSim flow to run BOOM at 90+ MHz on FPGAs on Amazon EC2 F1. Cr
 Berkeley in the [Berkeley Architecture Research](https://bar.eecs.berkeley.edu/) group, its focus is to create a high
 performance, synthesizable, and parameterizable core for architecture research.
 
+The current version of the BOOM microarchitectures (SonicBOOM, or BOOMv3) is performance competitive with commercial high-performance out-of-order cores, such as the Cortex A72, Xuantie 910, or SiFive U8, achieving 6.2 CM/MHz.
+
 Feature | BOOM
 --- | ---
 ISA | RISC-V (RV64GC)
@@ -20,12 +22,21 @@ Virtual Memory |√
 Boots Linux |√
 Boots Fedora |√
 Privileged Arch v1.11 |√
-External Debug |√
 
 ## Documentation and Information
 
 Please check out the BOOM website @ https://boom-core.org for the most up-to-date information.
 It contains links to the mailing lists, documentation, design spec., publications and more!
+
+If you use BOOMv3 in your published work, please cite BOOM as 
+
+```
+@article{zhaosonicboom,
+  title={SonicBOOM: The 3rd Generation Berkeley Out-of-Order Machine},
+  author={Zhao, Jerry and Korpan, Ben and Gonzalez, Abraham and Asanovic, Krste},
+  booktitle={Fourth Workshop on Computer Architecture Research with RISC-V},
+}
+```
 
 **Website:** (www.boom-core.org)
 
@@ -43,10 +54,7 @@ clone Chipyard separately and follow the default Chipyard instructions (without 
 
 ## Disclaimer!
 
-The RISC-V Privileged ISA, Platform, and Debug specs are still in flux. BOOM will do its best to
-stay up-to-date with it!
-
-BOOM is a work-in-progress and remains in active development.
+BOOM is a work-in-progress and remains in active development. 
 
 ## Contributing
 
