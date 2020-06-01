@@ -1520,6 +1520,11 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // -----------------------
   // Hellacache interface
   // We need to time things like a HellaCache would
+
+  // TODO FIX: RoCC might send stores, which must go through pipe0
+  //           Need to evaluate impact of sending PTW through pipe0 before
+  //           changing hella to only use pipe0
+  val hellaPipeIdx = if (usingRoCC) 0 else memWidth-1
   io.hellacache.req.ready := false.B
   io.hellacache.s2_nack   := false.B
   io.hellacache.s2_xcpt   := (0.U).asTypeOf(new rocket.HellaCacheExceptions)
@@ -1531,18 +1536,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       hella_state := h_s1
     }
   } .elsewhen (hella_state === h_s1) {
-    can_fire_hella_incoming(memWidth-1) := true.B
+    can_fire_hella_incoming(hellaPipeIdx) := true.B
 
     hella_data := io.hellacache.s1_data
-    hella_xcpt := dtlb.io.resp(memWidth-1)
+    hella_xcpt := dtlb.io.resp(hellaPipeIdx)
 
     when (io.hellacache.s1_kill) {
-      when (will_fire_hella_incoming(memWidth-1) && dmem_req_fire(memWidth-1)) {
+      when (will_fire_hella_incoming(hellaPipeIdx) && dmem_req_fire(hellaPipeIdx)) {
         hella_state := h_dead
       } .otherwise {
         hella_state := h_ready
       }
-    } .elsewhen (will_fire_hella_incoming(memWidth-1) && dmem_req_fire(memWidth-1)) {
+    } .elsewhen (will_fire_hella_incoming(hellaPipeIdx) && dmem_req_fire(hellaPipeIdx)) {
       hella_state := h_s2
     } .otherwise {
       hella_state := h_s2_nack
@@ -1574,9 +1579,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       }
     }
   } .elsewhen (hella_state === h_replay) {
-    can_fire_hella_wakeup(memWidth-1) := true.B
+    can_fire_hella_wakeup(hellaPipeIdx) := true.B
 
-    when (will_fire_hella_wakeup(memWidth-1) && dmem_req_fire(memWidth-1)) {
+    when (will_fire_hella_wakeup(hellaPipeIdx) && dmem_req_fire(hellaPipeIdx)) {
       hella_state := h_wait
     }
   } .elsewhen (hella_state === h_dead) {
