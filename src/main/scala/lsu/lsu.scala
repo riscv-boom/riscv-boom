@@ -1438,18 +1438,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       hella_state := h_s1
     }
   } .elsewhen (hella_state === h_s1) {
-    can_fire_hella_incoming(lsuWidth-1) := true.B
+    can_fire_hella_incoming(0) := true.B
 
     hella_data := io.hellacache.s1_data
-    hella_xcpt := dtlb.io.resp(lsuWidth-1)
+    hella_xcpt := dtlb.io.resp(0)
 
     when (io.hellacache.s1_kill) {
-      when (will_fire_hella_incoming(lsuWidth-1) && dmem_req_fire(lsuWidth-1)) {
+      when (will_fire_hella_incoming(0) && dmem_req_fire(0)) {
         hella_state := h_dead
       } .otherwise {
         hella_state := h_ready
       }
-    } .elsewhen (will_fire_hella_incoming(lsuWidth-1) && dmem_req_fire(lsuWidth-1)) {
+    } .elsewhen (will_fire_hella_incoming(0) && dmem_req_fire(0)) {
       hella_state := h_s2
     } .otherwise {
       hella_state := h_s2_nack
@@ -1481,9 +1481,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       }
     }
   } .elsewhen (hella_state === h_replay) {
-    can_fire_hella_wakeup(lsuWidth-1) := true.B
+    can_fire_hella_wakeup(0) := true.B
 
-    when (will_fire_hella_wakeup(lsuWidth-1) && dmem_req_fire(lsuWidth-1)) {
+    when (will_fire_hella_wakeup(0) && dmem_req_fire(0)) {
       hella_state := h_wait
     }
   } .elsewhen (hella_state === h_dead) {
