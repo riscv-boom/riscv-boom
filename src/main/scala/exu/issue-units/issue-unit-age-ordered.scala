@@ -35,9 +35,15 @@ class IssueUnitCollapsing(
   //-------------------------------------------------------------
   // Figure out how much to shift entries by
 
-  val maxShift = dispatchWidth
+  // Fast slots can shift up to dispatchWidth per cycle, so they can handle full dispatch throughput
+  val nFastSlots = dispatchWidth * 4
+  // Slow slots only shift 1 per cycle, these reduce critical path
+  val nSlowSlots = numIssueSlots - nFastSlots
+  require (nFastSlots > 0)
+  require (nSlowSlots >= 0)
+
   val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_uops.map(_.valid).map(!_.asBool)
-  val shamts_oh = Array.fill(numIssueSlots+dispatchWidth) {Wire(UInt(width=maxShift.W))}
+  val shamts_oh = Array.fill(numIssueSlots+dispatchWidth) {Wire(UInt(width=dispatchWidth.W))}
   // track how many to shift up this entry by by counting previous vacant spots
   def SaturatingCounterOH(count_oh:UInt, inc: Bool, max: Int): UInt = {
      val next = Wire(UInt(width=max.W))
@@ -51,7 +57,8 @@ class IssueUnitCollapsing(
   }
   shamts_oh(0) := 0.U
   for (i <- 1 until numIssueSlots + dispatchWidth) {
-    shamts_oh(i) := SaturatingCounterOH(shamts_oh(i-1), vacants(i-1), maxShift)
+    val shift = if (i < nSlowSlots) 1 else dispatchWidth
+    shamts_oh(i) := SaturatingCounterOH(shamts_oh(i-1), vacants(i-1), shift)
   }
 
   //-------------------------------------------------------------
@@ -67,7 +74,7 @@ class IssueUnitCollapsing(
   for (i <- 0 until numIssueSlots) {
     issue_slots(i).in_uop.valid := false.B
     issue_slots(i).in_uop.bits  := uops(i+1)
-    for (j <- 1 to maxShift by 1) {
+    for (j <- 1 to dispatchWidth by 1) {
       when (shamts_oh(i+j) === (1 << (j-1)).U) {
         issue_slots(i).in_uop.valid := will_be_valid(i+j)
         issue_slots(i).in_uop.bits  := uops(i+j)
@@ -80,11 +87,13 @@ class IssueUnitCollapsing(
   // Dispatch/Entry Logic
   // did we find a spot to slide the new dispatched uops into?
 
-  val will_be_available = (0 until numIssueSlots).map(i =>
-                            (!issue_slots(i).will_be_valid || issue_slots(i).clear) && !(issue_slots(i).in_uop.valid))
-  val num_available = PopCount(will_be_available)
+  // Only look at the fast slots to determine readiness to dispatch.
+  // Slow slot do not compact fast enough to make this calculation valid
+  val will_be_available = VecInit((nSlowSlots until numIssueSlots).map(i =>
+    (!issue_slots(i).will_be_valid || issue_slots(i).clear) && !(issue_slots(i).in_uop.valid)))
   for (w <- 0 until dispatchWidth) {
-    io.dis_uops(w).ready := RegNext(num_available > w.U)
+    io.dis_uops(w).ready := RegNext(PopCount(will_be_available) > w.U)
+    assert (!io.dis_uops(w).ready || (shamts_oh(w+numIssueSlots) >> w) =/= 0.U)
   }
 
   //-------------------------------------------------------------
