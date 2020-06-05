@@ -13,8 +13,7 @@ import boom.util.{BoomCoreStringPrefix, WrapInc}
 import scala.math.min
 
 case class BoomFAMicroBTBParams(
-  nWays: Int = 16,
-  offsetSz: Int = 13
+  nWays: Int = 16
 )
 
 
@@ -22,7 +21,6 @@ class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams = BoomFAMicroBT
 {
   override val nWays         = params.nWays
   val tagSz         = vaddrBitsExtended - log2Ceil(fetchWidth) - 1
-  val offsetSz      = params.offsetSz
   val nWrBypassEntries = 2
 
   def bimWrite(v: UInt, taken: Bool): UInt = {
@@ -35,9 +33,6 @@ class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams = BoomFAMicroBT
 
   require(isPow2(nWays))
 
-  class MicroBTBEntry extends Bundle {
-    val offset   = SInt(offsetSz.W)
-  }
 
   class MicroBTBMeta extends Bundle {
     val is_br = Bool()
@@ -55,7 +50,7 @@ class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams = BoomFAMicroBT
 
 
   val meta     = RegInit((0.U).asTypeOf(Vec(nWays, Vec(bankWidth, new MicroBTBMeta))))
-  val btb      = Reg(Vec(nWays, Vec(bankWidth, new MicroBTBEntry)))
+  val btb      = Reg(Vec(nWays, Vec(bankWidth, UInt(vaddrBitsExtended.W))))
 
   val mems = Nil
 
@@ -78,7 +73,7 @@ class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams = BoomFAMicroBT
   for (w <- 0 until bankWidth) {
     val entry_meta = meta(s1_hit_ways(w))(w)
     s1_resp(w).valid := s1_valid && s1_hits(w)
-    s1_resp(w).bits  := (s1_pc.asSInt + (w << 1).S + btb(s1_hit_ways(w))(w).offset).asUInt
+    s1_resp(w).bits  := btb(s1_hit_ways(w))(w)
     s1_is_br(w)      := s1_resp(w).valid &&  entry_meta.is_br
     s1_is_jal(w)     := s1_resp(w).valid && !entry_meta.is_br
     s1_taken(w)      := !entry_meta.is_br || entry_meta.ctr(1)
@@ -113,13 +108,8 @@ class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams = BoomFAMicroBT
   val s1_update_meta    = s1_update.bits.meta.asTypeOf(new MicroBTBPredictMeta)
   val s1_update_write_way = s1_update_meta.write_way
 
-  val max_offset_value = (~(0.U)((offsetSz-1).W)).asSInt
-  val min_offset_value = Cat(1.B, (0.U)((offsetSz-1).W)).asSInt
-  val new_offset_value = (s1_update.bits.target.asSInt -
-    (s1_update.bits.pc + (s1_update.bits.cfi_idx.bits << 1)).asSInt)
 
-  val s1_update_wbtb_data     = Wire(new MicroBTBEntry)
-  s1_update_wbtb_data.offset := new_offset_value
+  val s1_update_wbtb_data = s1_update.bits.target
   val s1_update_wbtb_mask = (UIntToOH(s1_update_cfi_idx) &
     Fill(bankWidth, s1_update.bits.cfi_idx.valid && s1_update.valid && s1_update.bits.cfi_taken && s1_update.bits.is_commit_update))
 
@@ -128,7 +118,7 @@ class FAMicroBTBBranchPredictorBank(params: BoomFAMicroBTBParams = BoomFAMicroBT
 
   // Write the BTB with the target
   when (s1_update.valid && s1_update.bits.cfi_taken && s1_update.bits.cfi_idx.valid && s1_update.bits.is_commit_update) {
-    btb(s1_update_write_way)(s1_update_cfi_idx).offset := new_offset_value
+    btb(s1_update_write_way)(s1_update_cfi_idx) := s1_update_wbtb_data
   }
 
   // Write the meta
