@@ -387,7 +387,8 @@ class ALUExeUnit(
   // TODO: Does this make sense as part of the iresp bundle?
   if (hasCSR) {
     io.resp.bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
-    io.resp.bits.uop.csr_cmd := alu.io.resp.bits.uop.csr_cmd
+    io.resp.bits.uop.csr_cmd  := Mux(alu.io.resp.valid, alu.io.resp.bits.uop.csr_cmd,
+      freechips.rocketchip.rocket.CSR.N)
   }
 
 
