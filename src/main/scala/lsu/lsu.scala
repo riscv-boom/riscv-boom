@@ -888,35 +888,40 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   // Task 1: Clr ROB busy bit
 
+  // Delay store clearing 1 extra cycle, as the store clear can't occur
+  // too quickly before an order fail caused by this store propagates to ROB
 
   for (w <- 0 until lsuWidth) {
-    val stq_idx = Wire(UInt())
-    val stq_clr = Wire(Bool())
+    // Delay store clearing 1 extra cycle, as the store clear can't occur
+    // too quickly before an order fail caused by this store propagates to ROB
+    val clr_valid = Reg(Bool())
+    clr_valid    := false.B
+    val clr_uop   = Reg(new MicroOp)
 
-    stq_idx := Mux(fired_store_agen(w) , RegNext(stq_incoming_idx(w))
-                                       , RegNext(stq_retry_idx))
-    stq_clr := fired_store_agen(w) || fired_store_retry(w)
+    val clr_valid_1 = RegNext(clr_valid && !io.core.exception && !IsKilledByBranch(io.core.brupdate, clr_uop))
+    val clr_uop_1   = RegNext(UpdateBrMask(io.core.brupdate, clr_uop))
 
+    val stq_idx = Mux(fired_store_agen(w) , RegNext(stq_incoming_idx(w))
+                                          , RegNext(stq_retry_idx))
+    val stq_clr = fired_store_agen(w) || fired_store_retry(w)
     val stq_e   = stq(stq_idx)
-    val clr_valid = (
-       stq_clr &&
-       stq_e.valid &&
-       stq_e.bits.addr.valid &&
-      !stq_e.bits.addr_is_virtual &&
-      !stq_e.bits.uop.is_amo &&
-      !stq_e.bits.cleared &&
-      !io.core.exception &&
-      !IsKilledByBranch(io.core.brupdate, stq_e.bits.uop)
-    )
-    val clr_uop = UpdateBrMask(io.core.brupdate, stq_e.bits.uop)
 
-    val clr_idx = stq_e.bits.uop.rob_idx
-    when (clr_valid) {
+    when ( stq_clr &&
+           stq_e.valid &&
+           stq_e.bits.addr.valid &&
+          !stq_e.bits.addr_is_virtual &&
+          !stq_e.bits.uop.is_amo &&
+          !stq_e.bits.cleared &&
+          !io.core.exception &&
+          !IsKilledByBranch(io.core.brupdate, stq_e.bits.uop)) {
+      clr_valid := true.B
+      clr_uop   := UpdateBrMask(io.core.brupdate, stq_e.bits.uop)
+
       stq(stq_idx).bits.cleared := true.B
     }
 
-    io.core.clr_bsy(w).valid := RegNext(clr_valid) && !io.core.exception && !IsKilledByBranch(io.core.brupdate, clr_uop)
-    io.core.clr_bsy(w).bits  := RegNext(clr_idx)
+    io.core.clr_bsy(w).valid := clr_valid_1 && !io.core.exception && !IsKilledByBranch(io.core.brupdate, clr_uop_1)
+    io.core.clr_bsy(w).bits  := clr_uop_1.rob_idx
   }
 
 
