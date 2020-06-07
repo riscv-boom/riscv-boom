@@ -699,6 +699,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
   }
 
+  val exe_agen_killed = widthMap(w => IsKilledByBranch(io.core.brupdate, agen(w).bits.uop))
 
 
   //------------------------------
@@ -733,7 +734,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     io.dmem.s1_kill(w) := false.B
 
     when (will_fire_load_agen_exec(w)) {
-      dmem_req(w).valid      := !exe_tlb_miss(w) && !exe_tlb_uncacheable(w)
+      dmem_req(w).valid      := !exe_tlb_miss(w) && !exe_tlb_uncacheable(w) && !exe_agen_killed(w)
       dmem_req(w).bits.addr  := exe_tlb_paddr(w)
       dmem_req(w).bits.uop   := exe_tlb_uop(w)
 
@@ -804,7 +805,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     when (will_fire_load_agen(w) || will_fire_load_agen_exec(w) || will_fire_load_retry(w))
     {
       val ldq_idx = Mux(will_fire_load_agen(w) || will_fire_load_agen_exec(w), ldq_incoming_idx(w), ldq_retry_idx)
-      ldq(ldq_idx).bits.addr.valid          := true.B
+      ldq(ldq_idx).bits.addr.valid          := !exe_agen_killed(w)
       ldq(ldq_idx).bits.addr.bits           := Mux(exe_tlb_miss(w), exe_tlb_vaddr(w), exe_tlb_paddr(w))
       ldq(ldq_idx).bits.uop.pdst            := exe_tlb_uop(w).pdst
       ldq(ldq_idx).bits.addr_is_virtual     := exe_tlb_miss(w)
@@ -819,7 +820,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       val stq_idx = Mux(will_fire_store_agen(w),
         stq_incoming_idx(w), stq_retry_idx)
 
-      stq(stq_idx).bits.addr.valid := !pf_st(w) // Prevent AMOs from executing!
+      stq(stq_idx).bits.addr.valid := !exe_agen_killed(w) && !pf_st(w) // Prevent AMOs from executing!
       stq(stq_idx).bits.addr.bits  := Mux(exe_tlb_miss(w), exe_tlb_vaddr(w), exe_tlb_paddr(w))
       stq(stq_idx).bits.uop.pdst   := exe_tlb_uop(w).pdst // Needed for AMOs
       stq(stq_idx).bits.addr_is_virtual := exe_tlb_miss(w)
@@ -851,11 +852,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   //-------------------------------------------------------------
   // Note the DCache may not have accepted our request
 
-  val agen_killed = widthMap(w => IsKilledByBranch(io.core.brupdate, agen(w).bits.uop))
-
-  val fired_load_agen_exec = widthMap(w => RegNext(will_fire_load_agen_exec(w) && !agen_killed(w)))
-  val fired_load_agen      = widthMap(w => RegNext(will_fire_load_agen     (w) && !agen_killed(w)))
-  val fired_store_agen     = widthMap(w => RegNext(will_fire_store_agen    (w) && !agen_killed(w)))
+  val fired_load_agen_exec = widthMap(w => RegNext(will_fire_load_agen_exec(w) && !exe_agen_killed(w)))
+  val fired_load_agen      = widthMap(w => RegNext(will_fire_load_agen     (w) && !exe_agen_killed(w)))
+  val fired_store_agen     = widthMap(w => RegNext(will_fire_store_agen    (w) && !exe_agen_killed(w)))
   val fired_sfence         = RegNext(will_fire_sfence)
   val fired_release        = RegNext(will_fire_release)
   val fired_load_retry     = widthMap(w => RegNext(will_fire_load_retry   (w) && !IsKilledByBranch(io.core.brupdate, ldq_retry_e.bits.uop)))

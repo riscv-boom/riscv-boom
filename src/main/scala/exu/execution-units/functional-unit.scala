@@ -468,6 +468,8 @@ class MemAddrCalcUnit(implicit p: Parameters)
 
   val store_data = io.req.bits.rs2_data
 
+  io.resp.valid     := io.req.valid // Do the branch kill in LSU
+  io.resp.bits.uop  := io.req.bits.uop
   io.resp.bits.addr := effective_address
   io.resp.bits.data := store_data
 
