@@ -471,9 +471,12 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   // ------------
   // New requests
 
-  io.lsu.req.ready := metaReadArb.io.in(4).ready && dataReadArb.io.in(2).ready
-  metaReadArb.io.in(4).valid := io.lsu.req.valid
-  dataReadArb.io.in(2).valid := io.lsu.req.valid
+  // In a 1-wide LSU, load/store wakeups and MSHR resps contend for same port, so
+  // we should block incoming requests when the MSHR trying to respond
+  val block_incoming_reqs = (lsuWidth == 1).B && mshrs.io.resp.valid
+  io.lsu.req.ready := metaReadArb.io.in(4).ready && dataReadArb.io.in(2).ready && !block_incoming_reqs
+  metaReadArb.io.in(4).valid := io.lsu.req.valid && !block_incoming_reqs
+  dataReadArb.io.in(2).valid := io.lsu.req.valid && !block_incoming_reqs
   for (w <- 0 until lsuWidth) {
     // Tag read for new requests
     metaReadArb.io.in(4).bits.req(w).idx    := io.lsu.req.bits(w).bits.addr >> blockOffBits
