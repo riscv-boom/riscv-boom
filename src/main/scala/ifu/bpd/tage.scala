@@ -33,7 +33,7 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
     val f1_req_pc    = Input(UInt(vaddrBitsExtended.W))
     val f1_req_ghist = Input(UInt(globalHistoryLength.W))
 
-    val f3_resp = Output(Vec(bankWidth, Valid(new TageResp)))
+    val f2_resp = Output(Vec(bankWidth, Valid(new TageResp)))
 
     val update_mask    = Input(Vec(bankWidth, Bool()))
     val update_taken   = Input(Vec(bankWidth, Bool()))
@@ -101,9 +101,9 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
 
   for (w <- 0 until bankWidth) {
     // This bit indicates the TAGE table matched here
-    io.f3_resp(w).valid    := RegNext(s2_req_rhits(w))
-    io.f3_resp(w).bits.u   := RegNext(Cat(s2_req_rhius(w), s2_req_rlous(w)))
-    io.f3_resp(w).bits.ctr := RegNext(s2_req_rtage(w).ctr)
+    io.f2_resp(w).valid    := s2_req_rhits(w)
+    io.f2_resp(w).bits.u   := Cat(s2_req_rhius(w), s2_req_rlous(w))
+    io.f2_resp(w).bits.ctr := s2_req_rtage(w).ctr
   }
 
   val clear_u_ctr = RegInit(0.U((log2Ceil(uBitPeriod) + log2Ceil(nRows) + 1).W))
@@ -231,7 +231,8 @@ class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implici
   val tables = tt.map(_._1)
   val mems = tt.map(_._2).flatten
 
-  val f3_resps = VecInit(tables.map(_.io.f3_resp))
+  val f2_resps = VecInit(tables.map(_.io.f2_resp))
+  val f3_resps = RegNext(f2_resps)
 
   val s1_update_meta = s1_update.bits.meta.asTypeOf(new TageMeta)
   val s1_update_mispredict_mask = UIntToOH(s1_update.bits.cfi_idx.bits) &
@@ -252,35 +253,43 @@ class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implici
 
 
   for (w <- 0 until bankWidth) {
-    var altpred = io.resp_in(0).f3(w).taken
-    val final_altpred = WireInit(io.resp_in(0).f3(w).taken)
-    var provided = false.B
-    var provider = 0.U
-    io.resp.f3(w).taken := io.resp_in(0).f3(w).taken
-
+    var s2_provided = false.B
+    var s2_provider = 0.U
+    var s2_alt_provided = false.B
+    var s2_alt_provider = 0.U
     for (i <- 0 until tageNTables) {
-      val hit = f3_resps(i)(w).valid
-      val ctr = f3_resps(i)(w).bits.ctr
-      when (hit) {
-        io.resp.f3(w).taken := Mux(ctr === 3.U || ctr === 4.U, altpred, ctr(2))
-        final_altpred       := altpred
-      }
+      val hit = f2_resps(i)(w).valid
+      s2_alt_provided = s2_alt_provided || (s2_provided && hit)
+      s2_provided = s2_provided || hit
 
-      provided = provided || hit
-      provider = Mux(hit, i.U, provider)
-      altpred  = Mux(hit, f3_resps(i)(w).bits.ctr(2), altpred)
+      s2_alt_provider = Mux(hit, s2_provider, s2_alt_provider)
+      s2_provider = Mux(hit, i.U, s2_provider)
     }
-    f3_meta.provider(w).valid := provided
-    f3_meta.provider(w).bits  := provider
-    f3_meta.alt_differs(w)    := final_altpred =/= io.resp.f3(w).taken
-    f3_meta.provider_u(w)     := f3_resps(provider)(w).bits.u
-    f3_meta.provider_ctr(w)   := f3_resps(provider)(w).bits.ctr
+    val s3_provided = RegNext(s2_provided)
+    val s3_provider = RegNext(s2_provider)
+    val s3_alt_provided = RegNext(s2_alt_provided)
+    val s3_alt_provider = RegNext(s2_alt_provider)
+
+    val prov = f3_resps(RegNext(s2_provider))(w).bits
+    val alt  = f3_resps(RegNext(s2_alt_provider))(w).bits
+
+    io.resp.f3(w).taken := Mux(s3_provided,
+      Mux(prov.ctr === 3.U || prov.ctr === 4.U,
+        Mux(s3_alt_provided, alt.ctr(2), io.resp_in(0).f3(w).taken),
+        prov.ctr(2)),
+      io.resp_in(0).f3(w).taken
+    )
+    f3_meta.provider(w).valid := s3_provided
+    f3_meta.provider(w).bits  := s3_provider
+    f3_meta.alt_differs(w)    := s3_alt_provided && alt.ctr(2) =/= io.resp.f3(w).taken
+    f3_meta.provider_u(w)     := prov.u
+    f3_meta.provider_ctr(w)   := prov.ctr
 
     // Create a mask of tables which did not hit our query, and also contain useless entries
     // and also uses a longer history than the provider
     val allocatable_slots = (
       VecInit(f3_resps.map(r => !r(w).valid && r(w).bits.u === 0.U)).asUInt &
-      ~(MaskLower(UIntToOH(provider)) & Fill(tageNTables, provided))
+      ~(MaskLower(UIntToOH(f3_meta.provider(w).bits)) & Fill(tageNTables, f3_meta.provider(w).valid))
     )
     val alloc_lfsr = random.LFSR(tageNTables max 2)
 
