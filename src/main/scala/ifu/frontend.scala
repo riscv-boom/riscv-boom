@@ -194,6 +194,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
   val edge_inst     = Vec(nBanks, Bool()) // True if 1st instruction in this bundle is pc - 2
   val insts         = Vec(fetchWidth, Bits(32.W))
   val exp_insts     = Vec(fetchWidth, Bits(32.W))
+  val pcs           = Vec(fetchWidth, UInt(vaddrBitsExtended.W))
 
   // Information for sfb folding
   // NOTE: This IS NOT equivalent to uop.pc_lob, that gets calculated in the FB
@@ -494,6 +495,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       val i = (b * bankWidth) + w
       val valid = Wire(Bool())
       f2_inst_mask(i) := s2_valid && f2_fetch_mask(i) && valid
+      f2_fetch_bundle.pcs(i) := f2_aligned_pc + (i << 1).U - ((f2_fetch_bundle.edge_inst(b) && (w == 0).B) << 1)
       if (w == 0) {
         valid := true.B
         when (bank_prev_is_half) {
@@ -644,7 +646,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   for (b <- 0 until nBanks) {
     for (w <- 0 until bankWidth) {
       val i = (b * bankWidth) + w
-      val pc = f3_aligned_pc + (i << 1).U - ((f3_fetch_bundle.edge_inst(b) && (w == 0).B) << 1)
+      val pc = f3_fetch_bundle.pcs(i)
 
       val bpu = Module(new BreakpointUnit(nBreakpoints))
       bpu.io.status := io.cpu.status
