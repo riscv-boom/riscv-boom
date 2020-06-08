@@ -409,22 +409,22 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     val block = block_load_mask(i) || p1_block_load_mask(i)
     e.addr.valid && e.addr_is_virtual && !block
   }), ldq_head))
-  val ldq_retry_e            = ldq(ldq_retry_idx)
+  val ldq_retry_e = WireInit(ldq(ldq_retry_idx))
 
   val stq_retry_idx = RegNext(AgePriorityEncoder((0 until numStqEntries).map(i => {
     val e = stq(i).bits
     e.addr.valid && e.addr_is_virtual
   }), stq_commit_head))
-  val stq_retry_e   = stq(stq_retry_idx)
+  val stq_retry_e   = WireInit(stq(stq_retry_idx))
 
-  val stq_commit_e  = stq(stq_execute_head)
+  val stq_commit_e  = WireInit(stq(stq_execute_head))
 
   val ldq_wakeup_idx = RegNext(AgePriorityEncoder((0 until numLdqEntries).map(i=> {
     val e = ldq(i).bits
     val block = block_load_mask(i) || p1_block_load_mask(i)
     e.addr.valid && !e.executed && !e.succeeded && !e.addr_is_virtual && !block
   }), ldq_head))
-  val ldq_wakeup_e   = ldq(ldq_wakeup_idx)
+  val ldq_wakeup_e   = WireInit(ldq(ldq_wakeup_idx))
 
   // -----------------------
   // Determine what can fire
