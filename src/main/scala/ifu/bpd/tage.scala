@@ -270,8 +270,8 @@ class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implici
     val s3_alt_provided = RegNext(s2_alt_provided)
     val s3_alt_provider = RegNext(s2_alt_provider)
 
-    val prov = f3_resps(RegNext(s2_provider))(w).bits
-    val alt  = f3_resps(RegNext(s2_alt_provider))(w).bits
+    val prov = RegNext(f2_resps(s2_provider)(w).bits)
+    val alt  = RegNext(f2_resps(s2_alt_provider)(w).bits)
 
     io.resp.f3(w).taken := Mux(s3_provided,
       Mux(prov.ctr === 3.U || prov.ctr === 4.U,
