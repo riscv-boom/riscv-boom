@@ -753,7 +753,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val dmem_req_fire = widthMap(w => dmem_req(w).valid && io.dmem.req.fire())
 
   val s0_executing_loads = WireInit(VecInit((0 until numLdqEntries).map(x=>false.B)))
-
+  val s0_kills = Wire(Vec(lsuWidth, Bool()))
 
   for (w <- 0 until lsuWidth) {
     dmem_req(w).valid := false.B
@@ -762,21 +762,25 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     dmem_req(w).bits.data  := 0.U
     dmem_req(w).bits.is_hella := false.B
 
-    io.dmem.s1_kill(w) := false.B
+    s0_kills(w) := false.B
+    io.dmem.s1_kill(w) := RegNext(s0_kills(w))
 
     when (will_fire_load_agen_exec(w)) {
-      dmem_req(w).valid      := !exe_tlb_miss(w) && !exe_tlb_uncacheable(w) && !exe_agen_killed(w)
+      dmem_req(w).valid      := true.B
       dmem_req(w).bits.addr  := exe_tlb_paddr(w)
       dmem_req(w).bits.uop   := exe_tlb_uop(w)
 
-      s0_executing_loads(ldq_incoming_idx(w)) := dmem_req_fire(w)
+      s0_kills(w)            := exe_tlb_miss(w) || exe_tlb_uncacheable(w)
+      s0_executing_loads(ldq_incoming_idx(w)) := dmem_req_fire(w) && !s0_kills(w)
+
       assert(!ldq_incoming_e(w).bits.executed)
     } .elsewhen (will_fire_load_retry(w)) {
-      dmem_req(w).valid      := !exe_tlb_miss(w) && !exe_tlb_uncacheable(w)
+      dmem_req(w).valid      := true.B
       dmem_req(w).bits.addr  := exe_tlb_paddr(w)
       dmem_req(w).bits.uop   := exe_tlb_uop(w)
 
-      s0_executing_loads(ldq_retry_idx) := dmem_req_fire(w)
+      s0_kills(w) := exe_tlb_miss(w) || exe_tlb_uncacheable(w)
+      s0_executing_loads(ldq_retry_idx) := dmem_req_fire(w) && !s0_kills(w)
     } .elsewhen (will_fire_store_commit_slow(w) || will_fire_store_commit_fast(w)) {
       dmem_req(w).valid         := true.B
       dmem_req(w).bits.addr     := stq_commit_e.bits.addr.bits
@@ -1077,7 +1081,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
           val older_nacked = nacking_loads(i) || RegNext(nacking_loads(i))
           when (!(l_bits.executed || l_bits.succeeded) || older_nacked) {
             s1_set_execute(lcam_ldq_idx(w))    := false.B
-            io.dmem.s1_kill(w)                 := RegNext(dmem_req_fire(w)) && !fired_load_agen(w)
+            when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
+              io.dmem.s1_kill(w)               := true.B
+            }
             can_forward(w)                     := false.B
           }
         }
@@ -1099,19 +1105,25 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         {
           ldst_addr_matches(w)(i)            := true.B
           ldst_forward_matches(w)(i)         := true.B
-          io.dmem.s1_kill(w)                 := RegNext(dmem_req_fire(w)) && !fired_load_agen(w)
+          when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
+            io.dmem.s1_kill(w)               := true.B
+          }
           s1_set_execute(lcam_ldq_idx(w))    := false.B
         }
           .elsewhen (((lcam_mask(w) & write_mask) =/= 0.U) && dword_addr_matches(w))
         {
           ldst_addr_matches(w)(i)            := true.B
-          io.dmem.s1_kill(w)                 := RegNext(dmem_req_fire(w)) && !fired_load_agen(w)
+          when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
+            io.dmem.s1_kill(w)               := true.B
+          }
           s1_set_execute(lcam_ldq_idx(w))    := false.B
         }
           .elsewhen (s_uop.is_fence || s_uop.is_amo)
         {
           ldst_addr_matches(w)(i)            := true.B
-          io.dmem.s1_kill(w)                 := RegNext(dmem_req_fire(w)) && !fired_load_agen(w)
+          when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
+            io.dmem.s1_kill(w)               := true.B
+          }
           s1_set_execute(lcam_ldq_idx(w))    := false.B
         }
       }
