@@ -20,14 +20,22 @@ class BIMMeta(implicit p: Parameters) extends BoomBundle()(p)
 }
 
 case class BoomBIMParams(
-  nSets: Int = 2048
+  nSets: Int = 2048,
+  nCols: Int = 8,
+  singlePorted: Boolean = true,
+  useFlops: Boolean = false
 )
 
 class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   override val nSets = params.nSets
+  val nCols = params.nCols
+  val nSetsPerCol = nSets / nCols
 
   require(isPow2(nSets))
+  require(isPow2(nCols))
+  require(nCols < nSets)
+  require(nCols > 1)
 
   val nWrBypassEntries = 2
 
@@ -42,16 +50,20 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
   override val metaSz   = s2_meta.asUInt.getWidth
 
   val doing_reset = RegInit(true.B)
-  val reset_idx = RegInit(0.U(log2Ceil(nSets).W))
+  val reset_idx = RegInit(0.U(log2Ceil(nSetsPerCol).W))
   reset_idx := reset_idx + doing_reset
-  when (reset_idx === (nSets-1).U) { doing_reset := false.B }
+  when (reset_idx === (nSetsPerCol-1).U) { doing_reset := false.B }
 
 
-  val data  = SyncReadMem(nSets, Vec(bankWidth, UInt(2.W)))
 
-  val mems = Seq(("bim", nSets, bankWidth * 2))
 
-  val s2_req_rdata    = RegNext(data.read(s0_idx   , s0_valid))
+  val mems = (0 until nCols) map {c => (f"bim_col$c", nSetsPerCol, bankWidth * 2)}
+
+  val s0_col_mask = UIntToOH(s0_idx(log2Ceil(nCols)-1,0)) & Fill(nCols, s0_valid)
+  val s0_col_idx  = s0_idx >> log2Ceil(nCols)
+  val s1_req_rdata = Wire(Vec(nCols, Vec(bankWidth, UInt(2.W))))
+
+  val s2_req_rdata = RegNext(Mux1H(RegNext(s0_col_mask), s1_req_rdata))
 
   val s2_resp         = Wire(Vec(bankWidth, Bool()))
 
@@ -65,7 +77,8 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
   val s1_update_wdata   = Wire(Vec(bankWidth, UInt(2.W)))
   val s1_update_wmask   = Wire(Vec(bankWidth, Bool()))
   val s1_update_meta    = s1_update.bits.meta.asTypeOf(new BIMMeta)
-  val s1_update_index   = s1_update_idx
+  val s1_update_col_mask = UIntToOH(s1_update_idx(log2Ceil(nCols)-1,0))
+  val s1_update_col_idx = s1_update_idx >> log2Ceil(nCols)
 
   val wrbypass_idxs = Reg(Vec(nWrBypassEntries, UInt(log2Ceil(nSets).W)))
   val wrbypass      = Reg(Vec(nWrBypassEntries, Vec(bankWidth, UInt(2.W))))
@@ -73,7 +86,7 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
 
   val wrbypass_hits = VecInit((0 until nWrBypassEntries) map { i =>
     !doing_reset &&
-    wrbypass_idxs(i) === s1_update_index(log2Ceil(nSets)-1,0)
+    wrbypass_idxs(i) === s1_update_idx(log2Ceil(nSets)-1,0)
   })
   val wrbypass_hit = wrbypass_hits.reduce(_||_)
   val wrbypass_hit_idx = PriorityEncoder(wrbypass_hits)
@@ -106,19 +119,42 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
 
   }
 
-  when (doing_reset || (s1_update.valid && s1_update.bits.is_commit_update)) {
-    data.write(
-      Mux(doing_reset, reset_idx, s1_update_index),
-      Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 2.U }), s1_update_wdata),
-      Mux(doing_reset, (~(0.U(bankWidth.W))), s1_update_wmask.asUInt).asBools
-    )
+  for (c <- 0 until nCols) {
+    s1_req_rdata(c) := DontCare
+    val wen = doing_reset || (s1_update.valid && s1_update.bits.is_commit_update && s1_update_col_mask(c) && !s0_col_mask(c))
+    if (params.useFlops) {
+      val data = Reg(Vec(nSetsPerCol, Vec(bankWidth, UInt(2.W))))
+      when (wen && doing_reset) {
+        data(reset_idx) := VecInit(Seq.fill(bankWidth) { 2.U })
+      } .elsewhen (wen) {
+        for (i <- 0 until bankWidth) {
+          when (s1_update_wmask(i)) {
+            data(s1_update_col_idx)(i) := s1_update_wdata(i)
+          }
+        }
+      }
+      when (s0_col_mask(c) && !(wen && params.singlePorted.B)) {
+        s1_req_rdata(c) := RegNext(data(s0_col_idx))
+      }
+    } else {
+      val data = SyncReadMem(nSetsPerCol, Vec(bankWidth, UInt(2.W)))
+      when (wen) {
+        data.write(
+          Mux(doing_reset, reset_idx, s1_update_col_idx),
+          Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 2.U }), s1_update_wdata),
+          Mux(doing_reset, (~(0.U(bankWidth.W))), s1_update_wmask.asUInt).asBools
+        )
+      }
+      val dout = data.read(s0_col_idx, s0_col_mask(c) && !(wen && params.singlePorted.B))
+      s1_req_rdata(c) := dout
+    }
   }
   when (s1_update_wmask.reduce(_||_) && s1_update.valid && s1_update.bits.is_commit_update) {
     when (wrbypass_hit) {
       wrbypass(wrbypass_hit_idx) := s1_update_wdata
     } .otherwise {
       wrbypass(wrbypass_enq_idx)      := s1_update_wdata
-      wrbypass_idxs(wrbypass_enq_idx) := s1_update_index
+      wrbypass_idxs(wrbypass_enq_idx) := s1_update_idx
       wrbypass_enq_idx := WrapInc(wrbypass_enq_idx, nWrBypassEntries)
     }
   }
