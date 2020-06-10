@@ -217,8 +217,9 @@ class FDivSqrtUnit(implicit p: Parameters)
     Mux(r_divsqrt_fin.singleIn,
       box(downvert_d2s.io.out, false.B),
       box(r_out_wdata_double, true.B))
-  io.resp.bits.fflags.valid := io.resp.valid
-  io.resp.bits.fflags.bits.uop := r_out_uop
-  io.resp.bits.fflags.bits.uop.br_mask := GetNewBrMask(io.brupdate, r_out_uop)
-  io.resp.bits.fflags.bits.flags := out_flags
+
+  io.fflags.valid := io.resp.valid
+  io.fflags.bits.uop := r_out_uop
+  io.fflags.bits.uop.br_mask := GetNewBrMask(io.brupdate, r_out_uop)
+  io.fflags.bits.flags := out_flags
 }

@@ -28,7 +28,7 @@ import freechips.rocketchip.tile
 import FUConstants._
 import boom.common._
 import boom.ifu.{GetPCFromFtqIO}
-import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue, BoomCoreStringPrefix}
+import boom.util._
 
 /**
  * Response from Execution Unit. Bundles a MicroOp with data
@@ -40,7 +40,6 @@ class ExeUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 {
   val data = Bits(dataWidth.W)
   val predicated = Bool() // Was this predicated off?
-  val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB // TODO: Do this better
 }
 
 /**
@@ -89,6 +88,8 @@ abstract class ExecutionUnit(
     val ll_iresp = if (writesLlIrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
     val ll_fresp = if (writesLlFrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
 
+    val fflags = if (hasFCSR) new Valid(new FFlagsResp) else null
+
     val sfence   = if (hasCSR) new Valid(new SFenceReq) else null
 
     val bypass   = Output(Vec(numBypassStages, Valid(new ExeUnitResp(dataWidth))))
@@ -104,7 +105,7 @@ abstract class ExecutionUnit(
     val status     = Input(new freechips.rocketchip.rocket.MStatus())
 
     // only used by the fpu unit
-    val fcsr_rm = if (hasFcsr) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
+    val fcsr_rm = if (hasFCSR) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
 
     // only used by the mem unit
     val agen = if (hasAGen) Output(Valid(new FuncUnitResp(xLen))) else null
@@ -115,24 +116,19 @@ abstract class ExecutionUnit(
     val com_exception = if (hasRocc) Input(Bool()) else null
   })
 
-  io.resp.bits.fflags.valid := false.B
   io.resp.bits.predicated := false.B
 
   if (writesLlIrf) {
-    io.ll_iresp.bits.fflags.valid := false.B
     io.ll_iresp.bits.predicated := false.B
   }
   if (writesLlFrf) {
-    io.ll_fresp.bits.fflags.valid := false.B
     io.ll_fresp.bits.predicated := false.B
   }
 
-  // TODO add "number of fflag ports", so we can properly account for FPU+Mem combinations
-  def hasFFlags     : Boolean = hasFpu || hasFdiv
-
   require ((hasFpu || hasFdiv) ^ (hasAlu || hasMul || hasAGen || hasDGen || hasIfpu),
     "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
-  def hasFcsr = hasIfpu || hasFpu || hasFdiv
+  def hasFCSR = hasIfpu || hasFpu || hasFdiv
+
 
 }
 
@@ -324,6 +320,8 @@ class ALUExeUnit(
     ifpu.io.brupdate   <> io.brupdate
     ifpu.io.resp.ready := DontCare
 
+    io.fflags := ifpu.io.fflags
+
     // buffer up results since we share write-port on integer regfile.
     val queue = Module(new BranchKillableQueue(new ExeUnitResp(dataWidth),
       entries = intToFpLatency + 3)) // TODO being overly conservative
@@ -331,11 +329,12 @@ class ALUExeUnit(
     queue.io.enq.bits.uop    := ifpu.io.resp.bits.uop
     queue.io.enq.bits.data   := ifpu.io.resp.bits.data
     queue.io.enq.bits.predicated := ifpu.io.resp.bits.predicated
-    queue.io.enq.bits.fflags := ifpu.io.resp.bits.fflags
     queue.io.brupdate := io.brupdate
     queue.io.flush := io.req.bits.kill
 
     io.ll_fresp <> queue.io.deq
+    io.ll_fresp.valid := queue.io.deq.valid && !IsKilledByBranch(io.brupdate, queue.io.deq.bits)
+    io.ll_fresp.bits.uop := UpdateBrMask(io.brupdate, queue.io.deq.bits.uop)
     ifpu_busy := !(queue.io.empty)
     assert (queue.io.enq.ready)
   }
@@ -345,8 +344,7 @@ class ALUExeUnit(
   val div_resp_val = WireInit(false.B)
   if (hasDiv) {
     val divq = Module(new BranchKillableQueue(new FuncUnitReq(xLen), 3))
-    divq.io.enq.valid := (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV) &&
-      !IsKilledByBranch(io.brupdate, io.req.bits.uop))
+    divq.io.enq.valid := (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV))
     divq.io.enq.bits  := io.req.bits
     divq.io.brupdate  := io.brupdate
     divq.io.flush     := io.req.bits.kill
@@ -354,6 +352,8 @@ class ALUExeUnit(
     div = Module(new DivUnit(xLen))
     div.io <> DontCare
     div.io.req <> divq.io.deq
+    div.io.req.valid := divq.io.deq.valid && !IsKilledByBranch(io.brupdate, divq.io.deq.bits)
+    div.io.req.bits := UpdateBrMask(io.brupdate, divq.io.deq.bits)
     div.io.brupdate            := io.brupdate
     div.io.req.bits.kill       := io.req.bits.kill
 
@@ -435,11 +435,11 @@ class FPUExeUnit(
                  Mux(!fdiv_busy && hasFdiv.B, FU_FDV, 0.U) |
                  Mux(!fpiu_busy && hasFpiu.B, FU_F2I, 0.U)
 
+  io.fflags.valid := false.B
+  io.fflags.bits := DontCare
+
   // FPU Unit -----------------------
   var fpu: FPUUnit = null
-  val fpu_resp_val = WireInit(false.B)
-  val fpu_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
-  fpu_resp_fflags.valid := false.B
   if (hasFpu) {
     fpu = Module(new FPUUnit())
     fpu.io.req.valid         := io.req.valid &&
@@ -453,18 +453,18 @@ class FPUExeUnit(
     fpu.io.req.bits.kill     := io.req.bits.kill
     fpu.io.fcsr_rm           := io.fcsr_rm
     fpu.io.brupdate          := io.brupdate
-    fpu.io.resp.ready        := DontCare
-    fpu_resp_val             := fpu.io.resp.valid
-    fpu_resp_fflags          := fpu.io.resp.bits.fflags
+    fpu.io.resp.ready        := true.B
+
+    when (fpu.io.resp.fire()) {
+      io.fflags := fpu.io.fflags
+    }
+
 
     fu_units += fpu
   }
 
   // FDiv/FSqrt Unit -----------------------
   var fdivsqrt: FDivSqrtUnit = null
-  val fdiv_resp_fflags = Wire(new ValidIO(new FFlagsResp()))
-  fdiv_resp_fflags := DontCare
-  fdiv_resp_fflags.valid := false.B
   if (hasFdiv) {
     fdivsqrt = Module(new FDivSqrtUnit())
     fdivsqrt.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_FDV)
@@ -482,7 +482,9 @@ class FPUExeUnit(
 
     fdiv_busy := !fdivsqrt.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code_is(FU_FDV))
 
-    fdiv_resp_fflags := fdivsqrt.io.resp.bits.fflags
+    when (fdivsqrt.io.resp.fire()) {
+      io.fflags := fdivsqrt.io.fflags
+    }
 
     fu_units += fdivsqrt
   }
@@ -494,7 +496,6 @@ class FPUExeUnit(
   io.resp.bits.uop    := PriorityMux(fu_units.map(f => (f.io.resp.valid,
                                                          f.io.resp.bits.uop)))
   io.resp.bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data)))
-  io.resp.bits.fflags := Mux(fpu_resp_val, fpu_resp_fflags, fdiv_resp_fflags)
 
   // Outputs (Write Port #1) -- FpToInt Queuing Unit -----------------------
 
@@ -509,7 +510,6 @@ class FPUExeUnit(
     queue.io.enq.bits.uop    := fpu.io.resp.bits.uop
     queue.io.enq.bits.data   := fpu.io.resp.bits.data
     queue.io.enq.bits.predicated := fpu.io.resp.bits.predicated
-    queue.io.enq.bits.fflags := fpu.io.resp.bits.fflags
     queue.io.brupdate          := io.brupdate
     queue.io.flush           := io.req.bits.kill
 
@@ -520,6 +520,8 @@ class FPUExeUnit(
     io.dgen.bits.data  := RegNext(ieee(io.req.bits.rs2_data))
 
     io.ll_iresp       <> queue.io.deq
+    io.ll_iresp.valid := queue.io.deq.valid && !IsKilledByBranch(io.brupdate, queue.io.deq.bits)
+    io.ll_iresp.bits  := UpdateBrMask(io.brupdate, queue.io.deq.bits)
 
     fpiu_busy := !(queue.io.empty)
   }

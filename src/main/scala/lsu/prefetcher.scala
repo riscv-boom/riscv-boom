@@ -17,7 +17,7 @@ import freechips.rocketchip.rocket._
 
 import boom.common._
 import boom.exu.BrResolutionInfo
-import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder, UpdateBrMask}
+import boom.util._
 
 
 

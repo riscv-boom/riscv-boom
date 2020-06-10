@@ -47,6 +47,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     val dgen             = Valid(new ExeUnitResp(fLen))           // to Load/Store Unit
     val to_int           = Decoupled(new ExeUnitResp(xLen))           // to integer RF
 
+    val fflags           = Vec(fpIssueParams.issueWidth, Valid(new FFlagsResp))
+
     val wakeups          = Vec(numWakeupPorts, Valid(new ExeUnitResp(fLen+1)))
     val wb_valids        = Input(Vec(numWakeupPorts, Bool()))
     val wb_pdsts         = Input(Vec(numWakeupPorts, UInt(width=fpPregSz.W)))
@@ -227,6 +229,12 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     wport.bits := exe_resp.bits
 
     w_cnt += 1
+  }
+
+  var f_cnt = 0
+  for (eu <- exe_units) {
+    io.fflags(f_cnt) := eu.io.fflags
+    f_cnt += 1
   }
 
   for ((wdata, wakeup) <- io.debug_wb_wdata zip io.wakeups) {

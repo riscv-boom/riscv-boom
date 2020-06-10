@@ -18,7 +18,7 @@ import freechips.rocketchip.rocket._
 
 import boom.common._
 import boom.exu.BrUpdateInfo
-import boom.util.{IsKilledByBranch, GetNewBrMask, BranchKillableQueue, IsOlder, UpdateBrMask, AgePriorityEncoder, WrapInc}
+import boom.util._
 
 class BoomDCacheReqInternal(implicit p: Parameters) extends BoomDCacheReq()(p)
   with HasL1HellaCacheParameters
@@ -125,7 +125,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   val sec_rdy = (!cmd_requires_second_acquire && !io.req_is_probe &&
                  !state.isOneOf(s_invalid, s_meta_write_req, s_mem_finish_1, s_mem_finish_2))// Always accept secondary misses
 
-  val rpq = Module(new BranchKillableQueue(new BoomDCacheReqInternal, cfg.nRPQ, u => u.uses_ldq, false))
+  val rpq = Module(new BranchKillableQueue(new BoomDCacheReqInternal, cfg.nRPQ, u => u.uses_ldq))
   rpq.io.brupdate := io.brupdate
   rpq.io.flush  := io.exception
   assert(!(state === s_invalid && !rpq.io.empty))
@@ -734,11 +734,11 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   TLArbiter.lowestFromSeq(edge, io.mem_acquire, mshrs.map(_.io.mem_acquire) ++ mmios.map(_.io.mem_access))
   TLArbiter.lowestFromSeq(edge, io.mem_finish,  mshrs.map(_.io.mem_finish))
 
-  val respq = Module(new BranchKillableQueue(new BoomDCacheResp, 4, u => u.uses_ldq, flow = false))
-  respq.io.brupdate := io.brupdate
-  respq.io.flush    := io.exception
-  respq.io.enq      <> resp_arb.io.out
-  io.resp           <> respq.io.deq
+  val respq = Module(new BranchKillableQueue(new BoomDCacheResp, 4, u => u.uses_ldq))
+  respq.io.brupdate  := io.brupdate
+  respq.io.flush     := io.exception
+  respq.io.enq       <> resp_arb.io.out
+  io.resp            <> respq.io.deq
 
   for (w <- 0 until lsuWidth) {
     io.req(w).ready      := (w.U === req_idx) &&

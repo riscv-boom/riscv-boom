@@ -87,7 +87,6 @@ class FuncUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundl
 {
   val predicated = Bool() // Was this response from a predicated-off instruction
   val data = UInt(dataWidth.W)
-  val fflags = new ValidIO(new FFlagsResp)
   val addr = UInt((vaddrBits+1).W) // only for maddr -> LSU
   val mxcpt = new ValidIO(UInt((freechips.rocketchip.rocket.Causes.all.max+2).W)) //only for maddr->LSU
 }
@@ -148,6 +147,7 @@ abstract class FunctionalUnit(
   val io = IO(new Bundle {
     val req    = Flipped(new DecoupledIO(new FuncUnitReq(dataWidth)))
     val resp   = (new DecoupledIO(new FuncUnitResp(dataWidth)))
+    val fflags = new ValidIO(new FFlagsResp)
 
     val brupdate = Input(new BrUpdateInfo())
 
@@ -442,7 +442,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   }
 
   // Exceptions
-  io.resp.bits.fflags.valid := false.B
+  io.fflags.valid := false.B
 }
 
 /**
@@ -532,10 +532,9 @@ class FPUUnit(implicit p: Parameters)
   fpu.io.req.bits.rs3_data := io.req.bits.rs3_data
   fpu.io.req.bits.fcsr_rm  := io.fcsr_rm
 
-  io.resp.bits.data              := fpu.io.resp.bits.data
-  io.resp.bits.fflags.valid      := fpu.io.resp.bits.fflags.valid
-  io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
-  io.resp.bits.fflags.bits.flags := fpu.io.resp.bits.fflags.bits.flags // kill me now
+  io.resp.bits.data    := fpu.io.resp.bits.data
+  io.fflags            := fpu.io.fflags
+  io.fflags.bits.uop   := io.resp.bits.uop
 }
 
 /**
@@ -581,10 +580,10 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
   ifpu.io.in.bits.in1 := io_req.rs1_data
   val out_double = Pipe(io.req.valid, !fp_ctrl.singleOut, intToFpLatency).bits
 
-  io.resp.bits.data              := box(ifpu.io.out.bits.data, out_double)
-  io.resp.bits.fflags.valid      := ifpu.io.out.valid
-  io.resp.bits.fflags.bits.uop   := io.resp.bits.uop
-  io.resp.bits.fflags.bits.flags := ifpu.io.out.bits.exc
+  io.resp.bits.data    := box(ifpu.io.out.bits.data, out_double)
+  io.fflags.valid      := io.resp.valid
+  io.fflags.bits.uop   := io.resp.bits.uop
+  io.fflags.bits.flags := ifpu.io.out.bits.exc
 }
 
 /**

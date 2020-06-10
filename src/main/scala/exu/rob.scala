@@ -43,7 +43,7 @@ import boom.util._
  */
 class RobIo(
   val numWakeupPorts: Int,
-  val numFpuPorts: Int
+  val numFFlagsPorts: Int
   )(implicit p: Parameters)  extends BoomBundle
 {
   // Decode Stage
@@ -80,7 +80,7 @@ class RobIo(
   val debug_wb_valids = Input(Vec(numWakeupPorts, Bool()))
   val debug_wb_wdata  = Input(Vec(numWakeupPorts, Bits(xLen.W)))
 
-  val fflags = Flipped(Vec(numFpuPorts, new ValidIO(new FFlagsResp())))
+  val fflags = Flipped(Vec(numFFlagsPorts, new ValidIO(new FFlagsResp())))
   val lxcpt = Flipped(new ValidIO(new Exception())) // LSU
 
   // Commit stage (free resources; also used for rollback).
@@ -210,10 +210,10 @@ class DebugRobSignals(implicit p: Parameters) extends BoomBundle
 @chiselName
 class Rob(
   val numWakeupPorts: Int,
-  val numFpuPorts: Int
+  val numFFlagPorts: Int
   )(implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new RobIo(numWakeupPorts, numFpuPorts))
+  val io = IO(new RobIo(numWakeupPorts, numFFlagPorts))
 
   // ROB Finite State Machine
   val s_reset :: s_normal :: s_rollback :: s_wait_till_empty :: Nil = Enum(4)
@@ -248,7 +248,7 @@ class Rob(
   val rob_tail_vals       = Wire(Vec(coreWidth, Bool())) // are the instructions at the tail valid? (to track partial row dispatches)
   val rob_head_uses_stq   = Wire(Vec(coreWidth, Bool()))
   val rob_head_uses_ldq   = Wire(Vec(coreWidth, Bool()))
-  val rob_head_fflags     = Wire(Vec(coreWidth, UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W)))
+  val rob_head_fflags     = Wire(Vec(coreWidth, Valid(UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))))
 
   val exception_thrown = Wire(Bool())
 
@@ -314,7 +314,7 @@ class Rob(
     val rob_uop       = Reg(Vec(numRobRows, new MicroOp()))
     val rob_exception = Reg(Vec(numRobRows, Bool()))
     val rob_predicated = Reg(Vec(numRobRows, Bool())) // Was this instruction predicated out?
-    val rob_fflags    = Mem(numRobRows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
+    val rob_fflags    = Mem(numRobRows, Valid(Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W)))
 
     val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
 
@@ -332,7 +332,8 @@ class Rob(
       rob_uop(rob_tail)       := io.enq_uops(w)
       rob_exception(rob_tail) := io.enq_uops(w).exception
       rob_predicated(rob_tail)   := false.B
-      rob_fflags(rob_tail)    := 0.U
+      rob_fflags(rob_tail).valid := false.B
+      rob_fflags(rob_tail).bits  := 0.U
 
       assert (rob_val(rob_tail) === false.B, "[rob] overwriting a valid entry.")
       assert ((io.enq_uops(w).rob_idx >> log2Ceil(coreWidth)) === rob_tail)
@@ -374,10 +375,12 @@ class Rob(
 
     //-----------------------------------------------
     // Accruing fflags
-    for (i <- 0 until numFpuPorts) {
-      val fflag_uop = io.fflags(i).bits.uop
-      when (io.fflags(i).valid && MatchBank(GetBankIdx(fflag_uop.rob_idx))) {
-        rob_fflags(GetRowIdx(fflag_uop.rob_idx)) := io.fflags(i).bits.flags
+    for (fflag <- io.fflags) {
+      when (fflag.valid && MatchBank(GetBankIdx(fflag.bits.uop.rob_idx))) {
+        assert(!rob_fflags(GetRowIdx(fflag.bits.uop.rob_idx)).valid)
+        assert(rob_val(GetRowIdx(fflag.bits.uop.rob_idx)))
+        rob_fflags(GetRowIdx(fflag.bits.uop.rob_idx)).valid := true.B
+        rob_fflags(GetRowIdx(fflag.bits.uop.rob_idx)).bits  := fflag.bits.flags
       }
     }
 
@@ -594,21 +597,23 @@ class Rob(
   val fflags     = Wire(Vec(coreWidth, UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W)))
 
   for (w <- 0 until coreWidth) {
-    fflags_val(w) :=
-      io.commit.valids(w) &&
-      io.commit.uops(w).fp_val &&
-      !io.commit.uops(w).uses_stq
+    fflags_val(w) := rob_head_fflags(w).valid && io.commit.valids(w)
+    fflags(w) := Mux(fflags_val(w), rob_head_fflags(w).bits, 0.U)
 
-    fflags(w) := Mux(fflags_val(w), rob_head_fflags(w), 0.U)
+    assert (!(io.commit.valids(w) &&
+              io.commit.uops(w).fp_val &&
+             !(io.commit.uops(w).uses_stq || io.commit.uops(w).uses_ldq) &&
+             !rob_head_fflags(w).valid),
+             "Committed FP instruction did not set fflag bits")
 
     assert (!(io.commit.valids(w) &&
              !io.commit.uops(w).fp_val &&
-             rob_head_fflags(w) =/= 0.U),
+             rob_head_fflags(w).valid),
              "Committed non-FP instruction has non-zero fflag bits.")
     assert (!(io.commit.valids(w) &&
              io.commit.uops(w).fp_val &&
              (io.commit.uops(w).uses_ldq || io.commit.uops(w).uses_stq) &&
-             rob_head_fflags(w) =/= 0.U),
+             (rob_head_fflags(w).bits =/= 0.U && rob_head_fflags(w).valid)),
              "Committed FP load or store has non-zero fflag bits.")
   }
   io.commit.fflags.valid := fflags_val.reduce(_|_)
@@ -871,5 +876,5 @@ class Rob(
     "Rob Rows           : " + numRobRows,
     "Rob Row size       : " + log2Ceil(numRobRows),
     "log2Ceil(coreWidth): " + log2Ceil(coreWidth),
-    "FPU FFlag Ports    : " + numFpuPorts)
+    "FPU FFlag Ports    : " + numFFlagPorts)
 }

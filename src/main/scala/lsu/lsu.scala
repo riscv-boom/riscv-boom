@@ -404,18 +404,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val stq_incoming_idx = widthMap(i => agen(i).bits.uop.stq_idx)
   val stq_incoming_e   = widthMap(i => stq(stq_incoming_idx(i)))
 
-  val ldq_retry_idx = RegNext(AgePriorityEncoder((0 until numLdqEntries).map(i => {
-    val e = ldq(i).bits
-    val block = block_load_mask(i) || p1_block_load_mask(i)
-    e.addr.valid && e.addr_is_virtual && !block
-  }), ldq_head))
-  val ldq_retry_e = WireInit(ldq(ldq_retry_idx))
-
-  val stq_retry_idx = RegNext(AgePriorityEncoder((0 until numStqEntries).map(i => {
-    val e = stq(i).bits
-    e.addr.valid && e.addr_is_virtual
-  }), stq_commit_head))
-  val stq_retry_e   = WireInit(stq(stq_retry_idx))
 
   val stq_commit_e  = WireInit(stq(stq_execute_head))
 
@@ -425,6 +413,52 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     e.addr.valid && !e.executed && !e.succeeded && !e.addr_is_virtual && !block
   }), ldq_head))
   val ldq_wakeup_e   = WireInit(ldq(ldq_wakeup_idx))
+
+
+  // Enqueue into the retry queue
+  val ldq_enq_retry_idx = Reg(UInt(ldqAddrSz.W))
+  ldq_enq_retry_idx := AgePriorityEncoder((0 until numLdqEntries).map(i => {
+    val e = WireInit(ldq(i).bits)
+    e.addr.valid && e.addr_is_virtual && (i.U =/= ldq_enq_retry_idx)
+  }), ldq_head)
+  val ldq_enq_retry_e = WireInit(ldq(ldq_enq_retry_idx))
+
+  val stq_enq_retry_idx = Reg(UInt(stqAddrSz.W))
+  stq_enq_retry_idx := AgePriorityEncoder((0 until numStqEntries).map(i => {
+    val e = WireInit(stq(i).bits)
+    e.addr.valid && e.addr_is_virtual && (i.U =/= stq_enq_retry_idx)
+  }), stq_commit_head)
+  val stq_enq_retry_e   = WireInit(stq(stq_enq_retry_idx))
+
+  val can_enq_load_retry    = (ldq_enq_retry_e.valid                            &&
+                               ldq_enq_retry_e.bits.addr.valid                  &&
+                               ldq_enq_retry_e.bits.addr_is_virtual)
+  val can_enq_store_retry   = (stq_enq_retry_e.valid                            &&
+                               stq_enq_retry_e.bits.addr.valid                  &&
+                               stq_enq_retry_e.bits.addr_is_virtual)
+
+  val retry_queue = Module(new BranchKillableQueue(new FuncUnitResp(xLen), 8))
+  retry_queue.io.brupdate := io.core.brupdate
+  retry_queue.io.flush    := io.core.exception
+
+  retry_queue.io.enq.valid     := can_enq_store_retry || can_enq_load_retry
+  retry_queue.io.enq.bits      := DontCare
+  retry_queue.io.enq.bits.addr := Mux(can_enq_store_retry, stq_enq_retry_e.bits.addr.bits, ldq_enq_retry_e.bits.addr.bits)
+  retry_queue.io.enq.bits.uop  := Mux(can_enq_store_retry, stq_enq_retry_e.bits.uop      , ldq_enq_retry_e.bits.uop)
+  retry_queue.io.enq.bits.uop.uses_ldq := can_enq_load_retry && !can_enq_store_retry
+  retry_queue.io.enq.bits.uop.ldq_idx  := ldq_enq_retry_idx
+  retry_queue.io.enq.bits.uop.stq_idx  := can_enq_store_retry
+  retry_queue.io.enq.bits.uop.stq_idx  := stq_enq_retry_idx
+
+  when (can_enq_store_retry && retry_queue.io.enq.fire()) {
+    stq(stq_enq_retry_idx).bits.addr.valid := false.B
+  } .elsewhen (can_enq_load_retry && retry_queue.io.enq.fire()) {
+    ldq(ldq_enq_retry_idx).bits.addr.valid := false.B
+  }
+
+  val ldq_retry_idx = retry_queue.io.deq.bits.uop.ldq_idx
+  val stq_retry_idx = retry_queue.io.deq.bits.uop.stq_idx
+  retry_queue.io.deq.ready := will_fire_load_retry.reduce(_||_) || will_fire_store_retry.reduce(_||_)
 
   // -----------------------
   // Determine what can fire
@@ -447,24 +481,21 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   // Can we retry a load that missed in the TLB
   val can_fire_load_retry    = widthMap(w =>
-                               ( ldq_retry_e.valid                            &&
-                                 ldq_retry_e.bits.addr.valid                  &&
-                                 ldq_retry_e.bits.addr_is_virtual             &&
+                               ( retry_queue.io.deq.valid                     &&
+                                 retry_queue.io.deq.bits.uop.uses_ldq         &&
                                 !p1_block_load_mask(ldq_retry_idx)            &&
                                 !p2_block_load_mask(ldq_retry_idx)            &&
                                 RegNext(dtlb.io.miss_rdy)                     &&
                                 !store_needs_order                            &&
-                                (w == lsuWidth-1).B                           && // TODO: Is this best scheduling?
-                                !ldq_retry_e.bits.order_fail))
+                                (w == lsuWidth-1).B))
 
   // Can we retry a store addrgen that missed in the TLB
   val can_fire_store_retry   = widthMap(w =>
-                               ( stq_retry_e.valid                            &&
-                                 stq_retry_e.bits.addr.valid                  &&
-                                 stq_retry_e.bits.addr_is_virtual             &&
+                               ( retry_queue.io.deq.valid                     &&
+                                 retry_queue.io.deq.bits.uop.uses_stq         &&
                                  (w == lsuWidth-1).B                          &&
-                                 RegNext(dtlb.io.miss_rdy)
-                               ))
+                                 RegNext(dtlb.io.miss_rdy)))
+
   // Can we commit a store
   val can_fire_store_commit_slow  = widthMap(w =>
                                     ( stq_commit_e.valid                           &&
@@ -538,8 +569,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     will_fire_release          (w) := lsu_sched(can_fire_release          (w) , false, false, true ) //            LCAM
     will_fire_hella_incoming   (w) := lsu_sched(can_fire_hella_incoming   (w) , true , true , false) // TLB , DC
     will_fire_hella_wakeup     (w) := lsu_sched(can_fire_hella_wakeup     (w) , false, true , false) //     , DC
-    will_fire_load_retry       (w) := lsu_sched(can_fire_load_retry       (w) , true , true , true ) // TLB , DC , LCAM
     will_fire_store_retry      (w) := lsu_sched(can_fire_store_retry      (w) , true , false, true ) // TLB ,    , LCAM
+    will_fire_load_retry       (w) := lsu_sched(can_fire_load_retry       (w) , true , true , true ) // TLB , DC , LCAM
     will_fire_load_wakeup      (w) := lsu_sched(can_fire_load_wakeup      (w) , false, true , true ) //     , DC , LCAM
     will_fire_store_commit_slow(w) := lsu_sched(can_fire_store_commit_slow(w) , false, true , false) //     , DC
 
@@ -577,20 +608,20 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                     Mux(will_fire_load_agen_exec(w) ||
                         will_fire_load_agen     (w)  , ldq_incoming_e(w).bits.uop,
                     Mux(will_fire_store_agen    (w)  , stq_incoming_e(w).bits.uop,
-                    Mux(will_fire_load_retry    (w)  , ldq_retry_e.bits.uop,
-                    Mux(will_fire_store_retry   (w)  , stq_retry_e.bits.uop,
+                    Mux(will_fire_load_retry    (w) ||
+                        will_fire_store_retry   (w)  , retry_queue.io.deq.bits.uop,
                     Mux(will_fire_hella_incoming(w)  , NullMicroOp,
-                                                       NullMicroOp))))))
+                                                       NullMicroOp)))))
 
   val exe_tlb_vaddr = widthMap(w =>
                     Mux(will_fire_load_agen_exec(w) ||
                         will_fire_load_agen     (w) ||
                         will_fire_store_agen    (w)  , agen(w).bits.addr,
                     Mux(will_fire_sfence        (w)  , io.core.sfence.bits.addr,
-                    Mux(will_fire_load_retry    (w)  , ldq_retry_e.bits.addr.bits,
-                    Mux(will_fire_store_retry   (w)  , stq_retry_e.bits.addr.bits,
+                    Mux(will_fire_load_retry    (w) ||
+                        will_fire_store_retry   (w)  , retry_queue.io.deq.bits.addr,
                     Mux(will_fire_hella_incoming(w)  , hella_req.addr,
-                                                       0.U))))))
+                                                       0.U)))))
 
   val exe_sfence = io.core.sfence
 
@@ -746,7 +777,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       dmem_req(w).bits.uop   := exe_tlb_uop(w)
 
       s0_executing_loads(ldq_retry_idx) := dmem_req_fire(w)
-      assert(!ldq_retry_e.bits.executed)
     } .elsewhen (will_fire_store_commit_slow(w) || will_fire_store_commit_fast(w)) {
       dmem_req(w).valid         := true.B
       dmem_req(w).bits.addr     := stq_commit_e.bits.addr.bits
@@ -811,8 +841,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       ldq(ldq_idx).bits.addr_is_virtual     := exe_tlb_miss(w)
       ldq(ldq_idx).bits.addr_is_uncacheable := exe_tlb_uncacheable(w) && !exe_tlb_miss(w)
 
-      assert(!((will_fire_load_agen(w) || will_fire_load_agen_exec(w)) && ldq_incoming_e(w).bits.addr.valid),
-        "[lsu] Incoming load is overwriting a valid address")
+      assert(!ldq(ldq_idx).bits.addr.valid,
+        "[lsu] Translating load is overwriting a valid address")
     }
 
     when (will_fire_store_agen(w) || will_fire_store_retry(w))
@@ -825,8 +855,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       stq(stq_idx).bits.uop.pdst   := exe_tlb_uop(w).pdst // Needed for AMOs
       stq(stq_idx).bits.addr_is_virtual := exe_tlb_miss(w)
 
-      assert(!(will_fire_store_agen(w) && stq_incoming_e(w).bits.addr.valid),
-        "[lsu] Incoming store is overwriting a valid address")
+      assert(!stq(stq_idx).bits.addr.valid,
+        "[lsu] Translating store is overwriting a valid address")
 
     }
 
@@ -857,8 +887,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val fired_store_agen     = widthMap(w => RegNext(will_fire_store_agen    (w) && !exe_agen_killed(w)))
   val fired_sfence         = RegNext(will_fire_sfence)
   val fired_release        = RegNext(will_fire_release)
-  val fired_load_retry     = widthMap(w => RegNext(will_fire_load_retry   (w) && !IsKilledByBranch(io.core.brupdate, ldq_retry_e.bits.uop)))
-  val fired_store_retry    = widthMap(w => RegNext(will_fire_store_retry  (w) && !IsKilledByBranch(io.core.brupdate, stq_retry_e.bits.uop)))
+  val fired_load_retry     = widthMap(w => RegNext(will_fire_load_retry   (w) && !IsKilledByBranch(io.core.brupdate, retry_queue.io.deq.bits.uop)))
+  val fired_store_retry    = widthMap(w => RegNext(will_fire_store_retry  (w) && !IsKilledByBranch(io.core.brupdate, retry_queue.io.deq.bits.uop)))
   val fired_store_commit   = widthMap(w => RegNext(will_fire_store_commit_slow(w) || will_fire_store_commit_fast(w)))
   val fired_load_wakeup    = widthMap(w => RegNext(will_fire_load_wakeup  (w) && !IsKilledByBranch(io.core.brupdate, ldq_wakeup_e.bits.uop)))
   val fired_hella_incoming = RegNext(will_fire_hella_incoming)
@@ -868,8 +898,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val mem_ldq_incoming_e   = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, ldq_incoming_e(w))))
   val mem_stq_incoming_e   = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, stq_incoming_e(w))))
   val mem_ldq_wakeup_e     = RegNext(UpdateBrMask(io.core.brupdate, ldq_wakeup_e))
-  val mem_ldq_retry_e      = RegNext(UpdateBrMask(io.core.brupdate, ldq_retry_e))
-  val mem_stq_retry_e      = RegNext(UpdateBrMask(io.core.brupdate, stq_retry_e))
+  val mem_ldq_retry_e      = RegNext(UpdateBrMask(io.core.brupdate, ldq(ldq_retry_idx)))
+  val mem_stq_retry_e      = RegNext(UpdateBrMask(io.core.brupdate, stq(stq_retry_idx)))
   val mem_ldq_e            = widthMap(w =>
                              Mux(fired_load_agen     (w) ||
                                  fired_load_agen_exec(w), mem_ldq_incoming_e(w),
@@ -1005,10 +1035,11 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     // Searcher is a store
     for (w <- 0 until lsuWidth) {
 
-      when (do_release_search(w) &&
-            l_valid              &&
-            l_bits.addr.valid    &&
-            block_addr_matches(w)) {
+      when ( do_release_search(w)   &&
+             l_valid                &&
+             l_bits.addr.valid      &&
+            !l_bits.addr_is_virtual &&
+             block_addr_matches(w)) {
         // This load has been observed, so if a younger load to the same address has not
         // executed yet, this load must be squashed
         ldq(i).bits.observed := true.B

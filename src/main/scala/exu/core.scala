@@ -153,7 +153,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                            xLen))
   val rob              = Module(new Rob(
                            numIrfWritePorts + numFpWakeupPorts,
-                           numFpWakeupPorts))
+                           fpWidth + 1))
   // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
   val int_iss_wakeups  = Wire(Vec(numIntIssueWakeupPorts, Valid(UInt(maxPregSz.W))))
   val int_ren_wakeups  = Wire(Vec(numIntRenameWakeupPorts, Valid(new ExeUnitResp(xLen))))
@@ -996,7 +996,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   csr.io.fcsr_flags.bits  := rob.io.commit.fflags.bits
   csr.io.set_fs_dirty.get := rob.io.commit.fflags.valid
 
-  int_exe_units.find(_.hasIfpu).get.io.fcsr_rm := csr.io.fcsr_rm
+  int_exe_units.find(_.hasFCSR).get.io.fcsr_rm := csr.io.fcsr_rm
   io.fcsr_rm := csr.io.fcsr_rm
 
   fp_pipeline.io.fcsr_rm := csr.io.fcsr_rm
@@ -1155,8 +1155,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo)
     rob.io.wb_resps(cnt).bits  <> resp.bits
     rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
-    if (eu.hasFFlags) {
-      rob.io.fflags(f_cnt) <> resp.bits.fflags
+    if (eu.hasFCSR) {
+      rob.io.fflags(f_cnt) <> eu.io.fflags
       f_cnt += 1
     }
     if (eu.hasCSR) {
@@ -1174,15 +1174,17 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   for ((wdata, wakeup) <- fp_pipeline.io.debug_wb_wdata zip fp_pipeline.io.wakeups) {
     rob.io.wb_resps(cnt) <> wakeup
-    rob.io.fflags(f_cnt) <> wakeup.bits.fflags
     rob.io.debug_wb_valids(cnt) := wakeup.valid
     rob.io.debug_wb_wdata(cnt) := wdata
     cnt += 1
+  }
+  for (fflags <- fp_pipeline.io.fflags) {
+    rob.io.fflags(f_cnt) := fflags
     f_cnt += 1
   }
 
   require (cnt == rob.numWakeupPorts)
-  require (f_cnt == rob.numFpuPorts)
+  require (f_cnt == rob.numFFlagPorts)
 
   // branch resolution
   rob.io.brupdate <> brupdate

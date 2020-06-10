@@ -54,11 +54,15 @@ object Fold
 object IsKilledByBranch
 {
   def apply(brupdate: BrUpdateInfo, uop: MicroOp): Bool = {
-    return maskMatch(brupdate.b1.mispredict_mask, uop.br_mask)
+    return apply(brupdate, uop.br_mask)
   }
 
   def apply(brupdate: BrUpdateInfo, uop_mask: UInt): Bool = {
     return maskMatch(brupdate.b1.mispredict_mask, uop_mask)
+  }
+
+  def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, bundle: T): Bool = {
+    return apply(brupdate, bundle.uop)
   }
 }
 
@@ -445,7 +449,7 @@ class Compactor[T <: chisel3.core.Data](n: Int, k: Int, gen: T) extends Module
  * Create a queue that can be killed with a branch kill signal.
  * Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
  */
-class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flush_fn: boom.common.MicroOp => Bool = u => true.B, flow: Boolean = true)
+class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flush_fn: boom.common.MicroOp => Bool = u => true.B)
   (implicit p: freechips.rocketchip.config.Parameters)
   extends boom.common.BoomModule()(p)
   with boom.common.HasBoomCoreParameters
@@ -472,7 +476,7 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flu
   val ptr_match = enq_ptr.value === deq_ptr.value
   io.empty := ptr_match && !maybe_full
   val full = ptr_match && maybe_full
-  val do_enq = WireInit(io.enq.fire())
+  val do_enq = WireInit(io.enq.fire() && !IsKilledByBranch(io.brupdate, io.enq.bits.uop) && !(io.flush && flush_fn(io.enq.bits.uop)))
   val do_deq = WireInit((io.deq.ready || !valids(deq_ptr.value)) && !io.empty)
 
   for (i <- 0 until entries) {
@@ -486,7 +490,7 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flu
 
   when (do_enq) {
     ram(enq_ptr.value)          := io.enq.bits
-    valids(enq_ptr.value)       := true.B //!IsKilledByBranch(io.brupdate, io.enq.bits.uop)
+    valids(enq_ptr.value)       := true.B
     uops(enq_ptr.value)         := io.enq.bits.uop
     uops(enq_ptr.value).br_mask := GetNewBrMask(io.brupdate, io.enq.bits.uop)
     enq_ptr.inc()
@@ -506,21 +510,9 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flu
   val out = Wire(gen)
   out             := ram(deq_ptr.value)
   out.uop         := uops(deq_ptr.value)
-  io.deq.valid            := !io.empty && valids(deq_ptr.value) && !IsKilledByBranch(io.brupdate, out.uop) && !(io.flush && flush_fn(out.uop))
+  io.deq.valid            := !io.empty && valids(deq_ptr.value) && !(io.flush && flush_fn(out.uop))
   io.deq.bits             := out
-  io.deq.bits.uop.br_mask := GetNewBrMask(io.brupdate, out.uop)
 
-  // For flow queue behavior.
-  if (flow) {
-    when (io.empty) {
-      io.deq.valid := io.enq.valid //&& !IsKilledByBranch(io.brupdate, io.enq.bits.uop)
-      io.deq.bits := io.enq.bits
-      io.deq.bits.uop.br_mask := GetNewBrMask(io.brupdate, io.enq.bits.uop)
-
-      do_deq := false.B
-      when (io.deq.ready) { do_enq := false.B }
-    }
-  }
   private val ptr_diff = enq_ptr.value - deq_ptr.value
   if (isPow2(entries)) {
     io.count := Cat(maybe_full && ptr_match, ptr_diff)
