@@ -1005,8 +1005,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // Mask of stores which we can forward from
   val ldst_forward_matches = WireInit(widthMap(w => VecInit((0 until numStqEntries).map(x=>false.B))))
 
-  val nacking_loads    = WireInit(VecInit((0 until numLdqEntries).map(x=>false.B))) // Loads which are being nacked by dcache in the next stage
-
   val s1_executing_loads = RegNext(s0_executing_loads)
   val s1_set_execute     = WireInit(s1_executing_loads)
 
@@ -1076,10 +1074,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
             ldq(i).bits.order_fail := true.B
           }
         } .elsewhen (lcam_ldq_idx(w) =/= i.U) {
-          // The load is older, and either it hasn't executed, it was nacked, or it is ignoring its response
+          // The load is older, and it wasn't executed
           // we need to kill ourselves, and prevent forwarding
-          val older_nacked = nacking_loads(i) || RegNext(nacking_loads(i))
-          when (!(l_bits.executed || l_bits.succeeded) || older_nacked) {
+          when (!(l_bits.executed || l_bits.succeeded)) {
             s1_set_execute(lcam_ldq_idx(w))    := false.B
             when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
               io.dmem.s1_kill(w)               := true.B
@@ -1248,7 +1245,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       {
         assert(ldq(io.dmem.nack(w).bits.uop.ldq_idx).bits.executed)
         ldq(io.dmem.nack(w).bits.uop.ldq_idx).bits.executed  := false.B
-        nacking_loads(io.dmem.nack(w).bits.uop.ldq_idx) := true.B
       }
         .otherwise
       {
