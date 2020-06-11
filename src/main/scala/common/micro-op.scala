@@ -85,8 +85,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val op1_sel          = UInt(OP1_X.getWidth.W)
   val op2_sel          = UInt(OP2_X.getWidth.W)
 
-
-  val csr_addr         = UInt(CSR_ADDR_SZ.W)    // only used for critical path reasons in Exe
   val rob_idx          = UInt(robAddrSz.W)
   val ldq_idx          = UInt(ldqAddrSz.W)
   val stq_idx          = UInt(stqAddrSz.W)

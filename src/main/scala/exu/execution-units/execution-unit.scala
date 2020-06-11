@@ -91,6 +91,7 @@ abstract class ExecutionUnit(
     val fflags = if (hasFCSR) new Valid(new FFlagsResp) else null
 
     val sfence   = if (hasCSR) new Valid(new SFenceReq) else null
+    val csr_resp = if (hasCSR) new Valid(new ExeUnitResp(xLen)) else null
 
     val bypass   = Output(Vec(numBypassStages, Valid(new ExeUnitResp(dataWidth))))
     val brupdate = Input(new BrUpdateInfo())
@@ -386,9 +387,9 @@ class ALUExeUnit(
   // pulled out for critical path reasons
   // TODO: Does this make sense as part of the iresp bundle?
   if (hasCSR) {
-    io.resp.bits.uop.csr_addr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
-    io.resp.bits.uop.csr_cmd  := Mux(alu.io.resp.valid, alu.io.resp.bits.uop.csr_cmd,
-      freechips.rocketchip.rocket.CSR.N)
+    io.csr_resp.valid     := alu.io.resp.valid
+    io.csr_resp.bits.uop  := alu.io.resp.bits.uop
+    io.csr_resp.bits.data := alu.io.resp.bits.data
   }
 
 
