@@ -315,7 +315,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       assert (ld_enq_idx === io.core.dis_uops(w).bits.ldq_idx, "[lsu] mismatch enq load tag.")
       assert (!ldq(ld_enq_idx).valid, "[lsu] Enqueuing uop is overwriting ldq entries")
     }
-      .elsewhen (dis_st_val)
+    when (dis_st_val)
     {
       stq(st_enq_idx).valid           := true.B
       stq(st_enq_idx).bits.uop        := io.core.dis_uops(w).bits
@@ -1230,6 +1230,14 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     io.core.fresp(w).valid := false.B
   }
 
+  // Initially assume the speculative load wakeup failed
+  io.core.ld_miss    := RegNext(io.core.spec_ld_wakeup.map(_.valid).reduce(_||_))
+  val spec_ld_succeed = WireInit(widthMap(w => !RegNext(io.core.spec_ld_wakeup(w).valid)))
+  when (spec_ld_succeed.reduce(_&&_)) {
+    io.core.ld_miss := false.B
+  }
+
+
   val dmem_resp_fired = WireInit(widthMap(w => false.B))
 
   for (w <- 0 until lsuWidth) {
@@ -1267,6 +1275,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         io.core.iresp(w).bits.uop  := ldq(ldq_idx).bits.uop
         io.core.fresp(w).bits.uop  := ldq(ldq_idx).bits.uop
         io.core.iresp(w).valid     := send_iresp
+
+        spec_ld_succeed(w) := send_iresp && ldq_idx === RegNext(mem_incoming_uop(w).ldq_idx)
+
         io.core.iresp(w).bits.data := io.dmem.resp(w).bits.data
         io.core.fresp(w).valid     := send_fresp
         io.core.fresp(w).bits.data := io.dmem.resp(w).bits.data
@@ -1329,17 +1340,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
   }
 
-  // Initially assume the speculative load wakeup failed
-  io.core.ld_miss         := RegNext(io.core.spec_ld_wakeup.map(_.valid).reduce(_||_))
-  val spec_ld_succeed = widthMap(w =>
-    !RegNext(io.core.spec_ld_wakeup(w).valid) ||
-    (io.core.iresp(w).valid &&
-      io.core.iresp(w).bits.uop.ldq_idx === RegNext(mem_incoming_uop(w).ldq_idx)
-    )
-  ).reduce(_&&_)
-  when (spec_ld_succeed) {
-    io.core.ld_miss := false.B
-  }
 
 
   //-------------------------------------------------------------

@@ -134,7 +134,7 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
         }
       }
       when (s0_col_mask(c) && !(wen && params.singlePorted.B)) {
-        s1_req_rdata(c) := RegNext(data(s0_col_idx))
+        s1_req_rdata(c) := data(RegNext(s0_col_idx))
       }
     } else {
       val data = SyncReadMem(nSetsPerCol, Vec(bankWidth, UInt(2.W)))

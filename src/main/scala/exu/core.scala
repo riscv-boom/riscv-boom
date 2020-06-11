@@ -157,7 +157,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
   val int_iss_wakeups  = Wire(Vec(numIntIssueWakeupPorts, Valid(UInt(maxPregSz.W))))
   val int_ren_wakeups  = Wire(Vec(numIntRenameWakeupPorts, Valid(new ExeUnitResp(xLen))))
-  val pred_wakeup  = Wire(Valid(new ExeUnitResp(1)))
+  val pred_wakeup  = Reg(Valid(new ExeUnitResp(1)))
   pred_wakeup.valid := false.B
   pred_wakeup.bits := DontCare
 
