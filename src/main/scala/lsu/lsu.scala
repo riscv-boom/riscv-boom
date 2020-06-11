@@ -1045,7 +1045,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         // This load has been observed, so if a younger load to the same address has not
         // executed yet, this load must be squashed
         ldq(i).bits.observed := true.B
-      } .elsewhen (do_st_search(w)                                                                                                &&
+      }
+      when (       do_st_search(w)                                                                                                &&
                    l_valid                                                                                                        &&
                    l_bits.addr.valid                                                                                              &&
                    (l_bits.executed || l_bits.succeeded || l_is_forwarding)                                                       &&
@@ -1060,7 +1061,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
           ((l_forward_stq_idx =/= lcam_stq_idx(w)) && forwarded_is_older)) { // If the load forwarded from us, we might be ok
           ldq(i).bits.order_fail := true.B
         }
-      } .elsewhen (do_ld_search(w)            &&
+      }
+      when (       do_ld_search(w)            &&
                    l_valid                    &&
                    l_bits.addr.valid          &&
                    !l_bits.addr_is_virtual    &&
