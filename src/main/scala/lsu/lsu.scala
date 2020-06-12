@@ -281,18 +281,21 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   var ld_enq_idx = ldq_tail
   var st_enq_idx = stq_tail
 
-  val stq_nonempty = (0 until numStqEntries).map{ i => stq(i).valid }.reduce(_||_) =/= 0.U
+  var ldq_tail_oh = UIntToOH(ldq_tail)(numLdqEntries-1,0)
+  val ldq_valids  = VecInit(ldq.map(_.valid)).asUInt
+  var stq_tail_oh = UIntToOH(stq_tail)(numStqEntries-1,0)
+  val stq_valids  = VecInit(stq.map(_.valid)).asUInt
 
-  var ldq_full = Bool()
-  var stq_full = Bool()
+  val stq_nonempty = stq.map(_.valid).reduce(_||_)
 
   for (w <- 0 until coreWidth)
   {
-    ldq_full = WrapInc(ld_enq_idx, numLdqEntries) === ldq_head
+
+    val ldq_full = (ldq_tail_oh & ldq_valids).orR
     io.core.ldq_full(w)    := ldq_full
     io.core.dis_ldq_idx(w) := ld_enq_idx
 
-    stq_full = WrapInc(st_enq_idx, numStqEntries) === stq_head
+    val stq_full = (stq_tail_oh & stq_valids).orR
     io.core.stq_full(w)    := stq_full
     io.core.dis_stq_idx(w) := st_enq_idx
 
@@ -338,6 +341,11 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                  st_enq_idx)
 
     assert(!(dis_ld_val && dis_st_val), "A UOP is trying to go into both the LDQ and the STQ")
+
+    ldq_tail_oh = Mux(io.core.dis_uops(w).bits.uses_ldq && !io.core.dis_uops(w).bits.exception,
+      RotateL1(ldq_tail_oh), ldq_tail_oh)
+    stq_tail_oh = Mux(io.core.dis_uops(w).bits.uses_stq && !io.core.dis_uops(w).bits.exception,
+      RotateL1(stq_tail_oh), stq_tail_oh)
   }
 
   ldq_tail := ld_enq_idx
