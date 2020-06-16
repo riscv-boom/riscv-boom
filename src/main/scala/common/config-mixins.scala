@@ -38,6 +38,12 @@ class WithBoomBranchPrintf extends Config((site, here, up) => {
   }
 })
 
+class WithBoomMemPrintf extends Config((site, here, up) => {
+  case BoomTilesKey => up(BoomTilesKey, site) map { b =>
+    b.copy(core = b.core.copy(enableMemtracePrintf = true))
+  }
+})
+
 
 
 

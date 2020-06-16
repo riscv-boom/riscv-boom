@@ -45,11 +45,12 @@ trait ScalarOpConstants
   // Extra Constants
 
   // Which branch predictor predicted us
-  val BSRC_SZ = 2
+  val BSRC_SZ = 3
   val BSRC_1 = 0.U(BSRC_SZ.W) // 1-cycle branch pred
   val BSRC_2 = 1.U(BSRC_SZ.W) // 2-cycle branch pred
   val BSRC_3 = 2.U(BSRC_SZ.W) // 3-cycle branch pred
-  val BSRC_C = 3.U(BSRC_SZ.W) // core branch resolution
+  val BSRC_4 = 3.U(BSRC_SZ.W) // 4-cycle branch pred
+  val BSRC_C = 4.U(BSRC_SZ.W) // core branch resolution
 
   //************************************
   // Control Signals
