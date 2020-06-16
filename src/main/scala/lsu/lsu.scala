@@ -771,7 +771,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     dmem_req(w).bits.is_hella := false.B
 
     s0_kills(w) := false.B
-    io.dmem.s1_kill(w) := RegNext(s0_kills(w))
+    io.dmem.s1_kill(w) := RegNext(s0_kills(w) && dmem_req_fire(w))
 
     when (will_fire_load_agen_exec(w)) {
       dmem_req(w).valid      := true.B
