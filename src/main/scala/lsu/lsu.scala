@@ -78,6 +78,8 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
   val s1_kill     = Output(Vec(lsuWidth, Bool()))
   // Get a request any cycle
   val resp        = Flipped(Vec(lsuWidth, new ValidIO(new BoomDCacheResp)))
+  // The cache irrevocably accepted our store
+  val store_ack   = Flipped(Vec(lsuWidth, new ValidIO(new MicroOp)))
   // In our response stage, if we get a nack, we need to reexecute
   val nack        = Flipped(Vec(lsuWidth, new ValidIO(new BoomDCacheReq)))
 
@@ -1300,17 +1302,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       }
         .elsewhen (io.dmem.resp(w).bits.uop.uses_stq)
       {
-        assert(!io.dmem.resp(w).bits.is_hella)
-        stq(io.dmem.resp(w).bits.uop.stq_idx).bits.succeeded := true.B
-        when (io.dmem.resp(w).bits.uop.is_amo) {
-          dmem_resp_fired(w) := true.B
-          io.core.iresp(w).valid     := true.B
-          io.core.iresp(w).bits.uop  := stq(io.dmem.resp(w).bits.uop.stq_idx).bits.uop
-          io.core.iresp(w).bits.data := io.dmem.resp(w).bits.data
+        assert(!io.dmem.resp(w).bits.is_hella && io.dmem.resp(w).bits.uop.is_amo)
+        dmem_resp_fired(w) := true.B
+        io.core.iresp(w).valid     := true.B
+        io.core.iresp(w).bits.uop  := stq(io.dmem.resp(w).bits.uop.stq_idx).bits.uop
+        io.core.iresp(w).bits.data := io.dmem.resp(w).bits.data
 
-          stq(io.dmem.resp(w).bits.uop.stq_idx).bits.debug_wb_data := io.dmem.resp(w).bits.data
-        }
+        stq(io.dmem.resp(w).bits.uop.stq_idx).bits.debug_wb_data := io.dmem.resp(w).bits.data
       }
+    }
+    // Handle store acks
+    when (io.dmem.store_ack(w).valid) {
+      stq(io.dmem.store_ack(w).bits.stq_idx).bits.succeeded := true.B
     }
 
 

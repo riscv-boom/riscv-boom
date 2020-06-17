@@ -727,8 +727,12 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_nack_wb     = widthMap(w => s2_valid(w) && !s2_hit(w) && s2_wb_idx_matches(w))
 
   s2_nack           := widthMap(w => (s2_nack_miss(w) || s2_nack_hit(w) || s2_nack_victim(w) || s2_nack_data(w) || s2_nack_wb(w)) && s2_type =/= t_replay)
-  val s2_send_resp = widthMap(w => (RegNext(s1_send_resp_or_nack(w)) && !s2_nack(w) &&
-                      (s2_hit(w) || (mshrs.io.req(w).fire() && isWrite(s2_req(w).uop.mem_cmd) && !isRead(s2_req(w).uop.mem_cmd)))))
+  val s2_send_resp = widthMap(w => (
+    RegNext(s1_send_resp_or_nack(w)) && !(s2_nack_hit(w) || s2_nack_victim(w) || s2_nack_data(w)) &&
+      s2_hit(w) && isRead(s2_req(w).uop.mem_cmd)))
+  val s2_send_store_ack = widthMap(w => (
+    RegNext(s1_send_resp_or_nack(w)) && !s2_nack(w) && s2_req(w).uop.uses_stq &&
+      (s2_hit(w) || mshrs.io.req(w).fire())))
   val s2_send_nack = widthMap(w => (RegNext(s1_send_resp_or_nack(w)) && s2_nack(w)))
   for (w <- 0 until lsuWidth)
     assert(!(s2_send_resp(w) && s2_send_nack(w)))
@@ -831,6 +835,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
     cache_resp(w).bits.is_hella := s2_req(w).is_hella
   }
 
+
   val uncache_resp = Wire(Valid(new BoomDCacheResp))
   uncache_resp.bits     := mshrs.io.resp.bits
   uncache_resp.valid    := mshrs.io.resp.valid
@@ -857,6 +862,9 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                             !IsKilledByBranch(io.lsu.brupdate, s2_req(w).uop)
     io.lsu.nack(w).bits  := UpdateBrMask(io.lsu.brupdate, s2_req(w))
     assert(!(io.lsu.nack(w).valid && s2_type =/= t_lsu))
+
+    io.lsu.store_ack(w).valid := s2_valid(w) && s2_send_store_ack(w) && (w == 0).B
+    io.lsu.store_ack(w).bits  := s2_req(w).uop
   }
 
   // Store/amo hits
