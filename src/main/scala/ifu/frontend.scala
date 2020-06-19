@@ -753,17 +753,13 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
 
 
-  val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist && enableGHistStallRepair.B
   val f3_correct_f2_ghist = s2_ghist =/= f3_predicted_ghist && enableGHistStallRepair.B
 
   when (f3.io.deq.valid && f4_ready) {
     when (s2_valid && s2_vpc === f3_predicted_target && !f3_correct_f2_ghist) {
       f3.io.enq.bits.ghist := f3_predicted_ghist
-    } .elsewhen (!s2_valid && s1_valid && s1_vpc === f3_predicted_target && !f3_correct_f1_ghist) {
-      s2_ghist := f3_predicted_ghist
     } .elsewhen (( s2_valid &&  (s2_vpc =/= f3_predicted_target || f3_correct_f2_ghist)) ||
-                 (!s2_valid &&  s1_valid && (s1_vpc =/= f3_predicted_target || f3_correct_f1_ghist)) ||
-                 (!s2_valid && !s1_valid)) {
+                 (!s2_valid)) {
       f2_clear := true.B
       f2_prev_is_half := f3_fetch_bundle.end_half.valid && !f3_predicted_do_redirect
       f2_prev_half    := f3_fetch_bundle.end_half.bits
