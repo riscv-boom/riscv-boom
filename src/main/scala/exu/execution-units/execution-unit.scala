@@ -228,8 +228,8 @@ class ALUExeUnit(
 
   override def toString: String = out_str.toString
 
-  val div_busy  = WireInit(false.B)
-  val ifpu_busy = WireInit(false.B)
+  val div_busy   = WireInit(false.B)
+  val ifpu_ready = RegInit(false.B)
 
   // The Functional Units --------------------
   // Specifically the functional units with fast writeback to IRF
@@ -240,7 +240,7 @@ class ALUExeUnit(
                  Mux(!div_busy && hasDiv.B, FU_DIV, 0.U) |
                  Mux(hasCSR.B, FU_CSR, 0.U) |
                  Mux(hasJmp.B, FU_JMP, 0.U) |
-                 Mux(!ifpu_busy && hasIfpu.B, FU_I2F, 0.U)
+                 Mux(ifpu_ready && hasIfpu.B, FU_I2F, 0.U)
 
 
   // ALU Unit -------------------------------
@@ -325,7 +325,7 @@ class ALUExeUnit(
 
     // buffer up results since we share write-port on integer regfile.
     val queue = Module(new BranchKillableQueue(new ExeUnitResp(dataWidth),
-      entries = intToFpLatency + 3)) // TODO being overly conservative
+      entries = intToFpLatency + 6)) // TODO being overly conservative
     queue.io.enq.valid       := ifpu.io.resp.valid
     queue.io.enq.bits.uop    := ifpu.io.resp.bits.uop
     queue.io.enq.bits.data   := ifpu.io.resp.bits.data
@@ -336,8 +336,8 @@ class ALUExeUnit(
     io.ll_fresp <> queue.io.deq
     io.ll_fresp.valid := queue.io.deq.valid && !IsKilledByBranch(io.brupdate, queue.io.deq.bits)
     io.ll_fresp.bits.uop := UpdateBrMask(io.brupdate, queue.io.deq.bits.uop)
-    ifpu_busy := !(queue.io.empty)
-    assert (queue.io.enq.ready)
+    ifpu_ready := RegNext(queue.io.count < 2.U)
+    assert (!(queue.io.enq.valid && !queue.io.enq.ready))
   }
 
   // Div/Rem Unit -----------------------
