@@ -1014,15 +1014,11 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val s1_executing_loads = RegNext(s0_executing_loads)
   val s1_set_execute     = WireInit(s1_executing_loads)
 
-  val mem_forward_valid   = Wire(Vec(lsuWidth, Bool()))
-  val mem_forward_ldq_idx = lcam_ldq_idx
-  val mem_forward_ld_addr = lcam_addr
-  val mem_forward_stq_idx = Wire(Vec(lsuWidth, UInt(log2Ceil(numStqEntries).W)))
-
-  val wb_forward_valid    = RegNext(mem_forward_valid)
-  val wb_forward_ldq_idx  = RegNext(mem_forward_ldq_idx)
-  val wb_forward_ld_addr  = RegNext(mem_forward_ld_addr)
-  val wb_forward_stq_idx  = RegNext(mem_forward_stq_idx)
+  val wb_ldst_forward_matches  = RegNext(ldst_forward_matches)
+  val wb_ldst_forward_valid    = Wire(Vec(lsuWidth, Bool()))
+  val wb_ldst_forward_ldq_idx  = RegNext(lcam_ldq_idx)
+  val wb_ldst_forward_ld_addr  = RegNext(lcam_addr)
+  val wb_ldst_forward_stq_idx  = Wire(Vec(lsuWidth, UInt(stqAddrSz.W)))
 
   for (i <- 0 until numLdqEntries) {
     val l_valid = ldq(i).valid
@@ -1030,9 +1026,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     val l_addr  = ldq(i).bits.addr.bits
     val l_mask  = GenByteMask(l_addr, l_bits.uop.mem_size)
 
-    val l_forwarders      = widthMap(w => wb_forward_valid(w) && wb_forward_ldq_idx(w) === i.U)
+    val l_forwarders      = widthMap(w => wb_ldst_forward_valid(w) && wb_ldst_forward_ldq_idx(w) === i.U)
     val l_is_forwarding   = l_forwarders.reduce(_||_)
-    val l_forward_stq_idx = Mux(l_is_forwarding, Mux1H(l_forwarders, wb_forward_stq_idx), l_bits.forward_stq_idx)
+    val l_forward_stq_idx = Mux(l_is_forwarding, Mux1H(l_forwarders, wb_ldst_forward_stq_idx), l_bits.forward_stq_idx)
 
 
     val block_addr_matches = widthMap(w => lcam_addr(w) >> blockOffBits === l_addr >> blockOffBits)
@@ -1145,15 +1141,16 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   for (w <- 0 until lsuWidth) {
     forwarding_age_logic(w).io.addr_matches    := ldst_addr_matches(w).asUInt
     forwarding_age_logic(w).io.youngest_st_idx := lcam_uop(w).stq_idx
-  }
-  val forwarding_idx = widthMap(w => forwarding_age_logic(w).io.forwarding_idx)
+    wb_ldst_forward_stq_idx(w) := RegNext(forwarding_age_logic(w).io.forwarding_idx)
 
-  // Forward if st-ld forwarding is possible from the writemask and loadmask
-  mem_forward_valid       := widthMap(w =>
-                                  (ldst_forward_matches(w)(forwarding_idx(w))        &&
-                                 !IsKilledByBranch(io.core.brupdate, lcam_uop(w))    &&
-                                 !io.core.exception && !RegNext(io.core.exception)))
-  mem_forward_stq_idx     := forwarding_idx
+    // Forward if st-ld forwarding is possible from the writemask and loadmask
+    wb_ldst_forward_valid(w)    := (wb_ldst_forward_matches(w)(wb_ldst_forward_stq_idx(w)) &&
+                                    !RegNext(IsKilledByBranch(io.core.brupdate, lcam_uop(w)))     &&
+                                    !io.core.exception && !RegNext(io.core.exception) && !RegNext(RegNext(io.core.exception)))
+
+  }
+
+
 
   // Avoid deadlock with a 1-w LSU prioritizing load wakeups > store commits
   // On a 2W machine, load wakeups and store commits occupy separate pipelines,
@@ -1162,7 +1159,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     // Wakeups may repeatedly find a st->ld addr conflict and fail to forward,
     // repeated wakeups may block the store from ever committing
     // Disallow load wakeups 1 cycle after this happens to allow the stores to drain
-    when (RegNext(ldst_addr_matches(0).reduce(_||_) && !mem_forward_valid(0))) {
+    when (RegNext(ldst_addr_matches(0).reduce(_||_)) && !wb_ldst_forward_valid(0)) {
       block_load_wakeup := true.B
     }
 
@@ -1313,15 +1310,15 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
 
 
-    when (dmem_resp_fired(w) && wb_forward_valid(w))
+    when (dmem_resp_fired(w) && wb_ldst_forward_valid(w))
     {
       // Twiddle thumbs. Can't forward because dcache response takes precedence
     }
-      .elsewhen (!dmem_resp_fired(w) && wb_forward_valid(w))
+      .elsewhen (!dmem_resp_fired(w) && wb_ldst_forward_valid(w))
     {
-      val f_idx       = wb_forward_ldq_idx(w)
+      val f_idx       = wb_ldst_forward_ldq_idx(w)
       val forward_uop = ldq(f_idx).bits.uop
-      val stq_e       = stq(wb_forward_stq_idx(w))
+      val stq_e       = stq(wb_ldst_forward_stq_idx(w))
       val data_ready  = stq_e.bits.data.valid && stq_e.valid
       val live        = !IsKilledByBranch(io.core.brupdate, forward_uop)
       val storegen = new freechips.rocketchip.rocket.StoreGen(
@@ -1329,7 +1326,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                 stq_e.bits.data.bits, coreDataBytes)
       val loadgen  = new freechips.rocketchip.rocket.LoadGen(
                                 forward_uop.mem_size, forward_uop.mem_signed,
-                                wb_forward_ld_addr(w),
+                                wb_ldst_forward_ld_addr(w),
                                 storegen.data, false.B, coreDataBytes)
 
       io.core.iresp(w).valid := (forward_uop.dst_rtype === RT_FIX) && data_ready && live
@@ -1342,7 +1339,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       when (data_ready && live) {
         ldq(f_idx).bits.succeeded := data_ready
         ldq(f_idx).bits.forward_std_val := true.B
-        ldq(f_idx).bits.forward_stq_idx := wb_forward_stq_idx(w)
+        ldq(f_idx).bits.forward_stq_idx := wb_ldst_forward_stq_idx(w)
 
         ldq(f_idx).bits.debug_wb_data   := loadgen.data
       }
