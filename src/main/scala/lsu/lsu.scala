@@ -493,9 +493,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val can_fire_load_retry    = widthMap(w =>
                                ( retry_queue.io.deq.valid                     &&
                                  retry_queue.io.deq.bits.uop.uses_ldq         &&
-                                !p1_block_load_mask(ldq_retry_idx)            &&
-                                !p2_block_load_mask(ldq_retry_idx)            &&
-                                RegNext(dtlb.io.miss_rdy)                     &&
                                 !store_needs_order                            &&
                                 (w == lsuWidth-1).B))
 
@@ -503,8 +500,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val can_fire_store_retry   = widthMap(w =>
                                ( retry_queue.io.deq.valid                     &&
                                  retry_queue.io.deq.bits.uop.uses_stq         &&
-                                 (w == lsuWidth-1).B                          &&
-                                 RegNext(dtlb.io.miss_rdy)))
+                                 (w == lsuWidth-1).B))
 
   // Can we commit a store
   val can_fire_store_commit_slow  = widthMap(w =>
