@@ -510,7 +510,7 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flu
   val out = Wire(gen)
   out             := ram(deq_ptr.value)
   out.uop         := uops(deq_ptr.value)
-  io.deq.valid            := !io.empty && valids(deq_ptr.value) && !(io.flush && flush_fn(out.uop))
+  io.deq.valid            := !io.empty && valids(deq_ptr.value)
   io.deq.bits             := out
 
   private val ptr_diff = enq_ptr.value - deq_ptr.value
