@@ -44,13 +44,12 @@ import testchipip.{ExtendedTracedInstruction}
 import boom.common._
 import boom.ifu.{GlobalHistory, HasBoomFrontendParameters}
 import boom.exu.FUConstants._
-import boom.common.BoomTilesKey
 import boom.util._
 
 /**
  * Top level core object that connects the Frontend to the rest of the pipeline.
  */
-class BoomCore(implicit p: Parameters) extends BoomModule
+class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   with HasBoomFrontendParameters // TODO: Don't add this trait
 {
   val io = new freechips.rocketchip.tile.CoreBundle
@@ -1421,7 +1420,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
   }
 
-  if (p(BoomTilesKey)(0).trace) {
+  if (usingTrace) {
     for (w <- 0 until coreWidth) {
       // Delay the trace so we have a cycle to pull PCs out of the FTQ
       io.trace(w).valid      := RegNext(rob.io.commit.arch_valids(w))

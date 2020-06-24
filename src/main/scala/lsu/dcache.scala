@@ -805,9 +805,11 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   mshrs.io.wb_resp      := wb.io.resp
   wb.io.mem_grant       := tl_out.d.fire() && tl_out.d.bits.source === cfg.nMSHRs.U
 
+  val lsu_release_arb = Module(new Arbiter(new TLBundleC(edge.bundle), 2))
+  io.lsu.release <> lsu_release_arb.io.out
+  lsu_release_arb.io.in(0) <> wb.io.lsu_release
+  lsu_release_arb.io.in(1) <> prober.io.lsu_release
 
-  TLArbiter.lowest(edge, io.lsu.release, wb.io.lsu_release, prober.io.lsu_release)
-  io.lsu.release.valid := wb.io.lsu_release.valid || prober.io.lsu_release.valid
   TLArbiter.lowest(edge, tl_out.c, wb.io.release, prober.io.rep)
 
   io.lsu.perf.release := edge.done(tl_out.c)
