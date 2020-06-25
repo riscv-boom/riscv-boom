@@ -397,7 +397,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
                                 nextFetch(s1_vpc))
 
   val f1_predicted_ghist = s1_ghist.update(
-    s1_bpd_resp.preds.map(p => p.is_br && p.predicted_pc.valid).asUInt & f1_mask,
+    s1_bpd_resp.preds.map(p => p.is_br).asUInt & f1_mask,
     s1_bpd_resp.preds(f1_redirect_idx).taken && f1_do_redirect,
     s1_bpd_resp.preds(f1_redirect_idx).is_br,
     f1_redirect_idx,
@@ -754,12 +754,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
 
   val f3_correct_f2_ghist = s2_ghist =/= f3_predicted_ghist && enableGHistStallRepair.B
+  val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist && enableGHistStallRepair.B
 
   when (f3.io.deq.valid && f4_ready) {
     when (s2_valid && s2_vpc === f3_predicted_target && !f3_correct_f2_ghist) {
       f3.io.enq.bits.ghist := f3_predicted_ghist
     } .elsewhen (( s2_valid &&  (s2_vpc =/= f3_predicted_target || f3_correct_f2_ghist)) ||
-                 (!s2_valid)) {
+                 (!s2_valid &&  s1_valid && (s1_vpc =/= f3_predicted_target || f3_correct_f1_ghist)) ||
+                 (!s2_valid && !s1_valid)) {
       f2_clear := true.B
       f2_prev_is_half := f3_fetch_bundle.end_half.valid && !f3_predicted_do_redirect
       f2_prev_half    := f3_fetch_bundle.end_half.bits

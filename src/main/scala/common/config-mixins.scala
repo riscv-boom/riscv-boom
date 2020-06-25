@@ -416,7 +416,7 @@ class WithTAGELBPD extends Config((site, here, up) => {
         val tage = Module(new TageBranchPredictorBank()(p))
         val btb = Module(new BTBBranchPredictorBank()(p))
         val bim = Module(new BIMBranchPredictorBank()(p))
-        val ubtb = Module(new FAMicroBTBBranchPredictorBank()(p))
+        val ubtb = Module(new FA2MicroBTBBranchPredictorBank()(p))
         val preds = Seq(loop, tage, btb, ubtb, bim)
         preds.map(_.io := DontCare)
 
