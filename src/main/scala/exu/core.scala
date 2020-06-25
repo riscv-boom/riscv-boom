@@ -212,7 +212,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Find the oldest mispredict and use it to update indices
   val live_brinfos      = brinfos.map(br => br.valid && br.mispredict && !IsKilledByBranch(brupdate, br.uop))
-  val oldest_mispredict = Mux1H(live_brinfos, brinfos)
+  // TODO Mux1H is better here, but prevents lots of useful const-prop-elim
+  val oldest_mispredict = PriorityMux(live_brinfos, brinfos)//Mux1H(live_brinfos, brinfos)
   val mispredict_val    = live_brinfos.reduce(_||_)
 
   b2.mispredict  := mispredict_val
