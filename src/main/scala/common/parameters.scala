@@ -28,7 +28,7 @@ case class BoomCoreParams(
   decodeWidth: Int = 1,
   numRobEntries: Int = 64,
   issueParams: Seq[IssueParams] = Seq(
-    IssueParams(issueWidth=1, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=1),
+    IssueParams(issueWidth=2, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=1),
     IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue, dispatchWidth=1),
     IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=1)),
   lsuWidth: Int = 1,
@@ -46,6 +46,7 @@ case class BoomCoreParams(
   enableSFBOpt: Boolean = false,
   enableGHistStallRepair: Boolean = true,
   enableBTBFastRepair: Boolean = true,
+  enableLoadToStoreForwarding: Boolean = true,
   useAtomicsOnlyForIO: Boolean = false,
   ftq: FtqParameters = FtqParameters(),
   intToFpLatency: Int = 2,
@@ -252,6 +253,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableSFBOpt = boomParams.enableSFBOpt
   val enableGHistStallRepair = boomParams.enableGHistStallRepair
   val enableBTBFastRepair = boomParams.enableBTBFastRepair
+  val enableLoadToStoreForwarding = boomParams.enableLoadToStoreForwarding
 
   //************************************
   // Implicitly calculated constants

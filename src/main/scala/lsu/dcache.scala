@@ -728,8 +728,10 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
   s2_nack           := widthMap(w => (s2_nack_miss(w) || s2_nack_hit(w) || s2_nack_victim(w) || s2_nack_data(w) || s2_nack_wb(w)) && s2_type =/= t_replay)
   val s2_send_resp = widthMap(w => (
-    RegNext(s1_send_resp_or_nack(w)) && !(s2_nack_hit(w) || s2_nack_victim(w) || s2_nack_data(w)) &&
-      s2_hit(w) && isRead(s2_req(w).uop.mem_cmd)))
+    RegNext(s1_send_resp_or_nack(w)) &&
+      (!(s2_nack_hit(w) || s2_nack_victim(w) || s2_nack_data(w)) || s2_type === t_replay) &&
+      s2_hit(w) && isRead(s2_req(w).uop.mem_cmd)
+  ))
   val s2_send_store_ack = widthMap(w => (
     RegNext(s1_send_resp_or_nack(w)) && !s2_nack(w) && s2_req(w).uop.uses_stq &&
       (s2_hit(w) || mshrs.io.req(w).fire())))
@@ -810,9 +812,11 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   mshrs.io.wb_resp      := wb.io.resp
   wb.io.mem_grant       := tl_out.d.fire() && tl_out.d.bits.source === cfg.nMSHRs.U
 
+  val lsu_release_arb = Module(new Arbiter(new TLBundleC(edge.bundle), 2))
+  io.lsu.release <> lsu_release_arb.io.out
+  lsu_release_arb.io.in(0) <> wb.io.lsu_release
+  lsu_release_arb.io.in(1) <> prober.io.lsu_release
 
-  TLArbiter.lowest(edge, io.lsu.release, wb.io.lsu_release, prober.io.lsu_release)
-  io.lsu.release.valid := wb.io.lsu_release.valid || prober.io.lsu_release.valid
   TLArbiter.lowest(edge, tl_out.c, wb.io.release, prober.io.rep)
 
   io.lsu.perf.release := edge.done(tl_out.c)

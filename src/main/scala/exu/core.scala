@@ -44,13 +44,12 @@ import testchipip.{ExtendedTracedInstruction}
 import boom.common._
 import boom.ifu.{GlobalHistory, HasBoomFrontendParameters}
 import boom.exu.FUConstants._
-import boom.common.BoomTilesKey
 import boom.util._
 
 /**
  * Top level core object that connects the Frontend to the rest of the pipeline.
  */
-class BoomCore(implicit p: Parameters) extends BoomModule
+class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   with HasBoomFrontendParameters // TODO: Don't add this trait
 {
   val io = new freechips.rocketchip.tile.CoreBundle
@@ -114,9 +113,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
   val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
   val rename_stage     = Module(new RenameStage(coreWidth, numIntPhysRegs, numIntRenameWakeupPorts, false))
-  val fp_rename_stage  = Module(new RenameStage(coreWidth, numFpPhysRegs, numFpWakeupPorts, true))
+  val fp_rename_stage  = if (usingFPU) Module(new RenameStage(coreWidth, numFpPhysRegs, numFpWakeupPorts, true)) else null
   val pred_rename_stage = Module(new PredRenameStage(coreWidth, ftqSz, 1))
-  val rename_stages    = Seq(rename_stage, fp_rename_stage, pred_rename_stage)
+  val rename_stages    = if (usingFPU) Seq(rename_stage, fp_rename_stage, pred_rename_stage) else Seq(rename_stage, pred_rename_stage)
 
   val mem_iss_unit     = Module(new IssueUnitCollapsing(memIssueParam, numIntIssueWakeupPorts))
   mem_iss_unit.suggestName("mem_issue_unit")
@@ -153,7 +152,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                            xLen))
   val rob              = Module(new Rob(
                            numIrfWritePorts + numFpWakeupPorts,
-                           fpWidth + 1))
+                           fpWidth + 1,
+                           usingTrace
+  ))
   // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
   val int_iss_wakeups  = Wire(Vec(numIntIssueWakeupPorts, Valid(UInt(maxPregSz.W))))
   val int_ren_wakeups  = Wire(Vec(numIntRenameWakeupPorts, Valid(new ExeUnitResp(xLen))))
@@ -884,8 +885,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   for ((renport, intport) <- rename_stage.io.wakeups zip int_ren_wakeups) {
     renport <> intport
   }
-  for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
-    renport <> fpport
+  if (usingFPU) {
+    for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
+       renport <> fpport
+    }
   }
 
   if (enableSFBOpt) {
@@ -1348,7 +1351,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     }
   }
 
-  if (p(BoomTilesKey)(0).trace) {
+  if (usingTrace) {
     for (w <- 0 until coreWidth) {
       // Delay the trace so we have a cycle to pull PCs out of the FTQ
       io.trace(w).valid      := RegNext(rob.io.commit.arch_valids(w))

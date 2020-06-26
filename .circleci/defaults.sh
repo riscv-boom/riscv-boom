@@ -96,31 +96,22 @@ clean_aws () {
 #############
 
 # make parallelism
-# CI_MAKE_NPROC
-ncpu="$(getconf _NPROCESSORS_ONLN || # GNU
-    getconf NPROCESSORS_ONLN || # *BSD, Solaris
-    nproc --all || # Linux
-    sysctl -n hw.ncpu || # *BSD, OS X
-    :)" 2>/dev/null
-
-case ${ncpu} in
-''|*[!0-9]*) ;; # Ignore non-integer values
-*) export CI_NPROC=${ncpu} ;;
-esac
-
-CI_MAKE_NPROC=${CI_NPROC:-1}
-
-# REMOTE_MAKE_NPROC (chosen based on a 24c system shared with 1 other project)
+CI_MAKE_NPROC=8
+# chosen based on a 24c system shared with 1 other project
 REMOTE_MAKE_NPROC=4
 
+# verilator version
+VERILATOR_VERSION=v4.034
+
 # remote variables (on build instance)
-REMOTE_WORK_DIR=$CI_DIR/$CIRCLE_PROJECT_REPONAME-$CIRCLE_BRANCH-$CIRCLE_SHA1-$CIRCLE_JOB
+REMOTE_PREFIX=$CI_DIR/$CIRCLE_PROJECT_REPONAME-$CIRCLE_BRANCH
+REMOTE_WORK_DIR=$REMOTE_PREFIX-$CIRCLE_SHA1-$CIRCLE_JOB
 REMOTE_RISCV_DIR=$REMOTE_WORK_DIR/riscv-tools-install
 REMOTE_ESP_DIR=$REMOTE_WORK_DIR/esp-tools-install
 REMOTE_CHIPYARD_DIR=$REMOTE_WORK_DIR/chipyard
-REMOTE_VERILATOR_DIR=$CI_DIR/$CIRCLE_PROJECT_REPONAME-$CIRCLE_BRANCH-$CIRCLE_SHA1-verilator-install
+REMOTE_VERILATOR_DIR=$REMOTE_PREFIX-$CIRCLE_SHA1-verilator-install
 REMOTE_SIM_DIR=$REMOTE_CHIPYARD_DIR/sims/verilator
-REMOTE_JAVA_ARGS="-Xmx8G -Xss8M -Dsbt.ivy.home=$REMOTE_WORK_DIR/.ivy2 -Dsbt.global.base=$REMOTE_WORK_DIR/.sbt -Dsbt.boot.directory=$REMOTE_WORK_DIR/.sbt/boot"
+REMOTE_JAVA_ARGS="-Xmx16G -Xss8M -Dsbt.ivy.home=$REMOTE_WORK_DIR/.ivy2 -Dsbt.supershell=false -Dsbt.global.base=$REMOTE_WORK_DIR/.sbt -Dsbt.boot.directory=$REMOTE_WORK_DIR/.sbt/boot"
 REMOTE_SPEC=$CI_DIR/../abejgonza/cpu2017-1.0.1.iso # TODO: this is temporary until a better location is found
 
 # remote variables (on manager instance)

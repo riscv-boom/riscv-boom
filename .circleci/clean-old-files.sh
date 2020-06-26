@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #-------------------------------------------------------------
-# clean directories that are older than 30 days
+# clean directories that are older than 14 days
 #
 # run location: build server (located at UCB)
 # usage:
@@ -31,7 +31,7 @@ age () {
 
 for d in $1/*/ ; do
     DIR_AGE="$(age $d)"
-    if [ $DIR_AGE -ge 30 ]; then
+    if [ $DIR_AGE -ge 14 ]; then
         if [[ $d == *"bin"* ]]; then
             echo "$d is getting skipped"
             continue

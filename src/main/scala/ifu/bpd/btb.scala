@@ -86,15 +86,18 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
   })
   val s1_hits     = s1_hit_ohs.map { oh => oh.reduce(_||_) }
   val s1_hit_ways = s1_hit_ohs.map { oh => PriorityEncoder(oh) }
-
+  val s1_targs    = Wire(Vec(nWays, Vec(bankWidth, UInt(vaddrBitsExtended.W))))
   for (w <- 0 until bankWidth) {
+    for (b <- 0 until nWays) {
+      val entry_btb = WireInit(s1_req_rbtb(b)(w))
+      s1_targs(b)(w) := Mux(entry_btb.extended,
+        s1_req_rebtb,
+        (s1_pc.asSInt + (w << 1).S + entry_btb.offset).asUInt)
+    }
+
     val entry_meta = s1_req_rmeta(s1_hit_ways(w))(w)
-    val entry_btb  = s1_req_rbtb(s1_hit_ways(w))(w)
     s1_resp(w).valid := !doing_reset && s1_valid && s1_hits(w)
-    s1_resp(w).bits  := Mux(
-      entry_btb.extended,
-      s1_req_rebtb,
-      (s1_pc.asSInt + (w << 1).S + entry_btb.offset).asUInt)
+    s1_resp(w).bits  := s1_targs(s1_hit_ways(w))(w)
     s1_is_br(w)  := !doing_reset && s1_resp(w).valid &&  entry_meta.is_br
     s1_is_jal(w) := !doing_reset && s1_resp(w).valid && !entry_meta.is_br
 

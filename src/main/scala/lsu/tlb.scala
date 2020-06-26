@@ -315,8 +315,8 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
         state := s_request
         r_refill_tag := vpn(w)
 
-        r_superpage_repl_addr := replacementEntry(superpage_entries, superpage_plru.replace)
-        r_sectored_repl_addr  := replacementEntry(sectored_entries, sectored_plru.replace)
+        r_superpage_repl_addr := replacementEntry(superpage_entries, superpage_plru.way)
+        r_sectored_repl_addr  := replacementEntry(sectored_entries, sectored_plru.way)
         r_sectored_hit_addr   := OHToUInt(sector_hits(w))
         r_sectored_hit        := sector_hits(w).orR
       }
