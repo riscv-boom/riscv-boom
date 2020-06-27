@@ -872,14 +872,17 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   }
 
   // Store/amo hits
-  val s3_req   = RegNext(s2_req(0))
+  val s3_req   = Wire(new BoomDCacheReq)
+  s3_req := RegNext(s2_req(0))
   val s3_valid = RegNext(s2_valid(0) && s2_hit(0) && isWrite(s2_req(0).uop.mem_cmd) &&
                          !s2_sc_fail && !(s2_send_nack(0) && s2_nack(0)))
+  val s3_data_word = RegNext(s2_data_word(0))
   for (w <- 1 until lsuWidth) {
     assert(!(s2_valid(w) && s2_hit(w) && isWrite(s2_req(w).uop.mem_cmd) &&
                          !s2_sc_fail && !(s2_send_nack(w) && s2_nack(w))),
       "Store must go through 0th pipe in L1D")
   }
+
 
   // For bypassing
   val s4_req   = RegNext(s3_req)
@@ -899,10 +902,10 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                                          s2_data_word_prebypass(w))))
   }
   val amoalu   = Module(new AMOALU(xLen))
-  amoalu.io.mask := new StoreGen(s2_req(0).uop.mem_size, s2_req(0).addr, 0.U, xLen/8).mask
-  amoalu.io.cmd  := s2_req(0).uop.mem_cmd
-  amoalu.io.lhs  := s2_data_word(0)
-  amoalu.io.rhs  := s2_req(0).data
+  amoalu.io.mask := new StoreGen(s3_req.uop.mem_size, s3_req.addr, 0.U, xLen/8).mask
+  amoalu.io.cmd  := s3_req.uop.mem_cmd
+  amoalu.io.lhs  := s3_data_word
+  amoalu.io.rhs  := RegNext(s2_req(0).data)
 
 
   s3_req.data := amoalu.io.out
