@@ -1011,9 +1011,12 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                       Mux(fired_store_agen (w), mem_incoming_uop(w).stq_idx,
                       Mux(fired_store_retry(w), RegNext(stq_retry_idx), 0.U)))
 
-  val can_forward = WireInit(widthMap(w =>
-    Mux(fired_load_agen(w) || fired_load_agen_exec(w) || fired_load_retry(w), !mem_tlb_uncacheable(w),
-      !ldq(lcam_ldq_idx(w)).bits.addr_is_uncacheable)))
+  val can_forward = widthMap(w => Mux(fired_load_agen(w) || fired_load_agen_exec(w) || fired_load_retry(w),
+    !mem_tlb_uncacheable(w),
+    !mem_ldq_wakeup_e.bits.addr_is_uncacheable
+  ))
+
+  val kill_forward = WireInit(widthMap(w => false.B))
 
   // Mask of stores which we conflict on address with
   val ldst_addr_matches    = WireInit(widthMap(w => VecInit((0 until numStqEntries).map(x=>false.B))))
@@ -1096,7 +1099,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
             when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
               io.dmem.s1_kill(w)               := true.B
             }
-            can_forward(w)                     := false.B
+            kill_forward(w)                    := true.B
           }
         }
       }
@@ -1119,7 +1122,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
           io.dmem.s1_kill(w) := true.B
         }
-        can_forward(w) := false.B
+        kill_forward(w) := true.B
       }
     }
   }
@@ -1187,8 +1190,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     wb_ldst_forward_stq_idx(w) := RegNext(forwarding_age_logic(w).io.forwarding_idx)
 
     // Forward if st-ld forwarding is possible from the writemask and loadmask
-    wb_ldst_forward_valid(w)    := (wb_ldst_forward_matches(w)(wb_ldst_forward_stq_idx(w)) &&
-                                    !RegNext(IsKilledByBranch(io.core.brupdate, lcam_uop(w)))     &&
+    wb_ldst_forward_valid(w)    := (wb_ldst_forward_matches(w)(wb_ldst_forward_stq_idx(w))    &&
+                                    !RegNext(kill_forward(w))                                 &&
+                                    !RegNext(IsKilledByBranch(io.core.brupdate, lcam_uop(w))) &&
                                     !io.core.exception && !RegNext(io.core.exception) && !RegNext(RegNext(io.core.exception)))
 
   }
