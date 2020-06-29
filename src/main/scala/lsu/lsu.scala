@@ -409,16 +409,16 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val store_needs_order = WireInit(false.B)
 
   val ldq_incoming_idx = widthMap(i => agen(i).bits.uop.ldq_idx)
-  val ldq_incoming_e   = widthMap(i => ldq(ldq_incoming_idx(i)))
+  val ldq_incoming_e   = widthMap(i => WireInit(ldq(ldq_incoming_idx(i))))
 
   val stq_incoming_idx = widthMap(i => agen(i).bits.uop.stq_idx)
-  val stq_incoming_e   = widthMap(i => stq(stq_incoming_idx(i)))
+  val stq_incoming_e   = widthMap(i => WireInit(stq(stq_incoming_idx(i))))
 
 
   val stq_commit_e  = WireInit(stq(stq_execute_head))
 
   val ldq_wakeup_idx = RegNext(AgePriorityEncoder((0 until numLdqEntries).map(i=> {
-    val e = ldq(i).bits
+    val e = WireInit(ldq(i).bits)
     val block = block_load_mask(i) || p1_block_load_mask(i)
     e.addr.valid && !e.executed && !e.succeeded && !e.addr_is_virtual && !block
   }), ldq_head))
@@ -1030,6 +1030,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   val wb_ldst_forward_matches  = RegNext(ldst_forward_matches)
   val wb_ldst_forward_valid    = Wire(Vec(lsuWidth, Bool()))
+  val wb_ldst_forward_e        = widthMap(w => RegNext(UpdateBrMask(io.core.brupdate, ldq(lcam_ldq_idx(w)).bits)))
   val wb_ldst_forward_ldq_idx  = RegNext(lcam_ldq_idx)
   val wb_ldst_forward_ld_addr  = RegNext(lcam_addr)
   val wb_ldst_forward_stq_idx  = Wire(Vec(lsuWidth, UInt(stqAddrSz.W)))
@@ -1040,10 +1041,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     val l_addr  = ldq(i).bits.addr.bits
     val l_mask  = GenByteMask(l_addr, l_bits.uop.mem_size)
 
-    val l_forwarders      = widthMap(w => wb_ldst_forward_valid(w) && wb_ldst_forward_ldq_idx(w) === i.U)
-    val l_is_forwarding   = l_forwarders.reduce(_||_)
-    val l_forward_stq_idx = Mux(l_is_forwarding, Mux1H(l_forwarders, wb_ldst_forward_stq_idx), l_bits.forward_stq_idx)
-
+    //val l_forwarders      = widthMap(w => wb_ldst_forward_valid(w) && wb_ldst_forward_ldq_idx(w) === i.U)
+    //val l_is_forwarding   = l_forwarders.reduce(_||_)
+    //val l_forward_stq_idx = Mux(l_is_forwarding, Mux1H(l_forwarders, wb_ldst_forward_stq_idx), l_bits.forward_stq_idx)
+    val l_forward_stq_idx = l_bits.forward_stq_idx
 
     val block_addr_matches = widthMap(w => lcam_addr(w) >> blockOffBits === l_addr >> blockOffBits)
     val dword_addr_matches = widthMap(w => block_addr_matches(w) && lcam_addr(w)(blockOffBits-1,3) === l_addr(blockOffBits-1,3))
@@ -1065,7 +1066,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       when (       do_st_search(w)                                                                                                &&
                    l_valid                                                                                                        &&
                    l_bits.addr.valid                                                                                              &&
-                   (l_bits.executed || l_bits.succeeded || l_is_forwarding)                                                       &&
+                   (l_bits.executed || l_bits.succeeded)                                                                          &&
                    !l_bits.addr_is_virtual                                                                                        &&
                    l_bits.st_dep_mask(lcam_stq_idx(w))                                                                            &&
                    dword_addr_matches(w)                                                                                          &&
@@ -1086,7 +1087,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                    mask_overlap(w)) {
         val searcher_is_older = IsOlder(lcam_ldq_idx(w), i.U, ldq_head)
         when (searcher_is_older) {
-          when ((l_bits.executed || l_bits.succeeded || l_is_forwarding) &&
+          when ((l_bits.executed || l_bits.succeeded) &&
                 !s1_executing_loads(i) && // If the load is proceeding in parallel we don't need to kill it
                 l_bits.observed) {        // Its only a ordering failure if the cache line was observed between the younger load and us
             ldq(i).bits.order_fail := true.B
@@ -1106,17 +1107,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
   }
 
-  // A nack might kill this request
+
   for (wi <- 0 until lsuWidth) {
     for (w <- 0 until lsuWidth) {
-      val dword_addr_matches = (lcam_addr(w) >> 3) === (io.dmem.nack(wi).bits.addr >> 3)
+      // A younger load might find a older nacking load
+      val nack_dword_addr_matches = (lcam_addr(w) >> 3) === (io.dmem.nack(wi).bits.addr >> 3)
       val nack_mask = GenByteMask(io.dmem.nack(wi).bits.addr, io.dmem.nack(wi).bits.uop.mem_size)
-      val mask_overlap = (nack_mask & lcam_mask(w)) === nack_mask
+      val nack_mask_overlap = (nack_mask & lcam_mask(w)) === nack_mask
       when (do_ld_search(w)                    &&
             io.dmem.nack(wi).valid             &&
             io.dmem.nack(wi).bits.uop.uses_ldq &&
-            dword_addr_matches                 &&
-            mask_overlap                        &&
+            nack_dword_addr_matches            &&
+            nack_mask_overlap                  &&
             IsOlder(io.dmem.nack(wi).bits.uop.ldq_idx, lcam_ldq_idx(w), ldq_head)) {
         s1_set_execute(lcam_ldq_idx(w)) := false.B
         when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
@@ -1124,9 +1126,32 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         }
         kill_forward(w) := true.B
       }
+
+      // A older load might find a younger forwarding load
+      val forward_dword_addr_matches = (lcam_addr(w) >> 3 === wb_ldst_forward_ld_addr(wi) >> 3)
+      val forward_mask = GenByteMask(wb_ldst_forward_ld_addr(wi), wb_ldst_forward_e(wi).uop.mem_size)
+      val forward_mask_overlap = (forward_mask & lcam_mask(w)) === forward_mask
+      when (do_ld_search(w)                   &&
+            wb_ldst_forward_valid(wi)         &&
+            forward_dword_addr_matches        &&
+            forward_mask_overlap              &&
+            wb_ldst_forward_e(wi).observed    &&
+            IsOlder(lcam_ldq_idx(w), wb_ldst_forward_ldq_idx(wi), ldq_head)) {
+        ldq(wb_ldst_forward_ldq_idx(wi)).bits.order_fail := true.B
+      }
+
+      // A older store might find a younger load which is forwarding from the wrong place
+      val forwarded_is_older = IsOlder(wb_ldst_forward_stq_idx(wi), lcam_stq_idx(w), wb_ldst_forward_e(wi).youngest_stq_idx)
+      when (do_st_search(w)                                    &&
+            wb_ldst_forward_valid(wi)                          &&
+            forward_dword_addr_matches                         &&
+            forward_mask_overlap                               &&
+            wb_ldst_forward_e(wi).st_dep_mask(lcam_stq_idx(w)) &&
+            forwarded_is_older) {
+        ldq(wb_ldst_forward_ldq_idx(wi)).bits.order_fail := true.B
+      }
     }
   }
-
 
   for (i <- 0 until numStqEntries) {
     val s_addr = stq(i).bits.addr.bits
@@ -1185,9 +1210,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // Find the youngest store which the load is dependent on
   val forwarding_age_logic = Seq.fill(lsuWidth) { Module(new ForwardingAgeLogic(numStqEntries)) }
   for (w <- 0 until lsuWidth) {
-    forwarding_age_logic(w).io.addr_matches    := ldst_addr_matches(w).asUInt
-    forwarding_age_logic(w).io.youngest_st_idx := lcam_uop(w).stq_idx
-    wb_ldst_forward_stq_idx(w) := RegNext(forwarding_age_logic(w).io.forwarding_idx)
+    forwarding_age_logic(w).io.addr_matches    := RegNext(ldst_addr_matches(w).asUInt)
+    forwarding_age_logic(w).io.youngest_st_idx := RegNext(lcam_uop(w).stq_idx)
+    wb_ldst_forward_stq_idx(w) := forwarding_age_logic(w).io.forwarding_idx
 
     // Forward if st-ld forwarding is possible from the writemask and loadmask
     wb_ldst_forward_valid(w)    := (wb_ldst_forward_matches(w)(wb_ldst_forward_stq_idx(w))    &&
