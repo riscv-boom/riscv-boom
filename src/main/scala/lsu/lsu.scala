@@ -178,7 +178,6 @@ class LDQEntry(implicit p: Parameters) extends BoomBundle()(p)
   val observed            = Bool()
 
   val st_dep_mask         = UInt(numStqEntries.W) // list of stores older than us
-  val youngest_stq_idx    = UInt(stqAddrSz.W) // index of the oldest store younger than us
 
   val forward_std_val     = Bool()
   val forward_stq_idx     = UInt(stqAddrSz.W) // Which store did we get the store-load forward from?
@@ -220,12 +219,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
 
 
-  // If we got a mispredict, the tail will be misaligned for 1 extra cycle
-  assert (io.core.brupdate.b2.mispredict ||
-          stq(stq_execute_head).valid ||
-          stq_head === stq_execute_head ||
-          stq_tail === stq_execute_head,
-            "stq_execute_head got off track.")
+ 
 
   val h_ready :: h_s1 :: h_s2 :: h_s2_nack :: h_wait :: h_replay :: h_dead :: Nil = Enum(7)
   // s1 : do TLB, if success and not killed, fire request go to h_s2
@@ -256,9 +250,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
 
   val clear_store     = WireInit(false.B)
-  val live_store_mask = RegInit(0.U(numStqEntries.W))
-  var next_live_store_mask = Mux(clear_store, live_store_mask & ~(1.U << stq_head),
-                                              live_store_mask)
 
 
   def widthMap[T <: Data](f: Int => T) = VecInit((0 until lsuWidth).map(f))
@@ -283,10 +274,21 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   var ld_enq_idx = ldq_tail
   var st_enq_idx = stq_tail
 
+  val dis_ldq_oh = Reg(Vec(numLdqEntries, Bool()))
+  val dis_stq_oh = Reg(Vec(numStqEntries, Bool()))
+  dis_ldq_oh := 0.U(numLdqEntries.W).toBools
+  dis_stq_oh := 0.U(numStqEntries.W).toBools
+  val dis_uops   = Reg(Vec(coreWidth, Valid(new MicroOp)))
+
+  val live_store_mask = VecInit(stq.map(_.valid)).asUInt | dis_stq_oh.asUInt
+  var next_live_store_mask = Mux(clear_store, live_store_mask & ~(1.U << stq_head),
+                                              live_store_mask)
+
+
   var ldq_tail_oh = UIntToOH(ldq_tail)(numLdqEntries-1,0)
-  val ldq_valids  = VecInit(ldq.map(_.valid)).asUInt
+  val ldq_valids  = VecInit(ldq.map(_.valid)).asUInt | dis_ldq_oh.asUInt
   var stq_tail_oh = UIntToOH(stq_tail)(numStqEntries-1,0)
-  val stq_valids  = VecInit(stq.map(_.valid)).asUInt
+  val stq_valids  = VecInit(stq.map(_.valid)).asUInt | dis_stq_oh.asUInt
 
   val stq_nonempty = stq.map(_.valid).reduce(_||_)
 
@@ -303,35 +305,42 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
     val dis_ld_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.uses_ldq && !io.core.dis_uops(w).bits.exception
     val dis_st_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.uses_stq && !io.core.dis_uops(w).bits.exception
-    when (dis_ld_val)
-    {
-      ldq(ld_enq_idx).valid                := true.B
-      ldq(ld_enq_idx).bits.uop             := io.core.dis_uops(w).bits
-      ldq(ld_enq_idx).bits.youngest_stq_idx  := st_enq_idx
-      ldq(ld_enq_idx).bits.st_dep_mask     := next_live_store_mask
 
-      ldq(ld_enq_idx).bits.addr.valid      := false.B
-      ldq(ld_enq_idx).bits.executed        := false.B
-      ldq(ld_enq_idx).bits.succeeded       := false.B
-      ldq(ld_enq_idx).bits.order_fail      := false.B
-      ldq(ld_enq_idx).bits.observed        := false.B
-      ldq(ld_enq_idx).bits.forward_std_val := false.B
+    dis_uops(w).valid := dis_ld_val || dis_st_val
+    dis_uops(w).bits  := io.core.dis_uops(w).bits
 
+    when (dis_ld_val) {
+      dis_ldq_oh(ld_enq_idx) := true.B
+      ldq(ld_enq_idx).bits.st_dep_mask := next_live_store_mask
       assert (ld_enq_idx === io.core.dis_uops(w).bits.ldq_idx, "[lsu] mismatch enq load tag.")
       assert (!ldq(ld_enq_idx).valid, "[lsu] Enqueuing uop is overwriting ldq entries")
     }
-    when (dis_st_val)
-    {
-      stq(st_enq_idx).valid           := true.B
-      stq(st_enq_idx).bits.uop        := io.core.dis_uops(w).bits
-      stq(st_enq_idx).bits.addr.valid := false.B
-      stq(st_enq_idx).bits.data.valid := false.B
-      stq(st_enq_idx).bits.committed  := false.B
-      stq(st_enq_idx).bits.succeeded  := false.B
-      stq(st_enq_idx).bits.cleared    := false.B
-
+    when (dis_st_val) {
+      dis_stq_oh(st_enq_idx) := true.B
       assert (st_enq_idx === io.core.dis_uops(w).bits.stq_idx, "[lsu] mismatch enq store tag.")
       assert (!stq(st_enq_idx).valid, "[lsu] Enqueuing uop is overwriting stq entries")
+    }
+    when (dis_uops(w).valid && dis_uops(w).bits.uses_ldq) {
+      val ldq_idx = dis_uops(w).bits.ldq_idx
+      ldq(ldq_idx).valid                 := !IsKilledByBranch(io.core.brupdate, dis_uops(w).bits)
+      ldq(ldq_idx).bits.uop              := UpdateBrMask(io.core.brupdate, dis_uops(w).bits)
+
+      ldq(ldq_idx).bits.addr.valid      := false.B
+      ldq(ldq_idx).bits.executed        := false.B
+      ldq(ldq_idx).bits.succeeded       := false.B
+      ldq(ldq_idx).bits.order_fail      := false.B
+      ldq(ldq_idx).bits.observed        := false.B
+      ldq(ldq_idx).bits.forward_std_val := false.B
+    }
+    when (dis_uops(w).valid && dis_uops(w).bits.uses_stq) {
+      val stq_idx = dis_uops(w).bits.stq_idx
+      stq(stq_idx).valid           := !IsKilledByBranch(io.core.brupdate, dis_uops(w).bits)
+      stq(stq_idx).bits.uop        := UpdateBrMask(io.core.brupdate, dis_uops(w).bits)
+      stq(stq_idx).bits.addr.valid := false.B
+      stq(stq_idx).bits.data.valid := false.B
+      stq(stq_idx).bits.committed  := false.B
+      stq(stq_idx).bits.succeeded  := false.B
+      stq(stq_idx).bits.cleared    := false.B
     }
 
     ld_enq_idx = Mux(dis_ld_val, WrapInc(ld_enq_idx, numLdqEntries),
@@ -352,6 +361,14 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   ldq_tail := ld_enq_idx
   stq_tail := st_enq_idx
+
+  // If we got a mispredict, the tail will be misaligned for 1 extra cycle
+  assert (io.core.brupdate.b2.mispredict ||
+          stq(stq_execute_head).valid ||
+          dis_stq_oh(stq_execute_head) ||
+          stq_head === stq_execute_head ||
+          stq_tail === stq_execute_head,
+            "stq_execute_head got off track.")
 
   io.dmem.force_order   := io.core.fence_dmem
   io.core.fencei_rdy    := !stq_nonempty && io.dmem.ordered
@@ -952,7 +969,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     } else {
       stq_idx := stq_clr_head_idx
     }
-    val stq_e   = stq(stq_idx)
+    val stq_e   = WireInit(stq(stq_idx))
 
     when ( stq_e.valid &&
            stq_e.bits.addr.valid &&
@@ -1072,7 +1089,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                    dword_addr_matches(w)                                                                                          &&
                    mask_overlap(w)) {
 
-        val forwarded_is_older = IsOlder(l_forward_stq_idx, lcam_stq_idx(w), l_bits.youngest_stq_idx)
+        val forwarded_is_older = IsOlder(l_forward_stq_idx, lcam_stq_idx(w), l_bits.uop.stq_idx)
         // We are older than this load, which overlapped us.
         when (!l_bits.forward_std_val || // If the load wasn't forwarded, it definitely failed
           ((l_forward_stq_idx =/= lcam_stq_idx(w)) && forwarded_is_older)) { // If the load forwarded from us, we might be ok
@@ -1141,7 +1158,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       }
 
       // A older store might find a younger load which is forwarding from the wrong place
-      val forwarded_is_older = IsOlder(wb_ldst_forward_stq_idx(wi), lcam_stq_idx(w), wb_ldst_forward_e(wi).youngest_stq_idx)
+      val forwarded_is_older = IsOlder(wb_ldst_forward_stq_idx(wi), lcam_stq_idx(w), wb_ldst_forward_e(wi).uop.stq_idx)
       when (do_st_search(w)                                    &&
             wb_ldst_forward_valid(wi)                          &&
             forward_dword_addr_matches                         &&
@@ -1154,8 +1171,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   }
 
   for (i <- 0 until numStqEntries) {
-    val s_addr = stq(i).bits.addr.bits
-    val s_uop  = stq(i).bits.uop
+    val s_e    = WireInit(stq(i))
+    val s_addr = s_e.bits.addr.bits
+    val s_uop  = s_e.bits.uop
     val dword_addr_matches = widthMap(w =>
                              ( stq(i).bits.addr.valid      &&
                               !stq(i).bits.addr_is_virtual &&
@@ -1167,7 +1185,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
           when (((lcam_mask(w) & write_mask) === lcam_mask(w)) && !s_uop.is_fence && dword_addr_matches(w) && can_forward(w))
           {
             ldst_addr_matches(w)(i)            := true.B
-            ldst_forward_matches(w)(i)         := true.B
+            ldst_forward_matches(w)(i)         := s_e.bits.data.valid
             when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
               io.dmem.s1_kill(w)               := true.B
             }
@@ -1184,9 +1202,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
             .elsewhen (s_uop.is_fence || s_uop.is_amo)
           {
             ldst_addr_matches(w)(i)            := true.B
-              when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
-                io.dmem.s1_kill(w)               := true.B
-              }
+            when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
+              io.dmem.s1_kill(w)               := true.B
+            }
             s1_set_execute(lcam_ldq_idx(w))    := false.B
           }
         } .otherwise { // when the store is younger
@@ -1208,14 +1226,15 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
 
   // Find the youngest store which the load is dependent on
-  val forwarding_age_logic = Seq.fill(lsuWidth) { Module(new ForwardingAgeLogic(numStqEntries)) }
   for (w <- 0 until lsuWidth) {
-    forwarding_age_logic(w).io.addr_matches    := RegNext(ldst_addr_matches(w).asUInt)
-    forwarding_age_logic(w).io.youngest_st_idx := RegNext(lcam_uop(w).stq_idx)
-    wb_ldst_forward_stq_idx(w) := forwarding_age_logic(w).io.forwarding_idx
+    val (youngest_matching, match_found) = ForwardingAgeLogic(numStqEntries, RegNext(ldst_addr_matches(w).asUInt), RegNext(lcam_uop(w).stq_idx))
+    val (youngest_forwarder, forwarder_found) = ForwardingAgeLogic(numStqEntries, RegNext(ldst_forward_matches(w).asUInt), RegNext(lcam_uop(w).stq_idx))
 
+    wb_ldst_forward_stq_idx(w) := youngest_forwarder
     // Forward if st-ld forwarding is possible from the writemask and loadmask
-    wb_ldst_forward_valid(w)    := (wb_ldst_forward_matches(w)(wb_ldst_forward_stq_idx(w))    &&
+    wb_ldst_forward_valid(w)    := (youngest_matching === youngest_forwarder                  &&
+                                    match_found                                               &&
+                                    forwarder_found                                           &&
                                     !RegNext(kill_forward(w))                                 &&
                                     !RegNext(IsKilledByBranch(io.core.brupdate, lcam_uop(w))) &&
                                     !io.core.exception && !RegNext(io.core.exception) && !RegNext(RegNext(io.core.exception)))
@@ -1395,8 +1414,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     {
       val f_idx       = wb_ldst_forward_ldq_idx(w)
       val forward_uop = ldq(f_idx).bits.uop
-      val stq_e       = stq(wb_ldst_forward_stq_idx(w))
-      val data_ready  = stq_e.bits.data.valid && stq_e.valid
+      val stq_e       = WireInit(stq(wb_ldst_forward_stq_idx(w)))
       val live        = !IsKilledByBranch(io.core.brupdate, forward_uop)
       val storegen = new freechips.rocketchip.rocket.StoreGen(
                                 stq_e.bits.uop.mem_size, stq_e.bits.addr.bits,
@@ -1406,15 +1424,15 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                 wb_ldst_forward_ld_addr(w),
                                 storegen.data, false.B, coreDataBytes)
 
-      io.core.iresp(w).valid := (forward_uop.dst_rtype === RT_FIX) && data_ready && live
-      io.core.fresp(w).valid := (forward_uop.dst_rtype === RT_FLT) && data_ready && live
+      io.core.iresp(w).valid := (forward_uop.dst_rtype === RT_FIX) && live
+      io.core.fresp(w).valid := (forward_uop.dst_rtype === RT_FLT) && live
       io.core.iresp(w).bits.uop  := forward_uop
       io.core.fresp(w).bits.uop  := forward_uop
       io.core.iresp(w).bits.data := loadgen.data
       io.core.fresp(w).bits.data := loadgen.data
 
-      when (data_ready && live) {
-        ldq(f_idx).bits.succeeded := data_ready
+      when (live) {
+        ldq(f_idx).bits.succeeded := true.B
         ldq(f_idx).bits.forward_std_val := true.B
         ldq(f_idx).bits.forward_stq_idx := wb_ldst_forward_stq_idx(w)
 
@@ -1441,10 +1459,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   //-------------------------------------------------------------
 
   // Kill stores
-  val st_brkilled_mask = Wire(Vec(numStqEntries, Bool()))
   for (i <- 0 until numStqEntries)
   {
-    st_brkilled_mask(i) := false.B
 
     when (stq(i).valid)
     {
@@ -1455,7 +1471,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         stq(i).valid           := false.B
         stq(i).bits.addr.valid := false.B
         stq(i).bits.data.valid := false.B
-        st_brkilled_mask(i)    := true.B
       }
     }
 
@@ -1466,8 +1481,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // Kill loads
   for (i <- 0 until numLdqEntries)
   {
-    when (ldq(i).valid)
-    {
+    when (ldq(i).valid) {
       ldq(i).bits.uop.br_mask := GetNewBrMask(io.core.brupdate, ldq(i).bits.uop.br_mask)
       when (IsKilledByBranch(io.core.brupdate, ldq(i).bits.uop))
       {
@@ -1626,9 +1640,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   //-------------------------------------------------------------
   // Exception / Reset
 
-  // for the live_store_mask, need to kill stores that haven't been committed
-  val st_exc_killed_mask = WireInit(VecInit((0 until numStqEntries).map(x=>false.B)))
-
   when (reset.asBool || io.core.exception)
   {
     ldq_head := 0.U
@@ -1655,7 +1666,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         when (!stq(i).bits.committed && !stq(i).bits.succeeded)
         {
           stq(i).valid           := false.B
-          st_exc_killed_mask(i)  := true.B
         }
       }
     }
@@ -1666,15 +1676,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
   }
 
-  //-------------------------------------------------------------
-  // Live Store Mask
-  // track a bit-array of stores that are alive
-  // (could maybe be re-produced from the stq_head/stq_tail, but need to know include spec_killed entries)
-
-  // TODO is this the most efficient way to compute the live store mask?
-  live_store_mask := next_live_store_mask &
-                    ~(st_brkilled_mask.asUInt) &
-                    ~(st_exc_killed_mask.asUInt)
 
 
 }
@@ -1697,50 +1698,58 @@ object GenByteMask
    }
 }
 
-/**
- * ...
- */
-class ForwardingAgeLogic(num_entries: Int)(implicit p: Parameters) extends BoomModule()(p)
+
+object ForwardingAgeLogic
+{
+  def apply(n: Int, matches: UInt, youngest: UInt): (UInt, Bool) = {
+    val module = Module(new ForwardingAgeLogic(n))
+    module.io.matches := matches
+    module.io.youngest := youngest
+    (module.io.found_idx, module.io.found)
+  }
+}
+
+class ForwardingAgeLogic(n: Int) extends Module()
 {
    val io = IO(new Bundle
    {
-      val addr_matches    = Input(UInt(num_entries.W)) // bit vector of addresses that match
+      val matches    = Input(UInt(n.W)) // bit vector of addresses that match
                                                        // between the load and the SAQ
-      val youngest_st_idx = Input(UInt(stqAddrSz.W)) // needed to get "age"
+      val youngest = Input(UInt(log2Ceil(n).W)) // needed to get "age"
 
-      val forwarding_val  = Output(Bool())
-      val forwarding_idx  = Output(UInt(stqAddrSz.W))
+      val found  = Output(Bool())
+      val found_idx  = Output(UInt(log2Ceil(n).W))
    })
 
    // generating mask that zeroes out anything younger than tail
-   val age_mask = Wire(Vec(num_entries, Bool()))
-   for (i <- 0 until num_entries)
+   val age_mask = Wire(Vec(n, Bool()))
+   for (i <- 0 until n)
    {
       age_mask(i) := true.B
-      when (i.U >= io.youngest_st_idx) // currently the tail points PAST last store, so use >=
+      when (i.U >= io.youngest) // currently the tail points PAST last store, so use >=
       {
          age_mask(i) := false.B
       }
    }
 
    // Priority encoder with moving tail: double length
-   val matches = Wire(UInt((2*num_entries).W))
-   matches := Cat(io.addr_matches & age_mask.asUInt,
-                  io.addr_matches)
+   val matches = Wire(UInt((2*n).W))
+   matches := Cat(io.matches & age_mask.asUInt,
+                  io.matches)
 
    val found_match = Wire(Bool())
    found_match       := false.B
-   io.forwarding_idx := 0.U
+   io.found_idx := 0.U
 
    // look for youngest, approach from the oldest side, let the last one found stick
-   for (i <- 0 until (2*num_entries))
+   for (i <- 0 until (2*n))
    {
       when (matches(i))
       {
          found_match := true.B
-         io.forwarding_idx := (i % num_entries).U
+         io.found_idx := (i % n).U
       }
    }
 
-   io.forwarding_val := found_match
+   io.found := found_match
 }
