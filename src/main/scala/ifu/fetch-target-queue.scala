@@ -50,7 +50,7 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
   // Was this CFI mispredicted by the branch prediction pipeline?
   val cfi_mispredicted = Bool()
   // What type of CFI was taken out of this bundle
-  val cfi_type = Bool()
+  val cfi_type = UInt(CFI_SZ.W)
   // mask of branches which were visible in this fetch bundle
   val br_mask   = UInt(fetchWidth.W)
   // This CFI is likely a CALL
@@ -61,9 +61,7 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
   val cfi_npc_plus4 = Bool()
   // What was the top of the RAS that this bundle saw?
   val ras_top = UInt(vaddrBitsExtended.W)
-
-  // What global history should be used to query this fetch bundle
-  val ghist = new GlobalHistory
+  val ras_idx = UInt(log2Ceil(nRasEntries).W)
 
   // Which bank did this start from?
   val start_bank = UInt(1.W)
@@ -81,9 +79,11 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle
   val ftq_idx   = Input(UInt(log2Ceil(ftqSz).W))
 
   val entry     = Output(new FTQBundle)
+  val ghist     = Output(new GlobalHistory)
 
   val pc        = Output(UInt(vaddrBitsExtended.W))
   val com_pc    = Output(UInt(vaddrBitsExtended.W))
+
   // the next_pc may not be valid (stalled or still being fetched)
   val next_val  = Output(Bool())
   val next_pc   = Output(UInt(vaddrBitsExtended.W))
@@ -95,25 +95,29 @@ class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle
  *
  * @param num_entries # of entries in the FTQ
  */
-class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomModule
+class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
   with HasBoomFrontendParameters
 {
+  val num_entries = ftqSz
   private val idx_sz = log2Ceil(num_entries)
 
   val io = IO(new BoomBundle {
     // Enqueue one entry for every fetch cycle.
-    val enq = Flipped(Decoupled(new FetchBundle))
+    val enq = Flipped(Decoupled(new FetchBundle()))
     // Pass to FetchBuffer (newly fetched instructions).
     val enq_idx = Output(UInt(idx_sz.W))
     // ROB tells us the youngest committed ftq_idx to remove from FTQ.
     val deq = Flipped(Valid(UInt(idx_sz.W)))
 
     // Give PC info to BranchUnit.
-    val get_ftq_pc = Vec(2, new GetPCFromFtqIO)
+    val get_ftq_pc = Vec(2, new GetPCFromFtqIO())
 
-    // Get PCs for debug tracing
-    val get_pc_debug = Vec(coreWidth, new GetPCFromFtqIO)
+
+    // Used to regenerate PC for trace port stuff in FireSim
+    // Don't tape this out, this blows up the FTQ
+    val debug_ftq_idx  = Input(Vec(coreWidth, UInt(log2Ceil(ftqSz).W)))
+    val debug_fetch_pc = Output(Vec(coreWidth, UInt(vaddrBitsExtended.W)))
 
     val redirect = Input(Valid(UInt(idx_sz.W)))
 
@@ -135,57 +139,68 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
 
 
   val pcs      = Reg(Vec(num_entries, UInt(vaddrBitsExtended.W)))
-  val bpd_meta = SyncReadMem(num_entries, Vec(nBanks, UInt(bpdMaxMetaLength.W)))
+  val meta     = SyncReadMem(num_entries, Vec(nBanks, UInt(bpdMaxMetaLength.W)))
   val ram      = Reg(Vec(num_entries, new FTQBundle))
+  val ghist    = Seq.fill(2) { SyncReadMem(num_entries, new GlobalHistory) }
+  val lhist    = if (useLHist) {
+    Some(SyncReadMem(num_entries, Vec(nBanks, UInt(localHistoryLength.W))))
+  } else {
+    None
+  }
 
   val do_enq = io.enq.fire()
 
 
   // This register lets us initialize the ghist to 0
-  val start_from_empty_ghist = RegInit(true.B)
-
+  val prev_ghist = RegInit((0.U).asTypeOf(new GlobalHistory))
+  val prev_entry = RegInit((0.U).asTypeOf(new FTQBundle))
+  val prev_pc    = RegInit(0.U(vaddrBitsExtended.W))
   when (do_enq) {
-    start_from_empty_ghist := false.B
 
     pcs(enq_ptr)           := io.enq.bits.pc
 
-    ram(enq_ptr).cfi_idx   := io.enq.bits.cfi_idx
+    val new_entry = Wire(new FTQBundle)
+
+    new_entry.cfi_idx   := io.enq.bits.cfi_idx
     // Initially, if we see a CFI, it is assumed to be taken.
     // Branch resolutions may change this
-    ram(enq_ptr).cfi_taken   := io.enq.bits.cfi_idx.valid
-    ram(enq_ptr).cfi_mispredicted := false.B
-    ram(enq_ptr).cfi_type    := io.enq.bits.cfi_type
-    ram(enq_ptr).cfi_is_call := io.enq.bits.cfi_is_call
-    ram(enq_ptr).cfi_is_ret  := io.enq.bits.cfi_is_ret
-    ram(enq_ptr).cfi_npc_plus4 := io.enq.bits.cfi_npc_plus4
-    ram(enq_ptr).ras_top     := io.enq.bits.ras_top
-    ram(enq_ptr).br_mask     := io.enq.bits.br_mask & io.enq.bits.mask
-    ram(enq_ptr).start_bank  := bank(io.enq.bits.pc)
-    val prev_idx = WrapDec(enq_ptr, num_entries)
-    val prev_entry = ram(prev_idx)
-    ram(enq_ptr).ghist := Mux(start_from_empty_ghist,
-      (0.U).asTypeOf(new GlobalHistory),
-      Mux(io.enq.bits.ghist.current_saw_branch_not_taken,
-        io.enq.bits.ghist,
-        prev_entry.ghist.update(
-          prev_entry.br_mask,
-          prev_entry.cfi_taken,
-          prev_entry.br_mask(prev_entry.cfi_idx.bits),
-          prev_entry.cfi_idx.bits,
-          prev_entry.cfi_idx.valid,
-          pcs(prev_idx),
-          prev_entry.cfi_is_call,
-          prev_entry.cfi_is_ret
-        )
+    new_entry.cfi_taken     := io.enq.bits.cfi_idx.valid
+    new_entry.cfi_mispredicted := false.B
+    new_entry.cfi_type      := io.enq.bits.cfi_type
+    new_entry.cfi_is_call   := io.enq.bits.cfi_is_call
+    new_entry.cfi_is_ret    := io.enq.bits.cfi_is_ret
+    new_entry.cfi_npc_plus4 := io.enq.bits.cfi_npc_plus4
+    new_entry.ras_top       := io.enq.bits.ras_top
+    new_entry.ras_idx       := io.enq.bits.ghist.ras_idx
+    new_entry.br_mask       := io.enq.bits.br_mask & io.enq.bits.mask
+    new_entry.start_bank    := bank(io.enq.bits.pc)
+
+    val new_ghist = Mux(io.enq.bits.ghist.current_saw_branch_not_taken,
+      io.enq.bits.ghist,
+      prev_ghist.update(
+        prev_entry.br_mask,
+        prev_entry.cfi_taken,
+        prev_entry.br_mask(prev_entry.cfi_idx.bits),
+        prev_entry.cfi_idx.bits,
+        prev_entry.cfi_idx.valid,
+        prev_pc,
+        prev_entry.cfi_is_call,
+        prev_entry.cfi_is_ret
       )
     )
 
-    bpd_meta.write(enq_ptr, io.enq.bits.bpd_meta)
+    lhist.map( l => l.write(enq_ptr, io.enq.bits.lhist))
+    ghist.map( g => g.write(enq_ptr, new_ghist))
+    meta.write(enq_ptr, io.enq.bits.bpd_meta)
+    ram(enq_ptr) := new_entry
+
+    prev_pc    := io.enq.bits.pc
+    prev_entry := new_entry
+    prev_ghist := new_ghist
 
     enq_ptr := WrapInc(enq_ptr, num_entries)
   }
 
-  io.enq.ready := !full
   io.enq_idx := enq_ptr
 
   io.bpdupdate.valid := false.B
@@ -201,70 +216,125 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
   // We can update the branch predictors when we know the target of the
   // CFI in this fetch bundle
 
-  val bpdupdate = Wire(Valid(new BranchPredictionUpdate))
-  bpdupdate.valid := false.B
-  bpdupdate.bits  := DontCare
   val ras_update = WireInit(false.B)
   val ras_update_pc = WireInit(0.U(vaddrBitsExtended.W))
   val ras_update_idx = WireInit(0.U(log2Ceil(nRasEntries).W))
   io.ras_update     := RegNext(ras_update)
   io.ras_update_pc  := RegNext(ras_update_pc)
   io.ras_update_idx := RegNext(ras_update_idx)
-  when (bpd_ptr =/= deq_ptr && enq_ptr =/= WrapInc(bpd_ptr, num_entries)) {
 
-    val entry = ram(bpd_ptr)
-    val cfi_idx = entry.cfi_idx.bits
+  val bpd_update_mispredict = RegInit(false.B)
+  val bpd_update_repair = RegInit(false.B)
+  val bpd_repair_idx = Reg(UInt(log2Ceil(ftqSz).W))
+  val bpd_end_idx = Reg(UInt(log2Ceil(ftqSz).W))
+  val bpd_repair_pc = Reg(UInt(vaddrBitsExtended.W))
 
-    // TODO: We should try to commit branch prediction updates earlier
-    bpdupdate.valid              := !first_empty && (entry.cfi_idx.valid || entry.br_mask =/= 0.U)
-    bpdupdate.bits.pc            := pcs(bpd_ptr)
+  val bpd_idx = Mux(io.redirect.valid, io.redirect.bits,
+    Mux(bpd_update_repair || bpd_update_mispredict, bpd_repair_idx, bpd_ptr))
+  val bpd_entry = RegNext(ram(bpd_idx))
+  val bpd_ghist = ghist(0).read(bpd_idx, true.B)
+  val bpd_lhist = if (useLHist) {
+    lhist.get.read(bpd_idx, true.B)
+  } else {
+    VecInit(Seq.fill(nBanks) { 0.U })
+  }
+  val bpd_meta  = meta.read(bpd_idx, true.B) // TODO fix these SRAMs
+  val bpd_pc    = RegNext(pcs(bpd_idx))
+  val bpd_target = RegNext(pcs(WrapInc(bpd_idx, num_entries)))
 
-    bpdupdate.bits.br_mask       := Mux(entry.cfi_idx.valid,
-      MaskLower(UIntToOH(cfi_idx)) & entry.br_mask, entry.br_mask)
-    bpdupdate.bits.cfi_idx.valid    := entry.cfi_idx.valid
-    bpdupdate.bits.cfi_idx.bits     := entry.cfi_idx.bits
-    bpdupdate.bits.cfi_mispredicted := entry.cfi_mispredicted
-    bpdupdate.bits.cfi_taken        := entry.cfi_taken
-    bpdupdate.bits.target           := pcs(WrapInc(bpd_ptr, num_entries))
-    bpdupdate.bits.cfi_is_br        := entry.br_mask(cfi_idx)
-    bpdupdate.bits.cfi_is_jal       := entry.cfi_type === CFI_JAL || entry.cfi_type === CFI_JALR
-    bpdupdate.bits.ghist            := entry.ghist
+  when (io.redirect.valid) {
+    bpd_update_mispredict := false.B
+    bpd_update_repair     := false.B
+  } .elsewhen (RegNext(io.brupdate.b2.mispredict)) {
+    bpd_update_mispredict := true.B
+    bpd_repair_idx        := RegNext(io.brupdate.b2.uop.ftq_idx)
+    bpd_end_idx           := RegNext(enq_ptr)
+  } .elsewhen (bpd_update_mispredict) {
+    bpd_update_mispredict := false.B
+    bpd_update_repair     := true.B
+    bpd_repair_idx        := WrapInc(bpd_repair_idx, num_entries)
+  } .elsewhen (bpd_update_repair && RegNext(bpd_update_mispredict)) {
+    bpd_repair_pc         := bpd_pc
+    bpd_repair_idx        := WrapInc(bpd_repair_idx, num_entries)
+  } .elsewhen (bpd_update_repair) {
+    bpd_repair_idx        := WrapInc(bpd_repair_idx, num_entries)
+    when (WrapInc(bpd_repair_idx, num_entries) === bpd_end_idx ||
+      bpd_pc === bpd_repair_pc)  {
+      bpd_update_repair := false.B
+    }
 
-    // ras_update     := entry.cfi_is_call
-    // ras_update_pc  := bankAlign(pcs(bpd_ptr)) + (entry.cfi_idx.bits << 1) + Mux(entry.cfi_npc_plus4, 4.U, 2.U)
-    // ras_update_idx := WrapInc(entry.ghist.ras_idx, nRasEntries)
+  }
 
-    bpd_ptr := WrapInc(bpd_ptr, num_entries)
+
+  val do_commit_update     = (!bpd_update_mispredict &&
+                              !bpd_update_repair &&
+                               bpd_ptr =/= deq_ptr &&
+                               enq_ptr =/= WrapInc(bpd_ptr, num_entries) &&
+                              !io.brupdate.b2.mispredict &&
+                              !io.redirect.valid && !RegNext(io.redirect.valid))
+  val do_mispredict_update = bpd_update_mispredict
+  val do_repair_update     = bpd_update_repair
+
+  when (RegNext(do_commit_update || do_repair_update || do_mispredict_update)) {
+    val cfi_idx = bpd_entry.cfi_idx.bits
+    val valid_repair = bpd_pc =/= bpd_repair_pc
+
+    io.bpdupdate.valid := (!first_empty &&
+                           (bpd_entry.cfi_idx.valid || bpd_entry.br_mask =/= 0.U) &&
+                           !(RegNext(do_repair_update) && !valid_repair))
+    io.bpdupdate.bits.is_mispredict_update := RegNext(do_mispredict_update)
+    io.bpdupdate.bits.is_repair_update     := RegNext(do_repair_update)
+    io.bpdupdate.bits.pc      := bpd_pc
+    io.bpdupdate.bits.btb_mispredicts := 0.U
+    io.bpdupdate.bits.br_mask := Mux(bpd_entry.cfi_idx.valid,
+      MaskLower(UIntToOH(cfi_idx)) & bpd_entry.br_mask, bpd_entry.br_mask)
+    io.bpdupdate.bits.cfi_idx := bpd_entry.cfi_idx
+    io.bpdupdate.bits.cfi_mispredicted := bpd_entry.cfi_mispredicted
+    io.bpdupdate.bits.cfi_taken  := bpd_entry.cfi_taken
+    io.bpdupdate.bits.target     := bpd_target
+    io.bpdupdate.bits.cfi_is_br  := bpd_entry.br_mask(cfi_idx)
+    io.bpdupdate.bits.cfi_is_jal := bpd_entry.cfi_type === CFI_JAL || bpd_entry.cfi_type === CFI_JALR
+    io.bpdupdate.bits.ghist      := bpd_ghist
+    io.bpdupdate.bits.lhist      := bpd_lhist
+    io.bpdupdate.bits.meta       := bpd_meta
 
     first_empty := false.B
   }
-  io.bpdupdate           := RegNext(bpdupdate)
-  io.bpdupdate.bits.meta := bpd_meta.read(bpd_ptr)
 
+  when (do_commit_update) {
+    bpd_ptr := WrapInc(bpd_ptr, num_entries)
+  }
+
+  io.enq.ready := RegNext(!full || do_commit_update)
+
+  val redirect_idx = io.redirect.bits
+  val redirect_entry = ram(redirect_idx)
+  val redirect_new_entry = WireInit(redirect_entry)
 
   when (io.redirect.valid) {
     enq_ptr    := WrapInc(io.redirect.bits, num_entries)
-  }
 
-  when (io.brupdate.b2.mispredict) {
-    val ftq_idx = io.brupdate.b2.uop.ftq_idx
-    val entry = ram(ftq_idx)
+    when (io.brupdate.b2.mispredict) {
     val new_cfi_idx = (io.brupdate.b2.uop.pc_lob ^
-      Mux(entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
+      Mux(redirect_entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
+      redirect_new_entry.cfi_idx.valid    := true.B
+      redirect_new_entry.cfi_idx.bits     := new_cfi_idx
+      redirect_new_entry.cfi_mispredicted := true.B
+      redirect_new_entry.cfi_taken        := io.brupdate.b2.taken
+      redirect_new_entry.cfi_is_call      := redirect_entry.cfi_is_call && redirect_entry.cfi_idx.bits === new_cfi_idx
+      redirect_new_entry.cfi_is_ret       := redirect_entry.cfi_is_ret  && redirect_entry.cfi_idx.bits === new_cfi_idx
+    }
 
-    ram(ftq_idx).cfi_idx.valid    := true.B
-    ram(ftq_idx).cfi_idx.bits     := new_cfi_idx
-    ram(ftq_idx).cfi_mispredicted := true.B
-    ram(ftq_idx).cfi_taken        := io.brupdate.b2.taken
-    ram(ftq_idx).cfi_is_call      := entry.cfi_is_call && entry.cfi_idx.bits === new_cfi_idx
-    ram(ftq_idx).cfi_is_ret       := entry.cfi_is_ret  && entry.cfi_idx.bits === new_cfi_idx
-
-  }
-  when (io.redirect.valid || io.brupdate.b2.mispredict) {
-    val entry = ram(Mux(io.redirect.valid, io.redirect.bits, io.brupdate.b2.uop.ftq_idx))
     ras_update     := true.B
-    ras_update_pc  := entry.ras_top
-    ras_update_idx := entry.ghist.ras_idx
+    ras_update_pc  := redirect_entry.ras_top
+    ras_update_idx := redirect_entry.ras_idx
+
+  } .elsewhen (RegNext(io.redirect.valid)) {
+    prev_entry := RegNext(redirect_new_entry)
+    prev_ghist := bpd_ghist
+    prev_pc    := bpd_pc
+
+    ram(RegNext(io.redirect.bits)) := RegNext(redirect_new_entry)
   }
 
   //-------------------------------------------------------------
@@ -278,19 +348,18 @@ class FetchTargetQueue(num_entries: Int)(implicit p: Parameters) extends BoomMod
     val next_pc = Mux(next_is_enq, io.enq.bits.pc, pcs(next_idx))
     val get_entry = ram(idx)
     val next_entry = ram(next_idx)
-    io.get_ftq_pc(i).entry    := RegNext(get_entry)
-    io.get_ftq_pc(i).pc       := RegNext(pcs(idx))
-    io.get_ftq_pc(i).next_pc  := RegNext(next_pc)
-    io.get_ftq_pc(i).next_val := RegNext(next_idx =/= enq_ptr || next_is_enq)
-    io.get_ftq_pc(i).com_pc   := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))
+    io.get_ftq_pc(i).entry     := RegNext(get_entry)
+    if (i == 1)
+      io.get_ftq_pc(i).ghist   := ghist(1).read(idx, true.B)
+    else
+      io.get_ftq_pc(i).ghist   := DontCare
+    io.get_ftq_pc(i).pc        := RegNext(pcs(idx))
+    io.get_ftq_pc(i).next_pc   := RegNext(next_pc)
+    io.get_ftq_pc(i).next_val  := RegNext(next_idx =/= enq_ptr || next_is_enq)
+    io.get_ftq_pc(i).com_pc    := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))
   }
 
-  //-------------------------------------------------------------
-  // **** Trace Debug PCs ****
-  //-------------------------------------------------------------
-
   for (w <- 0 until coreWidth) {
-    io.get_pc_debug(w)    := DontCare
-    io.get_pc_debug(w).pc := pcs(io.get_pc_debug(w).ftq_idx)
+    io.debug_fetch_pc(w) := RegNext(pcs(io.debug_ftq_idx(w)))
   }
 }

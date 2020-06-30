@@ -24,6 +24,9 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
 import freechips.rocketchip.util.property._
 import freechips.rocketchip.rocket.{HasL1ICacheParameters, ICacheParams, ICacheErrors, ICacheReq}
+import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalTreeNode}
+import freechips.rocketchip.diplomaticobjectmodel.DiplomaticObjectModelAddressing
+import freechips.rocketchip.diplomaticobjectmodel.model.{OMComponent, OMICache, OMECC}
 
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
@@ -47,6 +50,25 @@ class ICache(
 
   val size = icacheParams.nSets * icacheParams.nWays * icacheParams.blockBytes
   private val wordBytes = icacheParams.fetchBytes
+}
+class BoomICacheLogicalTreeNode(icache: ICache, deviceOpt: Option[SimpleDevice], params: ICacheParams) extends LogicalTreeNode(() => deviceOpt) {
+  override def getOMComponents(resourceBindings: ResourceBindings, children: Seq[OMComponent] = Nil): Seq[OMComponent] = {
+    Seq(
+      OMICache(
+        memoryRegions = DiplomaticObjectModelAddressing.getOMMemoryRegions("ITIM", resourceBindings),
+        interrupts = Nil,
+        nSets = params.nSets,
+        nWays = params.nWays,
+        blockSizeBytes = params.blockBytes,
+        dataMemorySizeBytes = params.nSets * params.nWays * params.blockBytes,
+        dataECC = params.dataECC.map(OMECC.fromString),
+        tagECC = params.tagECC.map(OMECC.fromString),
+        nTLBEntries = params.nTLBEntries,
+        maxTimSize = params.nSets * (params.nWays-1) * params.blockBytes,
+        memories = icache.module.asInstanceOf[ICacheModule].dataArrays.map(_._2)
+      )
+    )
+  }
 }
 
 /**
@@ -80,6 +102,10 @@ class ICacheBundle(val outer: ICache) extends BoomBundle()(outer.p)
 
   val resp = Valid(new ICacheResp(outer))
   val invalidate = Input(Bool())
+
+  val perf = Output(new Bundle {
+    val acquire = Bool()
+  })
 }
 
 /**
@@ -102,6 +128,7 @@ object GetPropertyByHartId
 class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   with HasBoomFrontendParameters
 {
+  val enableICacheDelay = tileParams.core.asInstanceOf[BoomCoreParams].enableICacheDelay
   val io = IO(new ICacheBundle(outer))
 
   val (tl_out, edge_out) = outer.masterNode.out(0)
@@ -165,7 +192,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     invalidated := true.B
   }
 
-  val s1_dout   = Wire(Vec(nWays, UInt(wordBits.W)))
+  val s2_dout   = Wire(Vec(nWays, UInt(wordBits.W)))
   val s1_bankid = Wire(Bool())
 
   for (i <- 0 until nWays) {
@@ -183,14 +210,37 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     nSets * refillCycles
   }
 
-
-  if (nBanks == 1) {
-    val dataArrays = (0 until nWays).map { x =>
-       SyncReadMem(ramDepth, UInt(wordBits.W)).suggestName(
-          "dataArrayWay_" + x.toString)
+  val dataArrays = if (nBanks == 1) {
+    // Use unbanked icache for narrow accesses.
+    (0 until nWays).map { x =>
+      DescribedSRAM(
+        name = s"dataArrayWay_${x}",
+        desc = "ICache Data Array",
+        size = nSets * refillCycles,
+        data = UInt((wordBits).W)
+      )
     }
+  } else {
+    // Use two banks, interleaved.
+    (0 until nWays).map { x =>
+      DescribedSRAM(
+        name = s"dataArrayB0Way_${x}",
+        desc = "ICache Data Array",
+        size = nSets * refillCycles,
+        data = UInt((wordBits/nBanks).W)
+      )} ++
+    (0 until nWays).map { x =>
+      DescribedSRAM(
+        name = s"dataArrayB1Way_${x}",
+        desc = "ICache Data Array",
+        size = nSets * refillCycles,
+        data = UInt((wordBits/nBanks).W)
+      )}
+  }
+  if (nBanks == 1) {
+    // Use unbanked icache for narrow accesses.
     s1_bankid := 0.U
-    for ((dataArray, i) <- dataArrays zipWithIndex) {
+    for ((dataArray, i) <- dataArrays.map(_._1) zipWithIndex) {
       def row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
       val s0_ren = s0_valid
 
@@ -201,16 +251,15 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
       when (wen) {
         dataArray.write(mem_idx, tl_out.d.bits.data)
       }
-      s1_dout(i) := dataArray.read(mem_idx, !wen && s0_ren)
+      if (enableICacheDelay)
+        s2_dout(i) := dataArray.read(RegNext(mem_idx), RegNext(!wen && s0_ren))
+      else
+        s2_dout(i) := RegNext(dataArray.read(mem_idx, !wen && s0_ren))
     }
   } else {
-    val dataArraysB0 = (0 until nWays).map { x =>
-      SyncReadMem(ramDepth, UInt((wordBits/nBanks).W)).suggestName(
-        "dataArrayB0Way_" + x.toString)}
-    val dataArraysB1 = (0 until nWays).map { x =>
-      SyncReadMem(ramDepth, UInt((wordBits/nBanks).W)).suggestName(
-        "dataArrayB1Way_" + x.toString)}
     // Use two banks, interleaved.
+    val dataArraysB0 = dataArrays.map(_._1).take(nWays)
+    val dataArraysB1 = dataArrays.map(_._1).drop(nWays)
     require (nBanks == 2)
 
     // Bank0 row's id wraps around if Bank1 is the starting bank.
@@ -267,12 +316,17 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
           dataArraysB1(i).write(mem_idx1, data(wordBits-1, wordBits/2))
         }
       }
-      s1_dout(i) := Cat(dataArraysB1(i).read(mem_idx1, !wen && s0_ren), dataArraysB0(i).read(mem_idx0, !wen && s0_ren))
+      if (enableICacheDelay) {
+        s2_dout(i) := Cat(dataArraysB1(i).read(RegNext(mem_idx1), RegNext(!wen && s0_ren)),
+                          dataArraysB0(i).read(RegNext(mem_idx0), RegNext(!wen && s0_ren)))
+      } else {
+        s2_dout(i) := RegNext(Cat(dataArraysB1(i).read(mem_idx1, !wen && s0_ren),
+                                  dataArraysB0(i).read(mem_idx0, !wen && s0_ren)))
+      }
     }
   }
   val s2_tag_hit = RegNext(s1_tag_hit)
   val s2_hit_way = OHToUInt(s2_tag_hit)
-  val s2_dout = RegNext(s1_dout)
   val s2_bankid = RegNext(s1_bankid)
   val s2_way_mux = Mux1H(s2_tag_hit, s2_dout)
 
@@ -301,6 +355,8 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   tl_out.b.ready := true.B
   tl_out.c.valid := false.B
   tl_out.e.valid := false.B
+
+  io.perf.acquire := tl_out.a.fire()
 
   when (!refill_valid) { invalidated := false.B }
   when (refill_fire) { refill_valid := true.B }

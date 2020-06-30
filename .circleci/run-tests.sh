@@ -1,6 +1,12 @@
 #!/bin/bash
 
-# run the different tests
+#-------------------------------------------------------------
+# run the different tests (based on the config)
+#
+# run location: circle ci docker image
+# usage:
+#   $1 - config string
+#-------------------------------------------------------------
 
 # turn echo on and error on earliest command
 set -ex
@@ -9,14 +15,12 @@ set -ex
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 source $SCRIPT_DIR/defaults.sh
 
-export VERILATOR_ROOT=$LOCAL_VERILATOR_DIR/install/share/verilator
-
 run_bmark () {
-    make -j$NPROC run-bmark-tests-fast -C $LOCAL_SIM_DIR VERILATOR_INSTALL_DIR=$LOCAL_VERILATOR_DIR $@
+    make -j$CI_MAKE_NPROC run-bmark-tests-fast -C $LOCAL_SIM_DIR $@
 }
 
 run_asm () {
-    make -j$NPROC run-asm-tests-fast -C $LOCAL_SIM_DIR VERILATOR_INSTALL_DIR=$LOCAL_VERILATOR_DIR $@
+    make -j$CI_MAKE_NPROC run-asm-tests-fast -C $LOCAL_SIM_DIR $@
 }
 
 run_both () {
@@ -47,7 +51,7 @@ case $1 in
         export RISCV=$LOCAL_ESP_DIR
         export LD_LIBRARY_PATH=$LOCAL_ESP_DIR/lib
         export PATH=$RISCV/bin:$PATH
-        make run-rv64uv-p-asm-tests -j$NPROC -C $LOCAL_SIM_DIR VERILATOR_INSTALL_DIR=$LOCAL_VERILATOR_DIR ${mapping[$1]}
+        make run-rv64uv-p-asm-tests -j$CI_MAKE_NPROC -C $LOCAL_SIM_DIR ${mapping[$1]}
         ;;
     *)
         echo "No set of tests for $1. Did you spell it right?"

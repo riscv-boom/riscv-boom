@@ -14,13 +14,15 @@ import freechips.rocketchip.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalModuleTree, LogicalTreeNode, RocketLogicalTreeNode, ICacheLogicalTreeNode}
+import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalTreeNode }
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.subsystem.{RocketCrossingParams}
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
+
+import testchipip.{ExtendedTracedInstruction, WithExtendedTraceport}
 
 import boom.exu._
 import boom.ifu._
@@ -35,7 +37,7 @@ import boom.util.{BoomCoreStringPrefix}
  * @param dcache d$ params
  * @param btb btb params
  * @param dataScratchpadBytes ...
- * @param trace ...
+ * @param trace enable traceport
  * @param hcfOnUncorrectable ...
  * @param name name of tile
  * @param hartId hardware thread id
@@ -52,8 +54,7 @@ case class BoomTileParams(
   hartId: Int = 0,
   beuAddr: Option[BigInt] = None,
   blockerCtrlAddr: Option[BigInt] = None,
-  boundaryBuffers: Boolean = false, // if synthesized with hierarchical PnR, cut feed-throughs?
-  dromajoParams: Option[DromajoParams] = None
+  boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
   ) extends TileParams
 {
   require(icache.isDefined)
@@ -75,11 +76,12 @@ class BoomTile(
   extends BaseTile(boomParams, crossing, lookup, q)
   with SinksExternalInterrupts
   with SourcesExternalNotifications
+  with WithExtendedTraceport
 {
 
   // Private constructor ensures altered LazyModule.p is used implicitly
   def this(params: BoomTileParams, crossing: RocketCrossingParams, lookup: LookupByHartIdImpl, logicalTreeNode: LogicalTreeNode)(implicit p: Parameters) =
-    this(params.copy(dromajoParams = Some(DromajoParams(Some(p(BootROMParams)), p(ExtMem), p(CLINTKey), p(PLICKey)))), crossing.crossingType, lookup, p, logicalTreeNode)
+    this(params, crossing.crossingType, lookup, p, logicalTreeNode)
 
   val intOutwardNode = IntIdentityNode()
   val masterNode = visibilityNode
@@ -128,36 +130,6 @@ class BoomTile(
     else TLBuffer(BufferParams.flow, BufferParams.none, BufferParams.none, BufferParams.none, BufferParams.none)
   }
 
-  val fakeRocketParams = RocketTileParams(
-    dcache = boomParams.dcache,
-    hartId = boomParams.hartId,
-    name   = boomParams.name,
-    btb    = boomParams.btb,
-    core = RocketCoreParams(
-      bootFreqHz          = boomParams.core.bootFreqHz,
-      useVM               = boomParams.core.useVM,
-      useUser             = boomParams.core.useUser,
-      useDebug            = boomParams.core.useDebug,
-      useAtomics          = boomParams.core.useAtomics,
-      useAtomicsOnlyForIO = boomParams.core.useAtomicsOnlyForIO,
-      useCompressed       = boomParams.core.useCompressed,
-      useSCIE             = boomParams.core.useSCIE,
-      mulDiv              = boomParams.core.mulDiv,
-      fpu                 = boomParams.core.fpu,
-      nLocalInterrupts    = boomParams.core.nLocalInterrupts,
-      nPMPs               = boomParams.core.nPMPs,
-      nBreakpoints        = boomParams.core.nBreakpoints,
-      nPerfCounters       = boomParams.core.nPerfCounters,
-      haveBasicCounters   = boomParams.core.haveBasicCounters,
-      misaWritable        = boomParams.core.misaWritable,
-      haveCFlush          = boomParams.core.haveCFlush,
-      nL2TLBEntries       = boomParams.core.nL2TLBEntries,
-      mtvecInit           = boomParams.core.mtvecInit,
-      mtvecWritable       = boomParams.core.mtvecWritable
-    )
-  )
-  val rocketLogicalTree: RocketLogicalTreeNode = new RocketLogicalTreeNode(cpuDevice, fakeRocketParams, None, p(XLen))
-
   override lazy val module = new BoomTileModuleImp(this)
 
   // DCache
@@ -169,8 +141,6 @@ class BoomTile(
   // Frontend/ICache
   val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, hartId))
   tlMasterXbar.node := frontend.masterNode
-
-  private val deviceOpt = None
 
   // ROCC
   val roccs = p(BuildRoCC).map(_(p))
@@ -205,7 +175,8 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   }
 
   // Pass through various external constants and reports
-  outer.traceSourceNode.bundle <> core.io.trace
+  outer.extTraceSourceNode.bundle <> core.io.trace
+  outer.traceSourceNode.bundle <> DontCare
   outer.bpwatchSourceNode.bundle <> DontCare // core.io.bpwatch
   core.io.hartid := constants.hartid
   outer.dcache.module.io.hartid := constants.hartid

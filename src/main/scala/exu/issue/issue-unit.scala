@@ -76,13 +76,14 @@ class IssueUnitIO(
   val iss_valids       = Output(Vec(issueWidth, Bool()))
   val iss_uops         = Output(Vec(issueWidth, new MicroOp()))
   val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(maxPregSz))))
+  val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
 
-  val spec_ld_wakeup  = Flipped(Valid(UInt(width=maxPregSz.W)))
+  val spec_ld_wakeup   = Flipped(Vec(memWidth, Valid(UInt(width=maxPregSz.W))))
 
   // tell the issue unit what each execution pipeline has in terms of functional units
   val fu_types         = Input(Vec(issueWidth, Bits(width=FUC_SZ.W)))
 
-  val brupdate           = Input(new BrUpdateInfo())
+  val brupdate         = Input(new BrUpdateInfo())
   val flush_pipeline   = Input(Bool())
   val ld_miss          = Input(Bool())
 
@@ -138,6 +139,11 @@ abstract class IssueUnit(
         dis_uops(w).prs1_busy  := false.B
       }
     }
+
+    if (iqType != IQT_INT.litValue) {
+      assert(!(io.dis_uops(w).bits.ppred_busy && io.dis_uops(w).valid))
+      dis_uops(w).ppred_busy := false.B
+    }
   }
 
   //-------------------------------------------------------------
@@ -146,7 +152,19 @@ abstract class IssueUnit(
   val slots = for (i <- 0 until numIssueSlots) yield { val slot = Module(new IssueSlot(numWakeupPorts)); slot }
   val issue_slots = VecInit(slots.map(_.io))
 
+  for (i <- 0 until numIssueSlots) {
+    issue_slots(i).wakeup_ports     := io.wakeup_ports
+    issue_slots(i).pred_wakeup_port := io.pred_wakeup_port
+    issue_slots(i).spec_ld_wakeup   := io.spec_ld_wakeup
+    issue_slots(i).ldspec_miss      := io.ld_miss
+    issue_slots(i).brupdate         := io.brupdate
+    issue_slots(i).kill             := io.flush_pipeline
+  }
+
   io.event_empty := !(issue_slots.map(s => s.valid).reduce(_|_))
+
+  val count = PopCount(slots.map(_.io.valid))
+  dontTouch(count)
 
   //-------------------------------------------------------------
 

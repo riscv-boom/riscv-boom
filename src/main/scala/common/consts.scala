@@ -19,33 +19,6 @@ import freechips.rocketchip.util.Str
 import freechips.rocketchip.rocket.RVCExpander
 
 /**
- * Mixin indicating the debug flags that can be set for viewing different
- * debug printf's
- */
-trait BOOMDebugConstants
-{
-  val DEBUG_PRINTF        = false // use the Chisel printf functionality
-  val COMMIT_LOG_PRINTF   = false // dump commit state, for comparision against ISA sim
-  val MEMTRACE_PRINTF     = false // dump trace of memory accesses to L1D for debugging
-
-  val DROMAJO_COSIM_ENABLE = false // enable dromajo cosim
-
-  // When enabling DEBUG_PRINTF, the vertical whitespace can be padded out
-  // such that viewing the *.out file in vim can line up veritically to
-  // enable ctrl+f/ctrl+b to advance the *.out file one cycle without
-  // moving the structures.
-  val debugScreenheight  = 79
-
-  // turn off stuff to dramatically reduce Chisel node count
-  val DEBUG_PRINTF_LSU    = true && DEBUG_PRINTF
-  val DEBUG_PRINTF_ROB    = true && DEBUG_PRINTF
-  val DEBUG_PRINTF_TAGE   = true && DEBUG_PRINTF
-  val DEBUG_PRINTF_FTQ    = true && DEBUG_PRINTF
-  val DEBUG_PRINTF_IQ     = true && DEBUG_PRINTF
-
-}
-
-/**
  * Mixin for issue queue types
  */
 trait IQType
@@ -152,7 +125,7 @@ trait ScalarOpConstants
 
   // Micro-op opcodes
   // TODO change micro-op opcodes into using enum
-  val UOPC_SZ = 9
+  val UOPC_SZ = 7
   val uopX    = BitPat.dontCare(UOPC_SZ)
   val uopNOP  =  0.U(UOPC_SZ.W)
   val uopLD   =  1.U(UOPC_SZ.W)
@@ -284,6 +257,8 @@ trait ScalarOpConstants
 
   val uopROCC      = 108.U(UOPC_SZ.W)
 
+  val uopMOV       = 109.U(UOPC_SZ.W) // conditional mov decoded from "add rd, x0, rs2"
+
   // The Bubble Instruction (Machine generated NOP)
   // Insert (XOR x0,x0,x0) which is different from software compiler
   // generated NOPs which are (ADDI x0, x0, 0).
@@ -375,7 +350,7 @@ trait RISCVConstants
     val bdecode = Module(new boom.exu.BranchDecode)
     bdecode.io.inst := inst
     bdecode.io.pc := 0.U
-    bdecode.io.cfi_type
+    bdecode.io.out.cfi_type
   }
 }
 
@@ -385,13 +360,9 @@ trait RISCVConstants
 trait ExcCauseConstants
 {
   // a memory disambigious misspeculation occurred
-  val MINI_EXCEPTION_MEM_ORDERING = 16.U
-  // an instruction needs to be replayed (e.g., I$ asks for a replay)
-  val MINI_EXCEPTION_REPLAY = 17.U
-  // unblock a store when it's blocked by nonstop loads
-  val MINI_EXCEPTION_STORE_BLOCKED = 18.U
+  val MINI_EXCEPTION_MEM_ORDERING  = 16.U
+  val MINI_EXCEPTION_STORE_BLOCKED = 17.U
 
   require (!freechips.rocketchip.rocket.Causes.all.contains(16))
   require (!freechips.rocketchip.rocket.Causes.all.contains(17))
-  require (!freechips.rocketchip.rocket.Causes.all.contains(18))
 }

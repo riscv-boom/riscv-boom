@@ -108,8 +108,6 @@ class RobIo(
   // Stall the frontend if we know we will redirect the PC
   val flush_frontend = Output(Bool())
 
-  // pass out debug information to high-level printf
-  val debug = Output(new DebugRobSignals())
 
   val debug_tsc = Input(UInt(xLen.W))
 }
@@ -119,9 +117,10 @@ class RobIo(
  */
 class CommitSignals(implicit p: Parameters) extends BoomBundle
 {
-  val valids     = Vec(retireWidth, Bool())
-  val uops       = Vec(retireWidth, new MicroOp())
-  val fflags     = Valid(UInt(5.W))
+  val valids      = Vec(retireWidth, Bool()) // These instructions may not correspond to an architecturally executed insn
+  val arch_valids = Vec(retireWidth, Bool())
+  val uops        = Vec(retireWidth, new MicroOp())
+  val fflags      = Valid(UInt(5.W))
 
   // These come a cycle later
   val debug_insts = Vec(retireWidth, UInt(32.W))
@@ -259,7 +258,6 @@ class Rob(
   val r_xcpt_val       = RegInit(false.B)
   val r_xcpt_uop       = Reg(new MicroOp())
   val r_xcpt_badvaddr  = Reg(UInt(coreMaxAddrBits.W))
-
   io.flush_frontend := r_xcpt_val
 
   //--------------------------------------------------
@@ -288,8 +286,6 @@ class Rob(
   val debug_entry = Wire(Vec(numRobEntries, new DebugRobBundle))
   debug_entry := DontCare // override in statements below
 
-  var num_inflight = 0.U(log2Ceil(numRobEntries+1).W)
-
   // **************************************************************************
   // --------------------------------------------------------------------------
   // **************************************************************************
@@ -309,10 +305,11 @@ class Rob(
 
     // one bank
     val rob_val       = RegInit(VecInit(Seq.fill(numRobRows){false.B}))
-    val rob_bsy       = Mem(numRobRows, Bool())
-    val rob_unsafe    = Mem(numRobRows, Bool())
+    val rob_bsy       = Reg(Vec(numRobRows, Bool()))
+    val rob_unsafe    = Reg(Vec(numRobRows, Bool()))
     val rob_uop       = Reg(Vec(numRobRows, new MicroOp()))
-    val rob_exception = Mem(numRobRows, Bool())
+    val rob_exception = Reg(Vec(numRobRows, Bool()))
+    val rob_predicated = Reg(Vec(numRobRows, Bool())) // Was this instruction predicated out?
     val rob_fflags    = Mem(numRobRows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
 
     val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
@@ -330,6 +327,7 @@ class Rob(
       rob_unsafe(rob_tail)    := io.enq_uops(w).unsafe
       rob_uop(rob_tail)       := io.enq_uops(w)
       rob_exception(rob_tail) := io.enq_uops(w).exception
+      rob_predicated(rob_tail)   := false.B
       rob_fflags(rob_tail)    := 0.U
 
       assert (rob_val(rob_tail) === false.B, "[rob] overwriting a valid entry.")
@@ -348,6 +346,7 @@ class Rob(
       when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx))) {
         rob_bsy(row_idx)      := false.B
         rob_unsafe(row_idx)   := false.B
+        rob_predicated(row_idx)  := wb_resp.bits.predicated
       }
       // TODO check that fflags aren't overwritten
       // TODO check that the wb is to a valid ROB entry, give it a time stamp
@@ -362,6 +361,7 @@ class Rob(
       when (clr_rob_idx.valid && MatchBank(GetBankIdx(clr_rob_idx.bits))) {
         val cidx = GetRowIdx(clr_rob_idx.bits)
         rob_bsy(cidx)    := false.B
+        rob_unsafe(cidx) := false.B
         assert (rob_val(cidx) === true.B, "[rob] store writing back to invalid entry.")
         assert (rob_bsy(cidx) === true.B, "[rob] store writing back to a not-busy entry.")
       }
@@ -407,6 +407,7 @@ class Rob(
     // use the same "com_uop" for both rollback AND commit
     // Perform Commit
     io.commit.valids(w) := will_commit(w)
+    io.commit.arch_valids(w) := will_commit(w) && !rob_predicated(com_idx)
     io.commit.uops(w)   := rob_uop(com_idx)
     io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
 
@@ -418,6 +419,7 @@ class Rob(
       io.commit.uops(w).debug_fsrc := BSRC_C
       io.commit.uops(w).taken      := io.brupdate.b2.taken
     }
+
 
     // Don't attempt to rollback the tail's row when the rob is full.
     val rbk_row = rob_state === s_rollback && !full
@@ -521,23 +523,7 @@ class Rob(
     }
     io.commit.debug_wdata(w) := rob_debug_wdata(rob_head)
 
-    //--------------------------------------------------
-    // Debug: handle passing out signals to printf in dpath
-
-    if (DEBUG_PRINTF_ROB) {
-      for (i <- 0 until numRobRows) {
-        debug_entry(w + i*coreWidth).valid     := rob_val(i)
-        debug_entry(w + i*coreWidth).busy      := rob_bsy(i.U)
-        debug_entry(w + i*coreWidth).unsafe    := rob_unsafe(i.U)
-        debug_entry(w + i*coreWidth).uop       := rob_uop(i.U)
-        debug_entry(w + i*coreWidth).exception := rob_exception(i.U)
-      }
-    }
-
-    num_inflight = num_inflight + PopCount(rob_val)
   } //for (w <- 0 until coreWidth)
-
-  dontTouch(num_inflight)
 
   // **************************************************************************
   // --------------------------------------------------------------------------
@@ -567,9 +553,7 @@ class Rob(
   // Note: exception must be in the commit bundle.
   // Note: exception must be the first valid instruction in the commit bundle.
   exception_thrown := will_throw_exception
-  val is_mini_exception = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING ||
-                          io.com_xcpt.bits.cause === MINI_EXCEPTION_REPLAY       ||
-                          io.com_xcpt.bits.cause === MINI_EXCEPTION_STORE_BLOCKED
+  val is_mini_exception = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING
   io.com_xcpt.valid := exception_thrown && !is_mini_exception
   io.com_xcpt.bits.cause := r_xcpt_uop.exc_cause
 
@@ -882,15 +866,6 @@ class Rob(
                                         !will_commit.reduce(_||_))
 
 
-  //--------------------------------------------------
-  // Handle passing out signals to printf in dpath
-
-  io.debug.state    := rob_state
-  io.debug.rob_head := rob_head
-  io.debug.rob_pnr := rob_pnr
-  io.debug.xcpt_val := r_xcpt_val
-  io.debug.xcpt_uop := r_xcpt_uop
-  io.debug.xcpt_badvaddr := r_xcpt_badvaddr
 
   override def toString: String = BoomCoreStringPrefix(
     "==ROB==",

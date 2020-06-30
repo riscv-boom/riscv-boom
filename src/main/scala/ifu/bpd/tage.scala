@@ -12,15 +12,7 @@ import boom.util.{BoomCoreStringPrefix, MaskLower, WrapInc}
 
 import scala.math.min
 
-class TageMeta(implicit p: Parameters) extends BoomBundle()(p)
-  with HasBoomFrontendParameters
-{
-  val provider      = Vec(bankWidth, Valid(UInt(log2Ceil(tageNTables).W)))
-  val alt_differs   = Vec(bankWidth, Bool())
-  val provider_u    = Vec(bankWidth, UInt(2.W))
-  val provider_ctr  = Vec(bankWidth, UInt(3.W))
-  val allocate      = Vec(bankWidth, Valid(UInt(log2Ceil(tageNTables).W)))
-}
+
 
 
 
@@ -29,20 +21,19 @@ class TageResp extends Bundle {
   val u   = UInt(2.W)
 }
 
-
-class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
+class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPeriod: Int)
   (implicit p: Parameters) extends BoomModule()(p)
   with HasBoomFrontendParameters
 {
   require(histLength <= globalHistoryLength)
 
-  val nIUMEntries = 2
   val nWrBypassEntries = 2
   val io = IO( new Bundle {
-    val f0_req = Input(Valid(new BranchPredictionBankRequest))
+    val f1_req_valid = Input(Bool())
+    val f1_req_pc    = Input(UInt(vaddrBitsExtended.W))
+    val f1_req_ghist = Input(UInt(globalHistoryLength.W))
 
     val f3_resp = Output(Vec(bankWidth, Valid(new TageResp)))
-    val f3_kill = Input(Bool())
 
     val update_mask    = Input(Vec(bankWidth, Bool()))
     val update_taken   = Input(Vec(bankWidth, Bool()))
@@ -93,75 +84,37 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
 
   val tageEntrySz = 1 + tagSz + 3
 
-  val (s0_hashed_idx, s0_tag) = compute_tag_and_hash(fetchIdx(io.f0_req.bits.pc), io.f0_req.bits.hist)
+  val (s1_hashed_idx, s1_tag) = compute_tag_and_hash(fetchIdx(io.f1_req_pc), io.f1_req_ghist)
 
   val hi_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
   val lo_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
   val table  = SyncReadMem(nRows, Vec(bankWidth, UInt(tageEntrySz.W)))
 
-  val ium_vals = Reg(Vec(nIUMEntries, Bool()))
-  val ium_tags = Reg(Vec(nIUMEntries, UInt(tagSz.W)))
-  val ium_idxs = Reg(Vec(nIUMEntries, UInt(log2Ceil(nRows).W)))
-  val ium      = Reg(Vec(nIUMEntries, Vec(bankWidth, UInt(3.W))))
-  val ium_enq_idx = RegInit(0.U(log2Ceil(nIUMEntries).W))
+  val mems = Seq((f"tage_l$histLength", nRows, bankWidth * tageEntrySz))
 
-  val s1_hashed_idx = RegNext(s0_hashed_idx)
-  val s1_tag        = RegNext(s0_tag)
-
-  val s1_req       = RegNext(io.f0_req)
-  val s1_req_rtage = VecInit(table.read(s0_hashed_idx, io.f0_req.valid).map(_.asTypeOf(new TageEntry)))
-  val s1_req_rhius = hi_us.read(s0_hashed_idx, io.f0_req.valid)
-  val s1_req_rlous = lo_us.read(s0_hashed_idx, io.f0_req.valid)
-  val s1_req_rhits = VecInit(s1_req_rtage.map(e => e.valid && e.tag === s1_tag && !doing_reset))
-  val s1_req_iumhits = VecInit((0 until nIUMEntries) map { i =>
-    ium_tags(i) === s1_tag && ium_idxs(i) === RegNext(s0_hashed_idx) && !doing_reset && ium_vals(i)
-  })
-  val s1_req_ium_hit_idx = PriorityEncoder(s1_req_iumhits)
-
-  val s2_req          = RegNext(s1_req)
-  val s2_req_ium_hit  = RegNext(s1_req_iumhits.reduce(_||_))
-  val s2_req_ium_hit_idx = RegNext(s1_req_ium_hit_idx)
-  val s2_req_ium_data = RegNext(ium(s1_req_ium_hit_idx))
-  val s2_req_rtage = RegNext(s1_req_rtage)
-  val s2_req_rhius = RegNext(s1_req_rhius)
-  val s2_req_rlous = RegNext(s1_req_rlous)
-  val s2_req_rhits = RegNext(s1_req_rhits)
   val s2_tag       = RegNext(s1_tag)
+
+  val s2_req_rtage = VecInit(table.read(s1_hashed_idx, io.f1_req_valid).map(_.asTypeOf(new TageEntry)))
+  val s2_req_rhius = hi_us.read(s1_hashed_idx, io.f1_req_valid)
+  val s2_req_rlous = lo_us.read(s1_hashed_idx, io.f1_req_valid)
+  val s2_req_rhits = VecInit(s2_req_rtage.map(e => e.valid && e.tag === s2_tag && !doing_reset))
 
   for (w <- 0 until bankWidth) {
     // This bit indicates the TAGE table matched here
     io.f3_resp(w).valid    := RegNext(s2_req_rhits(w))
     io.f3_resp(w).bits.u   := RegNext(Cat(s2_req_rhius(w), s2_req_rlous(w)))
-    //io.f3_resp(w).bits.ctr := RegNext(Mux(s2_req_ium_hit,  s2_req_ium_data(w), s2_req_rtage(w).ctr))
     io.f3_resp(w).bits.ctr := RegNext(s2_req_rtage(w).ctr)
   }
-  when (RegNext(s2_req.valid && s2_req_rhits.reduce(_||_) && !s2_req_ium_hit) && !io.f3_kill) {
-    for (w <- 0 until bankWidth) {
-      ium(ium_enq_idx)(w) := RegNext(inc_ctr(s2_req_rtage(w).ctr, s2_req_rtage(w).ctr(2)))
-    }
-    ium_idxs(ium_enq_idx) := RegNext(RegNext(s1_hashed_idx))
-    ium_tags(ium_enq_idx) := RegNext(RegNext(s1_tag))
-    ium_vals(ium_enq_idx) := true.B
-    ium_enq_idx := ium_enq_idx + 1.U
-  }
 
-  val clear_u_ctr = RegInit(0.U((log2Ceil(tageUBitPeriod) + log2Ceil(nRows) + 1).W))
+  val clear_u_ctr = RegInit(0.U((log2Ceil(uBitPeriod) + log2Ceil(nRows) + 1).W))
   when (doing_reset) { clear_u_ctr := 1.U } .otherwise { clear_u_ctr := clear_u_ctr + 1.U }
 
-  val doing_clear_u = clear_u_ctr(log2Ceil(tageUBitPeriod)-1,0) === 0.U
-  val doing_clear_u_hi = doing_clear_u && clear_u_ctr(log2Ceil(tageUBitPeriod) + log2Ceil(nRows)) === 1.U
-  val doing_clear_u_lo = doing_clear_u && clear_u_ctr(log2Ceil(tageUBitPeriod) + log2Ceil(nRows)) === 0.U
-  val clear_u_idx = clear_u_ctr >> log2Ceil(tageUBitPeriod)
+  val doing_clear_u = clear_u_ctr(log2Ceil(uBitPeriod)-1,0) === 0.U
+  val doing_clear_u_hi = doing_clear_u && clear_u_ctr(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 1.U
+  val doing_clear_u_lo = doing_clear_u && clear_u_ctr(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 0.U
+  val clear_u_idx = clear_u_ctr >> log2Ceil(uBitPeriod)
 
   val (update_idx, update_tag) = compute_tag_and_hash(fetchIdx(io.update_pc), io.update_hist)
-
-  when (io.update_mask.reduce(_||_)) {
-    for (w <- 0 until nIUMEntries) {
-      when (update_idx === ium_idxs(w) && update_tag === ium_tags(w)) {
-        ium_vals(w) := false.B
-      }
-    }
-  }
 
   val update_wdata = Wire(Vec(bankWidth, new TageEntry))
 
@@ -229,33 +182,35 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int)
 
 }
 
-class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank()(p)
+
+case class BoomTageParams(
+  //                                           nSets, histLen, tagSz
+  tableInfo: Seq[Tuple3[Int, Int, Int]] = Seq((  128,       2,     7),
+                                              (  128,       4,     7),
+                                              (  256,       8,     8),
+                                              (  256,      16,     8),
+                                              (  128,      32,     9),
+                                              (  128,      64,     9)),
+  uBitPeriod: Int = 2048
+)
+
+
+class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
-  val base = Module(new BTBBranchPredictorBank(BoomBTBParams()))
-  val micro = Module(new BTBBranchPredictorBank(
-    BoomBTBParams(nSets = 64, offsetSz = 13, extendedNSets = 0, micro = true))
-  )
-  base.io.f1_kill := io.f1_kill
-  base.io.f2_kill := io.f2_kill
-  base.io.f3_kill := io.f3_kill
-  micro.io.f1_kill := io.f1_kill
-  micro.io.f2_kill := io.f2_kill
-  micro.io.f3_kill := io.f3_kill
+  val tageUBitPeriod = params.uBitPeriod
+  val tageNTables    = params.tableInfo.size
 
-  base.io.f0_req := io.f0_req
-  base.io.update := io.update
-  base.io.update.bits.meta := io.update.bits.meta(base.metaSz-1,0)
-  micro.io.f0_req := io.f0_req
-  micro.io.update := io.update
-  micro.io.update.bits.meta := io.update.bits.meta(base.metaSz+micro.metaSz-1,base.metaSz)
-
-  io.f1_resp := micro.io.f1_resp
-  io.f2_resp := base.io.f2_resp
-  io.f3_resp := base.io.f3_resp
+  class TageMeta extends Bundle
+  {
+    val provider      = Vec(bankWidth, Valid(UInt(log2Ceil(tageNTables).W)))
+    val alt_differs   = Vec(bankWidth, Output(Bool()))
+    val provider_u    = Vec(bankWidth, Output(UInt(2.W)))
+    val provider_ctr  = Vec(bankWidth, Output(UInt(3.W)))
+    val allocate      = Vec(bankWidth, Valid(UInt(log2Ceil(tageNTables).W)))
+  }
 
   val f3_meta = Wire(new TageMeta)
-
-  override val metaSz = base.metaSz + micro.metaSz + f3_meta.asUInt.getWidth
+  override val metaSz = f3_meta.asUInt.getWidth
   require(metaSz <= bpdMaxMetaLength)
 
   def inc_u(u: UInt, alt_differs: Bool, mispredict: Bool): UInt = {
@@ -264,17 +219,21 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
                     Mux(u === 3.U, 3.U, u + 1.U)))
   }
 
-  val tables = (0 until tageNTables) map { i =>
-    Module(new TageTable(tageNSets(i), tageTagSz(i), tageHistoryLength(i)))
+  val tt = params.tableInfo map {
+    case (n, l, s) => {
+      val t = Module(new TageTable(n, s, l, params.uBitPeriod))
+      t.io.f1_req_valid := RegNext(io.f0_valid)
+      t.io.f1_req_pc    := RegNext(io.f0_pc)
+      t.io.f1_req_ghist := io.f1_ghist
+      (t, t.mems)
+    }
   }
+  val tables = tt.map(_._1)
+  val mems = tt.map(_._2).flatten
 
-
-
-  tables.map(_.io.f0_req  := io.f0_req)
-  tables.map(_.io.f3_kill := f3_kill)
   val f3_resps = VecInit(tables.map(_.io.f3_resp))
 
-  val s1_update_meta = (s1_update.bits.meta >> (base.metaSz + micro.metaSz)).asTypeOf(new TageMeta)
+  val s1_update_meta = s1_update.bits.meta.asTypeOf(new TageMeta)
   val s1_update_mispredict_mask = UIntToOH(s1_update.bits.cfi_idx.bits) &
     Fill(bankWidth, s1_update.bits.cfi_mispredicted)
 
@@ -293,17 +252,17 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
 
 
   for (w <- 0 until bankWidth) {
-    var altpred = base.io.f3_resp(w).taken
-    val final_altpred = WireInit(base.io.f3_resp(w).taken)
+    var altpred = io.resp_in(0).f3(w).taken
+    val final_altpred = WireInit(io.resp_in(0).f3(w).taken)
     var provided = false.B
     var provider = 0.U
-    io.f3_resp(w).taken := base.io.f3_resp(w).taken
+    io.resp.f3(w).taken := io.resp_in(0).f3(w).taken
 
     for (i <- 0 until tageNTables) {
       val hit = f3_resps(i)(w).valid
       val ctr = f3_resps(i)(w).bits.ctr
       when (hit) {
-        io.f3_resp(w).taken := Mux(ctr === 3.U || ctr === 4.U, altpred, ctr(2))
+        io.resp.f3(w).taken := Mux(ctr === 3.U || ctr === 4.U, altpred, ctr(2))
         final_altpred       := altpred
       }
 
@@ -313,7 +272,7 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
     }
     f3_meta.provider(w).valid := provided
     f3_meta.provider(w).bits  := provider
-    f3_meta.alt_differs(w)    := final_altpred =/= io.f3_resp(w).taken
+    f3_meta.alt_differs(w)    := final_altpred =/= io.resp.f3(w).taken
     f3_meta.provider_u(w)     := f3_resps(provider)(w).bits.u
     f3_meta.provider_ctr(w)   := f3_resps(provider)(w).bits.ctr
 
@@ -323,7 +282,7 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
       VecInit(f3_resps.map(r => !r(w).valid && r(w).bits.u === 0.U)).asUInt &
       ~(MaskLower(UIntToOH(provider)) & Fill(tageNTables, provided))
     )
-    val alloc_lfsr = random.LFSR(tageNTables)
+    val alloc_lfsr = random.LFSR(tageNTables max 2)
 
     val first_entry = PriorityEncoder(allocatable_slots)
     val masked_entry = PriorityEncoder(allocatable_slots & alloc_lfsr)
@@ -337,7 +296,7 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
     val update_was_taken = (s1_update.bits.cfi_idx.valid &&
                             (s1_update.bits.cfi_idx.bits === w.U) &&
                             s1_update.bits.cfi_taken)
-    when (s1_update.bits.br_mask(w) && s1_update.valid) {
+    when (s1_update.bits.br_mask(w) && s1_update.valid && s1_update.bits.is_commit_update) {
       when (s1_update_meta.provider(w).valid) {
         val provider = s1_update_meta.provider(w).bits
 
@@ -355,7 +314,7 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
       }
     }
   }
-  when (s1_update.valid && s1_update.bits.cfi_mispredicted && s1_update.bits.cfi_idx.valid) {
+  when (s1_update.valid && s1_update.bits.is_commit_update && s1_update.bits.cfi_mispredicted && s1_update.bits.cfi_idx.valid) {
     val idx = s1_update.bits.cfi_idx.bits
     val allocate = s1_update_meta.allocate(idx)
     when (allocate.valid) {
@@ -392,9 +351,10 @@ class TageBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
       tables(i).io.update_u(w)      := RegNext(s1_update_u(i)(w))
     }
     tables(i).io.update_pc    := RegNext(s1_update.bits.pc)
-    tables(i).io.update_hist  := RegNext(s1_update.bits.hist)
+    tables(i).io.update_hist  := RegNext(s1_update.bits.ghist)
   }
 
 
-  io.f3_meta := Cat(f3_meta.asUInt, micro.io.f3_meta(micro.metaSz-1,0), base.io.f3_meta(base.metaSz-1, 0))
+  //io.f3_meta := Cat(f3_meta.asUInt, micro.io.f3_meta(micro.metaSz-1,0), base.io.f3_meta(base.metaSz-1, 0))
+  io.f3_meta := f3_meta.asUInt
 }

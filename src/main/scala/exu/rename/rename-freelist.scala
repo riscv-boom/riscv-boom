@@ -20,7 +20,7 @@ import freechips.rocketchip.config.Parameters
 class RenameFreeList(
   val plWidth: Int,
   val numPregs: Int,
-  val float: Boolean)
+  val numLregs: Int)
   (implicit p: Parameters) extends BoomModule
 {
   private val pregSz = log2Ceil(numPregs)

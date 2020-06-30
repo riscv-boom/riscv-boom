@@ -37,10 +37,11 @@ class FetchBufferResp(implicit p: Parameters) extends BoomBundle
  *
  * @param num_entries effectively the number of full-sized fetch packets we can hold.
  */
-class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
+class FetchBuffer(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
   with HasBoomFrontendParameters
 {
+  val numEntries = numFetchBufferEntries
   val io = IO(new BoomBundle {
     val enq = Flipped(Decoupled(new FetchBundle()))
     val deq = new DecoupledIO(new FetchBufferResp())
@@ -98,6 +99,8 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
       in_uops(i).edge_inst      := false.B
       in_uops(i).debug_pc       := pc
       in_uops(i).pc_lob         := pc
+
+      in_uops(i).is_sfb         := io.enq.bits.sfbs(i) || io.enq.bits.shadowed_mask(i)
 
       if (w == 0) {
         when (io.enq.bits.edge_inst(b)) {
@@ -191,27 +194,5 @@ class FetchBuffer(numEntries: Int)(implicit p: Parameters) extends BoomModule
   // TODO Is this necessary?
   when (reset.toBool) {
     io.deq.bits.uops map { u => u.valid := false.B }
-  }
-
-  //-------------------------------------------------------------
-  // **** Printfs ****
-  //-------------------------------------------------------------
-
-  if (DEBUG_PRINTF) {
-    printf("FetchBuffer:\n")
-    // TODO a problem if we don't check the f3_valid?
-    printf("    Fetch3: Enq:(V:%c Msk:0x%x PC:0x%x) Clear:%c\n",
-      BoolToChar(io.enq.valid, 'V'),
-      io.enq.bits.mask.asUInt,
-      io.enq.bits.pc,
-      BoolToChar(io.clear, 'C'))
-
-    printf("    RAM: WPtr:%d RPtr:%d\n",
-      tail,
-      head)
-
-    printf("    Fetch4: Deq:(V:%c PC:0x%x)\n",
-      BoolToChar(io.deq.valid, 'V'),
-      io.deq.bits.uops(0).bits.debug_pc)
   }
 }
