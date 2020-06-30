@@ -86,10 +86,15 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
   val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
-  val rename_stage     = Module(new RenameStage(coreWidth, numIntPhysRegs, numIntRenameWakeupPorts, false))
-  val fp_rename_stage  = if (usingFPU) Module(new RenameStage(coreWidth, numFpPhysRegs, numFpWakeupPorts, true)) else null
-  val pred_rename_stage = Module(new PredRenameStage(coreWidth, ftqSz, 1))
-  val rename_stages    = if (usingFPU) Seq(rename_stage, fp_rename_stage, pred_rename_stage) else Seq(rename_stage, pred_rename_stage)
+  val int_rename       = Module(new RingRename)
+  val fp_rename        = if (usingFPU) Module(new Rename(coreWidth, numFpPhysRegs, numFpWakeupPorts, true))
+                         else null
+  val pred_rename      = if (enableSFBOpt) Module(new PredRename(coreWidth, ftqSz, 1))
+                         else null
+  val other_renamers   = if (usingFPU && enableSFBOpt) Seq(fp_rename, pred_rename)
+                         else if (usingFPU) Seq(fp_rename)
+                         else if (enableSFBOpt) Seq(pred_rename)
+                         else Seq()
 
   val mem_iss_unit     = Module(new IssueUnitCollapsing(memIssueParam, numIntIssueWakeupPorts))
   mem_iss_unit.suggestName("mem_issue_unit")
@@ -101,21 +106,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val iregfile         = Module(new BankedRegisterFileSynthesizable(numIntPhysRegs, xLen))
   val iregister_read   = Module(new RingRegisterRead)
 
+  val pregfile         = Module(new RegisterFileSynthesizable(
+                           ftqSz,
+                           coreWidth,
+                           1,
+                           1,
+                           Seq(true))) // The jmp unit is always bypassable
   pregfile.io := DontCare // Only use the IO if enableSFBOpt
-
-  // wb arbiter for the 0th ll writeback
-  // TODO: should this be a multi-arb?
-  val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 1 +
-                                                                   (if (usingFPU) 1 else 0) +
-                                                                   (if (usingRoCC) 1 else 0)))
-  val iregister_read   = Module(new RegisterRead(
-                           issue_units.map(_.issueWidth).sum,
-                           exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits),
-                           numIrfReadPorts,
-                           exe_units.withFilter(_.readsIrf).map(x => 2),
-                           exe_units.numTotalBypassPorts,
-                           jmp_unit.numBypassStages,
-                           xLen))
 
   val rob              = Module(new Rob(
                            coreWidth * 2 + numFpWakeupPorts,
@@ -573,55 +570,57 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
+  //-------------------------------------------------------------
   // Inputs
-  for (rename <- rename_stages) {
+
+  int_rename.io.kill := io.ifu.redirect_flush
+  int_rename.io.brupdate := brupdate
+
+  int_rename.io.debug_rob_empty := rob.io.empty
+
+  int_rename.io.dec_fire := dec_fire
+  int_rename.io.dec_uops := dec_uops
+
+  int_rename.io.dis_fire := dis_fire
+  int_rename.io.dis_ready := dis_ready
+
+  int_rename.io.com_valids := rob.io.commit.valids
+  int_rename.io.com_uops := rob.io.commit.uops
+  int_rename.io.rbk_valids := rob.io.commit.rbk_valids
+  int_rename.io.rollback := rob.io.commit.rollback
+
+  for (rename <- other_renamers) {
     rename.io.kill := io.ifu.redirect_flush
     rename.io.brupdate := brupdate
+
+    rename.io.debug_rob_empty := rob.io.empty
+
+    rename.io.dec_fire := dec_fire
+    rename.io.dec_uops := dec_uops
+
+    rename.io.dis_fire := dis_fire
+    rename.io.dis_ready := dis_ready
+
+    rename.io.com_valids := rob.io.commit.valids
+    rename.io.com_uops := rob.io.commit.uops
+    rename.io.rbk_valids := rob.io.commit.rbk_valids
+    rename.io.rollback := rob.io.commit.rollback
   }
 
-  rename_stage.io.dis_fire := dis_fire
-  rename_stage.io.dis_ready := dis_ready
-
-  rename_stage.io.com_valids := rob.io.commit.valids
-  rename_stage.io.com_uops := rob.io.commit.uops
-  rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
-  rename_stage.io.rollback := rob.io.commit.rollback
-
-  if (usingFPU) {
-    fp_rename_stage.io.kill := io.ifu.redirect_flush
-    fp_rename_stage.io.brupdate := brupdate
-
-    fp_rename_stage.io.debug_rob_empty := rob.io.empty
-
-    fp_rename_stage.io.dec_fire := dec_fire
-    fp_rename_stage.io.dec_uops := dec_uops
-
-    fp_rename_stage.io.dis_fire := dis_fire
-    fp_rename_stage.io.dis_ready := dis_ready
-
-    fp_rename_stage.io.com_valids := rob.io.commit.valids
-    fp_rename_stage.io.com_uops := rob.io.commit.uops
-    fp_rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
-    fp_rename_stage.io.rollback := rob.io.commit.rollback
-  }
-
-
+  //-------------------------------------------------------------
   // Outputs
-  dis_uops   := rename_stage.io.ren2_uops
-  dis_valids := rename_stage.io.ren2_mask
-  ren_stalls := rename_stage.io.ren_stalls
 
-  /**
-   * TODO This is a bit nasty, but it's currently necessary to
-   * split the INT/FP rename pipelines into separate instantiations.
-   * Won't have to do this anymore with a properly decoupled FP pipeline.
-   */
+  dis_uops   := int_rename.io.ren2_uops
+  dis_valids := int_rename.io.ren2_mask
+  ren_stalls := int_rename.io.ren_stalls
+
   for (w <- 0 until coreWidth) {
-    val i_uop   = rename_stage.io.ren2_uops(w)
-    val f_uop   = if (usingFPU) fp_rename_stage.io.ren2_uops(w) else NullMicroOp
-    val p_uop   = if (enableSFBOpt) pred_rename_stage.io.ren2_uops(w) else NullMicroOp
-    val f_stall = if (usingFPU) fp_rename_stage.io.ren_stalls(w) else false.B
-    val p_stall = if (enableSFBOpt) pred_rename_stage.io.ren_stalls(w) else false.B
+    val i_uop   = int_rename.io.ren2_uops(w)
+    val f_uop   = if (usingFPU) fp_rename.io.ren2_uops(w) else NullMicroOp
+    val p_uop   = if (enableSFBOpt) pred_rename.io.ren2_uops(w) else NullMicroOp
+    val i_stall = int_rename.io.ren_stalls(w)
+    val f_stall = if (usingFPU) fp_rename.io.ren_stalls(w) else false.B
+    val p_stall = if (enableSFBOpt) pred_rename.io.ren_stalls(w) else false.B
 
     // lrs1 can "pass through" to prs1. Used solely to index the csr file.
     dis_uops(w).prs1 := Mux(dis_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1,
@@ -641,7 +640,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     dis_uops(w).prs3_busy := f_uop.prs3_busy && dis_uops(w).frs3_en
     dis_uops(w).ppred_busy := p_uop.ppred_busy && dis_uops(w).is_sfb_shadow
 
-    ren_stalls(w) := rename_stage.io.ren_stalls(w) || f_stall || p_stall
+    ren_stalls(w) := i_stall || f_stall || p_stall
   }
 
   //-------------------------------------------------------------
@@ -771,23 +770,17 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
                                        && wbresp.bits.uop.dst_rtype === RT_FIX )
   }
 
-  rename_stage.io.wakeups := scheduler.io.fast_wakeups ++ slow_wakeups
+  int_rename.io.wakeups := scheduler.io.fast_wakeups ++ slow_wakeups
 
-  pred_wakeup.valid := (iss_valids(jmp_unit_idx) &&
+  // TODO!!!!!!
+  pred_wakeup.valid := DontCare /*(iss_valids(jmp_unit_idx) &&
                         iss_uops(jmp_unit_idx).is_sfb_br &&
-                        !(io.lsu.ld_miss && (iss_uops(jmp_unit_idx).iw_p1_poisoned || iss_uops(jmp_unit_idx).iw_p2_poisoned))
-  )
-  pred_wakeup.bits.uop := iss_uops(jmp_unit_idx)
+                        !(io.lsu.ld_miss && (iss_uops(jmp_unit_idx).iw_p1_poisoned || iss_uops(jmp_unit_idx).iw_p2_poisoned)))*/
+  pred_wakeup.bits.uop := DontCare //iss_uops(jmp_unit_idx)
   pred_wakeup.bits.fflags := DontCare
   pred_wakeup.bits.data := DontCare
   pred_wakeup.bits.predicated := DontCare
-
-  // Perform load-hit speculative wakeup through a special port (performs a poison wake-up).
-  // TODO!!!!!!
-  issue_units map { iu =>
-     iu.io.spec_ld_wakeup := io.lsu.spec_ld_wakeup
-  }
-
+/*
   // Connect the predicate wakeup port
   issue_units map { iu =>
     iu.io.pred_wakeup_port.valid := false.B
@@ -797,20 +790,18 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     int_iss_unit.io.pred_wakeup_port.valid := pred_wakeup.valid
     int_iss_unit.io.pred_wakeup_port.bits := pred_wakeup.bits.uop.pdst
   }
-
+*/
 
   // ----------------------------------------------------------------
   // Connect the wakeup ports to the busy tables in the rename stages
 
   if (usingFPU) {
-    for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
+    for ((renport, fpport) <- fp_rename.io.wakeups zip fp_pipeline.io.wakeups) {
       renport <> fpport
     }
   }
   if (enableSFBOpt) {
-    pred_rename_stage.io.wakeups(0) := pred_wakeup
-  } else {
-    pred_rename_stage.io.wakeups := DontCare
+    pred_rename.io.wakeups(0) := pred_wakeup
   }
 
   var idiv_issued = false.B
@@ -845,9 +836,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   // Register Read <- Issue (rrd <- iss)
   iregister_read.io.rf_read_ports <> iregfile.io.read_ports
-  iregister_read.io.prf_read_ports := DontCare
+  iregister_read.io.rf_read_ports := DontCare
   if (enableSFBOpt) {
-    iregister_read.io.prf_read_ports <> pregfile.io.read_ports
+    iregister_read.io.rf_read_ports <> pregfile.io.read_ports
   }
 
   iregister_read.io.iss_valids := iss_valids
@@ -942,9 +933,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   exe_units.io.kill     := RegNext(rob.io.flush.valid)
 
   // TODO !!!!!!!
-  for (i <- 0 until jmp_unit.numBypassStages) {
+  /*for (i <- 0 until jmp_unit.numBypassStages) {
     pred_bypasses(i) := jmp_unit.io.bypass(i)
-  }
+  }*/
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -1038,11 +1029,12 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+w+").iresp")
   }
 
-  if (enableSFBOpt) {
+  // TODO !!!!!!!
+  /*if (enableSFBOpt) {
     pregfile.io.write_ports(0).valid     := jmp_unit.io.iresp.valid && jmp_unit.io.iresp.bits.uop.is_sfb_br
     pregfile.io.write_ports(0).bits.addr := jmp_unit.io.iresp.bits.uop.pdst
     pregfile.io.write_ports(0).bits.data := jmp_unit.io.iresp.bits.data
-  }
+  }*/
 
   if (usingFPU) {
     // Connect IFPU
@@ -1138,8 +1130,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   exe_units.io.status := csr.io.status
   exe_units.io.bp     := csr.io.bp
   exe_units.io.com_exception := rob.io.flush.valid
-  if (usingFPU)
-    fp_pipeline.io.status := csr.io.status
 
   // LSU <> ROB
   rob.io.lsu_clr_bsy    := io.lsu.clr_bsy

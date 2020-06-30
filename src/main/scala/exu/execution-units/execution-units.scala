@@ -91,7 +91,7 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
   }
 
   lazy val jmp_unit_idx = {
-    exe_units.indexWhere(_.hasJmpUnit)
+    exe_units.indexWhere(_.hasJmp)
   }
 
   lazy val rocc_unit = {

@@ -80,6 +80,50 @@ class WithRationalBoomTiles extends Config((site, here, up) => {
 })
 
 /**
+ * N-wide Ring-BOOM.
+ */
+class WithRingBooms(n: Int, f: Int, c: Int, overrideIdOffset: Option[Int] = None) extends Config(
+  new WithTAGELBPD ++ // Default to TAGE-L BPD
+  new Config((site, here, up) => {
+    case TilesLocated(InSubsystem) => {
+      val prev = up(TilesLocated(InSubsystem), site)
+      val idOffset = overrideIdOffset.getOrElse(prev.size)
+      (0 until c).map { i =>
+        BoomTileAttachParams(
+          tileParams = BoomTileParams(
+            core = BoomCoreParams(
+							fetchWidth = f,
+							useCompressed = true,
+							decodeWidth = n,
+							numRobEntries = 25*n,
+							issueParams = Seq(
+								IssueParams(issueWidth=n, numEntries=8*n, iqType=IQT_INT.litValue, dispatchWidth=2),
+								IssueParams(issueWidth=1, numEntries=4*n, iqType=IQT_FP.litValue , dispatchWidth=n)),
+							memWidth = (n+1)/2,
+							numDCacheBanks = (n+1)/2,
+							numIntPhysRegisters = 32 + 17*n,
+							numFpPhysRegisters = 32 + 12*n,
+							numLdqEntries = 4*n,
+							numStqEntries = 4*n,
+							maxBrCount = 4*n,
+							numFetchBufferEntries = 8*n,
+							ftq = FtqParameters(nEntries=50*n/f),
+							fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
+						dcache = Some(DCacheParams(rowBits = site(SystemBusKey).beatBytes*8,
+																			 nSets=64, nWays=2*n, nMSHRs=n, nTLBEntries=16)),
+						icache = Some(ICacheParams(fetchBytes = 2*f, rowBits = site(SystemBusKey).beatBytes*8, nSets=64, nWays=2*n)),
+            hartId = i + idOffset
+          ),
+          crossingParams = RocketCrossingParams()
+        )
+      } ++ prev
+    }
+    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
+    case XLen => 64
+  })
+)
+
+/**
  * 1-wide BOOM.
  */
 class WithNSmallBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(

@@ -224,12 +224,12 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     val req = io.exe_reqs(w).bits
     val k = (coreWidth + w - 1) % coreWidth
 
-    rs1_data(w) := RegNext(Mux(req.uop.prs1_bypass_alu, column_exe_units(k).io.bypass.data(0),
+    rs1_data(w) := RegNext(Mux(req.uop.prs1_bypass_alu, column_exe_units(k).io.bypass(0).bits.data,
                            Mux(req.uop.prs1_bypass_mem.reduce(_||_),
                          Mux1H(req.uop.prs1_bypass_mem, mem_units.map(_.io.ll_iresp.bits.data)),
                            Mux(req.uop.prs1_bypass_gen, io.exe_resps(k).bits.data,
                                                          req.rs1_data))))
-    rs2_data(w) := RegNext(Mux(req.uop.prs2_bypass_alu, column_exe_units(k).io.bypass.data(0),
+    rs2_data(w) := RegNext(Mux(req.uop.prs2_bypass_alu, column_exe_units(k).io.bypass(0).bits.data,
                            Mux(req.uop.prs2_bypass_mem.reduce(_||_),
                          Mux1H(req.uop.prs2_bypass_mem, mem_units.map(_.io.ll_iresp.bits.data)),
                            Mux(req.uop.prs2_bypass_gen, io.exe_resps(k).bits.data,
@@ -238,11 +238,11 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
   // Setup requests
   for (w <- 0 until coreWidth) {
+    exe_reqs(w)               := DontCare
     exe_reqs(w).valid         := exe_valids(w)
     exe_reqs(w).bits.uop      := exe_uops(w)
     exe_reqs(w).bits.rs1_data := rs1_data(w)
     exe_reqs(w).bits.rs2_data := rs2_data(w)
-    exe_reqs(w).bits.rs3_data := DontCare
   }
 
   //----------------------------------------------------------------------------------------------------

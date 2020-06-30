@@ -88,7 +88,6 @@ class RenameFreeList(
   // Get the complete freelist as a bit vector (include pipelined selections).
   val debug_freelist = free_list | io.alloc_pregs.map(p => UIntToOH(p.bits) & Fill(n,p.valid)).reduce(_|_)
 
-  val numLregs = if(float) 32 else 31
   assert (!(debug_freelist & dealloc_mask).orR, "[freelist] Returning a free physical register.")
   assert (!io.pipeline_empty || PopCount(debug_freelist) >= (numPregs - numLregs - 1).U,
     "[freelist] Leaking physical registers.")
