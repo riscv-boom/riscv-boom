@@ -79,6 +79,16 @@ class WithRationalBoomTiles extends Config((site, here, up) => {
   }
 })
 
+class WithoutBoomFPU extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(
+      tileParams = tp.tileParams.copy(
+        core = tp.tileParams.core.copy(
+          issueParams = tp.tileParams.core.issueParams.filter(_.iqType != IQT_FP.litValue),
+          fpu = None)))
+   }
+})
+
 /**
  * N-wide Ring-BOOM.
  */
