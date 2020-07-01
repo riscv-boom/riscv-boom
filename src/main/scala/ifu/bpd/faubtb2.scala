@@ -51,7 +51,7 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
   val s1_meta = Wire(new MicroBTBPredictMeta)
   override val metaSz = s1_meta.asUInt.getWidth
 
-
+  val valids   = RegInit(VecInit(0.U(nWays.W).toBools))
   val meta     = Reg(Vec(nWays, new MicroBTBMeta))
   val btb      = Reg(Vec(nWays, Vec(2, UInt(vaddrBitsExtended.W))))
 
@@ -65,7 +65,7 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
   val s1_is_br  = Wire(Vec(bankWidth, Bool()))
   val s1_is_jal = Wire(Vec(bankWidth, Bool()))
 
-  val s1_hit_oh = (0 until nWays) map { w => meta(w).tag === s1_req_tag(tagSz-1,0) }
+  val s1_hit_oh = (0 until nWays) map { w => valids(w) && meta(w).tag === s1_req_tag(tagSz-1,0) }
   val s1_hit = s1_hit_oh.reduce(_||_) && s1_valid
 
   val s1_hit_meta = Mux1H(s1_hit_oh, meta)
@@ -152,7 +152,9 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
     wmeta.cfi_idx := Mux(s1_update.bits.cfi_idx.valid, s1_update.bits.cfi_idx.bits, rmeta.cfi_idx)
     when (s1_update.bits.cfi_idx.valid || s1_update.bits.br_mask =/= 0.U) {
       meta(s1_update_write_way) := wmeta
+      valids(s1_update_write_way) := true.B
     }
+    
   }
 
 
