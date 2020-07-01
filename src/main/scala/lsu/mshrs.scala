@@ -78,9 +78,9 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     val commit_coh  = Output(new ClientMetadata)
 
     // Reading from the line buffer
-    val lb_read       = Decoupled(new LineBufferReadReq)
+    val lb_read       = Output(new LineBufferReadReq)
     val lb_resp       = Input(UInt(encRowBits.W))
-    val lb_write      = Decoupled(new LineBufferWriteReq)
+    val lb_write      = Output(Valid(new LineBufferWriteReq))
 
     // Replays go through the cache pipeline again
     val replay      = Decoupled(new BoomDCacheReqInternal)
@@ -167,7 +167,6 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   io.meta_read.valid     := false.B
   io.mem_finish.valid    := false.B
   io.lb_write.valid      := false.B
-  io.lb_read.valid       := false.B
 
   when (io.req_sec_val && io.req_sec_rdy) {
     req.uop.mem_cmd := dirtier_cmd
@@ -220,10 +219,9 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       state := s_refill_resp
     }
   } .elsewhen (state === s_refill_resp) {
+    io.mem_grant.ready := true.B
     when (edge.hasData(io.mem_grant.bits)) {
-      io.mem_grant.ready      := io.lb_write.ready
       io.lb_write.valid       := io.mem_grant.valid
-      io.lb_write.bits.id     := io.id
       io.lb_write.bits.offset := refill_address_inc >> rowOffBits
       io.lb_write.bits.data   := io.mem_grant.bits.data
     } .otherwise {
@@ -256,12 +254,11 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       data_word, false.B, wordBytes)
 
 
-    rpq.io.deq.ready       := io.resp.ready && io.lb_read.ready && drain_load
-    io.lb_read.valid       := rpq.io.deq.valid && drain_load
-    io.lb_read.bits.id     := io.id
-    io.lb_read.bits.offset := rpq.io.deq.bits.addr >> rowOffBits
+    rpq.io.deq.ready  := io.resp.ready && drain_load
 
-    io.resp.valid     := rpq.io.deq.valid && io.lb_read.fire() && drain_load
+    io.lb_read.offset := rpq.io.deq.bits.addr >> rowOffBits
+
+    io.resp.valid     := rpq.io.deq.valid && drain_load
     io.resp.bits.uop  := rpq.io.deq.bits.uop
     io.resp.bits.data := loadgen.data
     io.resp.bits.is_hella := rpq.io.deq.bits.is_hella
@@ -321,11 +318,9 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       state := s_commit_line
     }
   } .elsewhen (state === s_commit_line) {
-    io.lb_read.valid       := true.B
-    io.lb_read.bits.id     := io.id
-    io.lb_read.bits.offset := refill_ctr
+    io.lb_read.offset := refill_ctr
 
-    io.refill.valid       := io.lb_read.fire()
+    io.refill.valid       := true.B
     io.refill.bits.addr   := req_block_addr | (refill_ctr << rowOffBits)
     io.refill.bits.way_en := req.way_en
     io.refill.bits.wmask  := ~(0.U(rowWords.W))
@@ -474,9 +469,7 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
 class LineBufferReadReq(implicit p: Parameters) extends BoomBundle()(p)
   with HasL1HellaCacheParameters
 {
-  val id      = UInt(log2Ceil(nLBEntries).W)
   val offset  = UInt(log2Ceil(cacheDataBeats).W)
-  def lb_addr = Cat(id, offset)
 }
 
 class LineBufferWriteReq(implicit p: Parameters) extends LineBufferReadReq()(p)
@@ -565,22 +558,8 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   // --------------------
   // The LineBuffer Data
   // Holds refilling lines, prefetched lines
-  val lb = Mem(nLBEntries * cacheDataBeats, UInt(encRowBits.W))
-  val lb_read_arb  = Module(new Arbiter(new LineBufferReadReq, cfg.nMSHRs))
-  val lb_write_arb = Module(new Arbiter(new LineBufferWriteReq, cfg.nMSHRs))
+  val lb = Reg(Vec(nLBEntries, Vec(cacheDataBeats, UInt(encRowBits.W))))
 
-  lb_read_arb.io.out.ready  := false.B
-  lb_write_arb.io.out.ready := true.B
-
-  val lb_read_data = WireInit(0.U(encRowBits.W))
-  when (lb_write_arb.io.out.fire()) {
-    lb.write(lb_write_arb.io.out.bits.lb_addr, lb_write_arb.io.out.bits.data)
-  } .otherwise {
-    lb_read_arb.io.out.ready := true.B
-    when (lb_read_arb.io.out.fire()) {
-      lb_read_data := lb.read(lb_read_arb.io.out.bits.lb_addr)
-    }
-  }
   def widthMap[T <: Data](f: Int => T) = VecInit((0 until lsuWidth).map(f))
 
 
@@ -660,9 +639,10 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     replay_arb.io.in(i)     <> mshr.io.replay
     refill_arb.io.in(i)     <> mshr.io.refill
 
-    lb_read_arb.io.in(i)       <> mshr.io.lb_read
-    mshr.io.lb_resp            := lb_read_data
-    lb_write_arb.io.in(i)      <> mshr.io.lb_write
+    mshr.io.lb_resp            := lb(i)(mshr.io.lb_read.offset)
+    when (mshr.io.lb_write.valid) {
+      lb(i)(mshr.io.lb_write.bits.offset) := mshr.io.lb_write.bits.data
+    }
 
     commit_vals(i)  := mshr.io.commit_val
     commit_addrs(i) := mshr.io.commit_addr
