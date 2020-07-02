@@ -104,12 +104,28 @@ class IssueUnitCollapsing(
     port_issued(w) = false.B
   }
 
+  val iss_select_mask = Array.ofDim[Boolean](issueWidth, numIssueSlots)
+  if (params.useFullIssueSel) {
+    for (w <- 0 until issueWidth) {
+      for (i <- 0 until numIssueSlots) {
+        iss_select_mask(w)(i) = true
+      }
+    }
+  } else {
+    for (w <- 0 until issueWidth) {
+      for (i <- 0 until numIssueSlots) {
+        iss_select_mask(w)(i) = (w % 2) == (i % 2)
+      }
+      iss_select_mask(w)(0) = true
+    }
+  }
+
   for (i <- 0 until numIssueSlots) {
     issue_slots(i).grant := false.B
     var uop_issued = false.B
 
     for (w <- 0 until issueWidth) {
-      val can_allocate = (issue_slots(i).iss_uop.bits.fu_code & io.fu_types(w)) =/= 0.U
+      val can_allocate = ((issue_slots(i).iss_uop.bits.fu_code & io.fu_types(w)) =/= 0.U) && iss_select_mask(w)(i).B
 
       when (requests(i) && !uop_issued && can_allocate && !port_issued(w)) {
         issue_slots(i).grant := true.B

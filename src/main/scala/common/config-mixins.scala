@@ -236,7 +236,7 @@ class WithNMegaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
               numRobEntries = 128,
               issueParams = Seq(
                 IssueParams(issueWidth=3, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=4),
-                IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4),
+                IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4, useFullIssueSel=false),
                 IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
               lsuWidth = 2,
               numIntPhysRegisters = 128,
@@ -286,7 +286,7 @@ class WithNGigaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
               numRobEntries = 130,
               issueParams = Seq(
                 IssueParams(issueWidth=2, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=5),
-                IssueParams(issueWidth=5, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=5),
+                IssueParams(issueWidth=5, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=5, useFullIssueSel=false),
                 IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=5)),
               lsuWidth = 2,
               numIntPhysRegisters = 128,

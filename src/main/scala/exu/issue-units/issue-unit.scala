@@ -32,6 +32,7 @@ case class IssueParams(
   dispatchWidth: Int = 1,
   issueWidth: Int = 1,
   numEntries: Int = 8,
+  useFullIssueSel: Boolean = true,
   iqType: BigInt
 )
 
