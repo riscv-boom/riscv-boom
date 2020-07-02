@@ -89,10 +89,12 @@ class IssueUnitCollapsing(
 
   // Only look at the fast slots to determine readiness to dispatch.
   // Slow slot do not compact fast enough to make this calculation valid
-  val will_be_available = VecInit((nSlowSlots until numIssueSlots).map(i =>
+  val is_available = Reg(Vec(nFastSlots, Bool()))
+  is_available := VecInit((nSlowSlots until numIssueSlots).map(i =>
     (!issue_slots(i).will_be_valid || issue_slots(i).clear) && !(issue_slots(i).in_uop.valid)))
   for (w <- 0 until dispatchWidth) {
-    io.dis_uops(w).ready := RegNext(PopCount(will_be_available) > w.U)
+    io.dis_uops(w).ready := RegNext(PopCount(is_available) > w.U + PopCount(io.dis_uops.map(_.fire)))
+    // io.dis_uops(w).ready := RegNext(PopCount(will_be_available) > w.U)
     assert (!io.dis_uops(w).ready || (shamts_oh(w+numIssueSlots) >> w) =/= 0.U)
   }
 
