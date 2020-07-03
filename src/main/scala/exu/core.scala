@@ -96,11 +96,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
                          else if (enableSFBOpt) Seq(pred_rename)
                          else Seq()
 
-  val mem_iss_unit     = Module(new IssueUnitCollapsing(memIssueParam, numIntIssueWakeupPorts))
-  mem_iss_unit.suggestName("mem_issue_unit")
-  val int_iss_unit     = Module(new IssueUnitCollapsing(intIssueParam, numIntIssueWakeupPorts))
-  int_iss_unit.suggestName("int_issue_unit")
-
   val scheduler        = Module(new RingScheduler(intIssueParam.numEntries, intIssueParam.dispatchWidth))
   val dispatcher       = Module(new BasicDispatcher)
   val iregfile         = Module(new BankedRegisterFileSynthesizable(numIntPhysRegs, xLen))
