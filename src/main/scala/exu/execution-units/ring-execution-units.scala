@@ -162,7 +162,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
       hasAlu = false,
       hasMem = true))
     mem_unit.suggestName("mem_unit_" + w)
-    mem_unit.io.ll_iresp.ready := DontCare
+    mem_unit.io.ll_iresp.ready := true.B
     memory_exe_units += mem_unit
   }
 
