@@ -832,7 +832,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
      f4.io.deq.bits.sfbs(i) &&
      !(f4.io.deq.bits.cfi_idx.valid && f4.io.deq.bits.cfi_idx.bits === i.U) &&
       Mux(f4.io.deq.bits.sfb_dests(i) === 0.U,
-        !bank_prev_is_half,
+        !f3.io.deq.bits.end_half.valid,
       Mux(f4.io.deq.bits.sfb_dests(i) === fetchBytes.U,
         !f4.io.deq.bits.end_half.valid,
         true.B)
