@@ -139,7 +139,7 @@ abstract class ExecutionUnit(
   if (writesIrf)   {
     io.iresp.bits.fflags.valid := false.B
     io.iresp.bits.predicated := false.B
-    assert(io.iresp.ready)
+    //assert(io.iresp.ready)
   }
   if (writesLlIrf) {
     io.ll_iresp.bits.fflags.valid := false.B
