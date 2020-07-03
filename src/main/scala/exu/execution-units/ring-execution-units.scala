@@ -184,7 +184,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     eu.io.brupdate := io.brupdate
     eu.io.kill     := io.kill
 
-    if (eu.writesIrf) eu.io.iresp.ready := DontCare
+    if (eu.writesIrf) eu.io.iresp.ready := true.B
   }
 
   //----------------------------------------------------------------------------------------------------
