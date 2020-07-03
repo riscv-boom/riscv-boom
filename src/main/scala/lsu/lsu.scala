@@ -179,6 +179,8 @@ class LDQEntry(implicit p: Parameters) extends BoomBundle()(p)
 
   val st_dep_mask         = UInt(numStqEntries.W) // list of stores older than us
 
+  val ld_byte_mask        = UInt(8.W)
+
   val forward_std_val     = Bool()
   val forward_stq_idx     = UInt(stqAddrSz.W) // Which store did we get the store-load forward from?
 
@@ -864,6 +866,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       val ldq_idx = Mux(will_fire_load_agen(w) || will_fire_load_agen_exec(w), ldq_incoming_idx(w), ldq_retry_idx)
       ldq(ldq_idx).bits.addr.valid          := !exe_agen_killed(w) || will_fire_load_retry(w)
       ldq(ldq_idx).bits.addr.bits           := Mux(exe_tlb_miss(w), exe_tlb_vaddr(w), exe_tlb_paddr(w))
+      ldq(ldq_idx).bits.ld_byte_mask        := GenByteMask(exe_tlb_vaddr(w), exe_tlb_uop(w).mem_size)
       ldq(ldq_idx).bits.uop.pdst            := exe_tlb_uop(w).pdst
       ldq(ldq_idx).bits.addr_is_virtual     := exe_tlb_miss(w)
       ldq(ldq_idx).bits.addr_is_uncacheable := exe_tlb_uncacheable(w) && !exe_tlb_miss(w)
@@ -1056,7 +1059,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     val l_valid = ldq(i).valid
     val l_bits  = ldq(i).bits
     val l_addr  = ldq(i).bits.addr.bits
-    val l_mask  = GenByteMask(l_addr, l_bits.uop.mem_size)
+    val l_mask  = ldq(i).bits.ld_byte_mask //GenByteMask(l_addr, l_bits.uop.mem_size)
 
     //val l_forwarders      = widthMap(w => wb_ldst_forward_valid(w) && wb_ldst_forward_ldq_idx(w) === i.U)
     //val l_is_forwarding   = l_forwarders.reduce(_||_)

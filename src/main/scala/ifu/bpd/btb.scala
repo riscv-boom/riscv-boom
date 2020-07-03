@@ -16,7 +16,8 @@ case class BoomBTBParams(
   nSets: Int = 128,
   nWays: Int = 2,
   offsetSz: Int = 13,
-  extendedNSets: Int = 128
+  extendedNSets: Int = 128,
+  useFlops: Boolean = false
 )
 
 
@@ -62,17 +63,14 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
   reset_idx := reset_idx + doing_reset
   when (reset_idx === (nSets-1).U) { doing_reset := false.B }
 
-  val meta     = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, UInt(btbMetaSz.W))) }
-  val btb      = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, UInt(btbEntrySz.W))) }
-  val ebtb     = SyncReadMem(extendedNSets, UInt(vaddrBitsExtended.W))
 
   val mems = (((0 until nWays) map ({w:Int => Seq(
     (f"btb_meta_way$w", nSets, bankWidth * btbMetaSz),
     (f"btb_data_way$w", nSets, bankWidth * btbEntrySz))})).flatten ++ Seq(("ebtb", extendedNSets, vaddrBitsExtended)))
+  val s1_req_rmeta = Wire(Vec(nWays, Vec(bankWidth, new BTBMeta)))
+  val s1_req_rbtb  = Wire(Vec(nWays, Vec(bankWidth, new BTBEntry)))
+  val s1_req_rebtb = Wire(UInt(vaddrBitsExtended.W))
 
-  val s1_req_rbtb  = VecInit(btb.map { b => VecInit(b.read(s0_idx , s0_valid).map(_.asTypeOf(new BTBEntry))) })
-  val s1_req_rmeta = VecInit(meta.map { m => VecInit(m.read(s0_idx, s0_valid).map(_.asTypeOf(new BTBMeta))) })
-  val s1_req_rebtb = ebtb.read(s0_idx, s0_valid)
   val s1_req_tag   = s1_idx >> log2Ceil(nSets)
 
   val s1_resp   = Wire(Vec(bankWidth, Valid(UInt(vaddrBitsExtended.W))))
@@ -166,37 +164,55 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
     s1_update_wmeta_data(w).is_br   := s1_update.bits.br_mask(w)
   }
 
-  for (w <- 0 until nWays) {
-    when (doing_reset || s1_update_meta.write_way === w.U || (w == 0 && nWays == 1).B) {
-      btb(w).write(
-        Mux(doing_reset,
-          reset_idx,
-          s1_update_idx),
-        Mux(doing_reset,
-          VecInit(Seq.fill(bankWidth) { 0.U(btbEntrySz.W) }),
-          VecInit(Seq.fill(bankWidth) { s1_update_wbtb_data.asUInt })),
-        Mux(doing_reset,
-          (~(0.U(bankWidth.W))),
-          s1_update_wbtb_mask).asBools
-      )
-      meta(w).write(
-        Mux(doing_reset,
-          reset_idx,
-          s1_update_idx),
-        Mux(doing_reset,
-          VecInit(Seq.fill(bankWidth) { 0.U(btbMetaSz.W) }),
-          VecInit(s1_update_wmeta_data.map(_.asUInt))),
-        Mux(doing_reset,
-          (~(0.U(bankWidth.W))),
-          s1_update_wmeta_mask).asBools
-      )
+  if (params.useFlops) {
+    for (w <- 0 until nWays) {
+      val meta = Reg(Vec(nSets, Vec(bankWidth, new BTBMeta)))
+      val btb  = Reg(Vec(nSets, Vec(bankWidth, new BTBEntry)))
+      s1_req_rmeta(w) := meta(s1_idx)
+      s1_req_rbtb(w)  := btb(s1_idx)
+      for (i <- 0 until bankWidth) {
+        when (doing_reset || s1_update_meta.write_way === w.U || (nWays == 1).B) {
+          when (doing_reset || s1_update_wbtb_mask(i)) {
+            btb(Mux(doing_reset, reset_idx, s1_update_idx))(i) := Mux(doing_reset,
+              0.U.asTypeOf(new BTBEntry), s1_update_wbtb_data)
+          }
+          when (doing_reset || s1_update_wmeta_mask(i)) {
+            meta(Mux(doing_reset, reset_idx, s1_update_idx))(i) := Mux(doing_reset,
+              0.U.asTypeOf(new BTBMeta), s1_update_wmeta_data)
+          }
+        }
+      }
+    }
+    val ebtb = Reg(Vec(extendedNSets, UInt(vaddrBitsExtended.W)))
+    s1_req_rebtb := ebtb(s1_idx)
 
+  } else {
+    for (w <- 0 until nWays) {
+      val meta = SyncReadMem(nSets, Vec(bankWidth, UInt(btbMetaSz.W)))
+      val btb  = SyncReadMem(nSets, Vec(bankWidth, UInt(btbEntrySz.W)))
+      s1_req_rmeta(w) := VecInit(meta.read(s0_idx, s0_valid).map(_.asTypeOf(new BTBMeta)))
+      s1_req_rbtb(w)  := VecInit(btb.read(s0_idx, s0_valid).map(_.asTypeOf(new BTBEntry)))
 
+      when (doing_reset || s1_update_meta.write_way === w.U || (nWays == 1).B) {
+        btb.write(
+          Mux(doing_reset, reset_idx, s1_update_idx),
+          Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 0.U(btbEntrySz.W) }),
+                           VecInit(Seq.fill(bankWidth) { s1_update_wbtb_data.asUInt })),
+          Mux(doing_reset, ~(0.U(bankWidth.W)), s1_update_wbtb_mask).asBools
+        )
+        meta.write(
+          Mux(doing_reset, reset_idx, s1_update_idx),
+          Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 0.U(btbMetaSz.W) }),
+                           VecInit(s1_update_wmeta_data.map(_.asUInt))),
+          Mux(doing_reset, ~(0.U(bankWidth.W)), s1_update_wmeta_mask).asBools
+        )
+      }
+    }
+    val ebtb = SyncReadMem(extendedNSets, UInt(vaddrBitsExtended.W))
+    s1_req_rebtb := ebtb.read(s0_idx, s0_valid)
+    when (s1_update_wbtb_mask =/= 0.U && offset_is_extended) {
+      ebtb.write(s1_update_idx, s1_update.bits.target)
     }
   }
-  when (s1_update_wbtb_mask =/= 0.U && offset_is_extended) {
-    ebtb.write(s1_update_idx, s1_update.bits.target)
-  }
-
 }
 

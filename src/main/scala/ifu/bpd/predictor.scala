@@ -176,6 +176,7 @@ abstract class BranchPredictorBank(implicit p: Parameters) extends BoomModule()(
 
   val s0_pc = io.f0_pc
   val s1_pc = RegNext(s0_pc)
+  val s2_pc = RegNext(s1_pc)
 
   val s0_update     = io.update
   val s0_update_idx = fetchIdx(io.update.bits.pc)

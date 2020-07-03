@@ -426,6 +426,36 @@ class WithNCS152DefaultBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) e
   *  Branch prediction configs below
   */
 
+class WithFastTAGEBPD extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
+      bpdMaxMetaLength = 120,
+      globalHistoryLength = 64,
+      localHistoryLength = 1,
+      localHistoryNSets = 0,
+      branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
+        val tage = Module(new TageBranchPredictorBank()(p))
+        val slowbtb = Module(new SlowBTBBranchPredictorBank()(p))
+        val fastbtb = Module(new BTBBranchPredictorBank(
+          BoomBTBParams(nSets = 32, nWays = 2, offsetSz = 13, extendedNSets = 32))(p))
+        val bim = Module(new BIMBranchPredictorBank()(p))
+        val ubtb = Module(new FA2MicroBTBBranchPredictorBank()(p))
+        val preds = Seq(tage, slowbtb, fastbtb, bim, ubtb)
+        preds.map(_.io := DontCare)
+
+        ubtb.io.resp_in(0)    := resp_in
+        bim.io.resp_in(0)     := ubtb.io.resp
+        fastbtb.io.resp_in(0) := bim.io.resp
+        slowbtb.io.resp_in(0) := fastbtb.io.resp
+        tage.io.resp_in(0)    := slowbtb.io.resp
+
+        (preds, tage.io.resp)
+      })
+    )))
+    case other => other
+  }
+})
+
 class WithTAGELBPD extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
