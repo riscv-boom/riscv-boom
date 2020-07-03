@@ -831,7 +831,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   // Register Read <- Issue (rrd <- iss)
   iregister_read.io.rf_read_ports <> iregfile.io.read_ports
-  iregister_read.io.rf_read_ports := DontCare
   if (enableSFBOpt) {
     iregister_read.io.rf_read_ports <> pregfile.io.read_ports
   }
