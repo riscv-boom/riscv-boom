@@ -159,6 +159,8 @@ class SlowBTBBranchPredictorBank(params: BoomSlowBTBParams = BoomSlowBTBParams()
   for (w <- 0 until nWays) {
     val meta = SyncReadMem(nSets, Vec(bankWidth, UInt(btbMetaSz.W)))
     val btb  = SyncReadMem(nSets, Vec(bankWidth, UInt(btbEntrySz.W)))
+    meta.suggestName(s"slowbtb_meta_way_${w}")
+    btb.suggestName(s"slowbtb_data_way_${w}")
     s2_req_rmeta(w) := VecInit(meta.read(s1_idx, s1_valid).map(_.asTypeOf(new BTBMeta)))
     s2_req_rbtb(w)  := VecInit(btb.read(s1_idx, s1_valid).map(_.asTypeOf(new BTBEntry)))
 

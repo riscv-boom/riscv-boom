@@ -99,7 +99,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
     s1_is_br(w)  := !doing_reset && s1_resp(w).valid &&  entry_meta.is_br
     s1_is_jal(w) := !doing_reset && s1_resp(w).valid && !entry_meta.is_br
 
-
+    io.resp.f1(w) := io.resp_in(0).f1(w)
     io.resp.f2(w) := io.resp_in(0).f2(w)
     io.resp.f3(w) := io.resp_in(0).f3(w)
     when (RegNext(s1_hits(w))) {
@@ -178,7 +178,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
           }
           when (doing_reset || s1_update_wmeta_mask(i)) {
             meta(Mux(doing_reset, reset_idx, s1_update_idx))(i) := Mux(doing_reset,
-              0.U.asTypeOf(new BTBMeta), s1_update_wmeta_data)
+              0.U.asTypeOf(new BTBMeta), s1_update_wmeta_data(i))
           }
         }
       }
@@ -190,6 +190,8 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
     for (w <- 0 until nWays) {
       val meta = SyncReadMem(nSets, Vec(bankWidth, UInt(btbMetaSz.W)))
       val btb  = SyncReadMem(nSets, Vec(bankWidth, UInt(btbEntrySz.W)))
+      meta.suggestName(s"btb_meta_way_${w}")
+      btb.suggestName(s"btb_data_way_${w}")
       s1_req_rmeta(w) := VecInit(meta.read(s0_idx, s0_valid).map(_.asTypeOf(new BTBMeta)))
       s1_req_rbtb(w)  := VecInit(btb.read(s0_idx, s0_valid).map(_.asTypeOf(new BTBEntry)))
 
@@ -209,6 +211,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
       }
     }
     val ebtb = SyncReadMem(extendedNSets, UInt(vaddrBitsExtended.W))
+    ebtb.suggestName(s"btb_ebtb")
     s1_req_rebtb := ebtb.read(s0_idx, s0_valid)
     when (s1_update_wbtb_mask =/= 0.U && offset_is_extended) {
       ebtb.write(s1_update_idx, s1_update.bits.target)
