@@ -80,14 +80,18 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     when ((io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype === RT_FIX) ||
            io.dis_uops(w).bits.uopc === uopAMO_AG) {
       dis_uops_setup(w).iw_state := s_valid_2
+    // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here
+    } .elsewhen (io.dis_uops(w).bits.uopc === uopSTA && io.dis_uops(w).bits.lrs2_rtype =/= RT_FIX) {
+      dis_uops_setup(w).lrs2_rtype  := RT_X
+      dis_uops_setup(w).prs2_status := 1.U
+      dis_uops_setup(w).prs2_busy   := false.B
     }
 
     dis_uops_setup(w).prs3_busy := false.B
   }
 
-  val dis_reqs = Transpose(io.dis_uops zip io.dis_valids map { case (u,v) =>
-    Mux(v, u.bits.column | Mux(u.bits.prs1_busy && u.bits.prs2_busy && !u.bits.prs2_load,
-                                 RotateLeft(u.bits.prs2_col), 0.U), 0.U) })
+  val dis_reqs = Transpose(dis_uops_setup zip io.dis_valids map { case (u,v) =>
+    Mux(v, u.column | Mux(u.prs1_busy && u.prs2_busy && !u.prs2_load, RotateLeft(u.prs2_col), 0.U), 0.U) })
   val dis_uops = Wire(Vec(coreWidth, Vec(columnDispatchWidth, new MicroOp)))
   val dis_vals = Wire(Vec(coreWidth, Vec(columnDispatchWidth, Bool())))
   val dis_gnts = Wire(Vec(coreWidth, UInt(coreWidth.W)))
