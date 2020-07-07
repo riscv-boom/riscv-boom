@@ -1161,16 +1161,12 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   }
   assert (!(idle_cycles.value(13)), "Pipeline has hung.")
 
-  if (usingFPU) {
-    fp_pipeline.io.debug_tsc_reg := debug_tsc_reg
-  }
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // **** Handle Cycle-by-Cycle Printouts ****
   //-------------------------------------------------------------
   //-------------------------------------------------------------
-
 
   io.lsu.debug_stcom.foreach(_.idx := DontCare)
 

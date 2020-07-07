@@ -50,7 +50,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     val wb_valids        = Input(Vec(numWakeupPorts, Bool()))
     val wb_pdsts         = Input(Vec(numWakeupPorts, UInt(width=fpPregSz.W)))
 
-    val debug_tsc_reg    = Input(UInt(width=xLen.W))
     val debug_wb_wdata   = Output(Vec(numWakeupPorts, UInt((fLen+1).W)))
   })
 
