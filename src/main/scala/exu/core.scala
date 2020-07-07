@@ -1058,6 +1058,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // ---------
 
   var cnt = 0
+  var f_cnt = 0
 
   // Column resps
   for (w <- 0 until coreWidth) {
@@ -1091,13 +1092,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     cnt += 1
   }
 
-  var f_cnt = 0
-  for (eu <- exe_units) {
-    val resp = eu.io.iresp
-    if (eu.hasFFlags) {
-      rob.io.fflags(f_cnt) <> resp.bits.fflags
-    }
-  }
   if (usingFPU) {
     for ((wdata, wakeup) <- fp_pipeline.io.debug_wb_wdata zip fp_pipeline.io.wakeups) {
       rob.io.wb_resps(cnt) <> wakeup
