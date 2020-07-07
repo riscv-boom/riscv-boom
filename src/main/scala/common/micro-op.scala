@@ -82,6 +82,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val stale_pdst       = UInt(maxPregSz.W)
   val ppred            = UInt(log2Ceil(ftqSz).W)
 
+  // One-hot vector which specifies the uop's column
+  // Only relevant for uops which use the integer scheduler
+  val column           = UInt(coreWidth.W)
+
   val prs1_busy        = Bool()
   val prs2_busy        = Bool()
   val prs3_busy        = Bool()
