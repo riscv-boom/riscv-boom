@@ -299,8 +299,8 @@ object FDecode extends DecodeConstants
             //    |  |  |  |           |        |       |       |       |       |  |     |  |  |  |  |  |      |    |  |  |  |  |  csr cmd
   FLW     -> List(Y, Y, Y, uopLD     , IQT_INT, FU_MEM, RT_FLT, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, 0.U, N, N, N, N, N, CSR.N),
   FLD     -> List(Y, Y, N, uopLD     , IQT_INT, FU_MEM, RT_FLT, RT_FIX, RT_X  , N, IS_I, Y, N, N, N, N, M_XRD, 0.U, N, N, N, N, N, CSR.N),
-  FSW     -> List(Y, Y, Y, uopSTA    , IQT_MFP,FU_F2IMEM,RT_X , RT_FIX, RT_FLT, N, IS_S, N, Y, N, N, N, M_XWR, 0.U, N, N, N, N, N, CSR.N), // sort of a lie; broken into two micro-ops
-  FSD     -> List(Y, Y, N, uopSTA    , IQT_MFP,FU_F2IMEM,RT_X , RT_FIX, RT_FLT, N, IS_S, N, Y, N, N, N, M_XWR, 0.U, N, N, N, N, N, CSR.N),
+  FSW     -> List(Y, Y, Y, uopSTA    , IQT_IFP,FU_F2IMEM,RT_X , RT_FIX, RT_FLT, N, IS_S, N, Y, N, N, N, M_XWR, 0.U, N, N, N, N, N, CSR.N), // sort of a lie; broken into two micro-ops
+  FSD     -> List(Y, Y, N, uopSTA    , IQT_IFP,FU_F2IMEM,RT_X , RT_FIX, RT_FLT, N, IS_S, N, Y, N, N, N, M_XWR, 0.U, N, N, N, N, N, CSR.N),
 
   FCLASS_S-> List(Y, Y, Y, uopFCLASS_S,IQT_FP , FU_F2I, RT_FIX, RT_FLT, RT_X  , N, IS_I, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, CSR.N),
   FCLASS_D-> List(Y, Y, N, uopFCLASS_D,IQT_FP , FU_F2I, RT_FIX, RT_FLT, RT_X  , N, IS_I, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, CSR.N),
