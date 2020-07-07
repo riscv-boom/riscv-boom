@@ -389,7 +389,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     (s1_bpd_resp.preds(i).is_jal ||
       (s1_bpd_resp.preds(i).is_br && s1_bpd_resp.preds(i).taken))
   }
-  val f1_redirect_idx = PriorityEncoder(f1_redirects)
   val f1_do_redirect = f1_redirects.reduce(_||_) && useBPD.B
   val f1_targs = s1_bpd_resp.preds.map(_.predicted_pc.bits)
   val f1_predicted_target = Mux(f1_do_redirect,
@@ -398,9 +397,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val f1_predicted_ghist = s1_ghist.update(
     s1_bpd_resp.preds.map(p => p.is_br).asUInt & f1_mask,
-    s1_bpd_resp.preds(f1_redirect_idx).taken && f1_do_redirect,
-    s1_bpd_resp.preds(f1_redirect_idx).is_br,
-    f1_redirect_idx,
+    PriorityMux(f1_redirects, s1_bpd_resp.preds).taken && f1_do_redirect,
+    PriorityMux(f1_redirects, s1_bpd_resp.preds).is_br,
+    PriorityEncoder(f1_redirects),
     f1_do_redirect,
     s1_vpc,
     false.B,
@@ -442,17 +441,17 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     (f2_bpd_resp.preds(i).is_jal ||
       (f2_bpd_resp.preds(i).is_br && f2_bpd_resp.preds(i).taken))
   }
-  val f2_redirect_idx = PriorityEncoder(f2_redirects)
+
   val f2_targs = f2_bpd_resp.preds.map(_.predicted_pc.bits)
   val f2_do_redirect = f2_redirects.reduce(_||_) && useBPD.B
   val f2_predicted_target = Mux(f2_do_redirect,
-                                f2_targs(f2_redirect_idx),
+                                PriorityMux(f2_redirects, f2_targs),
                                 nextFetch(s2_vpc))
   val f2_predicted_ghist = s2_ghist.update(
     f2_bpd_resp.preds.map(p => p.is_br && p.predicted_pc.valid).asUInt & f2_fetch_mask,
-    f2_bpd_resp.preds(f2_redirect_idx).taken && f2_do_redirect,
-    f2_bpd_resp.preds(f2_redirect_idx).is_br,
-    f2_redirect_idx,
+    PriorityMux(f2_redirects, f2_bpd_resp.preds).taken && f2_do_redirect,
+    PriorityMux(f2_redirects, f2_bpd_resp.preds).is_br,
+    PriorityEncoder(f2_redirects),
     f2_do_redirect,
     s2_vpc,
     false.B,
@@ -728,24 +727,23 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f3.io.deq.valid && f3.io.deq.bits.mask(i) && f3_bpd_resp.preds(i).predicted_pc.valid &&
     (f3_bpd_resp.preds(i).is_jal || (f3_bpd_resp.preds(i).is_br && f3_bpd_resp.preds(i).taken))
   }
-  val f3_predicted_redirect_idx = PriorityEncoder(f3_predicted_redirects)
   val f3_predicted_do_redirect = f3_predicted_redirects.reduce(_||_) && useBPD.B
   val f3_predicted_targs = f3_bpd_resp.preds.map(_.predicted_pc.bits)
   val f3_predicted_target = Mux(f3_predicted_do_redirect,
-                                f3_predicted_targs(f3_predicted_redirect_idx),
+                                PriorityMux(f3_predicted_redirects, f3_predicted_targs),
                                 nextFetch(f3.io.deq.bits.pc))
   val f3_predicted_ghist = f3_fetch_bundle.ghist.update(
     f3_bpd_resp.preds.map(p => p.is_br && p.predicted_pc.valid).asUInt & f3.io.deq.bits.mask,
-    f3_bpd_resp.preds(f3_predicted_redirect_idx).taken && f3_predicted_do_redirect,
-    f3_bpd_resp.preds(f3_predicted_redirect_idx).is_br,
-    f3_predicted_redirect_idx,
+    PriorityMux(f3_predicted_redirects, f3_bpd_resp.preds).taken && f3_predicted_do_redirect,
+    PriorityMux(f3_predicted_redirects, f3_bpd_resp.preds).is_br,
+    PriorityEncoder(f3_predicted_redirects),
     f3_predicted_do_redirect,
     f3.io.deq.bits.pc,
     false.B,
     false.B
   )
   val f3_decoded_target = Mux(f3_redirects.reduce(_||_),
-    f3_targs(PriorityEncoder(f3_redirects)),
+    PriorityMux(f3_redirects, f3_targs),
     nextFetch(f3_fetch_bundle.pc)
   )
 
@@ -841,8 +839,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
      )
   })
   val f4_sfb_valid = f4_sfbs.reduce(_||_) && f4.io.deq.valid
-  val f4_sfb_idx   = PriorityEncoder(f4_sfbs)
-  val f4_sfb_mask  = f4.io.deq.bits.sfb_masks(f4_sfb_idx)
+  val f4_sfb_mask  = PriorityMux(f4_sfbs, f4.io.deq.bits.sfb_masks)
   // If we have a SFB, wait for next fetch to be available in f3
   val f4_delay     = (
     f4.io.deq.bits.sfbs.reduce(_||_) &&
@@ -869,7 +866,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   fb.io.enq.valid := f4.io.deq.valid && ftq.io.enq.ready && !f4_delay
   fb.io.enq.bits  := f4.io.deq.bits
   fb.io.enq.bits.ftq_idx := ftq.io.enq_idx
-  fb.io.enq.bits.sfbs    := Mux(f4_sfb_valid, UIntToOH(f4_sfb_idx), 0.U(fetchWidth.W)).asBools
+  fb.io.enq.bits.sfbs    := Mux(f4_sfb_valid, UIntToOH(PriorityEncoder(f4_sfbs)), 0.U(fetchWidth.W)).asBools
   fb.io.enq.bits.shadowed_mask := (
     Mux(f4_sfb_valid, f4_sfb_mask(fetchWidth-1,0), 0.U(fetchWidth.W)) |
     f4.io.deq.bits.shadowed_mask.asUInt
