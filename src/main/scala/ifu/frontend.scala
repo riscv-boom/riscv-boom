@@ -385,9 +385,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val f1_mask = fetchMask(s1_vpc)
   val f1_redirects = (0 until fetchWidth) map { i =>
-    s1_valid && f1_mask(i) && s1_bpd_resp.preds(i).predicted_pc.valid &&
-    (s1_bpd_resp.preds(i).is_jal ||
-      (s1_bpd_resp.preds(i).is_br && s1_bpd_resp.preds(i).taken))
+    f1_mask(i) && s1_bpd_resp.preds(i).predicted_pc.valid && s1_bpd_resp.preds(i).taken
   }
   val f1_do_redirect = f1_redirects.reduce(_||_) && useBPD.B
   val f1_targs = s1_bpd_resp.preds.map(_.predicted_pc.bits)
@@ -437,11 +435,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f2_bpd_resp = bpd.io.resp.f2
   val f2_fetch_mask = fetchMask(s2_vpc)
   val f2_redirects = (0 until fetchWidth) map { i =>
-    s2_valid && f2_fetch_mask(i) && f2_bpd_resp.preds(i).predicted_pc.valid &&
-    (f2_bpd_resp.preds(i).is_jal ||
-      (f2_bpd_resp.preds(i).is_br && f2_bpd_resp.preds(i).taken))
+    f2_fetch_mask(i) && f2_bpd_resp.preds(i).predicted_pc.valid && f2_bpd_resp.preds(i).taken
   }
-
   val f2_targs = f2_bpd_resp.preds.map(_.predicted_pc.bits)
   val f2_do_redirect = f2_redirects.reduce(_||_) && useBPD.B
   val f2_predicted_target = Mux(f2_do_redirect,
@@ -724,8 +719,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // Use the branch predictor response in fetch-3, the decoded branch target
   // isn't available fast enough
   val f3_predicted_redirects = (0 until fetchWidth) map { i =>
-    f3.io.deq.valid && f3.io.deq.bits.mask(i) && f3_bpd_resp.preds(i).predicted_pc.valid &&
-    (f3_bpd_resp.preds(i).is_jal || (f3_bpd_resp.preds(i).is_br && f3_bpd_resp.preds(i).taken))
+    f3.io.deq.bits.mask(i) && f3_bpd_resp.preds(i).predicted_pc.valid && f3_bpd_resp.preds(i).taken
   }
   val f3_predicted_do_redirect = f3_predicted_redirects.reduce(_||_) && useBPD.B
   val f3_predicted_targs = f3_bpd_resp.preds.map(_.predicted_pc.bits)
