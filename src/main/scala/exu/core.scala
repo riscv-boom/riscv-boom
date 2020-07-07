@@ -737,7 +737,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   }
 
   scheduler.io.dis_uops   <> dispatcher.io.dis_uops(issueParams.indexWhere(_.iqType == IQT_INT.litValue))
-  scheduler.io.dis_valids := dis_valids zip dis_uops map { case (v,u) => v && u.iq_type === IQT_INT }
+  scheduler.io.dis_valids := dis_valids zip dis_uops map { case (v,u) => v && (u.iq_type & IQT_INT).orR }
   if (usingFPU) fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(issueParams.indexWhere(_.iqType == IQT_FP.litValue))
 
   //-------------------------------------------------------------
