@@ -88,6 +88,9 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     }
 
     dis_uops_setup(w).prs3_busy := false.B
+
+    assert (!(Mux(dis_uops_setup(w).dst_rtype === RT_FIX && io.dis_valids(w), dis_uops_setup(w).pdst_col, 0.U) &
+            ~dis_uops_setup(w).column).orR, "[iss] uop column should match pdst column when the uop writes an int pdst")
   }
 
   val dis_reqs = Transpose(dis_uops_setup zip io.dis_valids map { case (u,v) =>
