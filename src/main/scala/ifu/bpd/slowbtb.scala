@@ -104,11 +104,11 @@ class SlowBTBBranchPredictorBank(params: BoomSlowBTBParams = BoomSlowBTBParams()
     io.resp.f3(w) := io.resp_in(0).f3(w)
     when (RegNext(s2_hits(w))) {
       io.resp.f3(w).predicted_pc := RegNext(s2_resp(w))
-      io.resp.f3(w).is_br        := RegNext(s2_is_br(w))
-      io.resp.f3(w).is_jal       := RegNext(s2_is_jal(w))
-      when (RegNext(s2_is_jal(w))) {
-        io.resp.f3(w).taken      := true.B
-      }
+      //io.resp.f3(w).is_br        := RegNext(s2_is_br(w))
+      //io.resp.f3(w).is_jal       := RegNext(s2_is_jal(w))
+      // when (RegNext(s2_is_jal(w))) {
+      //   io.resp.f3(w).taken      := true.B
+      // }
     }
   }
 

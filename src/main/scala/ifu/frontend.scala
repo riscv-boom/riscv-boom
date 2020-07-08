@@ -308,6 +308,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   with HasBoomCoreParameters
   with HasBoomFrontendParameters
 {
+  val useSlowF3Redirect = false
+
   val io = IO(new BoomFrontendBundle(outer))
   implicit val edge = outer.masterNode.edges.out(0)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
@@ -471,6 +473,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   f2_fetch_bundle.tsrc       := s2_tsrc
   f2_fetch_bundle.ghist      := s2_ghist
   f2_fetch_bundle.mask       := f2_inst_mask.asUInt
+  f2_fetch_bundle.cfi_idx.valid := f2_redirects.reduce(_||_)
+  f2_fetch_bundle.cfi_idx.bits  := PriorityEncoder(f2_redirects)
 
 
   require(fetchWidth >= 4) // Logic gets kind of annoying with fetchWidth = 2
@@ -718,13 +722,22 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   // Use the branch predictor response in fetch-3, the decoded branch target
   // isn't available fast enough
-  val f3_predicted_redirects = (0 until fetchWidth) map { i =>
-    f3.io.deq.bits.mask(i) && f3_bpd_resp.preds(i).predicted_pc.valid && f3_bpd_resp.preds(i).taken
+  val f3_predicted_targs = f3_bpd_resp.preds.map(_.predicted_pc.bits)
+
+
+  val (f3_predicted_redirects, f3_redirect_target) = if (useSlowF3Redirect) {
+    val redirects = (UIntToOH(f3.io.deq.bits.cfi_idx.bits) & Fill(fetchWidth, f3.io.deq.bits.cfi_idx.valid)).toBools
+    (redirects, f3_predicted_targs(f3.io.deq.bits.cfi_idx.bits))
+  } else {
+    val redirects = VecInit((0 until fetchWidth) map { i =>
+      f3.io.deq.bits.mask(i) && f3_bpd_resp.preds(i).predicted_pc.valid && f3_bpd_resp.preds(i).taken
+    })
+    (redirects, PriorityMux(redirects, f3_predicted_targs))
   }
   val f3_predicted_do_redirect = f3_predicted_redirects.reduce(_||_) && useBPD.B
-  val f3_predicted_targs = f3_bpd_resp.preds.map(_.predicted_pc.bits)
+
   val f3_predicted_target = Mux(f3_predicted_do_redirect,
-                                PriorityMux(f3_predicted_redirects, f3_predicted_targs),
+                                f3_redirect_target,
                                 nextFetch(f3.io.deq.bits.pc))
   val f3_predicted_ghist = f3_fetch_bundle.ghist.update(
     f3_bpd_resp.preds.map(p => p.is_br && p.predicted_pc.valid).asUInt & f3.io.deq.bits.mask,
