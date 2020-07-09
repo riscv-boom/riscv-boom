@@ -79,7 +79,7 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
   // Get a request any cycle
   val resp        = Flipped(Vec(lsuWidth, new ValidIO(new BoomDCacheResp)))
   // The cache irrevocably accepted our store
-  val store_ack   = Flipped(Vec(lsuWidth, new ValidIO(new MicroOp)))
+  val store_ack   = Flipped(Vec(lsuWidth, new ValidIO(new BoomDCacheReq)))
   // In our response stage, if we get a nack, we need to reexecute
   val nack        = Flipped(Vec(lsuWidth, new ValidIO(new BoomDCacheReq)))
 
@@ -1401,7 +1401,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
     // Handle store acks
     when (io.dmem.store_ack(w).valid) {
-      stq(io.dmem.store_ack(w).bits.stq_idx).bits.succeeded := true.B
+      stq(io.dmem.store_ack(w).bits.uop.stq_idx).bits.succeeded := true.B
     }
 
 
@@ -1608,7 +1608,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
   } .elsewhen (hella_state === h_wait) {
     for (w <- 0 until lsuWidth) {
-      when (io.dmem.resp(w).valid && io.dmem.resp(w).bits.is_hella) {
+      when ((io.dmem.resp(w).valid && io.dmem.resp(w).bits.is_hella) ||
+            (io.dmem.store_ack(w).valid && io.dmem.store_ack(w).bits.is_hella)) {
         hella_state := h_ready
 
         io.hellacache.resp.valid       := true.B
@@ -1618,7 +1619,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         io.hellacache.resp.bits.signed := hella_req.signed
         io.hellacache.resp.bits.size   := hella_req.size
         io.hellacache.resp.bits.data   := io.dmem.resp(w).bits.data
-      } .elsewhen (io.dmem.nack(w).valid && io.dmem.nack(w).bits.is_hella) {
+      }
+      when (io.dmem.nack(w).valid && io.dmem.nack(w).bits.is_hella) {
         hella_state := h_replay
       }
     }

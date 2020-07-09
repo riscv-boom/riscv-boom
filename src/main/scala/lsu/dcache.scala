@@ -733,7 +733,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
       s2_hit(w) && isRead(s2_req(w).uop.mem_cmd)
   ))
   val s2_send_store_ack = widthMap(w => (
-    RegNext(s1_send_resp_or_nack(w)) && !s2_nack(w) && s2_req(w).uop.uses_stq &&
+    RegNext(s1_send_resp_or_nack(w)) && !s2_nack(w) && isWrite(s2_req(w).uop.mem_cmd) &&
       (s2_hit(w) || mshrs.io.req(w).fire())))
   val s2_send_nack = widthMap(w => (RegNext(s1_send_resp_or_nack(w)) && s2_nack(w)))
   for (w <- 0 until lsuWidth)
@@ -868,7 +868,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
     assert(!(io.lsu.nack(w).valid && s2_type =/= t_lsu))
 
     io.lsu.store_ack(w).valid := s2_valid(w) && s2_send_store_ack(w) && (w == 0).B
-    io.lsu.store_ack(w).bits  := s2_req(w).uop
+    io.lsu.store_ack(w).bits  := s2_req(w)
   }
 
   // Store/amo hits
