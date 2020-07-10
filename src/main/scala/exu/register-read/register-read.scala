@@ -108,9 +108,9 @@ class RegisterRead(
 
     if (enableSFBOpt) io.prf_read_ports(w).addr := pred_addr
 
-    if (numReadPorts > 0) rrd_rs1_data(w) := Mux(RegNext(rs1_addr === 0.U), 0.U, io.rf_read_ports(idx+0).data)
-    if (numReadPorts > 1) rrd_rs2_data(w) := Mux(RegNext(rs2_addr === 0.U), 0.U, io.rf_read_ports(idx+1).data)
-    if (numReadPorts > 2) rrd_rs3_data(w) := Mux(RegNext(rs3_addr === 0.U), 0.U, io.rf_read_ports(idx+2).data)
+    if (numReadPorts > 0) rrd_rs1_data(w) := io.rf_read_ports(idx+0).data
+    if (numReadPorts > 1) rrd_rs2_data(w) := io.rf_read_ports(idx+1).data
+    if (numReadPorts > 2) rrd_rs3_data(w) := io.rf_read_ports(idx+2).data
 
     if (enableSFBOpt) rrd_pred_data(w) := Mux(RegNext(io.iss_uops(w).bits.is_sfb_shadow), io.prf_read_ports(w).data, false.B)
 
@@ -135,43 +135,55 @@ class RegisterRead(
   //    - rs3 is used for FPU ops which are NOT bypassed (so don't check
   //       them!).
   //    - only bypass integer registers.
-
-  val bypassed_rs1_data = Wire(Vec(issueWidth, Bits(registerWidth.W)))
-  val bypassed_rs2_data = Wire(Vec(issueWidth, Bits(registerWidth.W)))
-  val bypassed_pred_data = Wire(Vec(issueWidth, Bool()))
-  bypassed_pred_data := DontCare
+  val bypass_data = io.bypass.map(_.bits.data)
+  val pred_bypass_data = io.pred_bypass.map(_.bits.data)
 
   for (w <- 0 until issueWidth) {
     val numReadPorts = numReadPortsArray(w)
-    var rs1_cases = Array((false.B, 0.U(registerWidth.W)))
-    var rs2_cases = Array((false.B, 0.U(registerWidth.W)))
-    var pred_cases = Array((false.B, 0.U(1.W)))
+    val rs1_bypass_hits  = Wire(Vec(numTotalBypassPorts, Bool()))
+    val rs2_bypass_hits  = Wire(Vec(numTotalBypassPorts, Bool()))
+    val pred_bypass_hits = Wire(Vec(numTotalPredBypassPorts, Bool()))
 
     val prs1       = rrd_uops(w).prs1
     val lrs1_rtype = rrd_uops(w).lrs1_rtype
     val prs2       = rrd_uops(w).prs2
     val lrs2_rtype = rrd_uops(w).lrs2_rtype
+    val prs3       = rrd_uops(w).prs3
     val ppred      = rrd_uops(w).ppred
 
     for (b <- 0 until numTotalBypassPorts)
     {
       val bypass = io.bypass(b)
-      // can't use "io.bypass.valid(b) since it would create a combinational loop on branch kills"
-      rs1_cases ++= Array((bypass.valid && (prs1 === bypass.bits.uop.pdst) && bypass.bits.uop.rf_wen
-        && bypass.bits.uop.dst_rtype === RT_FIX && lrs1_rtype === RT_FIX && (prs1 =/= 0.U), bypass.bits.data))
-      rs2_cases ++= Array((bypass.valid && (prs2 === bypass.bits.uop.pdst) && bypass.bits.uop.rf_wen
-        && bypass.bits.uop.dst_rtype === RT_FIX && lrs2_rtype === RT_FIX && (prs2 =/= 0.U), bypass.bits.data))
+      rs1_bypass_hits(b) := bypass.valid && prs1 === bypass.bits.uop.pdst && bypass.bits.uop.rf_wen && bypass.bits.uop.dst_rtype === RT_FIX
+      rs2_bypass_hits(b) := bypass.valid && prs2 === bypass.bits.uop.pdst && bypass.bits.uop.rf_wen && bypass.bits.uop.dst_rtype === RT_FIX
     }
 
     for (b <- 0 until numTotalPredBypassPorts)
     {
       val bypass = io.pred_bypass(b)
-      pred_cases ++= Array((bypass.valid && (ppred === bypass.bits.uop.pdst) && bypass.bits.uop.is_sfb_br, bypass.bits.data))
+      pred_bypass_hits(b) := bypass.valid && (ppred === bypass.bits.uop.pdst) && bypass.bits.uop.is_sfb_br
     }
+    exe_reg_rs1_data(w)  := rrd_rs1_data(w)
+    exe_reg_rs2_data(w)  := rrd_rs2_data(w)
+    exe_reg_rs3_data(w)  := rrd_rs3_data(w)
+    exe_reg_pred_data(w) := rrd_pred_data(w)
 
-    if (numReadPorts > 0) bypassed_rs1_data(w)  := MuxCase(rrd_rs1_data(w), rs1_cases)
-    if (numReadPorts > 1) bypassed_rs2_data(w)  := MuxCase(rrd_rs2_data(w), rs2_cases)
-    if (enableSFBOpt)     bypassed_pred_data(w) := MuxCase(rrd_pred_data(w), pred_cases)
+    if (numTotalBypassPorts > 0) {
+      when (rs1_bypass_hits.reduce(_||_)) {
+        exe_reg_rs1_data(w)  := Mux1H(rs1_bypass_hits, bypass_data)
+      }
+      when (rs2_bypass_hits.reduce(_||_)) {
+        exe_reg_rs2_data(w)  := Mux1H(rs2_bypass_hits, bypass_data)
+      }
+    }
+    if (numTotalPredBypassPorts > 0) {
+      when (pred_bypass_hits.reduce(_||_)) {
+        exe_reg_pred_data(w) := Mux1H(pred_bypass_hits, pred_bypass_data)
+      }
+    }
+    if (numReadPorts > 0) when (prs1 === 0.U) { exe_reg_rs1_data(w) := 0.U }
+    if (numReadPorts > 1) when (prs2 === 0.U) { exe_reg_rs2_data(w) := 0.U }
+    if (numReadPorts > 2) when (prs3 === 0.U) { exe_reg_rs3_data(w) := 0.U }
   }
 
   //-------------------------------------------------------------
@@ -180,16 +192,6 @@ class RegisterRead(
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  for (w <- 0 until issueWidth) {
-    val numReadPorts = numReadPortsArray(w)
-    if (numReadPorts > 0) exe_reg_rs1_data(w) := bypassed_rs1_data(w)
-    if (numReadPorts > 1) exe_reg_rs2_data(w) := bypassed_rs2_data(w)
-    if (numReadPorts > 2) exe_reg_rs3_data(w) := rrd_rs3_data(w)
-    if (enableSFBOpt)     exe_reg_pred_data(w) := bypassed_pred_data(w)
-    // ASSUMPTION: rs3 is FPU which is NOT bypassed
-  }
-  // TODO add assert to detect bypass conflicts on non-bypassable things
-  // TODO add assert that checks bypassing to verify there isn't something it hits rs3
 
   //-------------------------------------------------------------
   // set outputs to execute pipelines
@@ -198,9 +200,9 @@ class RegisterRead(
 
     io.exe_reqs(w).valid    := exe_reg_valids(w)
     io.exe_reqs(w).bits.uop := exe_reg_uops(w)
-    if (numReadPorts > 0) io.exe_reqs(w).bits.rs1_data := exe_reg_rs1_data(w)
-    if (numReadPorts > 1) io.exe_reqs(w).bits.rs2_data := exe_reg_rs2_data(w)
-    if (numReadPorts > 2) io.exe_reqs(w).bits.rs3_data := exe_reg_rs3_data(w)
-    if (enableSFBOpt)     io.exe_reqs(w).bits.pred_data := exe_reg_pred_data(w)
+    io.exe_reqs(w).bits.rs1_data := exe_reg_rs1_data(w)
+    io.exe_reqs(w).bits.rs2_data := exe_reg_rs2_data(w)
+    io.exe_reqs(w).bits.rs3_data := exe_reg_rs3_data(w)
+    io.exe_reqs(w).bits.pred_data := exe_reg_pred_data(w)
   }
 }

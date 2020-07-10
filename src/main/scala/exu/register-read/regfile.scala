@@ -75,14 +75,12 @@ object WritePort
  * @param numReadPorts number of read ports
  * @param numWritePorts number of write ports
  * @param registerWidth size of registers in bits
- * @param bypassableArray list of write ports from func units to the read port of the regfile
  */
 abstract class RegisterFile(
   numRegisters: Int,
   numReadPorts: Int,
   numWritePorts: Int,
-  registerWidth: Int,
-  bypassableArray: Seq[Boolean]) // which write ports can be bypassed to the read ports?
+  registerWidth: Int)
   (implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BoomBundle {
@@ -96,8 +94,7 @@ abstract class RegisterFile(
     "==" + type_str + " Regfile==",
     "Num RF Read Ports     : " + numReadPorts,
     "Num RF Write Ports    : " + numWritePorts,
-    "RF Cost (R+W)*(R+2W)  : " + rf_cost,
-    "Bypassable Units      : " + bypassableArray)
+    "RF Cost (R+W)*(R+2W)  : " + rf_cost)
 }
 
 /**
@@ -107,16 +104,14 @@ abstract class RegisterFile(
  * @param numReadPorts number of read ports
  * @param numWritePorts number of write ports
  * @param registerWidth size of registers in bits
- * @param bypassableArray list of write ports from func units to the read port of the regfile
  */
 class RegisterFileSynthesizable(
    numRegisters: Int,
    numReadPorts: Int,
    numWritePorts: Int,
-   registerWidth: Int,
-   bypassableArray: Seq[Boolean])
+   registerWidth: Int)
    (implicit p: Parameters)
-   extends RegisterFile(numRegisters, numReadPorts, numWritePorts, registerWidth, bypassableArray)
+   extends RegisterFile(numRegisters, numReadPorts, numWritePorts, registerWidth)
 {
   // --------------------------------------------------------------
 
@@ -134,31 +129,8 @@ class RegisterFileSynthesizable(
     read_data(i) := regfile(read_addrs(i))
   }
 
-  // --------------------------------------------------------------
-  // Bypass out of the ALU's write ports.
-  // We are assuming we cannot bypass a writer to a reader within the regfile memory
-  // for a write that occurs at the end of cycle S1 and a read that returns data on cycle S1.
-  // But since these bypasses are expensive, and not all write ports need to bypass their data,
-  // only perform the w->r bypass on a select number of write ports.
-
-  require (bypassableArray.length == io.write_ports.length)
-
-  if (bypassableArray.reduce(_||_)) {
-    val bypassable_wports = ArrayBuffer[Valid[RegisterFileWritePort]]()
-    io.write_ports zip bypassableArray map { case (wport, b) => if (b) { bypassable_wports += wport} }
-
-    for (i <- 0 until numReadPorts) {
-      val bypass_ens = bypassable_wports.map(x => x.valid &&
-        x.bits.addr === read_addrs(i))
-
-      val bypass_data = Mux1H(VecInit(bypass_ens), VecInit(bypassable_wports.map(_.bits.data)))
-
-      io.read_ports(i).data := Mux(bypass_ens.reduce(_|_), bypass_data, read_data(i))
-    }
-  } else {
-    for (i <- 0 until numReadPorts) {
-      io.read_ports(i).data := read_data(i)
-    }
+  for (i <- 0 until numReadPorts) {
+    io.read_ports(i).data := read_data(i)
   }
 
   // --------------------------------------------------------------

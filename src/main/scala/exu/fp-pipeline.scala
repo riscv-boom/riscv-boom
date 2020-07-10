@@ -54,7 +54,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     val wb_pdsts         = Input(Vec(numWakeupPorts, UInt(width=fpPregSz.W)))
 
     val debug_tsc_reg    = Input(UInt(width=xLen.W))
-    val debug_wb_wdata   = Output(Vec(numWakeupPorts, UInt((fLen+1).W)))
   })
 
   //**********************************
@@ -75,9 +74,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   val fregfile       = Module(new RegisterFileSynthesizable(numFpPhysRegs,
                          numFrfReadPorts,
                          numFrfWritePorts,
-                         fLen+1,
-                         // No bypassing for any FP units
-                         Seq.fill(numFrfWritePorts){ false }
+                         fLen+1
                          ))
   val fregister_read = Module(new RegisterRead(
                          issue_unit.issueWidth,
@@ -235,10 +232,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   for (eu <- exe_units) {
     io.fflags(f_cnt) := eu.io.fflags
     f_cnt += 1
-  }
-
-  for ((wdata, wakeup) <- io.debug_wb_wdata zip io.wakeups) {
-    wdata := ieee(wakeup.bits.data)
   }
 
   exe_units.map(_.io.fcsr_rm := io.fcsr_rm)

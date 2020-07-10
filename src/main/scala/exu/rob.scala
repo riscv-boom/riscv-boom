@@ -74,12 +74,6 @@ class RobIo(
   // Port for unmarking loads/stores as speculation hazards..
   val lsu_clr_unsafe   = Input(Vec(lsuWidth, Valid(UInt(robAddrSz.W))))
 
-
-  // Track side-effects for debug purposes.
-  // Also need to know when loads write back, whereas we don't need loads to unbusy.
-  val debug_wb_valids = Input(Vec(numWakeupPorts, Bool()))
-  val debug_wb_wdata  = Input(Vec(numWakeupPorts, Bits(xLen.W)))
-
   val fflags = Flipped(Vec(numFFlagsPorts, new ValidIO(new FFlagsResp())))
   val lxcpt = Flipped(new ValidIO(new Exception())) // LSU
 
@@ -507,8 +501,8 @@ class Rob(
 
     for (i <- 0 until numWakeupPorts) {
       val rob_idx = io.wb_resps(i).bits.uop.rob_idx
-      when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
-        rob_debug_wdata(GetRowIdx(rob_idx)) := io.debug_wb_wdata(i)
+      when (io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx))) {
+        rob_debug_wdata(GetRowIdx(rob_idx)) := io.wb_resps(i).bits.data
       }
       val temp_uop = rob_uop(GetRowIdx(rob_idx))
 
