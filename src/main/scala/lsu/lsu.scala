@@ -1281,7 +1281,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   //         Delay this a cycle to avoid going ahead of the exception broadcast
   //         The unsafe bit is cleared on the first translation, so no need to fire for load wakeups
   for (w <- 0 until lsuWidth) {
-    io.core.clr_unsafe(w).valid := RegNext((do_st_search(w) || do_ld_search(w)) && !fired_load_wakeup(w)) && false.B
+    io.core.clr_unsafe(w).valid := (
+      RegNext(do_st_search(w)) ||
+      (!io.dmem.nack(w).valid && RegNext(do_ld_search(w) && !fired_load_agen(w) && !io.dmem.s1_kill(w) && RegNext(dmem_req_fire(w))))
+    )
     io.core.clr_unsafe(w).bits  := RegNext(lcam_uop(w).rob_idx)
   }
 
@@ -1316,7 +1319,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // Task 4: Speculatively wakeup loads 1 cycle before they come back
   for (w <- 0 until lsuWidth) {
     io.core.spec_ld_wakeup(w).valid := (enableFastLoadUse.B                             &&
-                                        (fired_load_agen_exec(w) || fired_load_agen(w)) &&
+                                        fired_load_agen_exec(w)                         &&
                                         !mem_incoming_uop(w).fp_val                     &&
                                         mem_incoming_uop(w).pdst =/= 0.U)
     io.core.spec_ld_wakeup(w).bits  := mem_incoming_uop(w).pdst
