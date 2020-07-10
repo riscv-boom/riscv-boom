@@ -52,7 +52,7 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util.Str
 
 import boom.common._
-import boom.exu.{BrUpdateInfo, Exception, FuncUnitResp, CommitSignals, ExeUnitResp}
+import boom.exu.{BrUpdateInfo, Exception, CommitSignals, ExeUnitResp}
 import boom.util._
 
 class BoomDCacheReq(implicit p: Parameters) extends BoomBundle()(p)
@@ -105,7 +105,7 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
 class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 {
 
-  val agen        = Flipped(Vec(lsuWidth, Valid(new FuncUnitResp(xLen))))
+  val agen        = Flipped(Vec(lsuWidth, Valid(new ExeUnitResp(xLen))))
   val dgen        = Flipped(Vec(memWidth + 1, Valid(new ExeUnitResp(xLen))))
 
   val iresp       = Vec(lsuWidth, Valid(new ExeUnitResp(xLen)))
@@ -148,6 +148,9 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val lxcpt       = Output(Valid(new Exception))
 
   val tsc_reg     = Input(UInt())
+
+  val status = Input(new rocket.MStatus)
+  val bp     = Input(Vec(nBreakpoints, new rocket.BP))
 
   val perf        = Output(new Bundle {
     val acquire = Bool()
@@ -476,13 +479,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                stq_enq_retry_e.bits.addr.valid                  &&
                                stq_enq_retry_e.bits.addr_is_virtual)
 
-  val retry_queue = Module(new BranchKillableQueue(new FuncUnitResp(xLen), 8))
+  val retry_queue = Module(new BranchKillableQueue(new ExeUnitResp(xLen), 8))
   retry_queue.io.brupdate := io.core.brupdate
   retry_queue.io.flush    := io.core.exception
 
   retry_queue.io.enq.valid     := can_enq_store_retry || can_enq_load_retry
   retry_queue.io.enq.bits      := DontCare
-  retry_queue.io.enq.bits.addr := Mux(can_enq_store_retry, stq_enq_retry_e.bits.addr.bits, ldq_enq_retry_e.bits.addr.bits)
+  retry_queue.io.enq.bits.data := Mux(can_enq_store_retry, stq_enq_retry_e.bits.addr.bits, ldq_enq_retry_e.bits.addr.bits)
   retry_queue.io.enq.bits.uop  := Mux(can_enq_store_retry, stq_enq_retry_e.bits.uop      , ldq_enq_retry_e.bits.uop)
   retry_queue.io.enq.bits.uop.uses_ldq := can_enq_load_retry && !can_enq_store_retry
   retry_queue.io.enq.bits.uop.ldq_idx  := ldq_enq_retry_idx
@@ -649,10 +652,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val exe_tlb_vaddr = widthMap(w =>
                     Mux(will_fire_load_agen_exec(w) ||
                         will_fire_load_agen     (w) ||
-                        will_fire_store_agen    (w)  , agen(w).bits.addr,
+                        will_fire_store_agen    (w)  , agen(w).bits.data,
                     Mux(will_fire_sfence        (w)  , io.core.sfence.bits.addr,
                     Mux(will_fire_load_retry    (w) ||
-                        will_fire_store_retry   (w)  , retry_queue.io.deq.bits.addr,
+                        will_fire_store_retry   (w)  , retry_queue.io.deq.bits.data,
                     Mux(will_fire_hella_incoming(w)  , hella_req.addr,
                                                        0.U)))))
 
@@ -682,37 +685,54 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val exe_kill   = widthMap(w =>
                    Mux(will_fire_hella_incoming(w)  , io.hellacache.s1_kill,
                                                       false.B))
+  val bkptu = Seq.fill(lsuWidth) { Module(new rocket.BreakpointUnit(nBreakpoints)) }
   for (w <- 0 until lsuWidth) {
     dtlb.io.req(w).valid            := exe_tlb_valid(w)
     dtlb.io.req(w).bits.vaddr       := exe_tlb_vaddr(w)
     dtlb.io.req(w).bits.size        := exe_size(w)
     dtlb.io.req(w).bits.cmd         := exe_cmd(w)
     dtlb.io.req(w).bits.passthrough := exe_passthr(w)
+
+
+    bkptu(w).io.status := io.core.status
+    bkptu(w).io.bp     := io.core.bp
+    bkptu(w).io.pc     := DontCare
+    bkptu(w).io.ea     := exe_tlb_vaddr(w)
+
   }
   dtlb.io.kill                      := exe_kill.reduce(_||_)
   dtlb.io.sfence                    := exe_sfence
 
   // exceptions
-  val ma_ld = widthMap(w => (will_fire_load_agen(w) || will_fire_load_agen_exec(w)) && agen(w).bits.mxcpt.valid) // We get ma_ld in memaddrcalc
-  val ma_st = widthMap(w => will_fire_store_agen(w) && agen(w).bits.mxcpt.valid) // We get ma_ld in memaddrcalc
-  val pf_ld = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).pf.ld && exe_tlb_uop(w).uses_ldq)
-  val pf_st = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).pf.st && exe_tlb_uop(w).uses_stq)
-  val ae_ld = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).ae.ld && exe_tlb_uop(w).uses_ldq)
-  val ae_st = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).ae.st && exe_tlb_uop(w).uses_stq)
+  val ma_ld  = widthMap(w => dtlb.io.resp(w).ma.ld && exe_tlb_uop(w).uses_ldq)
+  val ma_st  = widthMap(w => dtlb.io.resp(w).ma.st && exe_tlb_uop(w).uses_stq && !exe_tlb_uop(w).is_fence)
+  val pf_ld  = widthMap(w => dtlb.io.resp(w).pf.ld && exe_tlb_uop(w).uses_ldq)
+  val pf_st  = widthMap(w => dtlb.io.resp(w).pf.st && exe_tlb_uop(w).uses_stq)
+  val ae_ld  = widthMap(w => dtlb.io.resp(w).ae.ld && exe_tlb_uop(w).uses_ldq)
+  val ae_st  = widthMap(w => dtlb.io.resp(w).ae.st && exe_tlb_uop(w).uses_stq)
+  val dbg_bp = widthMap(w => bkptu(w).io.debug_st && ((exe_tlb_uop(w).uses_ldq && bkptu(w).io.debug_ld) ||
+                                                      (exe_tlb_uop(w).uses_stq && bkptu(w).io.debug_st && !exe_tlb_uop(w).is_fence)))
+  val bp     = widthMap(w => bkptu(w).io.debug_st && ((exe_tlb_uop(w).uses_ldq && bkptu(w).io.xcpt_ld) ||
+                                                      (exe_tlb_uop(w).uses_stq && bkptu(w).io.xcpt_st && !exe_tlb_uop(w).is_fence)))
+
 
   // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
   val mem_xcpt_valids = RegNext(widthMap(w =>
-                     (pf_ld(w) || pf_st(w) || ae_ld(w) || ae_st(w) || ma_ld(w) || ma_st(w)) &&
+                     exe_tlb_valid(w) &&
+                     (pf_ld(w) || pf_st(w) || ae_ld(w) || ae_st(w) || ma_ld(w) || ma_st(w) || dbg_bp(w) || bp(w)) &&
                      !io.core.exception &&
                      !IsKilledByBranch(io.core.brupdate, exe_tlb_uop(w))))
   val mem_xcpt_uops   = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, exe_tlb_uop(w))))
   val mem_xcpt_causes = RegNext(widthMap(w =>
-    Mux(ma_ld(w), rocket.Causes.misaligned_load.U,
-    Mux(ma_st(w), rocket.Causes.misaligned_store.U,
-    Mux(pf_ld(w), rocket.Causes.load_page_fault.U,
-    Mux(pf_st(w), rocket.Causes.store_page_fault.U,
-    Mux(ae_ld(w), rocket.Causes.load_access.U,
-                  rocket.Causes.store_access.U)))))))
+    Mux(dbg_bp(w), rocket.CSR.debugTriggerCause.U,
+    Mux(bp    (w), rocket.Causes.breakpoint.U,
+    Mux(ma_st (w), rocket.Causes.misaligned_store.U,
+    Mux(ma_ld (w), rocket.Causes.misaligned_load.U,
+    Mux(pf_st (w), rocket.Causes.store_page_fault.U,
+    Mux(pf_ld (w), rocket.Causes.load_page_fault.U,
+    Mux(ae_st (w), rocket.Causes.store_access.U,
+    Mux(ae_ld (w), rocket.Causes.load_access.U, 0.U))))))))))
+
   val mem_xcpt_vaddrs = RegNext(exe_tlb_vaddr)
 
   for (w <- 0 until lsuWidth) {

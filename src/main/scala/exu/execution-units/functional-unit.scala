@@ -76,21 +76,6 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 
   val kill = Bool() // kill everything
 }
-
-/**
- * Bundle for the signals sent out of the function unit
- *
- * @param dataWidth data sent from the functional unit
- */
-class FuncUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
-  with HasBoomUOP
-{
-  val predicated = Bool() // Was this response from a predicated-off instruction
-  val data = UInt(dataWidth.W)
-  val addr = UInt((vaddrBits+1).W) // only for maddr -> LSU
-  val mxcpt = new ValidIO(UInt((freechips.rocketchip.rocket.Causes.all.max+2).W)) //only for maddr->LSU
-}
-
 /**
  * Branch resolution information given from the branch unit
  */
@@ -138,13 +123,12 @@ abstract class FunctionalUnit(
   val dataWidth: Int,
   val isJmpUnit: Boolean = false,
   val isAluUnit: Boolean = false,
-  val isMemAddrCalcUnit: Boolean = false,
   val needsFcsr: Boolean = false)
   (implicit p: Parameters) extends BoomModule
 {
   val io = IO(new Bundle {
     val req    = Flipped(new DecoupledIO(new FuncUnitReq(dataWidth)))
-    val resp   = (new DecoupledIO(new FuncUnitResp(dataWidth)))
+    val resp   = (new DecoupledIO(new ExeUnitResp(dataWidth)))
     val fflags = new ValidIO(new FFlagsResp)
 
     val brupdate = Input(new BrUpdateInfo())
@@ -157,11 +141,6 @@ abstract class FunctionalUnit(
     // only used by branch unit
     val brinfo     = if (isAluUnit) Output(new BrResolutionInfo()) else null
     val get_ftq_pc = if (isJmpUnit) Flipped(new GetPCFromFtqIO()) else null
-    val status     = if (isMemAddrCalcUnit) Input(new freechips.rocketchip.rocket.MStatus()) else null
-
-    // only used by memaddr calc unit
-    val bp = if (isMemAddrCalcUnit) Input(Vec(nBreakpoints, new BP)) else null
-
   })
 }
 
@@ -184,14 +163,12 @@ abstract class PipelinedFunctionalUnit(
   dataWidth: Int,
   isJmpUnit: Boolean = false,
   isAluUnit: Boolean = false,
-  isMemAddrCalcUnit: Boolean = false,
   needsFcsr: Boolean = false
   )(implicit p: Parameters) extends FunctionalUnit(
     numBypassStages = numBypassStages,
     dataWidth = dataWidth,
     isJmpUnit = isJmpUnit,
     isAluUnit = isAluUnit,
-    isMemAddrCalcUnit = isMemAddrCalcUnit,
     needsFcsr = needsFcsr)
 {
   // Pipelined functional unit is always ready.
@@ -447,66 +424,6 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
   io.fflags.valid := false.B
 }
 
-/**
- * Functional unit that passes in base+imm to calculate addresses, and passes store data
- * to the LSU.
- * For floating point, 65bit FP store-data needs to be decoded into 64bit FP form
- */
-class MemAddrCalcUnit(implicit p: Parameters)
-  extends FunctionalUnit(
-    numBypassStages = 0,
-    dataWidth = 65, // TODO enable this only if FP is enabled?
-    isMemAddrCalcUnit = true)
-  with freechips.rocketchip.rocket.constants.MemoryOpConstants
-  with freechips.rocketchip.rocket.constants.ScalarOpConstants
-{
-  // perform address calculation
-  val sum = (io.req.bits.rs1_data.asSInt + io.req.bits.uop.imm_packed(19,8).asSInt).asUInt
-  val ea_sign = Mux(sum(vaddrBits-1), ~sum(63,vaddrBits) === 0.U,
-                                       sum(63,vaddrBits) =/= 0.U)
-  val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).asUInt
-
-  val store_data = io.req.bits.rs2_data
-
-  io.resp.valid     := io.req.valid // Do the branch kill in LSU
-  io.resp.bits.uop  := io.req.bits.uop
-  io.resp.bits.addr := effective_address
-  io.resp.bits.data := store_data
-
-  // Handle misaligned exceptions
-  val size = io.req.bits.uop.mem_size
-  val misaligned =
-    (size === 1.U && (effective_address(0) =/= 0.U)) ||
-    (size === 2.U && (effective_address(1,0) =/= 0.U)) ||
-    (size === 3.U && (effective_address(2,0) =/= 0.U))
-
-  val bkptu = Module(new BreakpointUnit(nBreakpoints))
-  bkptu.io.status := io.status
-  bkptu.io.bp     := io.bp
-  bkptu.io.pc     := DontCare
-  bkptu.io.ea     := effective_address
-
-  val is_fence = io.req.bits.uop.is_fence
-  val ma_ld  = io.req.valid && io.req.bits.uop.uses_ldq && misaligned
-  val ma_st  = io.req.valid && io.req.bits.uop.uses_stq && misaligned && !is_fence
-  val dbg_bp = io.req.valid && ((io.req.bits.uop.uses_ldq && bkptu.io.debug_ld) ||
-                                (io.req.bits.uop.uses_stq && bkptu.io.debug_st && !is_fence))
-  val bp     = io.req.valid && ((io.req.bits.uop.uses_ldq && bkptu.io.xcpt_ld) ||
-                                (io.req.bits.uop.uses_stq && bkptu.io.xcpt_st && !is_fence))
-
-  def checkExceptions(x: Seq[(Bool, UInt)]) =
-    (x.map(_._1).reduce(_||_), PriorityMux(x))
-  val (xcpt_val, xcpt_cause) = checkExceptions(List(
-    (ma_ld,  (Causes.misaligned_load).U),
-    (ma_st,  (Causes.misaligned_store).U),
-    (dbg_bp, (CSR.debugTriggerCause).U),
-    (bp,     (Causes.breakpoint).U)))
-
-  io.resp.bits.mxcpt.valid := xcpt_val
-  io.resp.bits.mxcpt.bits  := xcpt_cause
-  assert (!(ma_ld && ma_st), "Mutually-exclusive exceptions are firing.")
-
-}
 
 
 /**

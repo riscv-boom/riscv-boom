@@ -1216,15 +1216,12 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // branch resolution
   rob.io.brupdate <> brupdate
 
+  io.lsu.status := csr.io.status
+  io.lsu.bp     := csr.io.bp
   mem_exe_units.map(u => u.io.status := csr.io.status)
   int_exe_units.map(u => u.io.status := csr.io.status)
   fp_pipeline.io.status := csr.io.status
 
-  // Connect breakpoint info to memaddrcalcunit
-  for (eu <- mem_exe_units) {
-    if (eu.hasAGen)
-      eu.io.bp     := csr.io.bp
-  }
 
   // LSU <> ROB
   rob.io.lsu_clr_bsy    := io.lsu.clr_bsy

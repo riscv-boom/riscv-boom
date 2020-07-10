@@ -109,9 +109,8 @@ abstract class ExecutionUnit(
     val fcsr_rm = if (hasFCSR) Input(Bits(tile.FPConstants.RM_SZ.W)) else null
 
     // only used by the mem unit
-    val agen = if (hasAGen) Output(Valid(new FuncUnitResp(xLen))) else null
+    val agen = if (hasAGen) Output(Valid(new ExeUnitResp(xLen))) else null
     val dgen = if (hasDGen || hasFpiu) Output(Valid(new ExeUnitResp(xLen))) else null
-    val bp   = if (hasAGen) Input(Vec(nBreakpoints, new BP)) else null
 
     // TODO move this out of ExecutionUnit
     val com_exception = if (hasRocc) Input(Bool()) else null
@@ -168,15 +167,14 @@ class MemExeUnit(
 
   assert (!(io.req.valid && io.req.bits.uop.fu_code_is(FU_STORE)))
   if (hasAGen) {
-    val maddrcalc = Module(new MemAddrCalcUnit)
-    maddrcalc.io.req        <> io.req
-    maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_AGEN)
-    maddrcalc.io.brupdate   <> io.brupdate
-    maddrcalc.io.status     := io.status
-    maddrcalc.io.bp         := io.bp
-    maddrcalc.io.resp.ready := DontCare
+    val sum = (io.req.bits.rs1_data.asSInt + io.req.bits.uop.imm_packed(19,8).asSInt).asUInt
+    val ea_sign = Mux(sum(vaddrBits-1), ~sum(63,vaddrBits) === 0.U,
+                                         sum(63,vaddrBits) =/= 0.U)
+    val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).asUInt
 
-    io.agen := maddrcalc.io.resp
+    io.agen.valid     := io.req.valid && io.req.bits.uop.fu_code_is(FU_AGEN)
+    io.agen.bits.uop  := io.req.bits.uop
+    io.agen.bits.data := Sext(effective_address, xLen)
   } else {
     assert(!(io.req.valid && io.req.bits.uop.fu_code_is(FU_AGEN)))
   }

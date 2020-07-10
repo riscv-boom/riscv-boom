@@ -48,8 +48,8 @@ class RoCCShimIO(implicit p: Parameters) extends BoomBundle
   val core             = new RoCCShimCoreIO
 
   val req              = Flipped(new DecoupledIO(new FuncUnitReq(xLen)))
-  val resp             = new DecoupledIO(new FuncUnitResp(xLen))
-  val brupdate           = Input(new BrUpdateInfo())
+  val resp             = new DecoupledIO(new ExeUnitResp(xLen))
+  val brupdate         = Input(new BrUpdateInfo())
   val status           = Input(new MStatus)
   val exception        = Input(Bool())
 }
