@@ -134,8 +134,6 @@ class BrUpdateMasks(implicit p: Parameters) extends BoomBundle
  * @param hasBranchUnit does this functional unit have a branch unit?
  */
 abstract class FunctionalUnit(
-  val isPipelined: Boolean,
-  val numStages: Int,
   val numBypassStages: Int,
   val dataWidth: Int,
   val isJmpUnit: Boolean = false,
@@ -189,8 +187,6 @@ abstract class PipelinedFunctionalUnit(
   isMemAddrCalcUnit: Boolean = false,
   needsFcsr: Boolean = false
   )(implicit p: Parameters) extends FunctionalUnit(
-    isPipelined = true,
-    numStages = numStages,
     numBypassStages = numBypassStages,
     dataWidth = dataWidth,
     isJmpUnit = isJmpUnit,
@@ -257,7 +253,7 @@ abstract class PipelinedFunctionalUnit(
  * @param dataWidth width of the data being operated on in the functional unit
  */
 @chiselName
-class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(implicit p: Parameters)
+class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(implicit p: Parameters)
   extends PipelinedFunctionalUnit(
     numStages = numStages,
     numBypassStages = numStages,
@@ -413,32 +409,38 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
 //   val reg_data = Reg(outType = Bits(width = xLen))
 //   reg_data := alu.io.out
 //   io.resp.bits.data := reg_data
-
-  val r_val  = RegInit(VecInit(Seq.fill(numStages) { false.B }))
-  val r_data = Reg(Vec(numStages, UInt(xLen.W)))
-  val r_pred = Reg(Vec(numStages, Bool()))
   val alu_out = Mux(io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data,
-    Mux(io.req.bits.uop.ldst_is_rs1, io.req.bits.rs1_data, io.req.bits.rs2_data),
-    Mux(io.req.bits.uop.is_mov, io.req.bits.rs2_data, alu.io.out))
-  r_val (0) := io.req.valid
-  r_data(0) := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
-  r_pred(0) := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data
-  for (i <- 1 until numStages) {
-    r_val(i)  := r_val(i-1)
-    r_data(i) := r_data(i-1)
-    r_pred(i) := r_pred(i-1)
-  }
-  io.resp.bits.data := r_data(numStages-1)
-  io.resp.bits.predicated := r_pred(numStages-1)
-  // Bypass
-  // for the ALU, we can bypass same cycle as compute
-  require (numStages >= 1)
-  require (numBypassStages >= 1)
-  io.bypass(0).valid := io.req.valid
-  io.bypass(0).bits.data := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
-  for (i <- 1 until numStages) {
-    io.bypass(i).valid := r_val(i-1)
-    io.bypass(i).bits.data := r_data(i-1)
+      Mux(io.req.bits.uop.ldst_is_rs1, io.req.bits.rs1_data, io.req.bits.rs2_data),
+      Mux(io.req.bits.uop.is_mov, io.req.bits.rs2_data, alu.io.out))
+  if (numStages == 0) {
+    require (numBypassStages == 0)
+    io.resp.bits.data := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
+    io.resp.bits.predicated := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data
+  } else {
+
+    val r_val  = RegInit(VecInit(Seq.fill(numStages) { false.B }))
+    val r_data = Reg(Vec(numStages, UInt(xLen.W)))
+    val r_pred = Reg(Vec(numStages, Bool()))
+
+    r_val (0) := io.req.valid
+    r_data(0) := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
+    r_pred(0) := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data
+    for (i <- 1 until numStages) {
+      r_val(i)  := r_val(i-1)
+      r_data(i) := r_data(i-1)
+      r_pred(i) := r_pred(i-1)
+    }
+    io.resp.bits.data := r_data(numStages-1)
+    io.resp.bits.predicated := r_pred(numStages-1)
+    // Bypass
+    // for the ALU, we can bypass same cycle as compute
+    require(numStages == numBypassStages)
+    io.bypass(0).valid := io.req.valid
+    io.bypass(0).bits.data := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
+    for (i <- 1 until numStages) {
+      io.bypass(i).valid := r_val(i-1)
+      io.bypass(i).bits.data := r_data(i-1)
+    }
   }
 
   // Exceptions
@@ -451,10 +453,8 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
  * For floating point, 65bit FP store-data needs to be decoded into 64bit FP form
  */
 class MemAddrCalcUnit(implicit p: Parameters)
-  extends PipelinedFunctionalUnit(
-    numStages = 0,
+  extends FunctionalUnit(
     numBypassStages = 0,
-    earliestBypassStage = 0,
     dataWidth = 65, // TODO enable this only if FP is enabled?
     isMemAddrCalcUnit = true)
   with freechips.rocketchip.rocket.constants.MemoryOpConstants
@@ -596,8 +596,6 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
  */
 abstract class IterativeFunctionalUnit(dataWidth: Int)(implicit p: Parameters)
   extends FunctionalUnit(
-    isPipelined = false,
-    numStages = 1,
     numBypassStages = 0,
     dataWidth = dataWidth)
 {

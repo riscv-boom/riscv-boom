@@ -194,7 +194,6 @@ class MemExeUnit(
 class ALUExeUnit(
   hasJmp         : Boolean = false,
   hasCSR         : Boolean = false,
-  hasAlu         : Boolean = true,
   hasMul         : Boolean = false,
   hasDiv         : Boolean = false,
   hasIfpu        : Boolean = false,
@@ -203,24 +202,21 @@ class ALUExeUnit(
   extends ExecutionUnit(
     writesLlIrf      = hasRocc,
     writesLlFrf      = hasIfpu && p(tile.TileKey).core.fpu != None,
-    numBypassStages  =
-      if (hasAlu && hasMul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
-      else if (hasAlu) 1 else 0,
+    numBypassStages  = if (hasMul) (p(tile.TileKey).core match { case b: BoomCoreParams => b.imulLatency }) else 0,
     dataWidth        = p(tile.XLen) + 1,
-    alwaysBypassable = hasAlu && !(hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
+    alwaysBypassable = !(hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     hasCSR           = hasCSR,
-    hasJmp           = hasJmp    ,
-    hasAlu           = hasAlu,
+    hasJmp           = hasJmp,
+    hasAlu           = true,
     hasMul           = hasMul,
     hasDiv           = hasDiv,
     hasIfpu          = hasIfpu,
     hasRocc          = hasRocc)
   with freechips.rocketchip.rocket.constants.MemoryOpConstants
 {
-
   val out_str =
     BoomCoreStringPrefix("==ExeUnit==") +
-    (if (hasAlu)  BoomCoreStringPrefix(" - ALU") else "") +
+    (             BoomCoreStringPrefix(" - ALU")) +
     (if (hasMul)  BoomCoreStringPrefix(" - Mul") else "") +
     (if (hasDiv)  BoomCoreStringPrefix(" - Div") else "") +
     (if (hasIfpu) BoomCoreStringPrefix(" - IFPU") else "") +
@@ -244,37 +240,34 @@ class ALUExeUnit(
 
 
   // ALU Unit -------------------------------
-  var alu: ALUUnit = null
-  if (hasAlu) {
-    alu = Module(new ALUUnit(isJmpUnit = hasJmp,
-                             numStages = numBypassStages,
-                             dataWidth = xLen))
-    alu.io.req.valid := (
-      io.req.valid &&
-      (io.req.bits.uop.fu_code === FU_ALU ||
-       io.req.bits.uop.fu_code === FU_JMP ||
-      (io.req.bits.uop.fu_code === FU_CSR && !io.req.bits.uop.is_rocc)))
-    //ROCC Rocc Commands are taken by the RoCC unit
+  var alu = Module(new ALUUnit(isJmpUnit = hasJmp,
+                               numStages = numBypassStages,
+                               dataWidth = xLen))
+  alu.io.req.valid := (
+    io.req.valid &&
+    (io.req.bits.uop.fu_code === FU_ALU ||
+     io.req.bits.uop.fu_code === FU_JMP ||
+    (io.req.bits.uop.fu_code === FU_CSR && !io.req.bits.uop.is_rocc)))
+  //ROCC Rocc Commands are taken by the RoCC unit
 
-    alu.io.req.bits.uop      := io.req.bits.uop
-    alu.io.req.bits.kill     := io.req.bits.kill
-    alu.io.req.bits.rs1_data := io.req.bits.rs1_data
-    alu.io.req.bits.rs2_data := io.req.bits.rs2_data
-    alu.io.req.bits.rs3_data := DontCare
-    alu.io.req.bits.pred_data := io.req.bits.pred_data
-    alu.io.resp.ready := DontCare
-    alu.io.brupdate := io.brupdate
+  alu.io.req.bits.uop      := io.req.bits.uop
+  alu.io.req.bits.kill     := io.req.bits.kill
+  alu.io.req.bits.rs1_data := io.req.bits.rs1_data
+  alu.io.req.bits.rs2_data := io.req.bits.rs2_data
+  alu.io.req.bits.rs3_data := DontCare
+  alu.io.req.bits.pred_data := io.req.bits.pred_data
+  alu.io.resp.ready := DontCare
+  alu.io.brupdate := io.brupdate
 
-    iresp_fu_units += alu
+  iresp_fu_units += alu
 
-    // Bypassing only applies to ALU
-    io.bypass := alu.io.bypass
+  // Bypassing only applies to ALU
+  io.bypass := alu.io.bypass
 
-    // branch unit is embedded inside the ALU
-    io.brinfo := alu.io.brinfo
-    if (hasJmp) {
-      alu.io.get_ftq_pc <> io.get_ftq_pc
-    }
+  // branch unit is embedded inside the ALU
+  io.brinfo := alu.io.brinfo
+  if (hasJmp) {
+    alu.io.get_ftq_pc <> io.get_ftq_pc
   }
 
   var rocc: RoCCShim = null

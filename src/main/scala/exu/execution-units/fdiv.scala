@@ -79,8 +79,6 @@ class UOPCodeFDivDecoder extends Module
  */
 class FDivSqrtUnit(implicit p: Parameters)
   extends FunctionalUnit(
-    isPipelined = false,
-    numStages = 1,
     numBypassStages = 0,
     dataWidth = 65,
     needsFcsr = true)

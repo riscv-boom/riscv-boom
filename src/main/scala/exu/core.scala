@@ -1176,17 +1176,26 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     val wb_uop = resp.bits.uop
     val data   = resp.bits.data
 
-    rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo)
-    rob.io.wb_resps(cnt).bits  <> resp.bits
-    if (eu.hasFCSR) {
-      rob.io.fflags(f_cnt) <> eu.io.fflags
-      f_cnt += 1
-    }
+    // For ALUs, delay the rob wakeup a cycle, since the branch broadcast happens later
+    rob.io.wb_resps(cnt).valid := RegNext(resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo))
+    rob.io.wb_resps(cnt).bits  := RegNext(resp.bits)
+
+    // For ALUs with CSR, the reponse should already be delayed at least a cycle, so no need to
+    // delay further here. Infact, delaying here would break compatibility with redirection from the
+    // CSR file, which makes assumptions on which cycle the CSR is accessed
     if (eu.hasCSR) {
+      require(eu.numBypassStages > 0)
+      rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo)
+      rob.io.wb_resps(cnt).bits  := resp.bits
       val wbReadsCSR = (eu.io.csr_resp.valid && eu.io.csr_resp.bits.uop.csr_cmd =/= CSR.N)
       rob.io.wb_resps(cnt).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, data)
     }
     cnt += 1
+
+    if (eu.hasFCSR) {
+      rob.io.fflags(f_cnt) := eu.io.fflags
+      f_cnt += 1
+    }
   }
 
 
