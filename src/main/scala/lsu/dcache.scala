@@ -683,17 +683,13 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   }
 
   when (s2_valid(0)) {
-    when (s2_req(0).addr === debug_sc_fail_addr) {
-      when (s2_sc_fail) {
-        debug_sc_fail_cnt := debug_sc_fail_cnt + 1.U
-      } .elsewhen (s2_sc) {
-        debug_sc_fail_cnt := 0.U
-      }
-    } .otherwise {
-      when (s2_sc_fail) {
-        debug_sc_fail_addr := s2_req(0).addr
-        debug_sc_fail_cnt  := 1.U
-      }
+    when (s2_req(0).addr === debug_sc_fail_addr && s2_sc_fail) {
+      debug_sc_fail_cnt := debug_sc_fail_cnt + 1.U
+    } .elsewhen (s2_req(0).addr =/= debug_sc_fail_addr && s2_sc_fail) {
+      debug_sc_fail_addr := s2_req(0).addr
+      debug_sc_fail_cnt  := 1.U
+    } .elsewhen (s2_sc && !s2_sc_fail) {
+      debug_sc_fail_cnt := 0.U
     }
   }
   assert(debug_sc_fail_cnt < 100.U, "L1DCache failed too many SCs in a row")
