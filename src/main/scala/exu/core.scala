@@ -191,7 +191,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // Dealing with branch resolutions
 
   // The individual branch resolutions from each ALU
-  val brinfos = Reg(Vec(coreWidth, new BrResolutionInfo()))
+  val brinfos = Reg(Vec(coreWidth, Valid(new BrResolutionInfo)))
 
   // "Merged" branch update info from all ALUs
   // brmask contains masks for rapidly clearing mispredicted instructions
@@ -205,27 +205,27 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   brupdate.b2 := b2
 
   for ((b, a) <- brinfos zip int_exe_units) {
-    b := a.io.brinfo
-    b.valid := a.io.brinfo.valid && !rob.io.flush.valid
+    b.bits := UpdateBrMask(brupdate, a.io.brinfo.bits)
+    b.valid := a.io.brinfo.valid && !rob.io.flush.valid && !IsKilledByBranch(brupdate, a.io.brinfo.bits)
   }
-  b1.resolve_mask := brinfos.map(x => x.valid << x.uop.br_tag).reduce(_|_)
-  b1.mispredict_mask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.br_tag).reduce(_|_)
+  b1.resolve_mask := brinfos.map(x => x.valid << x.bits.uop.br_tag).reduce(_|_)
+  b1.mispredict_mask := brinfos.map(x => (x.valid && x.bits.mispredict) << x.bits.uop.br_tag).reduce(_|_)
 
   // Find the oldest mispredict and use it to update indices
-  val live_brinfos      = brinfos.map(br => br.valid && br.mispredict && !IsKilledByBranch(brupdate, br.uop))
+  val live_brinfos      = brinfos.map(br => br.valid && br.bits.mispredict && !IsKilledByBranch(brupdate, br.bits.uop))
   // TODO Mux1H is better here, but prevents lots of useful const-prop-elim
   val oldest_mispredict = PriorityMux(live_brinfos, brinfos)//Mux1H(live_brinfos, brinfos)
   val mispredict_val    = live_brinfos.reduce(_||_)
 
   b2.mispredict  := mispredict_val
-  b2.cfi_type    := oldest_mispredict.cfi_type
-  b2.taken       := oldest_mispredict.taken
-  b2.pc_sel      := oldest_mispredict.pc_sel
-  b2.uop         := UpdateBrMask(brupdate, oldest_mispredict.uop)
-  b2.jalr_target := RegNext(jmp_unit.io.brinfo.jalr_target)
-  b2.target_offset := oldest_mispredict.target_offset
+  b2.cfi_type    := oldest_mispredict.bits.cfi_type
+  b2.taken       := oldest_mispredict.bits.taken
+  b2.pc_sel      := oldest_mispredict.bits.pc_sel
+  b2.uop         := UpdateBrMask(brupdate, oldest_mispredict.bits.uop)
+  b2.jalr_target := RegNext(jmp_unit.io.brinfo.bits.jalr_target)
+  b2.target_offset := oldest_mispredict.bits.target_offset
 
-  val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftq_idx
+  val oldest_mispredict_ftq_idx = oldest_mispredict.bits.uop.ftq_idx
 
 
   assert (!((brupdate.b1.mispredict_mask =/= 0.U || brupdate.b2.mispredict)
@@ -1177,7 +1177,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     val data   = resp.bits.data
 
     // For ALUs, delay the rob wakeup a cycle, since the branch broadcast happens later
-    rob.io.wb_resps(cnt).valid := RegNext(resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo))
+    rob.io.wb_resps(cnt).valid := RegNext(resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo) && !IsKilledByBranch(brupdate, resp))
     rob.io.wb_resps(cnt).bits  := RegNext(resp.bits)
 
     // For ALUs with CSR, the reponse should already be delayed at least a cycle, so no need to
@@ -1239,7 +1239,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   fp_pipeline.io.flush_pipeline := RegNext(rob.io.flush.valid)
 
   for (eu <- mem_exe_units ++ int_exe_units)
-    eu.io.req.bits.kill := RegNext(rob.io.flush.valid)
+    eu.io.kill := RegNext(rob.io.flush.valid)
 
 
   assert (!(rob.io.com_xcpt.valid && !rob.io.flush.valid),
@@ -1359,7 +1359,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     rocc_unit.io.rocc.dis_uops     := dis_uops
     rocc_unit.io.rocc.rob_head_idx := rob.io.rob_head_idx
     rocc_unit.io.rocc.rob_pnr_idx  := rob.io.rob_pnr_idx
-    rocc_unit.io.com_exception     := rob.io.flush.valid
     rocc_unit.io.status            := csr.io.status
 
     for (w <- 0 until coreWidth) {

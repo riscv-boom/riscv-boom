@@ -73,16 +73,12 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   val rs2_data = UInt(dataWidth.W)
   val rs3_data = UInt(dataWidth.W) // only used for FMA units
   val pred_data = Bool()
-
-  val kill = Bool() // kill everything
 }
 /**
  * Branch resolution information given from the branch unit
  */
-class BrResolutionInfo(implicit p: Parameters) extends BoomBundle
+class BrResolutionInfo(implicit p: Parameters) extends BoomBundle with HasBoomUOP
 {
-  val uop        = new MicroOp
-  val valid      = Bool()
   val mispredict = Bool()
   val taken      = Bool()                     // which direction did the branch go?
   val cfi_type   = UInt(CFI_SZ.W)
@@ -127,6 +123,8 @@ abstract class FunctionalUnit(
   (implicit p: Parameters) extends BoomModule
 {
   val io = IO(new Bundle {
+    val kill   = Input(Bool())
+
     val req    = Flipped(new DecoupledIO(new FuncUnitReq(dataWidth)))
     val resp   = (new DecoupledIO(new ExeUnitResp(dataWidth)))
     val fflags = new ValidIO(new FFlagsResp)
@@ -139,87 +137,9 @@ abstract class FunctionalUnit(
     val fcsr_rm = if (needsFcsr) Input(UInt(tile.FPConstants.RM_SZ.W)) else null
 
     // only used by branch unit
-    val brinfo     = if (isAluUnit) Output(new BrResolutionInfo()) else null
+    val brinfo     = if (isAluUnit) Output(Valid(new BrResolutionInfo)) else null
     val get_ftq_pc = if (isJmpUnit) Flipped(new GetPCFromFtqIO()) else null
   })
-}
-
-/**
- * Abstract top level pipelined functional unit
- *
- * Note: this helps track which uops get killed while in intermediate stages,
- * but it is the job of the consumer to check for kills on the same cycle as consumption!!!
- *
- * @param numStages how many pipeline stages does the functional unit have
- * @param numBypassStages how many bypass stages does the function unit have
- * @param earliestBypassStage first stage that you can start bypassing from
- * @param dataWidth width of the data being operated on in the functional unit
- * @param hasBranchUnit does this functional unit have a branch unit?
- */
-abstract class PipelinedFunctionalUnit(
-  numStages: Int,
-  numBypassStages: Int,
-  earliestBypassStage: Int,
-  dataWidth: Int,
-  isJmpUnit: Boolean = false,
-  isAluUnit: Boolean = false,
-  needsFcsr: Boolean = false
-  )(implicit p: Parameters) extends FunctionalUnit(
-    numBypassStages = numBypassStages,
-    dataWidth = dataWidth,
-    isJmpUnit = isJmpUnit,
-    isAluUnit = isAluUnit,
-    needsFcsr = needsFcsr)
-{
-  // Pipelined functional unit is always ready.
-  io.req.ready := true.B
-
-  if (numStages > 0) {
-    val r_valids = RegInit(VecInit(Seq.fill(numStages) { false.B }))
-    val r_uops   = Reg(Vec(numStages, new MicroOp()))
-
-    // handle incoming request
-    r_valids(0) := io.req.valid && !IsKilledByBranch(io.brupdate, io.req.bits.uop) && !io.req.bits.kill
-    r_uops(0)   := io.req.bits.uop
-    r_uops(0).br_mask := GetNewBrMask(io.brupdate, io.req.bits.uop)
-
-    // handle middle of the pipeline
-    for (i <- 1 until numStages) {
-      r_valids(i) := r_valids(i-1) && !IsKilledByBranch(io.brupdate, r_uops(i-1)) && !io.req.bits.kill
-      r_uops(i)   := r_uops(i-1)
-      r_uops(i).br_mask := GetNewBrMask(io.brupdate, r_uops(i-1))
-
-      if (numBypassStages > 0) {
-        io.bypass(i-1).bits.uop := r_uops(i-1)
-      }
-    }
-
-    // handle outgoing (branch could still kill it)
-    // consumer must also check for pipeline flushes (kills)
-    io.resp.valid    := r_valids(numStages-1) && !IsKilledByBranch(io.brupdate, r_uops(numStages-1))
-    io.resp.bits.predicated := false.B
-    io.resp.bits.uop := r_uops(numStages-1)
-    io.resp.bits.uop.br_mask := GetNewBrMask(io.brupdate, r_uops(numStages-1))
-
-    // bypassing (TODO allow bypass vector to have a different size from numStages)
-    if (numBypassStages > 0 && earliestBypassStage == 0) {
-      io.bypass(0).bits.uop := io.req.bits.uop
-
-      for (i <- 1 until numBypassStages) {
-        io.bypass(i).bits.uop := r_uops(i-1)
-      }
-    }
-  } else {
-    require (numStages == 0)
-    // pass req straight through to response
-
-    // valid doesn't check kill signals, let consumer deal with it.
-    // The LSU already handles it and this hurts critical path.
-    io.resp.valid    := io.req.valid && !IsKilledByBranch(io.brupdate, io.req.bits.uop)
-    io.resp.bits.predicated := false.B
-    io.resp.bits.uop := io.req.bits.uop
-    io.resp.bits.uop.br_mask := GetNewBrMask(io.brupdate, io.req.bits.uop)
-  }
 }
 
 /**
@@ -231,11 +151,9 @@ abstract class PipelinedFunctionalUnit(
  */
 @chiselName
 class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(implicit p: Parameters)
-  extends PipelinedFunctionalUnit(
-    numStages = numStages,
+  extends FunctionalUnit(
     numBypassStages = numStages,
     isAluUnit = true,
-    earliestBypassStage = 0,
     dataWidth = dataWidth,
     isJmpUnit = isJmpUnit)
   with boom.ifu.HasBoomFrontendParameters
@@ -276,13 +194,6 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
   alu.io.dw  := uop.fcn_dw
 
 
-  // Did I just get killed by the previous cycle's branch,
-  // or by a flush pipeline?
-  val killed = WireInit(false.B)
-  when (io.req.bits.kill || IsKilledByBranch(io.brupdate, uop)) {
-    killed := true.B
-  }
-
   val rs1 = io.req.bits.rs1_data
   val rs2 = io.req.bits.rs2_data
   val br_eq  = (rs1 === rs2)
@@ -303,16 +214,15 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
                         ))
 
   val is_taken = io.req.valid &&
-                   !killed &&
                    (uop.is_br || uop.is_jalr || uop.is_jal) &&
                    (pc_sel =/= PC_PLUS4)
 
   // "mispredict" means that a branch has been resolved and it must be killed
   val mispredict = WireInit(false.B)
 
-  val is_br          = io.req.valid && !killed && uop.is_br && !uop.is_sfb
-  val is_jal         = io.req.valid && !killed && uop.is_jal
-  val is_jalr        = io.req.valid && !killed && uop.is_jalr
+  val is_br          = io.req.valid && uop.is_br && !uop.is_sfb
+  val is_jal         = io.req.valid && uop.is_jal
+  val is_jalr        = io.req.valid && uop.is_jalr
 
   when (is_br || is_jalr) {
     if (!isJmpUnit) {
@@ -326,25 +236,25 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
     }
   }
 
-  val brinfo = Wire(new BrResolutionInfo)
+  val brinfo = Wire(Valid(new BrResolutionInfo))
 
   // note: jal doesn't allocate a branch-mask, so don't clear a br-mask bit
   brinfo.valid          := is_br || is_jalr
-  brinfo.mispredict     := mispredict
-  brinfo.uop            := uop
-  brinfo.cfi_type       := Mux(is_jalr, CFI_JALR,
+  brinfo.bits.mispredict     := mispredict
+  brinfo.bits.uop            := uop
+  brinfo.bits.cfi_type       := Mux(is_jalr, CFI_JALR,
                            Mux(is_br  , CFI_BR, CFI_X))
-  brinfo.taken          := is_taken
-  brinfo.pc_sel         := pc_sel
+  brinfo.bits.taken          := is_taken
+  brinfo.bits.pc_sel         := pc_sel
 
-  brinfo.jalr_target    := DontCare
+  brinfo.bits.jalr_target    := DontCare
 
 
   // Branch/Jump Target Calculation
   // For jumps we read the FTQ, and can calculate the target
   // For branches we emit the offset for the core to redirect if necessary
   val target_offset = imm_xprlen(20,0).asSInt
-  brinfo.jalr_target := DontCare
+  brinfo.bits.jalr_target := DontCare
   if (isJmpUnit) {
     def encodeVirtualAddress(a0: UInt, ea: UInt) = if (vaddrBitsExtended == vaddrBits) {
       ea
@@ -362,7 +272,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
     jalr_target_xlen := (jalr_target_base + target_offset).asUInt
     val jalr_target = (encodeVirtualAddress(jalr_target_xlen, jalr_target_xlen).asSInt & -2.S).asUInt
 
-    brinfo.jalr_target := jalr_target
+    brinfo.bits.jalr_target := jalr_target
     val cfi_idx = ((uop.pc_lob ^ Mux(io.get_ftq_pc.entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth),1)
 
     when (pc_sel === PC_JALR) {
@@ -373,7 +283,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
     }
   }
 
-  brinfo.target_offset := target_offset
+  brinfo.bits.target_offset := target_offset
 
 
   io.brinfo := brinfo
@@ -391,33 +301,28 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
       Mux(io.req.bits.uop.is_mov, io.req.bits.rs2_data, alu.io.out))
   if (numStages == 0) {
     require (numBypassStages == 0)
+    io.resp.valid := io.req.valid
+    io.resp.bits.uop := io.req.bits.uop
     io.resp.bits.data := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
     io.resp.bits.predicated := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data
   } else {
-
-    val r_val  = RegInit(VecInit(Seq.fill(numStages) { false.B }))
-    val r_data = Reg(Vec(numStages, UInt(xLen.W)))
-    val r_pred = Reg(Vec(numStages, Bool()))
-
-    r_val (0) := io.req.valid
-    r_data(0) := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
-    r_pred(0) := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data
-    for (i <- 1 until numStages) {
-      r_val(i)  := r_val(i-1)
-      r_data(i) := r_data(i-1)
-      r_pred(i) := r_pred(i-1)
-    }
-    io.resp.bits.data := r_data(numStages-1)
-    io.resp.bits.predicated := r_pred(numStages-1)
-    // Bypass
-    // for the ALU, we can bypass same cycle as compute
     require(numStages == numBypassStages)
-    io.bypass(0).valid := io.req.valid
-    io.bypass(0).bits.data := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
-    for (i <- 1 until numStages) {
-      io.bypass(i).valid := r_val(i-1)
-      io.bypass(i).bits.data := r_data(i-1)
+
+    val pipe = Module(new BranchKillablePipeline(new ExeUnitResp(xLen), numStages))
+    pipe.io.req.valid           := io.req.valid
+    pipe.io.req.bits.uop        := io.req.bits.uop
+    pipe.io.req.bits.data       := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
+    pipe.io.req.bits.predicated := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data
+
+    pipe.io.brupdate := io.brupdate
+    pipe.io.flush := io.kill
+
+    io.bypass(0) := pipe.io.req
+    for (i <- 0 until numStages-1) {
+      io.bypass(i+1) := pipe.io.resp(i)
     }
+    io.resp.valid := pipe.io.resp(numStages-1).valid
+    io.resp.bits  := pipe.io.resp(numStages-1).bits
   }
 
   // Exceptions
@@ -434,13 +339,17 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
  * write-port scheduling.
  */
 class FPUUnit(implicit p: Parameters)
-  extends PipelinedFunctionalUnit(
-    numStages = p(tile.TileKey).core.fpu.get.dfmaLatency,
+  extends FunctionalUnit(
     numBypassStages = 0,
-    earliestBypassStage = 0,
     dataWidth = 65,
     needsFcsr = true)
 {
+  val numStages = p(tile.TileKey).core.fpu.get.dfmaLatency
+
+  val pipe = Module(new BranchKillablePipeline(new FuncUnitReq(dataWidth), numStages))
+  pipe.io.req := io.req
+  pipe.io.flush := io.kill
+  pipe.io.brupdate := io.brupdate
   val fpu = Module(new FPU())
   fpu.io.req.valid         := io.req.valid
   fpu.io.req.bits.uop      := io.req.bits.uop
@@ -449,8 +358,12 @@ class FPUUnit(implicit p: Parameters)
   fpu.io.req.bits.rs3_data := io.req.bits.rs3_data
   fpu.io.req.bits.fcsr_rm  := io.fcsr_rm
 
+  io.resp.valid        := pipe.io.resp(numStages-1).valid
+  io.resp.bits.uop     := pipe.io.resp(numStages-1).bits.uop
   io.resp.bits.data    := fpu.io.resp.bits.data
-  io.fflags            := fpu.io.fflags
+
+  io.fflags.valid      := fpu.io.fflags.valid && io.resp.valid
+  io.fflags.bits       := fpu.io.fflags.bits
   io.fflags.bits.uop   := io.resp.bits.uop
 }
 
@@ -460,14 +373,16 @@ class FPUUnit(implicit p: Parameters)
  * @param latency the amount of stages to delay by
  */
 class IntToFPUnit(latency: Int)(implicit p: Parameters)
-  extends PipelinedFunctionalUnit(
-    numStages = latency,
+  extends FunctionalUnit(
     numBypassStages = 0,
-    earliestBypassStage = 0,
     dataWidth = 65,
     needsFcsr = true)
   with tile.HasFPUParameters
 {
+  val pipe = Module(new BranchKillablePipeline(new FuncUnitReq(dataWidth), latency))
+  pipe.io.req := io.req
+  pipe.io.flush := io.kill
+  pipe.io.brupdate := io.brupdate
   val fp_decoder = Module(new UOPCodeFPUDecoder) // TODO use a simpler decoder
   val io_req = io.req.bits
   fp_decoder.io.uopc := io_req.uop.uopc
@@ -497,42 +412,12 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
   ifpu.io.in.bits.in1 := io_req.rs1_data
   val out_double = Pipe(io.req.valid, !fp_ctrl.singleOut, intToFpLatency).bits
 
+  io.resp.valid        := pipe.io.resp(latency-1).valid
+  io.resp.bits.uop     := pipe.io.resp(latency-1).bits.uop
   io.resp.bits.data    := box(ifpu.io.out.bits.data, out_double)
   io.fflags.valid      := io.resp.valid
   io.fflags.bits.uop   := io.resp.bits.uop
   io.fflags.bits.flags := ifpu.io.out.bits.exc
-}
-
-/**
- * Iterative/unpipelined functional unit, can only hold a single MicroOp at a time
- * assumes at least one register between request and response
- *
- * TODO allow up to N micro-ops simultaneously.
- *
- * @param dataWidth width of the data to be passed into the functional unit
- */
-abstract class IterativeFunctionalUnit(dataWidth: Int)(implicit p: Parameters)
-  extends FunctionalUnit(
-    numBypassStages = 0,
-    dataWidth = dataWidth)
-{
-  val r_uop = Reg(new MicroOp())
-
-  val do_kill = Wire(Bool())
-  do_kill := io.req.bits.kill // irrelevant default
-
-  when (io.req.fire()) {
-    // update incoming uop
-    do_kill := IsKilledByBranch(io.brupdate, io.req.bits.uop) || io.req.bits.kill
-    r_uop := io.req.bits.uop
-    r_uop.br_mask := GetNewBrMask(io.brupdate, io.req.bits.uop)
-  } .otherwise {
-    do_kill := IsKilledByBranch(io.brupdate, r_uop) || io.req.bits.kill
-    r_uop.br_mask := GetNewBrMask(io.brupdate, r_uop)
-  }
-
-  // assumes at least one pipeline register between request and response
-  io.resp.bits.uop := r_uop
 }
 
 /**
@@ -541,29 +426,47 @@ abstract class IterativeFunctionalUnit(dataWidth: Int)(implicit p: Parameters)
  * @param dataWidth data to be passed into the functional unit
  */
 class DivUnit(dataWidth: Int)(implicit p: Parameters)
-  extends IterativeFunctionalUnit(dataWidth)
+  extends FunctionalUnit(numBypassStages = 0, dataWidth = dataWidth)
 {
 
   // We don't use the iterative multiply functionality here.
   // Instead we use the PipelinedMultiplier
   val div = Module(new freechips.rocketchip.rocket.MulDiv(mulDivParams, width = dataWidth))
 
+  val req = Reg(Valid(new MicroOp()))
+
+  when (io.req.fire()) {
+    req.valid := !IsKilledByBranch(io.brupdate, io.req.bits) && !io.kill
+    req.bits  := UpdateBrMask(io.brupdate, io.req.bits.uop)
+  } .otherwise {
+    req.valid := !IsKilledByBranch(io.brupdate, req.bits) && !io.kill && req.valid
+    req.bits  := UpdateBrMask(io.brupdate, req.bits)
+  }
+  when (reset.asBool) {
+    req.valid := false.B
+  }
+
   // request
-  div.io.req.valid    := io.req.valid && !this.do_kill
+  div.io.req.valid    := io.req.valid && !IsKilledByBranch(io.brupdate, io.req.bits) && !io.kill
   div.io.req.bits.dw  := io.req.bits.uop.fcn_dw
   div.io.req.bits.fn  := io.req.bits.uop.fcn_op
   div.io.req.bits.in1 := io.req.bits.rs1_data
   div.io.req.bits.in2 := io.req.bits.rs2_data
   div.io.req.bits.tag := DontCare
-  io.req.ready        := div.io.req.ready
+  io.req.ready        := div.io.req.ready && !req.valid
 
   // handle pipeline kills and branch misspeculations
-  div.io.kill         := this.do_kill
+  div.io.kill         := (req.valid && IsKilledByBranch(io.brupdate, req.bits)) || io.kill
 
   // response
-  io.resp.valid       := div.io.resp.valid && !this.do_kill
+  io.resp.valid       := div.io.resp.valid && req.valid
   div.io.resp.ready   := io.resp.ready
+  io.resp.valid       := div.io.resp.valid && req.valid
   io.resp.bits.data   := div.io.resp.bits.data
+  io.resp.bits.uop    := req.bits
+  when (io.resp.fire()) {
+    req.valid := false.B
+  }
 }
 
 /**
@@ -573,13 +476,10 @@ class DivUnit(dataWidth: Int)(implicit p: Parameters)
  * @param dataWidth size of the data being passed into the functional unit
  */
 class PipelinedMulUnit(numStages: Int, dataWidth: Int)(implicit p: Parameters)
-  extends PipelinedFunctionalUnit(
-    numStages = numStages,
-    numBypassStages = 0,
-    earliestBypassStage = 0,
-    dataWidth = dataWidth)
+  extends FunctionalUnit(numBypassStages = 0, dataWidth = dataWidth)
 {
   val imul = Module(new PipelinedMultiplier(xLen, numStages))
+  val pipe = Module(new BranchKillablePipeline(new FuncUnitReq(dataWidth), numStages))
   // request
   imul.io.req.valid    := io.req.valid
   imul.io.req.bits.fn  := io.req.bits.uop.fcn_op
@@ -587,6 +487,13 @@ class PipelinedMulUnit(numStages: Int, dataWidth: Int)(implicit p: Parameters)
   imul.io.req.bits.in1 := io.req.bits.rs1_data
   imul.io.req.bits.in2 := io.req.bits.rs2_data
   imul.io.req.bits.tag := DontCare
+
+  pipe.io.req          := io.req
+  pipe.io.flush        := io.kill
+  pipe.io.brupdate     := io.brupdate
   // response
+  io.resp.valid        := pipe.io.resp(numStages-1).valid
+  io.resp.bits.uop     := pipe.io.resp(numStages-1).bits.uop
   io.resp.bits.data    := imul.io.resp.bits.data
+  io.resp.bits.predicated := false.B
 }

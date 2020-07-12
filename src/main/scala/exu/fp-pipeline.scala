@@ -243,7 +243,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   // flush on exceptions, miniexeptions, and after some special instructions
 
   for (w <- 0 until exe_units.length) {
-    exe_units(w).io.req.bits.kill := io.flush_pipeline
+    exe_units(w).io.kill := io.flush_pipeline
   }
 
   override def toString: String =

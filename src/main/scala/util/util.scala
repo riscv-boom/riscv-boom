@@ -64,6 +64,10 @@ object IsKilledByBranch
   def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, bundle: T): Bool = {
     return apply(brupdate, bundle.uop)
   }
+
+  def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, bundle: Valid[T]): Bool = {
+    return apply(brupdate, bundle.bits)
+  }
 }
 
 /**
@@ -647,4 +651,30 @@ object BoomCoreStringPrefix
     val prefix = "[C" + s"${p(TileKey).hartId}" + "] "
     strs.map(str => prefix + str + "\n").mkString("")
   }
+}
+
+class BranchKillablePipeline[T <: boom.common.HasBoomUOP](gen: T, stages: Int)
+  (implicit p: freechips.rocketchip.config.Parameters)
+  extends boom.common.BoomModule()(p)
+  with boom.common.HasBoomCoreParameters
+{
+  val io = IO(new Bundle {
+    val req = Input(Valid(gen))
+    val flush = Input(Bool())
+    val brupdate = Input(new BrUpdateInfo)
+    val resp = Output(Vec(stages, Valid(gen)))
+  })
+  require(stages > 0)
+  val uops = Reg(Vec(stages, Valid(gen)))
+  uops(0).valid := io.req.valid && !IsKilledByBranch(io.brupdate, io.req.bits) && !io.flush
+  uops(0).bits  := UpdateBrMask(io.brupdate, io.req.bits)
+  for (i <- 1 until stages) {
+    uops(i).valid := uops(i-1).valid && !IsKilledByBranch(io.brupdate, uops(i-1).bits) && !io.flush
+    uops(i).bits  := UpdateBrMask(io.brupdate, uops(i-1).bits)
+  }
+
+  for (i <- 0 until stages) { when (reset.asBool) { uops(i).valid := false.B } }
+
+  io.resp := uops
+
 }

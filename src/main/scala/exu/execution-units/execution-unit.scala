@@ -101,7 +101,7 @@ abstract class ExecutionUnit(
     val rocc = if (hasRocc) new RoCCShimCoreIO else null
 
     // only used by the branch unit
-    val brinfo     = if (hasAlu) Output(new BrResolutionInfo()) else null
+    val brinfo     = if (hasAlu) Output(Valid(new BrResolutionInfo)) else null
     val get_ftq_pc = if (hasJmp) Flipped(new GetPCFromFtqIO()) else null
     val status     = Input(new freechips.rocketchip.rocket.MStatus())
 
@@ -112,8 +112,7 @@ abstract class ExecutionUnit(
     val agen = if (hasAGen) Output(Valid(new ExeUnitResp(xLen))) else null
     val dgen = if (hasDGen || hasFpiu) Output(Valid(new ExeUnitResp(xLen))) else null
 
-    // TODO move this out of ExecutionUnit
-    val com_exception = if (hasRocc) Input(Bool()) else null
+    val kill = Input(Bool())
   })
 
   io.resp.bits.predicated := false.B
@@ -248,14 +247,10 @@ class ALUExeUnit(
     (io.req.bits.uop.fu_code === FU_CSR && !io.req.bits.uop.is_rocc)))
   //ROCC Rocc Commands are taken by the RoCC unit
 
-  alu.io.req.bits.uop      := io.req.bits.uop
-  alu.io.req.bits.kill     := io.req.bits.kill
-  alu.io.req.bits.rs1_data := io.req.bits.rs1_data
-  alu.io.req.bits.rs2_data := io.req.bits.rs2_data
-  alu.io.req.bits.rs3_data := DontCare
-  alu.io.req.bits.pred_data := io.req.bits.pred_data
+  alu.io.req.bits   := io.req.bits
   alu.io.resp.ready := DontCare
-  alu.io.brupdate := io.brupdate
+  alu.io.brupdate   := io.brupdate
+  alu.io.kill       := io.kill
 
   iresp_fu_units += alu
 
@@ -272,14 +267,10 @@ class ALUExeUnit(
   if (hasRocc) {
     rocc = Module(new RoCCShim)
     rocc.io.req.valid         := io.req.valid && io.req.bits.uop.is_rocc
-    rocc.io.req.bits          := DontCare
-    rocc.io.req.bits.uop      := io.req.bits.uop
-    rocc.io.req.bits.kill     := io.req.bits.kill
-    rocc.io.req.bits.rs1_data := io.req.bits.rs1_data
-    rocc.io.req.bits.rs2_data := io.req.bits.rs2_data
+    rocc.io.req.bits          := io.req.bits
     rocc.io.brupdate          := io.brupdate // We should assert on this somewhere
     rocc.io.status            := io.status
-    rocc.io.exception         := io.com_exception
+    rocc.io.exception         := io.kill
     io.rocc                   <> rocc.io.core
 
     rocc.io.resp.ready        := io.ll_iresp.ready
@@ -295,11 +286,9 @@ class ALUExeUnit(
     imul = Module(new PipelinedMulUnit(imulLatency, xLen))
     imul.io <> DontCare
     imul.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_MUL)
-    imul.io.req.bits.uop      := io.req.bits.uop
-    imul.io.req.bits.rs1_data := io.req.bits.rs1_data
-    imul.io.req.bits.rs2_data := io.req.bits.rs2_data
-    imul.io.req.bits.kill     := io.req.bits.kill
-    imul.io.brupdate := io.brupdate
+    imul.io.req.bits          := io.req.bits
+    imul.io.brupdate          := io.brupdate
+    imul.io.kill              := io.kill
     iresp_fu_units += imul
   }
 
@@ -310,6 +299,7 @@ class ALUExeUnit(
     ifpu.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_I2F)
     ifpu.io.fcsr_rm    := io.fcsr_rm
     ifpu.io.brupdate   <> io.brupdate
+    ifpu.io.kill       := io.kill
     ifpu.io.resp.ready := DontCare
 
     io.fflags := ifpu.io.fflags
@@ -322,7 +312,7 @@ class ALUExeUnit(
     queue.io.enq.bits.data   := ifpu.io.resp.bits.data
     queue.io.enq.bits.predicated := ifpu.io.resp.bits.predicated
     queue.io.brupdate := io.brupdate
-    queue.io.flush := io.req.bits.kill
+    queue.io.flush    := io.kill
 
     io.ll_fresp <> queue.io.deq
     io.ll_fresp.valid := queue.io.deq.valid && !IsKilledByBranch(io.brupdate, queue.io.deq.bits)
@@ -339,7 +329,7 @@ class ALUExeUnit(
     divq.io.enq.valid := (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV))
     divq.io.enq.bits  := io.req.bits
     divq.io.brupdate  := io.brupdate
-    divq.io.flush     := io.req.bits.kill
+    divq.io.flush     := io.kill
 
     div = Module(new DivUnit(xLen))
     div.io <> DontCare
@@ -347,7 +337,7 @@ class ALUExeUnit(
     div.io.req.valid := divq.io.deq.valid && !IsKilledByBranch(io.brupdate, divq.io.deq.bits)
     div.io.req.bits := UpdateBrMask(io.brupdate, divq.io.deq.bits)
     div.io.brupdate            := io.brupdate
-    div.io.req.bits.kill       := io.req.bits.kill
+    div.io.kill                := io.kill
 
     // share write port with the pipelined units
     div.io.resp.ready := !(iresp_fu_units.map(_.io.resp.valid).reduce(_|_))
@@ -437,14 +427,10 @@ class FPUExeUnit(
     fpu.io.req.valid         := io.req.valid &&
                                 (io.req.bits.uop.fu_code_is(FU_FPU) ||
                                 io.req.bits.uop.fu_code_is(FU_F2I)) // TODO move to using a separate unit
-    fpu.io.req.bits.uop      := io.req.bits.uop
-    fpu.io.req.bits.rs1_data := io.req.bits.rs1_data
-    fpu.io.req.bits.rs2_data := io.req.bits.rs2_data
-    fpu.io.req.bits.rs3_data := io.req.bits.rs3_data
-    fpu.io.req.bits.pred_data := false.B
-    fpu.io.req.bits.kill     := io.req.bits.kill
+    fpu.io.req.bits          := io.req.bits
     fpu.io.fcsr_rm           := io.fcsr_rm
     fpu.io.brupdate          := io.brupdate
+    fpu.io.kill              := io.kill
     fpu.io.resp.ready        := true.B
 
     when (fpu.io.resp.fire()) {
@@ -460,14 +446,10 @@ class FPUExeUnit(
   if (hasFdiv) {
     fdivsqrt = Module(new FDivSqrtUnit())
     fdivsqrt.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_FDV)
-    fdivsqrt.io.req.bits.uop      := io.req.bits.uop
-    fdivsqrt.io.req.bits.rs1_data := io.req.bits.rs1_data
-    fdivsqrt.io.req.bits.rs2_data := io.req.bits.rs2_data
-    fdivsqrt.io.req.bits.rs3_data := DontCare
-    fdivsqrt.io.req.bits.pred_data := false.B
-    fdivsqrt.io.req.bits.kill     := io.req.bits.kill
+    fdivsqrt.io.req.bits          := io.req.bits
     fdivsqrt.io.fcsr_rm           := io.fcsr_rm
     fdivsqrt.io.brupdate          := io.brupdate
+    fdivsqrt.io.kill              := io.kill
 
     // share write port with the pipelined units
     fdivsqrt.io.resp.ready := !(fu_units.map(_.io.resp.valid).reduce(_|_)) // TODO PERF will get blocked by fpiu.
@@ -502,8 +484,8 @@ class FPUExeUnit(
     queue.io.enq.bits.uop    := fpu.io.resp.bits.uop
     queue.io.enq.bits.data   := fpu.io.resp.bits.data
     queue.io.enq.bits.predicated := fpu.io.resp.bits.predicated
-    queue.io.brupdate          := io.brupdate
-    queue.io.flush           := io.req.bits.kill
+    queue.io.brupdate        := io.brupdate
+    queue.io.flush           := io.kill
 
     assert (queue.io.enq.ready) // If this backs up, we've miscalculated the size of the queue.
 
