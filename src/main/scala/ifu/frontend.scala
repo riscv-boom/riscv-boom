@@ -341,14 +341,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s0_replay_resp = Wire(new TLBResp)
   val s0_replay_ppc  = Wire(UInt())
 
+  val jump_to_reset = RegInit(true.B)
 
-
-
-  when (RegNext(reset.asBool) && !reset.asBool) {
-    s0_valid   := true.B
-    s0_vpc     := io.reset_vector
-    s0_ghist   := (0.U).asTypeOf(new GlobalHistory)
-    s0_tsrc    := BSRC_C
+  when (jump_to_reset) {
+    s0_valid := true.B
+    s0_vpc   := io.reset_vector
+    s0_ghist := (0.U).asTypeOf(new GlobalHistory)
+    s0_tsrc  := BSRC_C
+    jump_to_reset := false.B
   }
 
   icache.io.req.valid     := s0_valid

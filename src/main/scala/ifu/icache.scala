@@ -151,10 +151,10 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val s0_valid = io.req.fire()
   val s0_vaddr = io.req.bits.addr
 
-  val s1_valid = RegNext(s0_valid)
+  val s1_valid = RegNext(s0_valid, false.B)
   val s1_tag_hit = Wire(Vec(nWays, Bool()))
   val s1_hit = s1_tag_hit.reduce(_||_)
-  val s2_valid = RegNext(s1_valid && !io.s1_kill)
+  val s2_valid = RegNext(s1_valid && !io.s1_kill, false.B)
   val s2_hit = RegNext(s1_hit)
 
 
