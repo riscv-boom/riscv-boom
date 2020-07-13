@@ -149,11 +149,13 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
         when (io.grant && !squash_grant) {
           next_uop.fu_code      := FU_AGEN
         }
-        io.iss_uop.bits.fu_code := FU_DGEN
-        io.iss_uop.bits.prs1    := slot_uop.prs2
+        io.iss_uop.bits.fu_code    := FU_DGEN
+        io.iss_uop.bits.prs1       := slot_uop.prs2
+        io.iss_uop.bits.lrs1_rtype := slot_uop.lrs2_rtype
       }
     } .elsewhen (slot_uop.fu_code === FU_DGEN) {
-      io.iss_uop.bits.prs1 := slot_uop.prs2
+      io.iss_uop.bits.prs1       := slot_uop.prs2
+      io.iss_uop.bits.lrs1_rtype := slot_uop.lrs2_rtype
     }
   }
 

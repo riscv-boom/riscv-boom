@@ -1340,8 +1340,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   for (w <- 0 until lsuWidth) {
     io.core.spec_ld_wakeup(w).valid := (enableFastLoadUse.B                             &&
                                         fired_load_agen_exec(w)                         &&
-                                        !mem_incoming_uop(w).fp_val                     &&
-                                        mem_incoming_uop(w).pdst =/= 0.U)
+                                        !mem_incoming_uop(w).fp_val)
     io.core.spec_ld_wakeup(w).bits  := mem_incoming_uop(w).pdst
   }
 

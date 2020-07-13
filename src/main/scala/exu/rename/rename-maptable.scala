@@ -67,7 +67,7 @@ class RenameMapTable(
   })
 
   // The map table register array and its branch snapshots.
-  val map_table = RegInit(VecInit(Seq.fill(numLregs){0.U(pregSz.W)}))
+  val map_table = RegInit(VecInit((0 until numLregs) map { i => i.U(pregSz.W) }))
   val br_snapshots = Reg(Vec(maxBrCount, Vec(numLregs, UInt(pregSz.W))))
 
   // The intermediate states of the map table following modification by each pipeline slot.
@@ -79,17 +79,11 @@ class RenameMapTable(
 
   // Figure out the new mappings seen by each pipeline slot.
   for (i <- 0 until numLregs) {
-    if (i == 0 && !float) {
-      for (j <- 0 until plWidth+1) {
-        remap_table(j)(i) := 0.U
-      }
-    } else {
-      val remapped_row = (remap_ldsts_oh.map(ldst => ldst(i)) zip remap_pdsts)
-        .scanLeft(map_table(i)) {case (pdst, (ldst, new_pdst)) => Mux(ldst, new_pdst, pdst)}
+    val remapped_row = (remap_ldsts_oh.map(ldst => ldst(i)) zip remap_pdsts)
+      .scanLeft(map_table(i)) {case (pdst, (ldst, new_pdst)) => Mux(ldst, new_pdst, pdst)}
 
-      for (j <- 0 until plWidth+1) {
-        remap_table(j)(i) := remapped_row(j)
-      }
+    for (j <- 0 until plWidth+1) {
+      remap_table(j)(i) := remapped_row(j)
     }
   }
 
@@ -125,5 +119,5 @@ class RenameMapTable(
   // Don't flag the creation of duplicate 'p0' mappings during rollback.
   // These cases may occur soon after reset, as all maptable entries are initialized to 'p0'.
   io.remap_reqs map (req => (req.pdst, req.valid)) foreach {case (p,r) =>
-    assert (!r || !map_table.contains(p) || p === 0.U && io.rollback, "[maptable] Trying to write a duplicate mapping.")}
+    assert (!r || !map_table.contains(p), "[maptable] Trying to write a duplicate mapping.")}
 }

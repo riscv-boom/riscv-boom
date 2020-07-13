@@ -47,7 +47,7 @@ class RenameFreeList(
     }
   })
   // The free list register array and its branch allocation lists.
-  val free_list = RegInit(UInt(numPregs.W), ~(1.U(numPregs.W)))
+  val free_list = RegInit(UInt(numPregs.W), Cat(~(0.U((numPregs-numLregs).W)), 0.U(numLregs.W)))
   val br_alloc_lists = Reg(Vec(maxBrCount, UInt(numPregs.W)))
 
   // Select pregs from the free list.

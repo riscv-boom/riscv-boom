@@ -131,6 +131,9 @@ abstract class AbstractRenameStage(
       next_uop := r_uop
     }
 
+    assert(!(r_valid && r_uop.lrs1_rtype === RT_FIX && r_uop.lrs1 === 0.U))
+    assert(!(r_valid && r_uop.lrs2_rtype === RT_FIX && r_uop.lrs2 === 0.U))
+
     r_uop := GetNewUopAndBrMask(BypassAllocations(next_uop, ren2_uops, ren2_alloc_reqs), io.brupdate)
 
     ren2_valids(w) := r_valid
@@ -217,7 +220,7 @@ class RenameStage(
   val freelist = Module(new RenameFreeList(
     plWidth,
     numPhysRegs,
-    if (float) 32 else 31))
+    32))
   val busytable = Module(new RenameBusyTable(
     plWidth,
     numPhysRegs,
@@ -294,13 +297,13 @@ class RenameStage(
   freelist.io.brupdate := io.brupdate
   freelist.io.debug.pipeline_empty := io.debug_rob_empty
 
-  assert (ren2_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
-           "[rename-stage] A uop is trying to allocate the zero physical register.")
+  // assert (ren2_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
+  //          "[rename-stage] A uop is trying to allocate the zero physical register.")
 
   // Freelist outputs.
   for ((uop, w) <- ren2_uops.zipWithIndex) {
     val preg = freelist.io.alloc_pregs(w).bits
-    uop.pdst := Mux(uop.ldst =/= 0.U || float.B, preg, 0.U)
+    uop.pdst := preg
   }
 
   //-------------------------------------------------------------
@@ -322,8 +325,8 @@ class RenameStage(
     uop.prs3_busy := uop.frs3_en && busy.prs3_busy
 
     val valid = ren2_valids(w)
-    assert (!(valid && busy.prs1_busy && rtype === RT_FIX && uop.lrs1 === 0.U), "[rename] x0 is busy??")
-    assert (!(valid && busy.prs2_busy && rtype === RT_FIX && uop.lrs2 === 0.U), "[rename] x0 is busy??")
+    assert (!(valid && busy.prs1_busy && rtype === RT_FIX && uop.lrs1_rtype === RT_FIX && uop.lrs1 === 0.U), "[rename] x0 is busy??")
+    assert (!(valid && busy.prs2_busy && rtype === RT_FIX && uop.lrs2_rtype === RT_FIX && uop.lrs2 === 0.U), "[rename] x0 is busy??")
   }
 
   //-------------------------------------------------------------

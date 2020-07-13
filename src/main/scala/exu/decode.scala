@@ -129,9 +129,9 @@ object DecodeTables
     CSRRS              -> List(Y, N, uopCSRRS  , IQT_INT, FU_CSR , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.S, DW_XPR, FN_ADD ),
     CSRRC              -> List(Y, N, uopCSRRC  , IQT_INT, FU_CSR , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.C, DW_XPR, FN_ADD ),
 
-    CSRRWI             -> List(Y, N, uopCSRRWI , IQT_INT, FU_CSR , RT_FIX, RT_PAS, RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.W, DW_XPR, FN_ADD ),
-    CSRRSI             -> List(Y, N, uopCSRRSI , IQT_INT, FU_CSR , RT_FIX, RT_PAS, RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.S, DW_XPR, FN_ADD ),
-    CSRRCI             -> List(Y, N, uopCSRRCI , IQT_INT, FU_CSR , RT_FIX, RT_PAS, RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.C, DW_XPR, FN_ADD ),
+    CSRRWI             -> List(Y, N, uopCSRRWI , IQT_INT, FU_CSR , RT_FIX, RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.W, DW_XPR, FN_ADD ),
+    CSRRSI             -> List(Y, N, uopCSRRSI , IQT_INT, FU_CSR , RT_FIX, RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.S, DW_XPR, FN_ADD ),
+    CSRRCI             -> List(Y, N, uopCSRRCI , IQT_INT, FU_CSR , RT_FIX, RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.C, DW_XPR, FN_ADD ),
 
     SFENCE_VMA          ->List(Y, N, uopSFENCE , IQT_INT, FU_CSR , RT_X  , RT_FIX, RT_FIX, N, IS_X, N, N, N,M_SFENCE , N, N, Y, Y, CSR.N, DW_XPR, FN_ADD ),
     SCALL              -> List(Y, N, uopSCALL  , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
@@ -421,23 +421,24 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   uop.lrs2       := LRS2
   uop.lrs3       := LRS3
 
-  uop.ldst_val   := cs.dst_type =/= RT_X && !(uop.ldst === 0.U && uop.dst_rtype === RT_FIX)
+  uop.ldst_val   := cs.dst_type =/= RT_X
   uop.dst_rtype  := cs.dst_type
-  uop.lrs1_rtype := cs.rs1_type
-  uop.lrs2_rtype := cs.rs2_type
+  uop.lrs1_rtype := Mux(cs.rs1_type === RT_FIX && LRS1 === 0.U, RT_ZERO, cs.rs1_type)
+  uop.lrs2_rtype := Mux(cs.rs2_type === RT_FIX && LRS2 === 0.U, RT_ZERO, cs.rs2_type)
   uop.frs3_en    := cs.frs3_en
 
   uop.ldst_is_rs1 := uop.is_sfb_shadow
   // SFB optimization
   uop.is_mov      := false.B
   when (uop.is_sfb_shadow && cs.rs2_type === RT_X) {
-    uop.lrs2_rtype  := RT_FIX
+    uop.lrs2_rtype  := Mux(LDST === 0.U, RT_ZERO, RT_FIX)
     uop.lrs2        := LDST
     uop.ldst_is_rs1 := false.B
   } .elsewhen (uop.is_sfb_shadow && cs.uopc === uopADD && LRS1 === 0.U) {
     uop.uopc        := uopMOV
     uop.is_mov      := true.B
     uop.lrs1        := LDST
+    uop.lrs1_rtype  := Mux(LDST === 0.U, RT_ZERO, RT_FIX)
     uop.ldst_is_rs1 := true.B
   }
   when (uop.is_sfb_br) {

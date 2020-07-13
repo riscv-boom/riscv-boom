@@ -181,9 +181,8 @@ class RegisterRead(
         exe_reg_pred_data(w) := Mux1H(pred_bypass_hits, pred_bypass_data)
       }
     }
-    if (numReadPorts > 0) when (prs1 === 0.U) { exe_reg_rs1_data(w) := 0.U }
-    if (numReadPorts > 1) when (prs2 === 0.U) { exe_reg_rs2_data(w) := 0.U }
-    if (numReadPorts > 2) when (prs3 === 0.U) { exe_reg_rs3_data(w) := 0.U }
+    when (lrs1_rtype === RT_ZERO) { exe_reg_rs1_data(w) := 0.U }
+    when (lrs2_rtype === RT_ZERO) { exe_reg_rs2_data(w) := 0.U }
   }
 
   //-------------------------------------------------------------
