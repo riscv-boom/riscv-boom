@@ -52,6 +52,7 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val load_wakeups  = Input(Vec(memWidth, Valid(UInt(ipregSz.W))))
   val load_nacks    = Input(Vec(memWidth, Bool()))
   val ll_wakeups    = Input(Vec(memWidth, Valid(UInt(ipregSz.W))))
+  val pred_wakeup   = Input(Valid(UInt(ftqSz.W)))
 
   val in_uop        = Flipped(Valid(new MicroOp)) // Received from dispatch or another slot during compaction
   val out_uop       = Output(new MicroOp) // The updated slot uop; will be shifted upwards in a collasping queue
@@ -82,6 +83,7 @@ class RingIssueSlot(implicit p: Parameters)
   def wakeup(uop: MicroOp,
              fwu: Valid[FastWakeup],
              cwu: Valid[UInt],
+             pwu: Valid[UInt],
              swu: Vec[Valid[UInt]],
              lwu: Vec[Valid[UInt]],
              llw: Vec[Valid[UInt]],
@@ -125,6 +127,9 @@ class RingIssueSlot(implicit p: Parameters)
     when ((uop.prs1_bypass_mem.asUInt & ldn.asUInt).orR) { woke_uop.prs1_status := 0.U }
     when ((uop.prs2_bypass_mem.asUInt & ldn.asUInt).orR) { woke_uop.prs2_status := 0.U }
 
+    // Wakeup predicate
+    when (pwu.bits === uop.ppred && pwu.valid) { woke_uop.ppred_busy := false.B }
+
     woke_uop
   }
 
@@ -148,7 +153,7 @@ class RingIssueSlot(implicit p: Parameters)
 
   val slot_uop = RegInit(NullMicroOp)
   val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, io.out_uop)
-  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.chain_wakeup, io.slow_wakeups, io.load_wakeups, io.ll_wakeups, io.load_nacks)
+  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.chain_wakeup, io.pred_wakeup, io.slow_wakeups, io.load_wakeups, io.ll_wakeups, io.load_nacks)
 
   val p1 = slot_uop.prs1_ready
   val p2 = slot_uop.prs2_ready
@@ -215,7 +220,7 @@ class RingIssueSlot(implicit p: Parameters)
   //----------------------------------------------------------------------------------------------------
   // Request Logic
 
-  val can_request = (io.fu_avail & slot_uop.fu_code).orR
+  val can_request = (io.fu_avail & slot_uop.fu_code).orR && slot_uop.ppred_ready
 
   when (state === s_valid_1) {
     io.request := p1 && p2 && can_request

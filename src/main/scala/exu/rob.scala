@@ -139,7 +139,7 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle
  */
 class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle
 {
-  val ftq_idx    = UInt(log2Ceil(ftqSz).W)
+  val ftq_idx    = UInt(ftqSz.W)
   val edge_inst  = Bool()
   val is_rvc     = Bool()
   val pc_lob     = UInt(log2Ceil(icBlockBytes).W)

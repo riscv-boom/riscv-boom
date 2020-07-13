@@ -56,6 +56,9 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     val get_ftq_pc = Flipped(new GetPCFromFtqIO)
     val status     = Input(new freechips.rocketchip.rocket.MStatus)
 
+    // special jmp response port for predicate writeback
+    val jmp_unit_resp = Output(Valid(new ExeUnitResp(xLen)))
+
     // only used by the CSR unit
     val csr_unit_resp = DecoupledIO(new FuncUnitResp(xLen))
 
@@ -208,8 +211,9 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
   val exe_valids = Wire(Vec(coreWidth, Bool()))
   val exe_uops   = Wire(Vec(coreWidth, new MicroOp))
-  val rs1_data   = Wire(Vec(coreWidth, Bits(xLen.W)))
-  val rs2_data   = Wire(Vec(coreWidth, Bits(xLen.W)))
+  val prs1_data  = Wire(Vec(coreWidth, Bits(xLen.W)))
+  val prs2_data  = Wire(Vec(coreWidth, Bits(xLen.W)))
+  val ppred_data = Wire(Vec(coreWidth, Bool()))
   val exe_reqs   = Wire(Vec(coreWidth, Valid(new FuncUnitReq(xLen))))
 
   // uop registers
@@ -224,25 +228,29 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
     val req = io.exe_reqs(w).bits
     val k = (coreWidth + w - 1) % coreWidth
 
-    rs1_data(w) := RegNext(Mux(req.uop.prs1_bypass_alu, column_exe_units(k).io.bypass(0).bits.data,
-                           Mux(req.uop.prs1_bypass_mem.reduce(_||_),
-                         Mux1H(req.uop.prs1_bypass_mem, mem_units.map(_.io.ll_iresp.bits.data)),
-                           Mux(req.uop.prs1_bypass_gen, io.exe_resps(k).bits.data,
-                                                         req.rs1_data))))
-    rs2_data(w) := RegNext(Mux(req.uop.prs2_bypass_alu, column_exe_units(k).io.bypass(0).bits.data,
-                           Mux(req.uop.prs2_bypass_mem.reduce(_||_),
-                         Mux1H(req.uop.prs2_bypass_mem, mem_units.map(_.io.ll_iresp.bits.data)),
-                           Mux(req.uop.prs2_bypass_gen, io.exe_resps(k).bits.data,
-                                                         req.rs2_data))))
+    prs1_data(w)  := RegNext(Mux(req.uop.prs1_bypass_alu, column_exe_units(k).io.bypass(0).bits.data,
+                             Mux(req.uop.prs1_bypass_mem.reduce(_||_),
+                           Mux1H(req.uop.prs1_bypass_mem, mem_units.map(_.io.ll_iresp.bits.data)),
+                             Mux(req.uop.prs1_bypass_gen, io.exe_resps(k).bits.data,
+                                                          req.rs1_data))))
+    prs2_data(w)  := RegNext(Mux(req.uop.prs2_bypass_alu, column_exe_units(k).io.bypass(0).bits.data,
+                             Mux(req.uop.prs2_bypass_mem.reduce(_||_),
+                           Mux1H(req.uop.prs2_bypass_mem, mem_units.map(_.io.ll_iresp.bits.data)),
+                             Mux(req.uop.prs2_bypass_gen, io.exe_resps(k).bits.data,
+                                                          req.rs2_data))))
+    ppred_data(w) := RegNext(Mux(req.uop.ppred === jmp_unit.io.bypass(0).bits.uop.pdst && jmp_unit.io.bypass(0).valid, jmp_unit.io.bypass(0).bits.data(0),
+                             Mux(req.uop.ppred === jmp_unit.io.iresp.bits.uop.pdst && jmp_unit.io.iresp.valid, jmp_unit.io.iresp.bits.data(0)    ,
+                                           req.pred_data)))
   }
 
   // Setup requests
   for (w <- 0 until coreWidth) {
-    exe_reqs(w)               := DontCare
-    exe_reqs(w).valid         := exe_valids(w)
-    exe_reqs(w).bits.uop      := exe_uops(w)
-    exe_reqs(w).bits.rs1_data := rs1_data(w)
-    exe_reqs(w).bits.rs2_data := rs2_data(w)
+    exe_reqs(w)                := DontCare
+    exe_reqs(w).valid          := exe_valids(w)
+    exe_reqs(w).bits.uop       := exe_uops(w)
+    exe_reqs(w).bits.rs1_data  := prs1_data(w)
+    exe_reqs(w).bits.rs2_data  := prs2_data(w)
+    exe_reqs(w).bits.pred_data := ppred_data(w)
   }
 
   //----------------------------------------------------------------------------------------------------
@@ -250,8 +258,8 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
 
   // Hookup column ALUs
   for (w <- 0 until coreWidth) {
-    column_exe_units(w).io.req.bits    := exe_reqs(w).bits
-    column_exe_units(w).io.req.valid   := exe_reqs(w).valid && exe_reqs(w).bits.uop.eu_code(0)
+    column_exe_units(w).io.req.bits  := exe_reqs(w).bits
+    column_exe_units(w).io.req.valid := exe_reqs(w).valid && exe_reqs(w).bits.uop.eu_code(0)
   }
 
   // Hookup memory units (any number suppported)
@@ -341,6 +349,8 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // Jump unit
   io.jmp_brinfo := jmp_unit.io.brinfo
   jmp_unit.io.get_ftq_pc <> io.get_ftq_pc
+  io.jmp_unit_resp.valid := jmp_unit.io.iresp.valid
+  io.jmp_unit_resp.bits  := jmp_unit.io.iresp.bits
 
   // CSR unit
   io.csr_unit_resp <> csr_unit.io.iresp

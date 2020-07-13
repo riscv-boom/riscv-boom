@@ -225,7 +225,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
 
   val ras_top       = UInt(vaddrBitsExtended.W)
 
-  val ftq_idx       = UInt(log2Ceil(ftqSz).W)
+  val ftq_idx       = UInt(ftqSz.W)
   val mask          = UInt(fetchWidth.W) // mark which words are valid instructions
 
   val br_mask       = UInt(fetchWidth.W)
@@ -262,7 +262,7 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
 
   // 1 for xcpt/jalr/auipc/flush
   val get_pc            = Flipped(Vec(2, new GetPCFromFtqIO()))
-  val debug_ftq_idx     = Output(Vec(coreWidth, UInt(log2Ceil(ftqSz).W)))
+  val debug_ftq_idx     = Output(Vec(coreWidth, UInt(ftqSz.W)))
   val debug_fetch_pc    = Input(Vec(coreWidth, UInt(vaddrBitsExtended.W)))
 
   // Breakpoint info
