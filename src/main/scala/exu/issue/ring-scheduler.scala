@@ -216,7 +216,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   }
 
   // Generate chained wakeups
-  val chain_xbar_reqs = Transpose(r_chain_uops zip r_chain_vals map { case (u,v) => Mux(v, u.pdst_col, 0.U) })
+  val chain_xbar_reqs = Transpose(r_chain_uops zip r_chain_vals map { case (u,v) => Mux(v, u.column, 0.U) })
   for (w <- 0 until coreWidth) {
     val chain_uop    = Mux1H(chain_xbar_reqs(w), r_chain_uops)
     val chain_wakeup = Wire(Valid(UInt(ipregSz.W)))

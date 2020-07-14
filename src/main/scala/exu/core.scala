@@ -607,7 +607,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   dis_uops   := int_rename.io.ren2_uops
   dis_valids := int_rename.io.ren2_mask
-  ren_stalls := int_rename.io.ren_stalls
 
   for (w <- 0 until coreWidth) {
     val i_uop   = int_rename.io.ren2_uops(w)

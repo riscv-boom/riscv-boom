@@ -506,7 +506,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   dataReadArb.io.in(0).bits.req(0).way_en := mshrs.io.replay.bits.way_en
   dataReadArb.io.in(0).bits.valid         := widthMap(w => (w == 0).B)
 
-  io.lsu.replay_wb_col := Mux(mshrs.io.replay.valid && isRead(replay_req(0).uop.mem_cmd), replay_req(0).uop.pdst_col, 0.U)
+  io.lsu.replay_wb_col := Mux(mshrs.io.replay.valid && isRead(replay_req(0).uop.mem_cmd), replay_req(0).uop.column, 0.U)
 
   // -----------
   // MSHR Meta read
@@ -834,7 +834,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   uncache_resp.bits     := mshrs.io.resp.bits
   uncache_resp.valid    := mshrs.io.resp.valid
   // We can backpressure the MSHRs, but not cache hits
-  val mshrs_can_wb = !(cache_resp.map(resp => Mux(resp.valid, resp.bits.uop.pdst_col, 0.U)).reduce(_|_) & mshrs.io.resp.bits.uop.pdst_col).orR
+  val mshrs_can_wb = !(cache_resp.map(resp => Mux(resp.valid, resp.bits.uop.column, 0.U)).reduce(_|_) & mshrs.io.resp.bits.uop.column).orR
   mshrs.io.resp.ready := !(cache_resp.map(_.valid).reduce(_&&_)) && mshrs_can_wb
 
   val resp = WireInit(cache_resp)

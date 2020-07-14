@@ -247,7 +247,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
   for (c <- 0 until coreWidth) {
     for (w <- 0 until coreWidth) {
       freelists(c).io.reqs(w)                := col_gnts(w)(c) && ren2_alloc_reqs(w)
-      freelists(c).io.dealloc_pregs(w).valid := io.com_uops(w).stale_col(c) && com_valids(w) || io.com_uops(w).pdst_col(c) && rbk_valids(w)
+      freelists(c).io.dealloc_pregs(w).valid := io.com_uops(w).stale_col(c) && com_valids(w) || io.com_uops(w).column(c) && rbk_valids(w)
       freelists(c).io.dealloc_pregs(w).bits  := Mux(io.rollback, io.com_uops(w).pdst, io.com_uops(w).stale_pdst)
     }
     freelists(c).io.ren_br_tags := ren2_br_tags

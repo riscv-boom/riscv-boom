@@ -285,7 +285,7 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   // EU -> Fast Resp crossbar
 
   val fast_eu_sels = Transpose(VecInit(Seq(VecInit(column_exe_units.map(_.io.iresp.valid)).asUInt) ++
-    shared_exe_units.filter(_.writesIrf).map(eu => eu.io.iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.iresp.valid))))
+    shared_exe_units.filter(_.writesIrf).map(eu => eu.io.iresp.bits.uop.column & Fill(coreWidth, eu.io.iresp.valid))))
 
   for (w <- 0 until coreWidth) {
     io.exe_resps(w).bits  := Mux1H(fast_eu_sels(w),
@@ -299,11 +299,11 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   //----------------------------------------------------------------------------------------------------
   // EU -> Slow (LL) Resp crossbar
 
-  val fpiu_wb_req = if (usingFPU) Seq(io.from_fpu.bits.uop.pdst_col & Fill(coreWidth, io.from_fpu.valid)) else Seq()
+  val fpiu_wb_req = if (usingFPU) Seq(io.from_fpu.bits.uop.column & Fill(coreWidth, io.from_fpu.valid)) else Seq()
   val fpiu_resp   = if (usingFPU) Seq(io.from_fpu.bits) else Seq()
 
   val slow_eu_reqs = Transpose(VecInit(shared_exe_units.filter(_.writesLlIrf).map(eu =>
-    eu.io.ll_iresp.bits.uop.pdst_col & Fill(coreWidth, eu.io.ll_iresp.valid)) ++ fpiu_wb_req))
+    eu.io.ll_iresp.bits.uop.column & Fill(coreWidth, eu.io.ll_iresp.valid)) ++ fpiu_wb_req))
   val slow_eu_rdys = Transpose(VecInit(slow_eu_reqs.map(r => ~MaskAbove(r))))
 
   for (w <- 0 until coreWidth) {
@@ -313,11 +313,11 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
   }
 
   for ((eu,rdy) <- shared_exe_units.filter(_.writesLlIrf) zip slow_eu_rdys) {
-    eu.io.ll_iresp.ready := (rdy & eu.io.ll_iresp.bits.uop.pdst_col).orR
+    eu.io.ll_iresp.ready := (rdy & eu.io.ll_iresp.bits.uop.column).orR
   }
 
   if (usingFPU) {
-    io.from_fpu.ready := (slow_eu_rdys.last & io.from_fpu.bits.uop.pdst_col).orR
+    io.from_fpu.ready := (slow_eu_rdys.last & io.from_fpu.bits.uop.column).orR
   } else {
     io.from_fpu.ready := DontCare
   }
