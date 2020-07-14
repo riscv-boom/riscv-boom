@@ -264,7 +264,7 @@ abstract class AbstractBoomDataArray(implicit p: Parameters) extends BoomModule 
     val read  = Input(Vec(lsuWidth, Valid(new L1DataReadReq)))
     val write = Input(Valid(new L1DataWriteReq))
     val resp  = Output(Vec(lsuWidth, Vec(nWays, Bits(encRowBits.W))))
-    val nacks = Output(Vec(lsuWidth, Bool()))
+    val s1_nacks = Output(Vec(lsuWidth, Bool()))
   })
 
   def pipeMap[T <: Data](f: Int => T) = VecInit((0 until lsuWidth).map(f))
@@ -291,7 +291,7 @@ class BoomDuplicatedDataArray(implicit p: Parameters) extends AbstractBoomDataAr
       }
       io.resp(j)(w) := RegNext(array.read(raddr, io.read(j).bits.way_en(w) && io.read(j).valid).asUInt)
     }
-    io.nacks(j) := false.B
+    io.s1_nacks(j) := false.B
   }
 }
 
@@ -336,7 +336,7 @@ class BoomBankedDataArray(implicit p: Parameters) extends AbstractBoomDataArray 
   //----------------------------------------------------------------------------------------------------
 
   val s2_bank_selection = RegNext(s1_bank_selection)
-  val s2_nacks          = RegNext(s1_nacks)
+  io.s1_nacks          := s1_nacks
 
   for (w <- 0 until nWays) {
     val s2_bank_reads = Reg(Vec(nBanks, Bits(encRowBits.W)))
@@ -362,8 +362,6 @@ class BoomBankedDataArray(implicit p: Parameters) extends AbstractBoomDataArray 
       io.resp(i)(w) := s2_bank_reads(s2_bank_selection(i))
     }
   }
-
-  io.nacks := s2_nacks
 }
 
 /**
@@ -626,6 +624,10 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
   val s1_wb_idx_matches = widthMap(i => (s1_addr(i)(untagBits-1,blockOffBits) === wb.io.idx.bits) && wb.io.idx.valid)
 
+  for (w <- 0 until lsuWidth) {
+    io.lsu.s1_nack_advisory(w) := data.io.s1_nacks(w)
+  }
+
   val s2_req   = RegNext(s1_req)
   val s2_type  = RegNext(s1_type)
   val s2_valid = widthMap(w =>
@@ -722,7 +724,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   // MSHRs not ready for request
   val s2_nack_miss   = widthMap(w => s2_valid(w) && !s2_hit(w) && !mshrs.io.req(w).ready)
   // Bank conflict on data arrays
-  val s2_nack_data   = widthMap(w => data.io.nacks(w))
+  val s2_nack_data   = widthMap(w => s2_valid(w) && RegNext(data.io.s1_nacks(w)))
   // Can't allocate MSHR for same set currently being written back
   val s2_nack_wb     = widthMap(w => s2_valid(w) && !s2_hit(w) && s2_wb_idx_matches(w))
 

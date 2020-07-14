@@ -76,6 +76,8 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
   val req         = new DecoupledIO(Vec(lsuWidth, Valid(new BoomDCacheReq)))
   // In LSU's LCAM search stage, kill if order fail (or forwarding possible)
   val s1_kill     = Output(Vec(lsuWidth, Bool()))
+  // The s1 inflight request will likely get nacked next cycle
+  val s1_nack_advisory = Input(Vec(lsuWidth, Bool()))
   // Get a request any cycle
   val resp        = Flipped(Vec(lsuWidth, new ValidIO(new BoomDCacheResp)))
   // The cache irrevocably accepted our store
@@ -1340,6 +1342,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   for (w <- 0 until lsuWidth) {
     io.core.spec_ld_wakeup(w).valid := (enableFastLoadUse.B                             &&
                                         fired_load_agen_exec(w)                         &&
+                                        !io.dmem.s1_nack_advisory(w)                    &&
                                         !mem_incoming_uop(w).fp_val)
     io.core.spec_ld_wakeup(w).bits  := mem_incoming_uop(w).pdst
   }
