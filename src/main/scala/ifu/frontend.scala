@@ -405,9 +405,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     false.B,
     false.B)
 
-  when (s1_valid && !s1_tlb_miss) {
+  when (s1_valid) {
     // Stop fetching on fault
-    s0_valid     := !(s1_tlb_resp.ae.inst || s1_tlb_resp.pf.inst)
+    s0_valid     := true.B
     s0_tsrc      := BSRC_1
     s0_vpc       := f1_predicted_target
     s0_ghist     := f1_predicted_ghist
