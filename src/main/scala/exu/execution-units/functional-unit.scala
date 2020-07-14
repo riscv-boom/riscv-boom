@@ -286,7 +286,11 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
   brinfo.bits.target_offset := target_offset
 
 
-  io.brinfo := brinfo
+  if (isJmpUnit) {
+    io.brinfo := RegNext(UpdateBrMask(io.brupdate, brinfo))
+  } else {
+    io.brinfo := brinfo
+  }
 
 
 
