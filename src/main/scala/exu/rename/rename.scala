@@ -324,6 +324,7 @@ class PredRename(
   numWbPorts: Int)
   (implicit p: Parameters) extends AbstractRename(plWidth, numPhysRegs, numWbPorts)(p)
 {
+  rtype := DontCare
   ren2_alloc_reqs := DontCare
 
   val busy_table = RegInit(VecInit(0.U(numFtqEntries.W).asBools))
