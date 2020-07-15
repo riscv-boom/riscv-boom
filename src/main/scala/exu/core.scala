@@ -102,7 +102,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val iregister_read   = Module(new RingRegisterRead)
 
   val pregfile         = Module(new RegisterFileSynthesizable(
-                           ftqSz,
+                           numFtqEntries,
                            coreWidth,
                            1,
                            1,
