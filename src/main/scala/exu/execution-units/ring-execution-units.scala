@@ -238,9 +238,12 @@ class RingExecutionUnits(implicit p: Parameters) extends BoomModule
                            Mux1H(req.uop.prs2_bypass_mem, mem_units.map(_.io.ll_iresp.bits.data)),
                              Mux(req.uop.prs2_bypass_gen, io.exe_resps(k).bits.data,
                                                           req.rs2_data))))
-    ppred_data(w) := RegNext(Mux(req.uop.ppred === jmp_unit.io.bypass(0).bits.uop.pdst && jmp_unit.io.bypass(0).valid, jmp_unit.io.bypass(0).bits.data(0),
-                             Mux(req.uop.ppred === jmp_unit.io.iresp.bits.uop.pdst && jmp_unit.io.iresp.valid, jmp_unit.io.iresp.bits.data(0)    ,
-                                           req.pred_data)))
+
+    val bypass_jmp_unit = req.uop.ppred === jmp_unit.io.bypass(0).bits.uop.pdst && jmp_unit.io.bypass(0).valid && jmp_unit.io.bypass(0).bits.uop.is_sfb_br
+    val bypass_jmp_resp = req.uop.ppred === jmp_unit.io.iresp.bits.uop.pdst && jmp_unit.io.iresp.valid && jmp_unit.io.iresp.bits.uop.is_sfb_br
+    ppred_data(w) := RegNext(Mux(bypass_jmp_unit, jmp_unit.io.bypass(0).bits.data(0),
+                             Mux(bypass_jmp_resp, jmp_unit.io.iresp.bits.data(0),
+                                                  req.pred_data)))
   }
 
   // Setup requests
