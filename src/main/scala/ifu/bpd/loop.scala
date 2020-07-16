@@ -116,7 +116,7 @@ class LoopBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBan
       // Learned, tag match -> decrement confidence
       when (entry.conf === 7.U && tag_match) {
         wentry.s_cnt := 0.U
-        wentry.conf  := 0.U
+        wentry.conf  := entry.conf - 1.U
 
       // Learned, no tag match -> do nothing? Don't evict super-confident entries?
       } .elsewhen (entry.conf === 7.U && !tag_match) {

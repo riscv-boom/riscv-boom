@@ -391,8 +391,15 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   }
   val f1_do_redirect = f1_redirects.reduce(_||_) && useBPD.B
   val f1_targs = s1_bpd_resp.preds.map(_.predicted_pc.bits)
+  val f1_targ = if (nBanks == 1) {
+    Mux1H(f1_redirects, f1_targs)
+  } else {
+    require(nBanks == 2)
+    Mux(f1_redirects.take(bankWidth).reduce(_||_), Mux1H(f1_redirects.take(bankWidth), f1_targs.take(bankWidth)),
+                                                   Mux1H(f1_redirects.drop(bankWidth), f1_targs.drop(bankWidth)))
+  }
   val f1_predicted_target = Mux(f1_do_redirect,
-                                Mux1H(f1_redirects, f1_targs),
+                                f1_targ,
                                 nextFetch(s1_vpc))
 
   val f1_predicted_ghist = s1_ghist.update(

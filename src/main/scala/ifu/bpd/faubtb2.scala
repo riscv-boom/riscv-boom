@@ -143,10 +143,12 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
       wmeta.jal_mask := UIntToOH(s1_update.bits.cfi_idx.bits) & Fill(bankWidth, s1_update.bits.cfi_idx.valid && (s1_update.bits.cfi_is_jal || s1_update.bits.cfi_is_jalr))
     } .otherwise {
       wmeta.br_mask := rmeta.br_mask | s1_update.bits.br_mask
-      wmeta.ctr := Mux(s1_update.bits.cfi_idx.valid &&
-                       s1_update.bits.cfi_idx.bits === rmeta.cfi_idx,
-        bimWrite(rmeta.ctr, s1_update.bits.cfi_taken),
-        Mux(s1_update.bits.cfi_idx.valid, Mux(s1_update.bits.cfi_taken, 3.U, 0.U), rmeta.ctr))
+      wmeta.ctr := Mux(s1_update.bits.cfi_idx.valid,
+        Mux(s1_update.bits.cfi_idx.bits === rmeta.cfi_idx, bimWrite(rmeta.ctr, s1_update.bits.cfi_taken),
+                                                           Mux(s1_update.bits.cfi_taken, 3.U, 0.U)),
+        Mux(s1_update.bits.br_mask(rmeta.cfi_idx)        , bimWrite(rmeta.ctr, false.B),
+                                                           rmeta.ctr)
+      )
       wmeta.jal_mask := rmeta.jal_mask | UIntToOH(s1_update.bits.cfi_idx.bits) & Fill(bankWidth, s1_update.bits.cfi_idx.valid && (s1_update.bits.cfi_is_jal || s1_update.bits.cfi_is_jalr))
     }
     wmeta.cfi_idx := Mux(s1_update.bits.cfi_idx.valid, s1_update.bits.cfi_idx.bits, rmeta.cfi_idx)
