@@ -256,6 +256,9 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
     fwu
   }
 
+  // Is this micro-op (probably) a pointer or loop index bump?
+  def is_ptr_bump = ldst === lrs1 && uopc === uopADDI
+
   // Helpers for performance counters
   def zero_waiting = !(prs1_busy || prs2_busy)
   def one_waiting  =   prs1_busy ^  prs2_busy

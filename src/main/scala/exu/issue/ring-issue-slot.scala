@@ -37,6 +37,7 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val valid         = Output(Bool())
   val will_be_valid = Output(Bool())
   val request       = Output(Bool())
+  val request_ptr   = Output(Bool())
   val request_chain = Output(Bool())
   val grant         = Input(Bool())
 
@@ -230,6 +231,12 @@ class RingIssueSlot(implicit p: Parameters)
     io.request_chain := slot_uop.prs2_status(1,0).orR
   } .otherwise {
     io.request_chain := false.B
+  }
+
+  when (state =/= s_invalid) {
+    io.request_ptr := p1 && slot_uop.is_ptr_bump && can_request
+  } .otherwise {
+    io.request_ptr := false.B
   }
 
   //----------------------------------------------------------------------------------------------------
