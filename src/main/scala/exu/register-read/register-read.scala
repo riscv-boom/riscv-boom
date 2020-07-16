@@ -51,7 +51,7 @@ class RegisterRead(
 
     // interface with register file's read ports
     val rf_read_ports = Flipped(Vec(numTotalReadPorts, new RegisterFileReadPortIO(maxPregSz, registerWidth)))
-    val prf_read_ports = Flipped(Vec(issueWidth, new RegisterFileReadPortIO(log2Ceil(ftqSz), 1)))
+    val prf_read_ports = Flipped(Vec(issueWidth, new RegisterFileReadPortIO(ftqSz, 1)))
 
     val bypass = Input(Vec(numTotalBypassPorts, Valid(new ExeUnitResp(registerWidth))))
     val pred_bypass = Input(Vec(numTotalPredBypassPorts, Valid(new ExeUnitResp(1))))

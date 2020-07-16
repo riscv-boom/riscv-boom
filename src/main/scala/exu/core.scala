@@ -102,7 +102,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val iregister_read   = Module(new RingRegisterRead)
 
   val pregfile         = Module(new RegisterFileSynthesizable(
-                           ftqSz,
+                           numFtqEntries,
                            coreWidth,
                            1,
                            1,
@@ -113,7 +113,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
                            coreWidth * 2 + numFpWakeupPorts,
                            numFpWakeupPorts))
 
-  val pred_wakeup  = Wire(Valid(new ExeUnitResp(1)))
+  val pred_wakeup  = Wire(Valid(UInt(ftqSz.W)))
   val slow_wakeups = Wire(Vec(2*coreWidth, Valid(UInt(ipregSz.W))))
   slow_wakeups    := DontCare
 
@@ -473,11 +473,11 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // FTQ GetPC Port Arbitration
 
-  val jmp_pc_req   = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
-  val xcpt_pc_req  = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
-  val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  val jmp_pc_req   = Wire(Decoupled(UInt(ftqSz.W)))
+  val xcpt_pc_req  = Wire(Decoupled(UInt(ftqSz.W)))
+  val flush_pc_req = Wire(Decoupled(UInt(ftqSz.W)))
 
-  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 3))
+  val ftq_arb = Module(new Arbiter(UInt(ftqSz.W), 3))
 
   // Order by the oldest. Flushes come from the oldest instructions in pipe
   // Decoding exceptions come from youngest
@@ -607,7 +607,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   dis_uops   := int_rename.io.ren2_uops
   dis_valids := int_rename.io.ren2_mask
-  ren_stalls := int_rename.io.ren_stalls
 
   for (w <- 0 until coreWidth) {
     val i_uop   = int_rename.io.ren2_uops(w)
@@ -623,9 +622,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     dis_uops(w).prs2 := Mux(dis_uops(w).lrs2_rtype === RT_FLT, f_uop.prs2, i_uop.prs2)
     dis_uops(w).prs3 := f_uop.prs3
     dis_uops(w).ppred := p_uop.ppred
-    dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype  === RT_FLT, f_uop.pdst, i_uop.pdst)
-                        //Mux(dis_uops(w).dst_rtype  === RT_FIX, i_uop.pdst,    TODO !!!!!!
-                        //                                       p_uop.pdst))
+    dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype === RT_X  , p_uop.pdst,
+                        Mux(dis_uops(w).dst_rtype === RT_FLT, f_uop.pdst,
+                                                              i_uop.pdst))
     dis_uops(w).stale_pdst := Mux(dis_uops(w).dst_rtype === RT_FLT, f_uop.stale_pdst, i_uop.stale_pdst)
 
     dis_uops(w).prs1_busy := i_uop.prs1_busy && (dis_uops(w).lrs1_rtype === RT_FIX) ||
@@ -767,25 +766,16 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   int_rename.io.wakeups := scheduler.io.fast_wakeups ++ slow_wakeups
 
-  // TODO!!!!!!
-  pred_wakeup.valid := DontCare /*(iss_valids(jmp_unit_idx) &&
-                        iss_uops(jmp_unit_idx).is_sfb_br &&
-                        !(io.lsu.ld_miss && (iss_uops(jmp_unit_idx).iw_p1_poisoned || iss_uops(jmp_unit_idx).iw_p2_poisoned)))*/
-  pred_wakeup.bits.uop := DontCare //iss_uops(jmp_unit_idx)
-  pred_wakeup.bits.fflags := DontCare
-  pred_wakeup.bits.data := DontCare
-  pred_wakeup.bits.predicated := DontCare
-/*
+  pred_wakeup.valid := iss_jmp zip iss_uops map { case (j,u) => j && u.is_sfb_br } reduce (_||_)
+  pred_wakeup.bits  := Mux1H(iss_jmp, iss_uops).pdst
+
   // Connect the predicate wakeup port
-  issue_units map { iu =>
-    iu.io.pred_wakeup_port.valid := false.B
-    iu.io.pred_wakeup_port.bits := DontCare
-  }
   if (enableSFBOpt) {
-    int_iss_unit.io.pred_wakeup_port.valid := pred_wakeup.valid
-    int_iss_unit.io.pred_wakeup_port.bits := pred_wakeup.bits.uop.pdst
+    scheduler.io.pred_wakeup := pred_wakeup
+  } else {
+    scheduler.io.pred_wakeup.valid := false.B
+    scheduler.io.pred_wakeup.bits  := DontCare
   }
-*/
 
   // ----------------------------------------------------------------
   // Connect the wakeup ports to the busy tables in the rename stages
@@ -796,7 +786,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     }
   }
   if (enableSFBOpt) {
-    pred_rename.io.wakeups(0) := pred_wakeup
+    pred_rename.io.wakeups(0)                := DontCare
+    pred_rename.io.wakeups(0).valid          := pred_wakeup.valid
+    pred_rename.io.wakeups(0).bits.uop.pdst  := pred_wakeup.bits
   }
 
   var idiv_issued = false.B
@@ -832,7 +824,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // Register Read <- Issue (rrd <- iss)
   iregister_read.io.rf_read_ports <> iregfile.io.read_ports
   if (enableSFBOpt) {
-    iregister_read.io.rf_read_ports <> pregfile.io.read_ports
+    iregister_read.io.prf_read_ports <> pregfile.io.read_ports
   }
 
   iregister_read.io.iss_valids := iss_valids
@@ -1023,12 +1015,12 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+w+").iresp")
   }
 
-  // TODO !!!!!!!
-  /*if (enableSFBOpt) {
-    pregfile.io.write_ports(0).valid     := jmp_unit.io.iresp.valid && jmp_unit.io.iresp.bits.uop.is_sfb_br
-    pregfile.io.write_ports(0).bits.addr := jmp_unit.io.iresp.bits.uop.pdst
-    pregfile.io.write_ports(0).bits.data := jmp_unit.io.iresp.bits.data
-  }*/
+  if (enableSFBOpt) {
+    val jmp_resp = exe_units.io.jmp_unit_resp
+    pregfile.io.write_ports(0).valid     := jmp_resp.valid && jmp_resp.bits.uop.is_sfb_br
+    pregfile.io.write_ports(0).bits.addr := jmp_resp.bits.uop.pdst
+    pregfile.io.write_ports(0).bits.data := jmp_resp.bits.data
+  }
 
   if (usingFPU) {
     // Connect IFPU

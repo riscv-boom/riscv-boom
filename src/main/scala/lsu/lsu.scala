@@ -788,7 +788,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       // First pipe's request will be killed by the replay anyways,
       // but need to check for writeback collisions on the other pipes.
       dmem_req(w).valid      := !exe_tlb_miss(w) && !exe_tlb_uncacheable(w) &&
-                                !((w > 0).B && (exe_tlb_uop(w).pdst_col & io.dmem.replay_wb_col).orR)
+                                !((w > 0).B && (exe_tlb_uop(w).column & io.dmem.replay_wb_col).orR)
       dmem_req(w).bits.addr  := exe_tlb_paddr(w)
       dmem_req(w).bits.uop   := exe_tlb_uop(w)
 
@@ -797,7 +797,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
     } .elsewhen (will_fire_load_retry(w)) {
       dmem_req(w).valid      := !exe_tlb_miss(w) && !exe_tlb_uncacheable(w) &&
-                                !((w > 0).B && (exe_tlb_uop(w).pdst_col & load_wb_cols).orR)
+                                !((w > 0).B && (exe_tlb_uop(w).column & load_wb_cols).orR)
       dmem_req(w).bits.addr  := exe_tlb_paddr(w)
       dmem_req(w).bits.uop   := exe_tlb_uop(w)
 
@@ -818,7 +818,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
       stq(stq_execute_head).bits.succeeded := false.B
     } .elsewhen (will_fire_load_wakeup(w)) {
-      dmem_req(w).valid      := !((w > 0).B && (ldq_wakeup_e.bits.uop.pdst_col & load_wb_cols).orR)
+      dmem_req(w).valid      := !((w > 0).B && (ldq_wakeup_e.bits.uop.column & load_wb_cols).orR)
       dmem_req(w).bits.addr  := ldq_wakeup_e.bits.addr.bits
       dmem_req(w).bits.uop   := ldq_wakeup_e.bits.uop
 
@@ -905,7 +905,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
 
     load_wb_cols = Mux(dmem_req_fire(w) && dmem_req(w).bits.uop.ctrl.is_load,
-                       load_wb_cols | dmem_req(w).bits.uop.pdst_col,
+                       load_wb_cols | dmem_req(w).bits.uop.column,
                        load_wb_cols)
   }
   val will_fire_stdf_incoming = io.core.fp_stdata.fire()
@@ -1316,7 +1316,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   }
 
   val dmem_resp_fired = WireInit(widthMap(w => false.B))
-  val dmem_resp_wb_cols = io.dmem.resp.map(r => Mux(r.valid, r.bits.uop.pdst_col, 0.U)).reduce(_|_)
+  val dmem_resp_wb_cols = io.dmem.resp.map(r => Mux(r.valid, r.bits.uop.column, 0.U)).reduce(_|_)
   var forward_wb_cols = 0.U
 
   for (w <- 0 until memWidth) {
@@ -1393,7 +1393,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       val stq_e       = stq(wb_forward_stq_idx(w))
       val data_ready  = stq_e.bits.data.valid
       val live        = !IsKilledByBranch(io.core.brupdate, forward_uop)
-      val can_wb_irf  = !(forward_uop.pdst_col & (dmem_resp_wb_cols | forward_wb_cols)).orR
+      val can_wb_irf  = !(forward_uop.column & (dmem_resp_wb_cols | forward_wb_cols)).orR
       val storegen = new freechips.rocketchip.rocket.StoreGen(
                                 stq_e.bits.uop.mem_size, stq_e.bits.addr.bits,
                                 stq_e.bits.data.bits, coreDataBytes)
@@ -1409,7 +1409,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       io.core.exe(w).iresp.bits.data := loadgen.data
       io.core.exe(w).fresp.bits.data := loadgen.data
 
-      forward_wb_col := Mux(io.core.exe(w).iresp.valid, forward_uop.pdst_col, 0.U)
+      forward_wb_col := Mux(io.core.exe(w).iresp.valid, forward_uop.column, 0.U)
 
       when (data_ready && live && (can_wb_irf || forward_uop.dst_rtype === RT_FLT)) {
         ldq(f_idx).bits.succeeded := data_ready
@@ -1431,7 +1431,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // Check for writeback collisions
   var writeback_columns = 0.U
   for (w <- 0 until memWidth) {
-    val pipe_slot_writeback_column = Mux(io.core.exe(w).iresp.valid, io.core.exe(w).iresp.bits.uop.pdst_col, 0.U)
+    val pipe_slot_writeback_column = Mux(io.core.exe(w).iresp.valid, io.core.exe(w).iresp.bits.uop.column, 0.U)
     assert (!(writeback_columns & pipe_slot_writeback_column), "[lsu] Two loads trying to write the same column")
     writeback_columns = writeback_columns | pipe_slot_writeback_column
   }

@@ -34,6 +34,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     val load_wakeups = Input(Vec(   memWidth, Valid(UInt(ipregSz.W))))
     val   ll_wakeups = Input(Vec(   memWidth, Valid(UInt(ipregSz.W))))
     val load_nacks   = Input(Vec(   memWidth, Bool()))
+    val pred_wakeup  = Input(Valid(UInt(ftqSz.W)))
 
     val fast_wakeups = Output(Vec(coreWidth , Valid(UInt(ipregSz.W))))
 
@@ -57,6 +58,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
       slots(w)(i).load_wakeups := io.load_wakeups
       slots(w)(i).ll_wakeups   := io.ll_wakeups
       slots(w)(i).load_nacks   := io.load_nacks
+      slots(w)(i).pred_wakeup  := io.pred_wakeup
 
       slots(w)(i).brupdate := io.brupdate
       slots(w)(i).kill     := io.kill
@@ -214,7 +216,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   }
 
   // Generate chained wakeups
-  val chain_xbar_reqs = Transpose(r_chain_uops zip r_chain_vals map { case (u,v) => Mux(v, u.pdst_col, 0.U) })
+  val chain_xbar_reqs = Transpose(r_chain_uops zip r_chain_vals map { case (u,v) => Mux(v, u.column, 0.U) })
   for (w <- 0 until coreWidth) {
     val chain_uop    = Mux1H(chain_xbar_reqs(w), r_chain_uops)
     val chain_wakeup = Wire(Valid(UInt(ipregSz.W)))

@@ -57,7 +57,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val br_tag           = UInt(brTagSz.W)
 
   // Index into FTQ to figure out our fetch PC.
-  val ftq_idx          = UInt(log2Ceil(ftqSz).W)
+  val ftq_idx          = UInt(ftqSz.W)
   // This inst straddles two fetch packets
   val edge_inst        = Bool()
   // Low-order bits of our own PC. Combine with ftq[ftq_idx] to get PC.
@@ -80,7 +80,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val prs2             = UInt(maxPregSz.W)
   val prs3             = UInt(maxPregSz.W)
   val stale_pdst       = UInt(maxPregSz.W)
-  val ppred            = UInt(log2Ceil(ftqSz).W)
+  val ppred            = UInt(ftqSz.W)
 
   // One-hot vector which specifies the uop's column
   // Only relevant for uops which use the integer scheduler
@@ -153,6 +153,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def is_sfb_shadow    = !is_br && is_sfb && enableSFBOpt.B // Is this predicated
   val ldst_is_rs1      = Bool() // If this is set and we are predicated off, copy rs1 to dst,
                                 // else copy rs2 to dst
+  def ppred_ready      = !is_sfb_shadow || !ppred_busy
 
   // logical specifiers (only used in Decode->Rename), except rollback (ldst)
   val ldst             = UInt(lregSz.W)
@@ -239,7 +240,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def shared_eu_code = eu_code(3,1)
   def exe_wb_latency = fu_code(3) << (imulLatency - 1) | (fu_code(1) | fu_code(0))  // Hard coded latency vector
 
-  // Generate the fast wakeup signal the uop emits upon being issued
+  // Generate the fast wakeup signal the uop emits when issued
   def fast_wakeup(grant: Bool): Valid[FastWakeup] = {
     val fwu = Wire(Valid(new FastWakeup))
 

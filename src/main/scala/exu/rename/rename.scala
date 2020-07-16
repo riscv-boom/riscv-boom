@@ -324,13 +324,14 @@ class PredRename(
   numWbPorts: Int)
   (implicit p: Parameters) extends AbstractRename(plWidth, numPhysRegs, numWbPorts)(p)
 {
+  rtype := DontCare
   ren2_alloc_reqs := DontCare
 
-  val busy_table = RegInit(VecInit(0.U(ftqSz.W).asBools))
-  val to_busy = WireInit(VecInit(0.U(ftqSz.W).asBools))
-  val unbusy = WireInit(VecInit(0.U(ftqSz.W).asBools))
+  val busy_table = RegInit(VecInit(0.U(numFtqEntries.W).asBools))
+  val to_busy = WireInit(VecInit(0.U(numFtqEntries.W).asBools))
+  val unbusy = WireInit(VecInit(0.U(numFtqEntries.W).asBools))
 
-  val current_ftq_idx = Reg(UInt(log2Ceil(ftqSz).W))
+  val current_ftq_idx = Reg(UInt(ftqSz.W))
   var next_ftq_idx = current_ftq_idx
 
   for (w <- 0 until plWidth) {

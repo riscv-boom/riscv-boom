@@ -76,7 +76,7 @@ class IssueUnitIO(
   val iss_valids       = Output(Vec(issueWidth, Bool()))
   val iss_uops         = Output(Vec(issueWidth, new MicroOp()))
   val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new IqWakeup(maxPregSz))))
-  val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
+  val pred_wakeup_port = Flipped(Valid(UInt(ftqSz.W)))
 
   val spec_ld_wakeup   = Flipped(Vec(memWidth, Valid(UInt(width=maxPregSz.W))))
 

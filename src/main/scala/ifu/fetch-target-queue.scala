@@ -76,7 +76,7 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
  */
 class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle
 {
-  val ftq_idx   = Input(UInt(log2Ceil(ftqSz).W))
+  val ftq_idx   = Input(UInt(ftqSz.W))
 
   val entry     = Output(new FTQBundle)
   val ghist     = Output(new GlobalHistory)
@@ -99,7 +99,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   with HasBoomCoreParameters
   with HasBoomFrontendParameters
 {
-  val num_entries = ftqSz
+  val num_entries = numFtqEntries
   private val idx_sz = log2Ceil(num_entries)
 
   val io = IO(new BoomBundle {
@@ -116,7 +116,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
 
     // Used to regenerate PC for trace port stuff in FireSim
     // Don't tape this out, this blows up the FTQ
-    val debug_ftq_idx  = Input(Vec(coreWidth, UInt(log2Ceil(ftqSz).W)))
+    val debug_ftq_idx  = Input(Vec(coreWidth, UInt(ftqSz.W)))
     val debug_fetch_pc = Output(Vec(coreWidth, UInt(vaddrBitsExtended.W)))
 
     val redirect = Input(Valid(UInt(idx_sz.W)))
@@ -225,8 +225,8 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
 
   val bpd_update_mispredict = RegInit(false.B)
   val bpd_update_repair = RegInit(false.B)
-  val bpd_repair_idx = Reg(UInt(log2Ceil(ftqSz).W))
-  val bpd_end_idx = Reg(UInt(log2Ceil(ftqSz).W))
+  val bpd_repair_idx = Reg(UInt(ftqSz.W))
+  val bpd_end_idx = Reg(UInt(ftqSz.W))
   val bpd_repair_pc = Reg(UInt(vaddrBitsExtended.W))
 
   val bpd_idx = Mux(io.redirect.valid, io.redirect.bits,
