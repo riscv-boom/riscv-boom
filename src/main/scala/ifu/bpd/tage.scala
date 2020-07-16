@@ -21,7 +21,7 @@ class TageResp extends Bundle {
   val u   = UInt(2.W)
 }
 
-class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPeriod: Int)
+class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPeriod: Int, val singlePorted: Boolean)
   (implicit p: Parameters) extends BoomModule()(p)
   with HasBoomFrontendParameters
 {
@@ -86,23 +86,23 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
 
   val (s1_hashed_idx, s1_tag) = compute_tag_and_hash(fetchIdx(io.f1_req_pc), io.f1_req_ghist)
 
-  val hi_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
-  val lo_us  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
+  val us     = SyncReadMem(nRows, Vec(bankWidth*2, Bool()))
   val table  = SyncReadMem(nRows, Vec(bankWidth, UInt(tageEntrySz.W)))
+  us.suggestName(s"tage_u_${histLength}")
+  table.suggestName(s"tage_table_${histLength}")
 
   val mems = Seq((f"tage_l$histLength", nRows, bankWidth * tageEntrySz))
 
   val s2_tag       = RegNext(s1_tag)
 
-  val s2_req_rtage = VecInit(table.read(s1_hashed_idx, io.f1_req_valid).map(_.asTypeOf(new TageEntry)))
-  val s2_req_rhius = hi_us.read(s1_hashed_idx, io.f1_req_valid)
-  val s2_req_rlous = lo_us.read(s1_hashed_idx, io.f1_req_valid)
+  val s2_req_rtage = Wire(Vec(bankWidth, new TageEntry))
+  val s2_req_rus = Wire(Vec(bankWidth*2, Bool()))
   val s2_req_rhits = VecInit(s2_req_rtage.map(e => e.valid && e.tag === s2_tag && !doing_reset))
 
   for (w <- 0 until bankWidth) {
     // This bit indicates the TAGE table matched here
     io.f2_resp(w).valid    := s2_req_rhits(w)
-    io.f2_resp(w).bits.u   := Cat(s2_req_rhius(w), s2_req_rlous(w))
+    io.f2_resp(w).bits.u   := Cat(s2_req_rus(w*2+1), s2_req_rus(w*2))
     io.f2_resp(w).bits.ctr := s2_req_rtage(w).ctr
   }
 
@@ -110,33 +110,38 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
   when (doing_reset) { clear_u_ctr := 1.U } .otherwise { clear_u_ctr := clear_u_ctr + 1.U }
 
   val doing_clear_u = clear_u_ctr(log2Ceil(uBitPeriod)-1,0) === 0.U
-  val doing_clear_u_hi = doing_clear_u && clear_u_ctr(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 1.U
-  val doing_clear_u_lo = doing_clear_u && clear_u_ctr(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 0.U
+  val clear_u_hi = clear_u_ctr(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 1.U
+  val clear_u_lo = clear_u_ctr(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 0.U
   val clear_u_idx = clear_u_ctr >> log2Ceil(uBitPeriod)
+  val clear_u_mask = VecInit((0 until bankWidth*2) map { i => if (i % 2 == 0) clear_u_lo else clear_u_hi }).asUInt
 
   val (update_idx, update_tag) = compute_tag_and_hash(fetchIdx(io.update_pc), io.update_hist)
 
   val update_wdata = Wire(Vec(bankWidth, new TageEntry))
+  val wen = WireInit(doing_reset || io.update_mask.reduce(_||_))
+  val rdata = if (singlePorted) table.read(s1_hashed_idx, !wen && io.f1_req_valid) else table.read(s1_hashed_idx, io.f1_req_valid)
+  s2_req_rtage := VecInit(rdata.map(_.asTypeOf(new TageEntry)))
+  when (wen) {
+    val widx = Mux(doing_reset, reset_idx, update_idx)
+    val wdata = Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 0.U(tageEntrySz.W) }), VecInit(update_wdata.map(_.asUInt)))
+    val wmask = Mux(doing_reset, ~(0.U(bankWidth.W)), io.update_mask.asUInt)
+    table.write(widx, wdata, wmask.asBools)
+  }
 
-  table.write(
-    Mux(doing_reset, reset_idx                                          , update_idx),
-    Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 0.U(tageEntrySz.W) }), VecInit(update_wdata.map(_.asUInt))),
-    Mux(doing_reset, ~(0.U(bankWidth.W))                                , io.update_mask.asUInt).asBools
-  )
+  val update_u_mask = VecInit((0 until bankWidth*2) map {i => io.update_u_mask(i / 2)})
+  val update_u_wen = WireInit(doing_reset || doing_clear_u || update_u_mask.reduce(_||_))
+  val u_rdata = us.read(s1_hashed_idx, (!update_u_wen && singlePorted.B) && io.f1_req_valid)
+  s2_req_rus := u_rdata
+  when (update_u_wen) {
+    val widx = Mux(doing_reset, reset_idx, Mux(doing_clear_u, clear_u_idx, update_idx))
+    val wdata = Mux(doing_reset || doing_clear_u, VecInit(0.U((bankWidth*2).W).asBools), VecInit(io.update_u.asUInt.asBools))
+    val wmask = Mux(doing_reset, ~(0.U((bankWidth*2).W)), Mux(doing_clear_u, clear_u_mask, update_u_mask.asUInt))
+    us.write(widx, wdata, wmask.asBools)
+  }
 
-  val update_hi_wdata = Wire(Vec(bankWidth, Bool()))
-  hi_us.write(
-    Mux(doing_reset, reset_idx, Mux(doing_clear_u_hi, clear_u_idx, update_idx)),
-    Mux(doing_reset || doing_clear_u_hi, VecInit((0.U(bankWidth.W)).asBools), update_hi_wdata),
-    Mux(doing_reset || doing_clear_u_hi, ~(0.U(bankWidth.W)), io.update_u_mask.asUInt).asBools
-  )
 
-  val update_lo_wdata = Wire(Vec(bankWidth, Bool()))
-  lo_us.write(
-    Mux(doing_reset, reset_idx, Mux(doing_clear_u_lo, clear_u_idx, update_idx)),
-    Mux(doing_reset || doing_clear_u_lo, VecInit((0.U(bankWidth.W)).asBools), update_lo_wdata),
-    Mux(doing_reset || doing_clear_u_lo, ~(0.U(bankWidth.W)), io.update_u_mask.asUInt).asBools
-  )
+
+
 
   val wrbypass_tags    = Reg(Vec(nWrBypassEntries, UInt(tagSz.W)))
   val wrbypass_idxs    = Reg(Vec(nWrBypassEntries, UInt(log2Ceil(nRows).W)))
@@ -162,9 +167,6 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
     )
     update_wdata(w).valid := true.B
     update_wdata(w).tag   := update_tag
-
-    update_hi_wdata(w)    := io.update_u(w)(1)
-    update_lo_wdata(w)    := io.update_u(w)(0)
   }
 
   when (io.update_mask.reduce(_||_)) {
@@ -191,7 +193,8 @@ case class BoomTageParams(
                                               (  256,      16,     8),
                                               (  128,      32,     9),
                                               (  128,      64,     9)),
-  uBitPeriod: Int = 2048
+  uBitPeriod: Int = 2048,
+  singlePorted: Boolean = false
 )
 
 
@@ -221,7 +224,7 @@ class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implici
 
   val tt = params.tableInfo map {
     case (n, l, s) => {
-      val t = Module(new TageTable(n, s, l, params.uBitPeriod))
+      val t = Module(new TageTable(n, s, l, params.uBitPeriod, params.singlePorted))
       t.io.f1_req_valid := RegNext(io.f0_valid)
       t.io.f1_req_pc    := RegNext(io.f0_pc)
       t.io.f1_req_ghist := io.f1_ghist

@@ -236,7 +236,7 @@ class WithNMegaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
               numRobEntries = 128,
               issueParams = Seq(
                 IssueParams(issueWidth=3, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=4),
-                IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4, useFullIssueSel=false),
+                IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4),
                 IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
               lsuWidth = 2,
               numIntPhysRegisters = 128,
@@ -267,6 +267,54 @@ class WithNMegaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
     case XLen => 64
   })
 )
+
+class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
+  new WithFastTAGEBPD ++
+  new Config((site, here, up) => {
+    case TilesLocated(InSubsystem) => {
+      val prev = up(TilesLocated(InSubsystem), site)
+      val idOffset = overrideIdOffset.getOrElse(prev.size)
+      (0 until n).map { i =>
+        BoomTileAttachParams(
+          tileParams = BoomTileParams(
+            core = BoomCoreParams(
+              fetchWidth = 8,
+              decodeWidth = 4,
+              numRobEntries = 128,
+              issueParams = Seq(
+                IssueParams(issueWidth=3, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=4, numSlowEntries=8),
+                IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4, numSlowEntries=24, useFullIssueSel=false),
+                IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4, numSlowEntries=16)),
+              lsuWidth = 2,
+              numIntPhysRegisters = 128,
+              numFpPhysRegisters = 128,
+              numLdqEntries = 32,
+              numStqEntries = 32,
+              maxBrCount = 20,
+              numFetchBufferEntries = 32,
+              enablePrefetching = true,
+              enableSFBOpt = true,
+              numDCacheBanks = 4,
+              ftq = FtqParameters(nEntries=40),
+              fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
+            ),
+            dcache = Some(
+              DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=8, nTLBEntries=32)
+            ),
+            icache = Some(
+              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, fetchBytes=4*4)
+            ),
+            hartId = i + idOffset
+          ),
+          crossingParams = RocketCrossingParams()
+        )
+      } ++ prev
+    }
+    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+    case XLen => 64
+  })
+)
+
 
 /**
  * 5-wide BOOM.
@@ -434,18 +482,24 @@ class WithFastTAGEBPD extends Config((site, here, up) => {
       localHistoryLength = 1,
       localHistoryNSets = 0,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
-        val tage = Module(new TageBranchPredictorBank()(p))
-        val slowbtb = Module(new SlowBTBBranchPredictorBank()(p))
+        val tage = Module(new TageBranchPredictorBank(
+          BoomTageParams(singlePorted = true))(p))
+        val slowbtb = Module(new SlowBTBBranchPredictorBank(
+          BoomSlowBTBParams(singlePorted = true))(p))
         val fastbtb = Module(new BTBBranchPredictorBank(
-          BoomBTBParams(nSets = 32, nWays = 2, offsetSz = 13, extendedNSets = 32))(p))
-        val bim = Module(new BIMBranchPredictorBank()(p))
+          BoomBTBParams(nSets = 32, nWays = 2, offsetSz = 13, extendedNSets = 32, useFlops = true))(p))
+        val slowbim = Module(new BIMBranchPredictorBank(
+          BoomBIMParams(nSets = 4096, singlePorted = true, slow = true))(p))
+        val fastbim = Module(new BIMBranchPredictorBank(
+          BoomBIMParams(useFlops = true, nSets = 128, singlePorted = false))(p))
         val ubtb = Module(new FA2MicroBTBBranchPredictorBank()(p))
-        val preds = Seq(tage, slowbtb, fastbtb, bim, ubtb)
+        val preds = Seq(tage, slowbtb, fastbtb, slowbim, fastbim, ubtb)
         preds.map(_.io := DontCare)
 
         ubtb.io.resp_in(0)    := resp_in
-        bim.io.resp_in(0)     := ubtb.io.resp
-        fastbtb.io.resp_in(0) := bim.io.resp
+        fastbim.io.resp_in(0) := ubtb.io.resp
+        slowbim.io.resp_in(0) := fastbim.io.resp
+        fastbtb.io.resp_in(0) := slowbim.io.resp
         slowbtb.io.resp_in(0) := fastbtb.io.resp
         tage.io.resp_in(0)    := slowbtb.io.resp
 

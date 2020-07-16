@@ -16,7 +16,8 @@ case class BoomSlowBTBParams(
   nSets: Int = 128,
   nWays: Int = 2,
   offsetSz: Int = 13,
-  extendedNSets: Int = 128
+  extendedNSets: Int = 128,
+  singlePorted: Boolean = false
 )
 
 
@@ -161,27 +162,38 @@ class SlowBTBBranchPredictorBank(params: BoomSlowBTBParams = BoomSlowBTBParams()
     val btb  = SyncReadMem(nSets, Vec(bankWidth, UInt(btbEntrySz.W)))
     meta.suggestName(s"slowbtb_meta_way_${w}")
     btb.suggestName(s"slowbtb_data_way_${w}")
-    s2_req_rmeta(w) := VecInit(meta.read(s1_idx, s1_valid).map(_.asTypeOf(new BTBMeta)))
-    s2_req_rbtb(w)  := VecInit(btb.read(s1_idx, s1_valid).map(_.asTypeOf(new BTBEntry)))
 
-    when (doing_reset || s1_update_meta.write_way === w.U || (nWays == 1).B) {
-      btb.write(
-        Mux(doing_reset, reset_idx, s1_update_idx),
-        Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 0.U(btbEntrySz.W) }),
-                         VecInit(Seq.fill(bankWidth) { s1_update_wbtb_data.asUInt })),
-        Mux(doing_reset, ~(0.U(bankWidth.W)), s1_update_wbtb_mask).asBools
-      )
-      meta.write(
-        Mux(doing_reset, reset_idx, s1_update_idx),
-        Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 0.U(btbMetaSz.W) }),
-                         VecInit(s1_update_wmeta_data.map(_.asUInt))),
-        Mux(doing_reset, ~(0.U(bankWidth.W)), s1_update_wmeta_mask).asBools
-      )
+
+    val btbwen  = WireInit(doing_reset || ((s1_update_meta.write_way === w.U || (nWays == 1).B) && s1_update_wbtb_mask =/= 0.U))
+    val metawen = WireInit(doing_reset || ((s1_update_meta.write_way === w.U || (nWays == 1).B) && s1_update_wmeta_mask =/= 0.U))
+
+    val rbtb = if (params.singlePorted) btb.read(s1_idx, s1_valid && !btbwen) else btb.read(s1_idx, s1_valid)
+    s2_req_rbtb(w)  := VecInit(rbtb.map(_.asTypeOf(new BTBEntry)))
+
+    when (btbwen) {
+      val widx = Mux(doing_reset, reset_idx, s1_update_idx)
+      val wdata = Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 0.U(btbEntrySz.W) }),
+                                   VecInit(Seq.fill(bankWidth) { s1_update_wbtb_data.asUInt }))
+      val wmask = Mux(doing_reset, ~(0.U(bankWidth.W)), s1_update_wbtb_mask)
+      btb.write(widx, wdata, wmask.asBools)
+    }
+
+    val rmeta = if (params.singlePorted) meta.read(s1_idx, s1_valid && !metawen) else meta.read(s1_idx, s1_valid)
+    s2_req_rmeta(w) := VecInit(rmeta.map(_.asTypeOf(new BTBMeta)))
+    when (metawen) {
+      val widx = Mux(doing_reset, reset_idx, s1_update_idx)
+      val wdata = Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 0.U(btbMetaSz.W) }),
+                                   VecInit(s1_update_wmeta_data.map(_.asUInt)))
+      val wmask = Mux(doing_reset, ~(0.U(bankWidth.W)), s1_update_wmeta_mask)
+      meta.write(widx, wdata, wmask.asBools)
     }
   }
   val ebtb = SyncReadMem(extendedNSets, UInt(vaddrBitsExtended.W))
-  s2_req_rebtb := ebtb.read(s1_idx, s1_valid)
-  when (s1_update_wbtb_mask =/= 0.U && offset_is_extended) {
+
+  val ewen = WireInit(s1_update_wbtb_mask =/= 0.U && offset_is_extended)
+  val rebtb = if (params.singlePorted) ebtb.read(s1_idx, s1_valid && !ewen) else ebtb.read(s1_idx, s1_valid)
+  s2_req_rebtb := rebtb
+  when (ewen) {
     ebtb.write(s1_update_idx, s1_update.bits.target)
   }
 }

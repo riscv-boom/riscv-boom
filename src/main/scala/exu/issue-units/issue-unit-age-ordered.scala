@@ -35,12 +35,14 @@ class IssueUnitCollapsing(
   //-------------------------------------------------------------
   // Figure out how much to shift entries by
 
-  // Fast slots can shift up to dispatchWidth per cycle, so they can handle full dispatch throughput
-  val nFastSlots = dispatchWidth * 4
   // Slow slots only shift 1 per cycle, these reduce critical path
-  val nSlowSlots = numIssueSlots - nFastSlots
-  require (nFastSlots > 0)
-  require (nSlowSlots >= 0)
+  val nSlowSlots = params.numSlowEntries
+  // Fast slots can shift up to dispatchWidth per cycle, so they can handle full dispatch throughput
+  val nFastSlots = numIssueSlots - nSlowSlots
+
+  require (nFastSlots >= dispatchWidth)
+  require (nFastSlots <= numIssueSlots)
+
 
   val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_uops.map(_.valid).map(!_.asBool)
   val shamts_oh = Array.fill(numIssueSlots+dispatchWidth) {Wire(UInt(width=dispatchWidth.W))}
@@ -57,7 +59,7 @@ class IssueUnitCollapsing(
   }
   shamts_oh(0) := 0.U
   for (i <- 1 until numIssueSlots + dispatchWidth) {
-    val shift = if (i < nSlowSlots) 1 else dispatchWidth
+    val shift = if (i < nSlowSlots) (dispatchWidth min 1 + (i * (dispatchWidth-1)/nSlowSlots).toInt) else dispatchWidth
     shamts_oh(i) := SaturatingCounterOH(shamts_oh(i-1), vacants(i-1), shift)
   }
 

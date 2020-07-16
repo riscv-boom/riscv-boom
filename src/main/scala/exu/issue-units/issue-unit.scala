@@ -33,6 +33,7 @@ case class IssueParams(
   issueWidth: Int = 1,
   numEntries: Int = 8,
   useFullIssueSel: Boolean = true,
+  numSlowEntries: Int = 0,
   iqType: BigInt
 )
 

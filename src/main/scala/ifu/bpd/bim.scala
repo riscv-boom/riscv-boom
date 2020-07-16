@@ -23,7 +23,8 @@ case class BoomBIMParams(
   nSets: Int = 2048,
   nCols: Int = 8,
   singlePorted: Boolean = true,
-  useFlops: Boolean = false
+  useFlops: Boolean = false,
+  slow: Boolean = false
 )
 
 class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
@@ -60,10 +61,12 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
   val mems = (0 until nCols) map {c => (f"bim_col$c", nSetsPerCol, bankWidth * 2)}
 
   val s0_col_mask = UIntToOH(s0_idx(log2Ceil(nCols)-1,0)) & Fill(nCols, s0_valid)
+  val s1_col_mask = RegNext(s0_col_mask)
   val s0_col_idx  = s0_idx >> log2Ceil(nCols)
-  val s1_req_rdata = Wire(Vec(nCols, Vec(bankWidth, UInt(2.W))))
+  val s1_col_idx  = RegNext(s0_col_idx)
 
-  val s2_req_rdata = RegNext(Mux1H(RegNext(s0_col_mask), s1_req_rdata))
+  val s2_req_rdata_all = Wire(Vec(nCols, Vec(bankWidth, UInt(2.W))))
+  val s2_req_rdata = Mux1H(RegNext(s1_col_mask), s2_req_rdata_all)
 
   val s2_resp         = Wire(Vec(bankWidth, Bool()))
 
@@ -71,8 +74,13 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
 
     s2_resp(w)        := s2_valid && s2_req_rdata(w)(1) && !doing_reset
     s2_meta.bims(w)   := s2_req_rdata(w)
-  }
 
+    if (!params.slow) {
+      io.resp.f2(w).taken := s2_resp(w)
+    }
+    io.resp.f3(w).taken := RegNext(s2_resp(w))
+  }
+  io.f3_meta := RegNext(s2_meta.asUInt)
 
   val s1_update_wdata   = Wire(Vec(bankWidth, UInt(2.W)))
   val s1_update_wmask   = Wire(Vec(bankWidth, Bool()))
@@ -120,8 +128,16 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
   }
 
   for (c <- 0 until nCols) {
-    s1_req_rdata(c) := DontCare
-    val wen = doing_reset || (s1_update.valid && s1_update.bits.is_commit_update && s1_update_col_mask(c) && !s0_col_mask(c))
+    val wen = WireInit(doing_reset || (s1_update.valid && s1_update.bits.is_commit_update && s1_update_col_mask(c) && !s0_col_mask(c)))
+
+    val rdata = Wire(Vec(bankWidth, UInt(2.W)))
+    rdata := DontCare
+    val (ren, ridx) = if (params.slow) (s1_col_mask(c), s1_col_idx) else (s0_col_mask(c), s0_col_idx)
+    if (params.slow) {
+      s2_req_rdata_all(c) := rdata
+    } else {
+      s2_req_rdata_all(c) := RegNext(rdata)
+    }
     if (params.useFlops) {
       val data = Reg(Vec(nSetsPerCol, Vec(bankWidth, UInt(2.W))))
       when (wen && doing_reset) {
@@ -133,20 +149,20 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
           }
         }
       }
-      when (s0_col_mask(c) && !(wen && params.singlePorted.B)) {
-        s1_req_rdata(c) := data(RegNext(s0_col_idx))
+      when (RegNext(ren) && !(wen && params.singlePorted.B)) {
+        rdata := data(RegNext(ridx))
       }
     } else {
       val data = SyncReadMem(nSetsPerCol, Vec(bankWidth, UInt(2.W)))
+      data.suggestName(s"bim_col_${c}")
+      val r = if (params.singlePorted) data.read(ridx, ren && !wen) else data.read(ridx, ren)
+      rdata := r
       when (wen) {
-        data.write(
-          Mux(doing_reset, reset_idx, s1_update_col_idx),
-          Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 2.U }), s1_update_wdata),
-          Mux(doing_reset, (~(0.U(bankWidth.W))), s1_update_wmask.asUInt).asBools
-        )
+        val widx = Mux(doing_reset, reset_idx, s1_update_col_idx)
+        val wdata = Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 2.U }), s1_update_wdata)
+        val wmask = Mux(doing_reset, (~(0.U(bankWidth.W))), s1_update_wmask.asUInt)
+        data.write(widx, wdata, wmask.asBools)
       }
-      val dout = data.read(s0_col_idx, s0_col_mask(c) && !(wen && params.singlePorted.B))
-      s1_req_rdata(c) := dout
     }
   }
   when (s1_update_wmask.reduce(_||_) && s1_update.valid && s1_update.bits.is_commit_update) {
@@ -159,9 +175,5 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
     }
   }
 
-  for (w <- 0 until bankWidth) {
-    io.resp.f2(w).taken := s2_resp(w)
-    io.resp.f3(w).taken := RegNext(io.resp.f2(w).taken)
-  }
-  io.f3_meta := RegNext(s2_meta.asUInt)
+
 }
