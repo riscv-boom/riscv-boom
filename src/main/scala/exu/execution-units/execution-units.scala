@@ -90,6 +90,10 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
     exe_units.find(_.hasFpiu).get
   }
 
+  lazy val jmp_unit_idx = {
+    exe_units.indexWhere(_.hasJmp)
+  }
+
   lazy val rocc_unit = {
     require (usingRoCC)
     require (exe_units.count(_.hasRocc) == 1)

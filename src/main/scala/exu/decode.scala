@@ -274,9 +274,9 @@ object XDecode extends DecodeConstants
   AMOMAX_D-> List(Y, N, X, uopAMO_AG, IQT_INT, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_MAX, 0.U,N, N, N, Y, Y, CSR.N),
   AMOMAXU_D->List(Y, N, X, uopAMO_AG, IQT_INT, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XA_MAXU,0.U,N, N, N, Y, Y, CSR.N),
 
-  LR_W    -> List(Y, N, X, uopAMO_AG, IQT_INT, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XLR   , 0.U,N, N, N, Y, Y, CSR.N), // TODO optimize LR, SC
-  LR_D    -> List(Y, N, X, uopAMO_AG, IQT_INT, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XLR   , 0.U,N, N, N, Y, Y, CSR.N), // note LR generates 2 micro-ops,
-  SC_W    -> List(Y, N, X, uopAMO_AG, IQT_INT, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC   , 0.U,N, N, N, Y, Y, CSR.N), // one which isn't needed
+  LR_W    -> List(Y, N, X, uopLD    , IQT_INT, FU_MEM, RT_FIX, RT_FIX, RT_X  , N, IS_X, Y, N, N, N, N, M_XLR   , 0.U,N, N, N, Y, Y, CSR.N),
+  LR_D    -> List(Y, N, X, uopLD    , IQT_INT, FU_MEM, RT_FIX, RT_FIX, RT_X  , N, IS_X, Y, N, N, N, N, M_XLR   , 0.U,N, N, N, Y, Y, CSR.N),
+  SC_W    -> List(Y, N, X, uopAMO_AG, IQT_INT, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC   , 0.U,N, N, N, Y, Y, CSR.N),
   SC_D    -> List(Y, N, X, uopAMO_AG, IQT_INT, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, Y, Y, N, N, M_XSC   , 0.U,N, N, N, Y, Y, CSR.N)
   )
 }
@@ -508,13 +508,12 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     (x.map(_._1).reduce(_||_), PriorityMux(x))
 
   val (xcpt_valid, xcpt_cause) = checkExceptions(List(
-    (io.interrupt,     io.interrupt_cause),
-    (uop.bp_debug_if,  (CSR.debugTriggerCause).U),
-    (uop.bp_xcpt_if,   (Causes.breakpoint).U),
-    (uop.replay_if,    MINI_EXCEPTION_REPLAY),
-    (uop.xcpt_pf_if,   (Causes.fetch_page_fault).U),
-    (uop.xcpt_ae_if,   (Causes.fetch_access).U),
-    (id_illegal_insn,  (Causes.illegal_instruction).U)))
+    (io.interrupt && !io.enq.uop.is_sfb, io.interrupt_cause),  // Disallow interrupts while we are handling a SFB
+    (uop.bp_debug_if,                    (CSR.debugTriggerCause).U),
+    (uop.bp_xcpt_if,                     (Causes.breakpoint).U),
+    (uop.xcpt_pf_if,                     (Causes.fetch_page_fault).U),
+    (uop.xcpt_ae_if,                     (Causes.fetch_access).U),
+    (id_illegal_insn,                    (Causes.illegal_instruction).U)))
 
   uop.exception := xcpt_valid
   uop.exc_cause := xcpt_cause
@@ -538,6 +537,22 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   uop.lrs1_rtype := cs.rs1_type
   uop.lrs2_rtype := cs.rs2_type
   uop.frs3_en    := cs.frs3_en
+
+  uop.ldst_is_rs1 := uop.is_sfb_shadow
+  // SFB optimization
+  when (uop.is_sfb_shadow && cs.rs2_type === RT_X) {
+    uop.lrs2_rtype  := RT_FIX
+    uop.lrs2        := inst(RD_MSB,RD_LSB)
+    uop.ldst_is_rs1 := false.B
+  } .elsewhen (uop.is_sfb_shadow && cs.uopc === uopADD && inst(RS1_MSB,RS1_LSB) === 0.U) {
+    uop.uopc        := uopMOV
+    uop.lrs1        := inst(RD_MSB, RD_LSB)
+    uop.ldst_is_rs1 := true.B
+  }
+  when (uop.is_sfb_br) {
+    uop.fu_code := FU_JMP
+  }
+
 
   uop.fp_val     := cs.fp_val
   uop.fp_single  := cs.fp_single // TODO use this signal instead of the FPU decode's table signal?
@@ -584,46 +599,95 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
  * Smaller Decode unit for the Frontend to decode different
  * branches.
  * Accepts EXPANDED RVC instructions
- */
+  */
+
+class BranchDecodeSignals(implicit p: Parameters) extends BoomBundle
+{
+  val is_ret   = Bool()
+  val is_call  = Bool()
+  val target   = UInt(vaddrBitsExtended.W)
+  val cfi_type = UInt(CFI_SZ.W)
+
+
+  // Is this branch a short forwards jump?
+  val sfb_offset = Valid(UInt(log2Ceil(icBlockBytes).W))
+  // Is this instruction allowed to be inside a sfb?
+  val shadowable = Bool()
+}
 
 class BranchDecode(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new Bundle {
     val inst    = Input(UInt(32.W))
     val pc      = Input(UInt(vaddrBitsExtended.W))
-    val is_ret  = Output(Bool())
-    val is_call = Output(Bool())
-    val target = Output(UInt(vaddrBitsExtended.W))
-    val cfi_type = Output(UInt(CFI_SZ.W))
+
+    val out = Output(new BranchDecodeSignals)
   })
 
   val bpd_csignals =
     freechips.rocketchip.rocket.DecodeLogic(io.inst,
-                  List[BitPat](N, N, N, IS_X),
-////                      //   is br?
-////                      //   |  is jal?
-////                      //   |  |  is jalr?
-////                      //   |  |  |  br type
-////                      //   |  |  |  |
+                  List[BitPat](N, N, N, N, X),
+////                               is br?
+////                               |  is jal?
+////                               |  |  is jalr?
+////                               |  |  |
+////                               |  |  |  shadowable
+////                               |  |  |  |  has_rs2
+////                               |  |  |  |  |
             Array[(BitPat, List[BitPat])](
-               JAL     -> List(N, Y, N, IS_J),
-               JALR    -> List(N, N, Y, IS_I),
-               BEQ     -> List(Y, N, N, IS_B),
-               BNE     -> List(Y, N, N, IS_B),
-               BGE     -> List(Y, N, N, IS_B),
-               BGEU    -> List(Y, N, N, IS_B),
-               BLT     -> List(Y, N, N, IS_B),
-               BLTU    -> List(Y, N, N, IS_B)
+               JAL         -> List(N, Y, N, N, X),
+               JALR        -> List(N, N, Y, N, X),
+               BEQ         -> List(Y, N, N, N, X),
+               BNE         -> List(Y, N, N, N, X),
+               BGE         -> List(Y, N, N, N, X),
+               BGEU        -> List(Y, N, N, N, X),
+               BLT         -> List(Y, N, N, N, X),
+               BLTU        -> List(Y, N, N, N, X),
+
+               SLLI        -> List(N, N, N, Y, N),
+               SRLI        -> List(N, N, N, Y, N),
+               SRAI        -> List(N, N, N, Y, N),
+
+               ADDIW       -> List(N, N, N, Y, N),
+               SLLIW       -> List(N, N, N, Y, N),
+               SRAIW       -> List(N, N, N, Y, N),
+               SRLIW       -> List(N, N, N, Y, N),
+
+               ADDW        -> List(N, N, N, Y, Y),
+               SUBW        -> List(N, N, N, Y, Y),
+               SLLW        -> List(N, N, N, Y, Y),
+               SRAW        -> List(N, N, N, Y, Y),
+               SRLW        -> List(N, N, N, Y, Y),
+
+               LUI         -> List(N, N, N, Y, N),
+
+               ADDI        -> List(N, N, N, Y, N),
+               ANDI        -> List(N, N, N, Y, N),
+               ORI         -> List(N, N, N, Y, N),
+               XORI        -> List(N, N, N, Y, N),
+               SLTI        -> List(N, N, N, Y, N),
+               SLTIU       -> List(N, N, N, Y, N),
+
+               SLL         -> List(N, N, N, Y, Y),
+               ADD         -> List(N, N, N, Y, Y),
+               SUB         -> List(N, N, N, Y, Y),
+               SLT         -> List(N, N, N, Y, Y),
+               SLTU        -> List(N, N, N, Y, Y),
+               AND         -> List(N, N, N, Y, Y),
+               OR          -> List(N, N, N, Y, Y),
+               XOR         -> List(N, N, N, Y, Y),
+               SRA         -> List(N, N, N, Y, Y),
+               SRL         -> List(N, N, N, Y, Y)
             ))
 
-  val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: imm_sel_ :: Nil = bpd_csignals
+  val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: (cs_is_shadowable:Bool) :: (cs_has_rs2) :: Nil = bpd_csignals
 
-  io.is_call := (cs_is_jal || cs_is_jalr) && GetRd(io.inst) === RA
-  io.is_ret  := cs_is_jalr && GetRs1(io.inst) === BitPat("b00?01")
+  io.out.is_call := (cs_is_jal || cs_is_jalr) && GetRd(io.inst) === RA
+  io.out.is_ret  := cs_is_jalr && GetRs1(io.inst) === BitPat("b00?01") && GetRd(io.inst) === X0
 
-  io.target := Mux(cs_is_br, ComputeBranchTarget(io.pc, io.inst, xLen),
-                              ComputeJALTarget(io.pc, io.inst, xLen))
-  io.cfi_type :=
+  io.out.target := Mux(cs_is_br, ComputeBranchTarget(io.pc, io.inst, xLen),
+                                 ComputeJALTarget(io.pc, io.inst, xLen))
+  io.out.cfi_type :=
     Mux(cs_is_jalr,
       CFI_JALR,
     Mux(cs_is_jal,
@@ -631,14 +695,16 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
     Mux(cs_is_br,
       CFI_BR,
       CFI_X)))
-}
 
-/**
- * IO bundle for getting the branch mask
- */
-class DebugBranchMaskGenerationLogicIO(implicit p: Parameters) extends BoomBundle
-{
-  val branch_mask = UInt(maxBrCount.W)
+  val br_offset = Cat(io.inst(7), io.inst(30,25), io.inst(11,8), 0.U(1.W))
+  // Is a sfb if it points forwards (offset is positive)
+  io.out.sfb_offset.valid := cs_is_br && !io.inst(31) && br_offset =/= 0.U && (br_offset >> log2Ceil(icBlockBytes)) === 0.U
+  io.out.sfb_offset.bits  := br_offset
+  io.out.shadowable := cs_is_shadowable && (
+    !cs_has_rs2 ||
+    (GetRs1(io.inst) === GetRd(io.inst)) ||
+    (io.inst === ADD && GetRs1(io.inst) === X0)
+  )
 }
 
 /**
@@ -669,7 +735,7 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
     val brupdate         = Input(new BrUpdateInfo())
     val flush_pipeline = Input(Bool())
 
-    val debug = Output(new DebugBranchMaskGenerationLogicIO())
+    val debug_branch_mask = Output(UInt(maxBrCount.W))
   })
 
   val branch_mask = RegInit(0.U(maxBrCount.W))
@@ -722,5 +788,5 @@ class BranchMaskGenerationLogic(val pl_width: Int)(implicit p: Parameters) exten
     branch_mask := GetNewBrMask(io.brupdate, curr_mask) & mask
   }
 
-  io.debug.branch_mask := branch_mask
+  io.debug_branch_mask := branch_mask
 }

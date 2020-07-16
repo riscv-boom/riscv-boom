@@ -254,12 +254,12 @@ class BoomL1MetaReadReq(implicit p: Parameters) extends BoomBundle()(p) {
   val req = Vec(memWidth, new L1MetaReadReq)
 }
 
- class BoomL1DataReadReq(implicit p: Parameters) extends BoomBundle()(p) {
+class BoomL1DataReadReq(implicit p: Parameters) extends BoomBundle()(p) {
   val req = Vec(memWidth, new L1DataReadReq)
   val valid = Vec(memWidth, Bool())
 }
 
-class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCacheParameters {
+abstract class AbstractBoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCacheParameters {
   val io = IO(new BoomBundle {
     val read  = Input(Vec(memWidth, Valid(new L1DataReadReq)))
     val write = Input(Valid(new L1DataWriteReq))
@@ -268,6 +268,34 @@ class BoomDataArray(implicit p: Parameters) extends BoomModule with HasL1HellaCa
   })
 
   def pipeMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
+
+}
+
+class BoomDuplicatedDataArray(implicit p: Parameters) extends AbstractBoomDataArray
+{
+
+  val waddr = io.write.bits.addr >> rowOffBits
+  for (j <- 0 until memWidth) {
+
+    val raddr = io.read(j).bits.addr >> rowOffBits
+    for (w <- 0 until nWays) {
+      val (array, omSRAM) = DescribedSRAM(
+        name = s"array_${w}_${j}",
+        desc = "Non-blocking DCache Data Array",
+        size = nSets * refillCycles,
+        data = Vec(rowWords, Bits(encDataBits.W))
+      )
+      when (io.write.bits.way_en(w) && io.write.valid) {
+        val data = VecInit((0 until rowWords) map (i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i)))
+        array.write(waddr, data, io.write.bits.wmask.asBools)
+      }
+      io.resp(j)(w) := RegNext(array.read(raddr, io.read(j).bits.way_en(w) && io.read(j).valid).asUInt)
+    }
+    io.nacks(j) := false.B
+  }
+}
+
+class BoomBankedDataArray(implicit p: Parameters) extends AbstractBoomDataArray {
 
   val nBanks   = boomParams.numDCacheBanks
   val bankSize = nSets * refillCycles / nBanks
@@ -423,7 +451,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   metaWriteArb.io.out.ready := meta.map(_.io.write.ready).reduce(_||_)
 
   // data
-  val data = Module(new BoomDataArray)
+  val data = Module(if (boomParams.numDCacheBanks == 1) new BoomDuplicatedDataArray else new BoomBankedDataArray)
   val dataWriteArb = Module(new Arbiter(new L1DataWriteReq, 2))
   // 0 goes to pipeline, 1 goes to MSHR refills
   val dataReadArb = Module(new Arbiter(new BoomL1DataReadReq, 3))
@@ -655,17 +683,13 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   }
 
   when (s2_valid(0)) {
-    when (s2_req(0).addr === debug_sc_fail_addr) {
-      when (s2_sc_fail) {
-        debug_sc_fail_cnt := debug_sc_fail_cnt + 1.U
-      } .elsewhen (s2_sc) {
-        debug_sc_fail_cnt := 0.U
-      }
-    } .otherwise {
-      when (s2_sc_fail) {
-        debug_sc_fail_addr := s2_req(0).addr
-        debug_sc_fail_cnt  := 1.U
-      }
+    when (s2_req(0).addr === debug_sc_fail_addr && s2_sc_fail) {
+      debug_sc_fail_cnt := debug_sc_fail_cnt + 1.U
+    } .elsewhen (s2_req(0).addr =/= debug_sc_fail_addr && s2_sc_fail) {
+      debug_sc_fail_addr := s2_req(0).addr
+      debug_sc_fail_cnt  := 1.U
+    } .elsewhen (s2_sc && !s2_sc_fail) {
+      debug_sc_fail_cnt := 0.U
     }
   }
   assert(debug_sc_fail_cnt < 100.U, "L1DCache failed too many SCs in a row")
@@ -779,17 +803,23 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   mshrs.io.wb_resp      := wb.io.resp
   wb.io.mem_grant       := tl_out.d.fire() && tl_out.d.bits.source === cfg.nMSHRs.U
 
+  val lsu_release_arb = Module(new Arbiter(new TLBundleC(edge.bundle), 2))
+  io.lsu.release <> lsu_release_arb.io.out
+  lsu_release_arb.io.in(0) <> wb.io.lsu_release
+  lsu_release_arb.io.in(1) <> prober.io.lsu_release
 
-  TLArbiter.lowest(edge, io.lsu.release, wb.io.lsu_release, prober.io.lsu_release)
-  io.lsu.release.valid := wb.io.lsu_release.valid || prober.io.lsu_release.valid
   TLArbiter.lowest(edge, tl_out.c, wb.io.release, prober.io.rep)
+
+  io.lsu.perf.release := edge.done(tl_out.c)
+  io.lsu.perf.acquire := edge.done(tl_out.a)
 
   // load data gen
   val s2_data_word_prebypass = widthMap(w => s2_data_muxed(w) >> Cat(s2_word_idx(w), 0.U(log2Ceil(coreDataBits).W)))
   val s2_data_word = Wire(Vec(memWidth, UInt()))
+
   val loadgen = (0 until memWidth).map { w =>
     new LoadGen(s2_req(w).uop.mem_size, s2_req(w).uop.mem_signed, s2_req(w).addr,
-                s2_data_word(w), s2_sc, wordBytes)
+                s2_data_word(w), s2_sc && (w == 0).B, wordBytes)
   }
   // Mux between cache responses and uncache responses
   val cache_resp = Wire(Vec(memWidth, Valid(new BoomDCacheResp)))

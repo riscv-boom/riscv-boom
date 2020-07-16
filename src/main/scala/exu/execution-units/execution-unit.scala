@@ -39,6 +39,7 @@ class ExeUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   with HasBoomUOP
 {
   val data = Bits(dataWidth.W)
+  val predicated = Bool() // Was this predicated off?
   val fflags = new ValidIO(new FFlagsResp) // write fflags to ROB // TODO: Do this better
 }
 
@@ -89,7 +90,7 @@ abstract class ExecutionUnit(
   val alwaysBypassable : Boolean       = false,
   val hasMem           : Boolean       = false,
   val hasCSR           : Boolean       = false,
-  val hasJmp       : Boolean       = false,
+  val hasJmp           : Boolean       = false,
   val hasAlu           : Boolean       = false,
   val hasFpu           : Boolean       = false,
   val hasMul           : Boolean       = false,
@@ -111,7 +112,7 @@ abstract class ExecutionUnit(
     val ll_iresp = if (writesLlIrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
     val ll_fresp = if (writesLlFrf) new DecoupledIO(new ExeUnitResp(dataWidth)) else null
 
-    val bypass   = Output(new BypassData(numBypassStages, dataWidth))
+    val bypass   = Output(Vec(numBypassStages, Valid(new ExeUnitResp(dataWidth))))
 
     val brupdate = Input(new BrUpdateInfo)
     val kill     = Input(Bool())
@@ -135,10 +136,24 @@ abstract class ExecutionUnit(
     val com_exception = if (hasMem || hasRocc) Input(Bool()) else null
   })
 
-  if (writesIrf)   { io.iresp.bits.fflags.valid    := false.B }
-  if (writesLlIrf) { io.ll_iresp.bits.fflags.valid := false.B }
-  if (writesFrf)   { io.fresp.bits.fflags.valid    := false.B }
-  if (writesLlFrf) { io.ll_fresp.bits.fflags.valid := false.B }
+  if (writesIrf)   {
+    io.iresp.bits.fflags.valid := false.B
+    io.iresp.bits.predicated := false.B
+    //assert(io.iresp.ready)
+  }
+  if (writesLlIrf) {
+    io.ll_iresp.bits.fflags.valid := false.B
+    io.ll_iresp.bits.predicated := false.B
+  }
+  if (writesFrf)   {
+    io.fresp.bits.fflags.valid := false.B
+    io.fresp.bits.predicated := false.B
+    assert(io.fresp.ready)
+  }
+  if (writesLlFrf) {
+    io.ll_fresp.bits.fflags.valid := false.B
+    io.ll_fresp.bits.predicated := false.B
+  }
 
   // TODO add "number of fflag ports", so we can properly account for FPU+Mem combinations
   def hasFFlags     : Boolean = hasFpu || hasFdiv
@@ -152,12 +167,12 @@ abstract class ExecutionUnit(
 
   def supportedFuncUnits = {
     new SupportedFuncUnits(
-      alu = hasAlu,
-      jmp = hasJmp,
-      mem = hasMem,
+      alu  = hasAlu,
+      jmp  = hasJmp,
+      mem  = hasMem,
       muld = hasMul || hasDiv,
-      fpu = hasFpu,
-      csr = hasCSR,
+      fpu  = hasFpu,
+      csr  = hasCSR,
       fdiv = hasFdiv,
       ifpu = hasIfpu)
   }
@@ -176,14 +191,14 @@ abstract class ExecutionUnit(
  * @param hasMem does the exe unit have a MemAddrCalcUnit
  */
 class ALUExeUnit(
-  hasJmp         : Boolean = false,
-  hasCSR         : Boolean = false,
-  hasAlu         : Boolean = true,
-  hasMul         : Boolean = false,
-  hasDiv         : Boolean = false,
-  hasIfpu        : Boolean = false,
-  hasMem         : Boolean = false,
-  hasRocc        : Boolean = false)
+  hasJmp : Boolean = false,
+  hasCSR : Boolean = false,
+  hasAlu : Boolean = true,
+  hasMul : Boolean = false,
+  hasDiv : Boolean = false,
+  hasIfpu: Boolean = false,
+  hasMem : Boolean = false,
+  hasRocc: Boolean = false)
   (implicit p: Parameters)
   extends ExecutionUnit(
     readsIrf         = true,
@@ -256,6 +271,7 @@ class ALUExeUnit(
     alu.io.req.bits.rs1_data := io.req.bits.rs1_data
     alu.io.req.bits.rs2_data := io.req.bits.rs2_data
     alu.io.req.bits.rs3_data := DontCare
+    alu.io.req.bits.pred_data := io.req.bits.pred_data
     alu.io.resp.ready := DontCare
     alu.io.brupdate := io.brupdate
     alu.io.kill     := io.kill
@@ -263,7 +279,7 @@ class ALUExeUnit(
     iresp_fu_units += alu
 
     // Bypassing only applies to ALU
-    io.bypass <> alu.io.bypass
+    io.bypass := alu.io.bypass
 
     // branch unit is embedded inside the ALU
     io.brinfo := alu.io.brinfo
@@ -322,6 +338,7 @@ class ALUExeUnit(
     queue.io.enq.valid       := ifpu.io.resp.valid
     queue.io.enq.bits.uop    := ifpu.io.resp.bits.uop
     queue.io.enq.bits.data   := ifpu.io.resp.bits.data
+    queue.io.enq.bits.predicated := ifpu.io.resp.bits.predicated
     queue.io.enq.bits.fflags := ifpu.io.resp.bits.fflags
     queue.io.brupdate := io.brupdate
     queue.io.flush    := io.kill
@@ -362,8 +379,7 @@ class ALUExeUnit(
     maddrcalc.io.status     := io.status
     maddrcalc.io.bp         := io.bp
     maddrcalc.io.resp.ready := DontCare
-    io.bypass <> maddrcalc.io.bypass // TODO this is not where the bypassing should
-                                     // occur from, is there any bypassing happening?!
+    require(numBypassStages == 0)
 
     io.lsu_io.req := maddrcalc.io.resp
 
@@ -384,9 +400,11 @@ class ALUExeUnit(
   if (writesIrf && !hasMem) {
     io.iresp.valid     := iresp_fu_units.map(_.io.resp.valid).reduce(_|_)
     io.iresp.bits.uop  := PriorityMux(iresp_fu_units.map(f =>
-      (f.io.resp.valid, f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
+      (f.io.resp.valid, f.io.resp.bits.uop)))
     io.iresp.bits.data := PriorityMux(iresp_fu_units.map(f =>
-      (f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
+      (f.io.resp.valid, f.io.resp.bits.data)))
+    io.iresp.bits.predicated := PriorityMux(iresp_fu_units.map(f =>
+      (f.io.resp.valid, f.io.resp.bits.predicated)))
 
     // pulled out for critical path reasons
     // TODO: Does this make sense as part of the iresp bundle?
@@ -457,6 +475,7 @@ class FPUExeUnit(
     fpu.io.req.bits.rs2_data := io.req.bits.rs2_data
     fpu.io.req.bits.rs3_data := io.req.bits.rs3_data
     fpu.io.kill              := io.kill
+    fpu.io.req.bits.pred_data:= false.B
     fpu.io.fcsr_rm           := io.fcsr_rm
     fpu.io.brupdate          := io.brupdate
     fpu.io.resp.ready        := DontCare
@@ -479,6 +498,7 @@ class FPUExeUnit(
     fdivsqrt.io.req.bits.rs2_data := io.req.bits.rs2_data
     fdivsqrt.io.req.bits.rs3_data := DontCare
     fdivsqrt.io.kill              := io.kill
+    fdivsqrt.io.req.bits.pred_data:= false.B
     fdivsqrt.io.fcsr_rm           := io.fcsr_rm
     fdivsqrt.io.brupdate          := io.brupdate
 
@@ -497,8 +517,8 @@ class FPUExeUnit(
   io.fresp.valid       := fu_units.map(_.io.resp.valid).reduce(_|_) &&
                           !(fpu.io.resp.valid && fpu.io.resp.bits.uop.fu_code_is(FU_F2I))
   io.fresp.bits.uop    := PriorityMux(fu_units.map(f => (f.io.resp.valid,
-                                                         f.io.resp.bits.uop.asUInt))).asTypeOf(new MicroOp())
-  io.fresp.bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data.asUInt))).asUInt
+                                                         f.io.resp.bits.uop)))
+  io.fresp.bits.data:= PriorityMux(fu_units.map(f => (f.io.resp.valid, f.io.resp.bits.data)))
   io.fresp.bits.fflags := Mux(fpu_resp_val, fpu_resp_fflags, fdiv_resp_fflags)
 
   // Outputs (Write Port #1) -- FpToInt Queuing Unit -----------------------
@@ -513,6 +533,7 @@ class FPUExeUnit(
                                  fpu.io.resp.bits.uop.uopc =/= uopSTA) // STA means store data gen for floating point
     queue.io.enq.bits.uop    := fpu.io.resp.bits.uop
     queue.io.enq.bits.data   := fpu.io.resp.bits.data
+    queue.io.enq.bits.predicated := fpu.io.resp.bits.predicated
     queue.io.enq.bits.fflags := fpu.io.resp.bits.fflags
     queue.io.brupdate        := io.brupdate
     queue.io.flush           := io.kill
@@ -527,6 +548,7 @@ class FPUExeUnit(
     fp_sdq.io.enq.bits.fflags:= DontCare
     fp_sdq.io.brupdate       := io.brupdate
     fp_sdq.io.flush          := io.kill
+    fp_sdq.io.enq.bits.predicated := false.B
 
     assert(!(fp_sdq.io.enq.valid && !fp_sdq.io.enq.ready))
 

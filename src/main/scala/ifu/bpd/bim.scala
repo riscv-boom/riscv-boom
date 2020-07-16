@@ -9,12 +9,9 @@ import freechips.rocketchip.tilelink._
 
 import boom.common._
 import boom.util.{BoomCoreStringPrefix, WrapInc}
+import scala.math.min
 
 
-case class BoomBIMParams(
-  nSets: Int = 512,
-  micro: Boolean = false
-)
 
 class BIMMeta(implicit p: Parameters) extends BoomBundle()(p)
   with HasBoomFrontendParameters
@@ -22,10 +19,14 @@ class BIMMeta(implicit p: Parameters) extends BoomBundle()(p)
   val bims  = Vec(bankWidth, UInt(2.W))
 }
 
+case class BoomBIMParams(
+  nSets: Int = 2048
+)
 
-class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) extends BranchPredictorBank()(p)
+class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   override val nSets = params.nSets
+
   require(isPow2(nSets))
 
   val nWrBypassEntries = 2
@@ -37,8 +38,8 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
       Mux(old_bim_sat_ntaken && !taken, 0.U,
       Mux(taken, v + 1.U, v - 1.U)))
   }
-  val s1_meta           = Wire(new BIMMeta)
-  override val metaSz   = s1_meta.asUInt.getWidth
+  val s2_meta           = Wire(new BIMMeta)
+  override val metaSz   = s2_meta.asUInt.getWidth
 
   val doing_reset = RegInit(true.B)
   val reset_idx = RegInit(0.U(log2Ceil(nSets).W))
@@ -46,28 +47,25 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
   when (reset_idx === (nSets-1).U) { doing_reset := false.B }
 
 
-  val data  = Seq.fill(bankWidth) { SyncReadMem(nSets, UInt(2.W)) }
+  val data  = SyncReadMem(nSets, Vec(bankWidth, UInt(2.W)))
 
-  val s1_req_rdata    = VecInit(data.map(_.read(s0_req_idx   , io.f0_req.valid)))
+  val mems = Seq(("bim", nSets, bankWidth * 2))
 
+  val s2_req_rdata    = RegNext(data.read(s0_idx   , s0_valid))
+
+  val s2_resp         = Wire(Vec(bankWidth, Bool()))
+
+  for (w <- 0 until bankWidth) {
+
+    s2_resp(w)        := s2_valid && s2_req_rdata(w)(1) && !doing_reset
+    s2_meta.bims(w)   := s2_req_rdata(w)
+  }
 
 
   val s1_update_wdata   = Wire(Vec(bankWidth, UInt(2.W)))
   val s1_update_wmask   = Wire(Vec(bankWidth, Bool()))
   val s1_update_meta    = s1_update.bits.meta.asTypeOf(new BIMMeta)
-
-
-  val s1_resp           = Wire(Vec(bankWidth, new BranchPrediction))
-
-  for (w <- 0 until bankWidth) {
-
-    s1_resp(w).taken        := s1_req.valid && s1_req_rdata(w)(1) && !doing_reset
-    s1_resp(w).is_br        := false.B
-    s1_resp(w).is_jal       := false.B
-    s1_resp(w).predicted_pc.valid := false.B
-    s1_resp(w).predicted_pc.bits  := DontCare
-    s1_meta.bims(w)            := s1_req_rdata(w)
-  }
+  val s1_update_index   = s1_update_idx
 
   val wrbypass_idxs = Reg(Vec(nWrBypassEntries, UInt(log2Ceil(nSets).W)))
   val wrbypass      = Reg(Vec(nWrBypassEntries, Vec(bankWidth, UInt(2.W))))
@@ -75,10 +73,12 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
 
   val wrbypass_hits = VecInit((0 until nWrBypassEntries) map { i =>
     !doing_reset &&
-    wrbypass_idxs(i) === s1_update_idx(log2Ceil(nSets)-1,0)
+    wrbypass_idxs(i) === s1_update_index(log2Ceil(nSets)-1,0)
   })
   val wrbypass_hit = wrbypass_hits.reduce(_||_)
   val wrbypass_hit_idx = PriorityEncoder(wrbypass_hits)
+
+
 
   for (w <- 0 until bankWidth) {
     s1_update_wmask(w)         := false.B
@@ -106,27 +106,26 @@ class BIMBranchPredictorBank(params: BoomBIMParams)(implicit p: Parameters) exte
 
   }
 
-  for (w <- 0 until bankWidth) {
-    when (doing_reset || (s1_update_wmask(w) && s1_update.valid)) {
-      data(w).write(
-        Mux(doing_reset, reset_idx, s1_update_idx),
-        Mux(doing_reset, 2.U, s1_update_wdata(w))
-      )
-    }
+  when (doing_reset || (s1_update.valid && s1_update.bits.is_commit_update)) {
+    data.write(
+      Mux(doing_reset, reset_idx, s1_update_index),
+      Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 2.U }), s1_update_wdata),
+      Mux(doing_reset, (~(0.U(bankWidth.W))), s1_update_wmask.asUInt).asBools
+    )
   }
-  when (s1_update_wmask.reduce(_||_) && s1_update.valid) {
+  when (s1_update_wmask.reduce(_||_) && s1_update.valid && s1_update.bits.is_commit_update) {
     when (wrbypass_hit) {
       wrbypass(wrbypass_hit_idx) := s1_update_wdata
     } .otherwise {
       wrbypass(wrbypass_enq_idx)      := s1_update_wdata
-      wrbypass_idxs(wrbypass_enq_idx) := s1_update_idx
+      wrbypass_idxs(wrbypass_enq_idx) := s1_update_index
       wrbypass_enq_idx := WrapInc(wrbypass_enq_idx, nWrBypassEntries)
     }
   }
 
-  if (params.micro)
-    io.f1_resp := s1_resp
-  io.f2_resp := RegNext(s1_resp)
-  io.f3_resp := RegNext(io.f2_resp)
-  io.f3_meta := RegNext(RegNext(s1_meta.asUInt))
+  for (w <- 0 until bankWidth) {
+    io.resp.f2(w).taken := s2_resp(w)
+    io.resp.f3(w).taken := RegNext(io.resp.f2(w).taken)
+  }
+  io.f3_meta := RegNext(s2_meta.asUInt)
 }

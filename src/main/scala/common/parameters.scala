@@ -43,6 +43,9 @@ case class BoomCoreParams(
   enableFastLoadUse: Boolean = true,
   enableCommitMapTable: Boolean = false,
   enableFastPNR: Boolean = false,
+  enableSFBOpt: Boolean = false,
+  enableGHistStallRepair: Boolean = true,
+  enableBTBFastRepair: Boolean = true,
   useAtomicsOnlyForIO: Boolean = false,
   ftq: FtqParameters = FtqParameters(),
   intToFpLatency: Int = 2,
@@ -52,8 +55,20 @@ case class BoomCoreParams(
   numRCQEntries: Int = 8,
   numDCacheBanks: Int = 1,
   nPMPs: Int = 8,
-  /* more stuff */
+  enableICacheDelay: Boolean = false,
 
+  /* branch prediction */
+  enableBranchPrediction: Boolean = true,
+  branchPredictor: Function2[BranchPredictionBankResponse, Parameters, Tuple2[Seq[BranchPredictorBank], BranchPredictionBankResponse]] = ((resp_in: BranchPredictionBankResponse, p: Parameters) => (Nil, resp_in)),
+  globalHistoryLength: Int = 64,
+  localHistoryLength: Int = 32,
+  localHistoryNSets: Int = 128,
+  bpdMaxMetaLength: Int = 120,
+  numRasEntries: Int = 32,
+  enableRasTopRepair: Boolean = true,
+
+  /* more stuff */
+  useCompressed: Boolean = true,
   useFetchMonitor: Boolean = true,
   bootFreqHz: BigInt = 0,
   fpu: Option[FPUParams] = Some(FPUParams(sfmaLatency=4, dfmaLatency=4)),
@@ -70,18 +85,24 @@ case class BoomCoreParams(
   useAtomics: Boolean = true,
   useDebug: Boolean = true,
   useUser: Boolean = true,
+  useSupervisor: Boolean = false,
   useVM: Boolean = true,
-  useCompressed: Boolean = false,
   useSCIE: Boolean = false,
   useRVE: Boolean = false,
   useBPWatch: Boolean = false,
-  clockGate: Boolean = false
+  clockGate: Boolean = false,
+
+  /* debug stuff */
+  enableCommitLogPrintf: Boolean = false,
+  enableBranchPrintf: Boolean = false,
+  enableMemtracePrintf: Boolean = false
+
 // DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams
 {
   val haveFSDirty = true
   val pmpGranularity: Int = 4
-  val instBits: Int = if (useCompressed) 16 else 32
+  val instBits: Int = 16
   val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
   val retireWidth = decodeWidth
   val jumpInFrontend: Boolean = false // unused in boom
@@ -202,22 +223,31 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   //************************************
   // Branch Prediction
-  val globalHistoryLength = 64
-  val bpdMaxMetaLength = 80
+  val globalHistoryLength = boomParams.globalHistoryLength
+  val localHistoryLength = boomParams.localHistoryLength
+  val localHistoryNSets = boomParams.localHistoryNSets
+  val bpdMaxMetaLength = boomParams.bpdMaxMetaLength
 
-  val nRasEntries = 32
+  def getBPDComponents(resp_in: BranchPredictionBankResponse, p: Parameters) = {
+    boomParams.branchPredictor(resp_in, p)
+  }
 
-  val tageNTables = 6
-  val tageNSets = Seq(128, 128, 256, 256, 128, 128)
-  val tageHistoryLength = Seq(2, 4, 8, 16, 32, 64)
-  val tageTagSz = Seq(7, 7, 8, 8, 9, 9)
-  val tageUBitPeriod = 2048
+  val nRasEntries = boomParams.numRasEntries max 2
+  val useRAS = boomParams.numRasEntries > 0
+  val enableRasTopRepair = boomParams.enableRasTopRepair
+
+  val useBPD = boomParams.enableBranchPrediction
+
+  val useLHist = localHistoryNSets > 1 && localHistoryLength > 1
 
   //************************************
   // Extra Knobs and Features
   val enableCommitMapTable = boomParams.enableCommitMapTable
   require(!enableCommitMapTable) // TODO Fix the commit map table.
   val enableFastPNR = boomParams.enableFastPNR
+  val enableSFBOpt = false //boomParams.enableSFBOpt
+  val enableGHistStallRepair = boomParams.enableGHistStallRepair
+  val enableBTBFastRepair = boomParams.enableBTBFastRepair
 
   //************************************
   // Implicitly calculated constants
@@ -244,6 +274,11 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   require ((numLdqEntries-1) > coreWidth)
   require ((numStqEntries-1) > coreWidth)
 
+  //***********************************
+  // Debug printout parameters
+  val COMMIT_LOG_PRINTF   = boomParams.enableCommitLogPrintf // dump commit state, for comparision against ISA sim
+  val BRANCH_PRINTF       = boomParams.enableBranchPrintf // dump branch predictor results
+  val MEMTRACE_PRINTF     = boomParams.enableMemtracePrintf // dump trace of memory accesses to L1D for debugging
 
   //************************************
   // Other Non/Should-not-be sythesizable modules
@@ -255,13 +290,3 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val corePAddrBits = paddrBits
   val corePgIdxBits = pgIdxBits
 }
-
-/**
- * Dromajo simulation parameters
- */
-case class DromajoParams(
-  bootromParams: Option[BootROMParams] = None,
-  extMemParams: Option[MemoryPortParams] = None,
-  clintParams: Option[CLINTParams] = None,
-  plicParams: Option[PLICParams] = None
-)

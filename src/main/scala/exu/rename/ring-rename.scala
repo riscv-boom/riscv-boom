@@ -232,12 +232,14 @@ class RingRename(implicit p: Parameters) extends BoomModule
 
   val column_arbiter = Module(new ColumnArbiter)
 
+  val col_gnts = column_arbiter.io.gnts
+
   for (w <- 0 until coreWidth) {
     column_arbiter.io.uops(w).bits  := ren2_uops(w)
     column_arbiter.io.uops(w).valid := ren2_valids(w)
-  }
 
-  val col_gnts = column_arbiter.io.gnts
+    ren2_uops(w).column := col_gnts(w)
+  }
 
   //----------------------------------------------------------------------------------------------------
   // Free Lists

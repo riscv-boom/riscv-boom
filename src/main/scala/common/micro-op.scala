@@ -48,10 +48,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val iw_p1_poisoned   = Bool()
   val iw_p2_poisoned   = Bool()
 
-  def allocate_brtag   = is_br || is_jalr
   val is_br            = Bool()                      // is this micro-op a (branch) vs a regular PC+4 inst?
   val is_jalr          = Bool()                      // is this a jump? (jal or jalr)
   val is_jal           = Bool()                      // is this a JAL (doesn't include JR)? used for branch unit
+  val is_sfb           = Bool()                      // is this a sfb or in the shadow of a sfb
 
   val br_mask          = UInt(maxBrCount.W)  // which branches are we being speculated under?
   val br_tag           = UInt(brTagSz.W)
@@ -80,6 +80,11 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val prs2             = UInt(maxPregSz.W)
   val prs3             = UInt(maxPregSz.W)
   val stale_pdst       = UInt(maxPregSz.W)
+  val ppred            = UInt(log2Ceil(ftqSz).W)
+
+  // One-hot vector which specifies the uop's column
+  // Only relevant for uops which use the integer scheduler
+  val column           = UInt(coreWidth.W)
 
   val prs1_busy        = Bool()
   val prs2_busy        = Bool()
@@ -126,6 +131,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // Check if a load nack kills this uop while being issued
   def load_wakeup_nacked(load_nacks: Vec[Bool]) = ((prs1_bypass_mem.asUInt | prs2_bypass_mem.asUInt) & load_nacks.asUInt).orR
 
+  val ppred_busy       = Bool()
   val exception        = Bool()
   val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity
   val bypassable       = Bool()                // can we bypass ALU results? (doesn't include loads, csr, etc...)
@@ -142,11 +148,18 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
                                                      // drain, clear fetcha fter it (tell ROB to un-ready until empty)
   val flush_on_commit  = Bool()                      // some instructions need to flush the pipeline behind them
 
+  // Preditation
+  def is_sfb_br        = is_br && is_sfb && enableSFBOpt.B // Does this write a predicate
+  def is_sfb_shadow    = !is_br && is_sfb && enableSFBOpt.B // Is this predicated
+  val ldst_is_rs1      = Bool() // If this is set and we are predicated off, copy rs1 to dst,
+                                // else copy rs2 to dst
+
   // logical specifiers (only used in Decode->Rename), except rollback (ldst)
   val ldst             = UInt(lregSz.W)
   val lrs1             = UInt(lregSz.W)
   val lrs2             = UInt(lregSz.W)
   val lrs3             = UInt(lregSz.W)
+
   val ldst_val         = Bool()              // is there a destination? invalid for stores, rd==x0, etc.
   val dst_rtype        = UInt(2.W)
   val lrs1_rtype       = UInt(2.W)
@@ -161,7 +174,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // frontend exception information
   val xcpt_pf_if       = Bool()             // I-TLB page fault.
   val xcpt_ae_if       = Bool()             // I$ access exception.
-  val replay_if        = Bool()             // I$ wants us to replay our ifetch request
   val xcpt_ma_if       = Bool()             // Misaligned fetch (jal/brjumping to misaligned addr).
   val bp_debug_if      = Bool()             // Breakpoint
   val bp_xcpt_if       = Bool()             // Breakpoint
@@ -171,6 +183,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val debug_fsrc       = UInt(BSRC_SZ.W)
   // What prediction structure provides the prediction TO this op
   val debug_tsrc       = UInt(BSRC_SZ.W)
+
+  // Do we allocate a branch tag for this?
+  // SFB branches don't get a mask, they get a predicate bit
+  def allocate_brtag   = (is_br && !is_sfb) || is_jalr
 
   // Does this register write-back
   def rf_wen           = dst_rtype =/= RT_X

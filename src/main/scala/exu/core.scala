@@ -39,16 +39,17 @@ import freechips.rocketchip.rocket.{Causes, PRV}
 import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle}
 import freechips.rocketchip.devices.tilelink.{PLICConsts, CLINTConsts}
 
+import testchipip.{ExtendedTracedInstruction}
+
 import boom.common._
 import boom.ifu.{GlobalHistory, HasBoomFrontendParameters}
 import boom.exu.FUConstants._
-import boom.common.BoomTilesKey
 import boom.util._
 
 /**
  * Top level core object that connects the Frontend to the rest of the pipeline.
  */
-class BoomCore(implicit p: Parameters) extends BoomModule
+class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   with HasBoomFrontendParameters // TODO: Don't add this trait
 {
   val io = new freechips.rocketchip.tile.CoreBundle
@@ -60,8 +61,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     val rocc = Flipped(new freechips.rocketchip.tile.RoCCCoreIO())
     val lsu = Flipped(new boom.lsu.LSUCoreIO)
     val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
-    val trace = Output(Vec(coreParams.retireWidth,
-      new freechips.rocketchip.rocket.TracedInstruction))
+    val trace = Output(Vec(coreParams.retireWidth, new ExtendedTracedInstruction))
     val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
   }
   //**********************************
@@ -86,24 +86,36 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
   val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
-  val rename_stage     = Module(new RingRename)
-  val fp_rename_stage  = if (usingFPU) Module(new RenameStage(coreWidth, numFpPhysRegs, numFpWakeupPorts, true))
+  val int_rename       = Module(new RingRename)
+  val fp_rename        = if (usingFPU) Module(new Rename(coreWidth, numFpPhysRegs, numFpWakeupPorts, true))
                          else null
-  val rename_stages    = if (usingFPU) Seq(rename_stage, fp_rename_stage) else Seq(rename_stage)
+  val pred_rename      = if (enableSFBOpt) Module(new PredRename(coreWidth, ftqSz, 1))
+                         else null
+  val other_renamers   = if (usingFPU && enableSFBOpt) Seq(fp_rename, pred_rename)
+                         else if (usingFPU) Seq(fp_rename)
+                         else if (enableSFBOpt) Seq(pred_rename)
+                         else Seq()
 
   val scheduler        = Module(new RingScheduler(intIssueParam.numEntries, intIssueParam.dispatchWidth))
-
   val dispatcher       = Module(new BasicDispatcher)
-
   val iregfile         = Module(new BankedRegisterFileSynthesizable(numIntPhysRegs, xLen))
-
   val iregister_read   = Module(new RingRegisterRead)
+
+  val pregfile         = Module(new RegisterFileSynthesizable(
+                           ftqSz,
+                           coreWidth,
+                           1,
+                           1,
+                           Seq(true))) // The jmp unit is always bypassable
+  pregfile.io := DontCare // Only use the IO if enableSFBOpt
+
   val rob              = Module(new Rob(
                            coreWidth * 2 + numFpWakeupPorts,
                            numFpWakeupPorts))
 
-  val slow_wakeups     = Wire(Vec(2*coreWidth, Valid(UInt(ipregSz.W))))
-  slow_wakeups        := DontCare
+  val pred_wakeup  = Wire(Valid(new ExeUnitResp(1)))
+  val slow_wakeups = Wire(Vec(2*coreWidth, Valid(UInt(ipregSz.W))))
+  slow_wakeups    := DontCare
 
   //***********************************
   // Pipeline State Registers and Wires
@@ -201,7 +213,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       ("nop",       () => false.B))),
 
     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-//      ("I$ blocked",                        () => icache_blocked),
+      // ("I$ blocked",                        () => icache_blocked),
       ("nop",                               () => false.B),
       // ("branch misprediction",              () => br_unit.brinfo.mispredict),
       // ("control-flow target misprediction", () => br_unit.brinfo.mispredict &&
@@ -211,11 +223,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     )),
 
     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-//      ("I$ miss",     () => io.ifu.perf.acquire),
-//      ("D$ miss",     () => io.dmem.perf.acquire),
-//      ("D$ release",  () => io.dmem.perf.release),
-//      ("ITLB miss",   () => io.ifu.perf.tlbMiss),
-//      ("DTLB miss",   () => io.dmem.perf.tlbMiss),
+      ("I$ miss",     () => io.ifu.perf.acquire),
+      ("D$ miss",     () => io.lsu.perf.acquire),
+      ("D$ release",  () => io.lsu.perf.release),
+      ("ITLB miss",   () => io.ifu.perf.tlbMiss),
+      ("DTLB miss",   () => io.lsu.perf.tlbMiss),
       ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
   val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
   csr.io.inst foreach { c => c := DontCare }
@@ -233,36 +245,34 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
   val debug_tsc_reg = RegInit(0.U(xLen.W))
   val debug_irt_reg = RegInit(0.U(xLen.W))
-  val debug_cfis = RegInit(0.U(xLen.W))
-  val debug_f3_mispredicts = RegInit(0.U(xLen.W)) // How many cfis were missed by the l3 predictor
-  val debug_f2_mispredicts = RegInit(0.U(xLen.W)) // How many cfis were missed by the l2 predictor
-  val debug_f1_mispredicts = RegInit(0.U(xLen.W)) // How many cfis were missed by the l1 predictor
-  dontTouch(debug_f3_mispredicts)
-  dontTouch(debug_f2_mispredicts)
-  dontTouch(debug_f1_mispredicts)
-  dontTouch(debug_cfis)
-  debug_cfis := debug_cfis + PopCount(VecInit((0 until coreWidth) map {i =>
-    rob.io.commit.valids(i) &&
-    (rob.io.commit.uops(i).is_br || rob.io.commit.uops(i).is_jal || rob.io.commit.uops(i).is_jalr)
-  }))
-  debug_f3_mispredicts := debug_f3_mispredicts + PopCount(VecInit((0 until coreWidth) map { i =>
-    rob.io.commit.valids(i) &&
-    (rob.io.commit.uops(i).is_br || rob.io.commit.uops(i).is_jal || rob.io.commit.uops(i).is_jalr) &&
-    rob.io.commit.uops(i).debug_fsrc > BSRC_3
-  }))
-  debug_f2_mispredicts := debug_f2_mispredicts + PopCount(VecInit((0 until coreWidth) map { i =>
-    rob.io.commit.valids(i) &&
-    (rob.io.commit.uops(i).is_br || rob.io.commit.uops(i).is_jal || rob.io.commit.uops(i).is_jalr) &&
-    rob.io.commit.uops(i).debug_fsrc > BSRC_2
-  }))
-  debug_f1_mispredicts := debug_f1_mispredicts + PopCount(VecInit((0 until coreWidth) map { i =>
-    rob.io.commit.valids(i) &&
-    (rob.io.commit.uops(i).is_br || rob.io.commit.uops(i).is_jal || rob.io.commit.uops(i).is_jalr) &&
-    rob.io.commit.uops(i).debug_fsrc > BSRC_1
-  }))
+  val debug_brs     = Reg(Vec(4, UInt(xLen.W)))
+  val debug_jals    = Reg(Vec(4, UInt(xLen.W)))
+  val debug_jalrs   = Reg(Vec(4, UInt(xLen.W)))
+
+  for (j <- 0 until 4) {
+    debug_brs(j) := debug_brs(j) + PopCount(VecInit((0 until coreWidth) map {i =>
+      rob.io.commit.arch_valids(i) &&
+      (rob.io.commit.uops(i).debug_fsrc === j.U) &&
+      rob.io.commit.uops(i).is_br
+    }))
+    debug_jals(j) := debug_jals(j) + PopCount(VecInit((0 until coreWidth) map {i =>
+      rob.io.commit.arch_valids(i) &&
+      (rob.io.commit.uops(i).debug_fsrc === j.U) &&
+      rob.io.commit.uops(i).is_jal
+    }))
+    debug_jalrs(j) := debug_jalrs(j) + PopCount(VecInit((0 until coreWidth) map {i =>
+      rob.io.commit.arch_valids(i) &&
+      (rob.io.commit.uops(i).debug_fsrc === j.U) &&
+      rob.io.commit.uops(i).is_jalr
+    }))
+  }
+
+  dontTouch(debug_brs)
+  dontTouch(debug_jals)
+  dontTouch(debug_jalrs)
 
   debug_tsc_reg := debug_tsc_reg + 1.U
-  debug_irt_reg := debug_irt_reg + PopCount(rob.io.commit.valids.asUInt)
+  debug_irt_reg := debug_irt_reg + PopCount(rob.io.commit.arch_valids.asUInt)
   dontTouch(debug_tsc_reg)
   dontTouch(debug_irt_reg)
 
@@ -331,7 +341,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   io.ifu.bp      := csr.io.bp
 
   io.ifu.flush_icache := (0 until coreWidth).map { i =>
-    rob.io.commit.valids(i) && rob.io.commit.uops(i).is_fencei }.reduce(_||_)
+    rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei }.reduce(_||_)
 
   // TODO FIX THIS HACK
   // The below code works because of two quirks with the flush mechanism
@@ -346,7 +356,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     io.ifu.redirect_val   := true.B
     io.ifu.redirect_flush := true.B
     val flush_typ = RegNext(rob.io.flush.bits.flush_typ)
-    io.ifu.redirect_ghist := io.ifu.get_pc(0).entry.ghist
+    // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
+    val new_ghist = WireInit((0.U).asTypeOf(new GlobalHistory))
+    new_ghist.current_saw_branch_not_taken := true.B
+    new_ghist.ras_idx := io.ifu.get_pc(0).entry.ras_idx
+    io.ifu.redirect_ghist := new_ghist
     when (FlushTypes.useCsrEvec(flush_typ)) {
       io.ifu.redirect_pc  := Mux(flush_typ === FlushTypes.eret,
                                  RegNext(RegNext(csr.io.evec)),
@@ -380,7 +394,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     val ftq_entry = io.ifu.get_pc(1).entry
     val cfi_idx = (brupdate.b2.uop.pc_lob ^
       Mux(ftq_entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
-    val next_ghist = ftq_entry.ghist.update(
+    val ftq_ghist = io.ifu.get_pc(1).ghist
+    val next_ghist = ftq_ghist.update(
       ftq_entry.br_mask.asUInt,
       brupdate.b2.taken,
       brupdate.b2.cfi_type === CFI_BR,
@@ -393,7 +408,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
     io.ifu.redirect_ghist   := Mux(
       use_same_ghist,
-      ftq_entry.ghist,
+      ftq_ghist,
       next_ghist)
     io.ifu.redirect_ghist.current_saw_branch_not_taken := use_same_ghist
   } .elsewhen (rob.io.flush_frontend || brupdate.b1.mispredict_mask =/= 0.U) {
@@ -443,9 +458,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // Decoders
 
-  // stall fetch/dcode because we ran out of branch tags
-  val branch_mask_full = Wire(Vec(coreWidth, Bool()))
-
   for (w <- 0 until coreWidth) {
     dec_valids(w)                      := io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid &&
                                           !dec_finished_mask(w)
@@ -481,9 +493,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   val iss_jmp = iss_uops zip iss_valids map { case (u,v) => u.fu_code === FU_JMP && v }
   jmp_pc_req.valid                 := RegNext(iss_jmp.reduce(_||_))
   jmp_pc_req.bits                  := RegNext(Mux1H(iss_jmp, iss_uops.map(_.ftq_idx)))
+
+  exe_units.io.get_ftq_pc          := DontCare
   exe_units.io.get_ftq_pc.pc       := io.ifu.get_pc(0).pc
   exe_units.io.get_ftq_pc.entry    := io.ifu.get_pc(0).entry
-  exe_units.io.get_ftq_pc.com_pc   := DontCare
   exe_units.io.get_ftq_pc.next_val := io.ifu.get_pc(0).next_val
   exe_units.io.get_ftq_pc.next_pc  := io.ifu.get_pc(0).next_pc
 
@@ -505,6 +518,8 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   dec_xcpts := dec_uops zip dec_valids map {case (u,v) => u.exception && v}
   val dec_xcpt_stall = dec_xcpts.reduce(_||_) && !xcpt_pc_req.ready
+  // stall fetch/dcode because we ran out of branch tags
+  val branch_mask_full = Wire(Vec(coreWidth, Bool()))
 
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
@@ -550,63 +565,67 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
+  //-------------------------------------------------------------
   // Inputs
-  rename_stage.io.kill := io.ifu.redirect_flush
-  rename_stage.io.brupdate := brupdate
 
-  rename_stage.io.debug_rob_empty := rob.io.empty
+  int_rename.io.kill := io.ifu.redirect_flush
+  int_rename.io.brupdate := brupdate
 
-  rename_stage.io.dec_fire := dec_fire
-  rename_stage.io.dec_uops := dec_uops
+  int_rename.io.debug_rob_empty := rob.io.empty
 
-  rename_stage.io.dis_fire := dis_fire
-  rename_stage.io.dis_ready := dis_ready
+  int_rename.io.dec_fire := dec_fire
+  int_rename.io.dec_uops := dec_uops
 
-  rename_stage.io.com_valids := rob.io.commit.valids
-  rename_stage.io.com_uops := rob.io.commit.uops
-  rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
-  rename_stage.io.rollback := rob.io.commit.rollback
+  int_rename.io.dis_fire := dis_fire
+  int_rename.io.dis_ready := dis_ready
 
-  if (usingFPU) {
-    fp_rename_stage.io.kill := io.ifu.redirect_flush
-    fp_rename_stage.io.brupdate := brupdate
+  int_rename.io.com_valids := rob.io.commit.valids
+  int_rename.io.com_uops := rob.io.commit.uops
+  int_rename.io.rbk_valids := rob.io.commit.rbk_valids
+  int_rename.io.rollback := rob.io.commit.rollback
 
-    fp_rename_stage.io.debug_rob_empty := rob.io.empty
+  for (rename <- other_renamers) {
+    rename.io.kill := io.ifu.redirect_flush
+    rename.io.brupdate := brupdate
 
-    fp_rename_stage.io.dec_fire := dec_fire
-    fp_rename_stage.io.dec_uops := dec_uops
+    rename.io.debug_rob_empty := rob.io.empty
 
-    fp_rename_stage.io.dis_fire := dis_fire
-    fp_rename_stage.io.dis_ready := dis_ready
+    rename.io.dec_fire := dec_fire
+    rename.io.dec_uops := dec_uops
 
-    fp_rename_stage.io.com_valids := rob.io.commit.valids
-    fp_rename_stage.io.com_uops := rob.io.commit.uops
-    fp_rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
-    fp_rename_stage.io.rollback := rob.io.commit.rollback
+    rename.io.dis_fire := dis_fire
+    rename.io.dis_ready := dis_ready
+
+    rename.io.com_valids := rob.io.commit.valids
+    rename.io.com_uops := rob.io.commit.uops
+    rename.io.rbk_valids := rob.io.commit.rbk_valids
+    rename.io.rollback := rob.io.commit.rollback
   }
 
+  //-------------------------------------------------------------
   // Outputs
-  dis_uops := rename_stage.io.ren2_uops
-  dis_valids := rename_stage.io.ren2_mask
-  ren_stalls := rename_stage.io.ren_stalls
 
+  dis_uops   := int_rename.io.ren2_uops
+  dis_valids := int_rename.io.ren2_mask
+  ren_stalls := int_rename.io.ren_stalls
 
-  /**
-   * TODO This is a bit nasty, but it's currently necessary to
-   * split the INT/FP rename pipelines into separate instantiations.
-   * Won't have to do this anymore with a properly decoupled FP pipeline.
-   */
   for (w <- 0 until coreWidth) {
-    val i_uop   = rename_stage.io.ren2_uops(w)
-    val f_uop   = if (usingFPU) fp_rename_stage.io.ren2_uops(w) else NullMicroOp
-    val f_stall = if (usingFPU) fp_rename_stage.io.ren_stalls(w) else false.B
+    val i_uop   = int_rename.io.ren2_uops(w)
+    val f_uop   = if (usingFPU) fp_rename.io.ren2_uops(w) else NullMicroOp
+    val p_uop   = if (enableSFBOpt) pred_rename.io.ren2_uops(w) else NullMicroOp
+    val i_stall = int_rename.io.ren_stalls(w)
+    val f_stall = if (usingFPU) fp_rename.io.ren_stalls(w) else false.B
+    val p_stall = if (enableSFBOpt) pred_rename.io.ren_stalls(w) else false.B
 
     // lrs1 can "pass through" to prs1. Used solely to index the csr file.
     dis_uops(w).prs1 := Mux(dis_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1,
                         Mux(dis_uops(w).lrs1_rtype === RT_FIX, i_uop.prs1, dis_uops(w).lrs1))
     dis_uops(w).prs2 := Mux(dis_uops(w).lrs2_rtype === RT_FLT, f_uop.prs2, i_uop.prs2)
     dis_uops(w).prs3 := f_uop.prs3
+    dis_uops(w).ppred := p_uop.ppred
     dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype  === RT_FLT, f_uop.pdst, i_uop.pdst)
+                        //Mux(dis_uops(w).dst_rtype  === RT_FIX, i_uop.pdst,    TODO !!!!!!
+                        //                                       p_uop.pdst))
     dis_uops(w).stale_pdst := Mux(dis_uops(w).dst_rtype === RT_FLT, f_uop.stale_pdst, i_uop.stale_pdst)
 
     dis_uops(w).prs1_busy := i_uop.prs1_busy && (dis_uops(w).lrs1_rtype === RT_FIX) ||
@@ -614,8 +633,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     dis_uops(w).prs2_busy := i_uop.prs2_busy && (dis_uops(w).lrs2_rtype === RT_FIX) ||
                              f_uop.prs2_busy && (dis_uops(w).lrs2_rtype === RT_FLT)
     dis_uops(w).prs3_busy := f_uop.prs3_busy && dis_uops(w).frs3_en
+    dis_uops(w).ppred_busy := p_uop.ppred_busy && dis_uops(w).is_sfb_shadow
 
-    ren_stalls(w) := rename_stage.io.ren_stalls(w) || f_stall
+    ren_stalls(w) := i_stall || f_stall || p_stall
   }
 
   //-------------------------------------------------------------
@@ -717,7 +737,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
 
   scheduler.io.dis_uops   <> dispatcher.io.dis_uops(issueParams.indexWhere(_.iqType == IQT_INT.litValue))
-  scheduler.io.dis_valids := dis_valids zip dis_uops map { case (v,u) => v && u.iq_type === IQT_INT }
+  scheduler.io.dis_valids := dis_valids zip dis_uops map { case (v,u) => v && (u.iq_type & IQT_INT).orR }
   if (usingFPU) fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(issueParams.indexWhere(_.iqType == IQT_FP.litValue))
 
   //-------------------------------------------------------------
@@ -745,12 +765,38 @@ class BoomCore(implicit p: Parameters) extends BoomModule
                                        && wbresp.bits.uop.dst_rtype === RT_FIX )
   }
 
-  rename_stage.io.wakeups := scheduler.io.fast_wakeups ++ slow_wakeups
+  int_rename.io.wakeups := scheduler.io.fast_wakeups ++ slow_wakeups
+
+  // TODO!!!!!!
+  pred_wakeup.valid := DontCare /*(iss_valids(jmp_unit_idx) &&
+                        iss_uops(jmp_unit_idx).is_sfb_br &&
+                        !(io.lsu.ld_miss && (iss_uops(jmp_unit_idx).iw_p1_poisoned || iss_uops(jmp_unit_idx).iw_p2_poisoned)))*/
+  pred_wakeup.bits.uop := DontCare //iss_uops(jmp_unit_idx)
+  pred_wakeup.bits.fflags := DontCare
+  pred_wakeup.bits.data := DontCare
+  pred_wakeup.bits.predicated := DontCare
+/*
+  // Connect the predicate wakeup port
+  issue_units map { iu =>
+    iu.io.pred_wakeup_port.valid := false.B
+    iu.io.pred_wakeup_port.bits := DontCare
+  }
+  if (enableSFBOpt) {
+    int_iss_unit.io.pred_wakeup_port.valid := pred_wakeup.valid
+    int_iss_unit.io.pred_wakeup_port.bits := pred_wakeup.bits.uop.pdst
+  }
+*/
+
+  // ----------------------------------------------------------------
+  // Connect the wakeup ports to the busy tables in the rename stages
 
   if (usingFPU) {
-    for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
+    for ((renport, fpport) <- fp_rename.io.wakeups zip fp_pipeline.io.wakeups) {
       renport <> fpport
     }
+  }
+  if (enableSFBOpt) {
+    pred_rename.io.wakeups(0) := pred_wakeup
   }
 
   var idiv_issued = false.B
@@ -785,6 +831,9 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Register Read <- Issue (rrd <- iss)
   iregister_read.io.rf_read_ports <> iregfile.io.read_ports
+  if (enableSFBOpt) {
+    iregister_read.io.rf_read_ports <> pregfile.io.read_ports
+  }
 
   iregister_read.io.iss_valids := iss_valids
   iregister_read.io.iss_uops := iss_uops
@@ -812,7 +861,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   // Extra I/O
   // Delay retire/exception 1 cycle
-  csr.io.retire    := RegNext(PopCount(rob.io.commit.valids.asUInt))
+  csr.io.retire    := RegNext(PopCount(rob.io.commit.arch_valids.asUInt))
   csr.io.exception := RegNext(rob.io.com_xcpt.valid)
   // csr.io.pc used for setting EPC during exception or CSR.io.trace.
 
@@ -876,6 +925,11 @@ class BoomCore(implicit p: Parameters) extends BoomModule
 
   exe_units.io.brupdate := brupdate
   exe_units.io.kill     := RegNext(rob.io.flush.valid)
+
+  // TODO !!!!!!!
+  /*for (i <- 0 until jmp_unit.numBypassStages) {
+    pred_bypasses(i) := jmp_unit.io.bypass(i)
+  }*/
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -969,6 +1023,13 @@ class BoomCore(implicit p: Parameters) extends BoomModule
       "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+w+").iresp")
   }
 
+  // TODO !!!!!!!
+  /*if (enableSFBOpt) {
+    pregfile.io.write_ports(0).valid     := jmp_unit.io.iresp.valid && jmp_unit.io.iresp.bits.uop.is_sfb_br
+    pregfile.io.write_ports(0).bits.addr := jmp_unit.io.iresp.bits.uop.pdst
+    pregfile.io.write_ports(0).bits.data := jmp_unit.io.iresp.bits.data
+  }*/
+
   if (usingFPU) {
     // Connect IFPU
     fp_pipeline.io.from_int  <> exe_units.io.to_fpu
@@ -997,6 +1058,7 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   // ---------
 
   var cnt = 0
+  var f_cnt = 0
 
   // Column resps
   for (w <- 0 until coreWidth) {
@@ -1030,13 +1092,6 @@ class BoomCore(implicit p: Parameters) extends BoomModule
     cnt += 1
   }
 
-  var f_cnt = 0
-  for (eu <- exe_units) {
-    val resp = eu.io.iresp
-    if (eu.hasFFlags) {
-      rob.io.fflags(f_cnt) <> resp.bits.fflags
-    }
-  }
   if (usingFPU) {
     for ((wdata, wakeup) <- fp_pipeline.io.debug_wb_wdata zip fp_pipeline.io.wakeups) {
       rob.io.wb_resps(cnt) <> wakeup
@@ -1100,105 +1155,10 @@ class BoomCore(implicit p: Parameters) extends BoomModule
   }
   assert (!(idle_cycles.value(13)), "Pipeline has hung.")
 
-  if (usingFPU) {
-    fp_pipeline.io.debug_tsc_reg := debug_tsc_reg
-  }
-
-  // TODO: Does anyone want this debugging functionality?
-  val coreMonitorBundle = Wire(new CoreMonitorBundle(xLen))
-  coreMonitorBundle.clock  := clock
-  coreMonitorBundle.reset  := reset
-  coreMonitorBundle.hartid := DontCare
-  coreMonitorBundle.timer  := DontCare
-  coreMonitorBundle.valid  := DontCare
-  coreMonitorBundle.pc     := DontCare
-  coreMonitorBundle.wrdst  := DontCare
-  coreMonitorBundle.wrdata := DontCare
-  coreMonitorBundle.wren   := DontCare
-  coreMonitorBundle.rd0src := DontCare
-  coreMonitorBundle.rd0val := DontCare
-  coreMonitorBundle.rd1src := DontCare
-  coreMonitorBundle.rd1val := DontCare
-  coreMonitorBundle.inst   := DontCare
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
-  // Page Table Walker
-
-  io.ptw.ptbr       := csr.io.ptbr
-  io.ptw.status     := csr.io.status
-  io.ptw.pmp        := csr.io.pmp
-  io.ptw.sfence     := io.ifu.sfence
-
-  //-------------------------------------------------------------
-  //-------------------------------------------------------------
-
-  io.rocc := DontCare
-  io.rocc.exception := csr.io.exception && csr.io.status.xs.orR
-  if (usingRoCC) {
-    exe_units.rocc_unit.io.rocc.rocc         <> io.rocc
-    exe_units.rocc_unit.io.rocc.dis_uops     := dis_uops
-    exe_units.rocc_unit.io.rocc.rob_head_idx := rob.io.rob_head_idx
-    exe_units.rocc_unit.io.rocc.rob_pnr_idx  := rob.io.rob_pnr_idx
-    exe_units.rocc_unit.io.com_exception     := rob.io.flush.valid
-    exe_units.rocc_unit.io.status            := csr.io.status
-
-    for (w <- 0 until coreWidth) {
-       exe_units.rocc_unit.io.rocc.dis_rocc_vals(w) := (
-         dis_fire(w) &&
-         dis_uops(w).uopc === uopROCC &&
-         !dis_uops(w).exception
-       )
-    }
-  }
-
-  io.ifu.get_pc_debug := DontCare
-
-  if (p(BoomTilesKey)(0).trace) {
-    for (w <- 0 until coreWidth) {
-      io.trace(w).clock      := clock
-      io.trace(w).reset      := reset
-
-      // Delay the trace so we have a cycle to pull PCs out of the FTQ
-      io.trace(w).valid      := RegNext(rob.io.commit.valids(w))
-
-      // Recalculate the PC
-      io.ifu.get_pc_debug(w).ftq_idx := rob.io.commit.uops(w).ftq_idx
-      io.trace(w).iaddr := RegNext(Sext(AlignPCToBoundary(io.ifu.get_pc_debug(w).pc, icBlockBytes)
-                                      + rob.io.commit.uops(w).pc_lob
-                                      - Mux(rob.io.commit.uops(w).edge_inst, 2.U, 0.U), xLen))
-
-      // use debug_insts instead of uop.debug_inst to use the rob's debug_inst_mem
-      io.trace(w).insn       := rob.io.commit.debug_insts(w)
-
-      // Comment out this assert because it blows up FPGA synth-asserts
-      // This tests correctedness of the debug_inst mem
-      // when (RegNext(rob.io.commit.valids(w))) {
-      //   assert(rob.io.commit.debug_insts(w) === RegNext(rob.io.commit.uops(w).debug_inst))
-      // }
-      // This tests correctedness of recovering pcs through ftq debug ports
-      // when (RegNext(rob.io.commit.valids(w))) {
-      //   assert(Sext(io.trace(w).iaddr, xLen) ===
-      //     RegNext(Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen)))
-      // }
-
-      // These csr signals do not exactly match up with the ROB commit signals.
-      io.trace(w).priv       := RegNext(csr.io.status.prv)
-      // Can determine if it is an interrupt or not based on the MSB of the cause
-      io.trace(w).exception  := RegNext(rob.io.com_xcpt.valid && !rob.io.com_xcpt.bits.cause(xLen - 1))
-      io.trace(w).interrupt  := RegNext(rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.cause(xLen - 1))
-      io.trace(w).cause      := RegNext(rob.io.com_xcpt.bits.cause)
-      io.trace(w).tval       := RegNext(csr.io.tval)
-    }
-    dontTouch(io.trace)
-  } else {
-    io.trace := DontCare
-    io.trace map (t => t.valid := false.B)
-  }
-
-  //-------------------------------------------------------------
-  //-------------------------------------------------------------
-  // **** Commit log ****
+  // **** Handle Cycle-by-Cycle Printouts ****
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
@@ -1262,5 +1222,119 @@ class BoomCore(implicit p: Parameters) extends BoomModule
         }
       }
     }
+  } else if (BRANCH_PRINTF) {
+    val debug_ghist = RegInit(0.U(globalHistoryLength.W))
+    when (rob.io.flush.valid && FlushTypes.useCsrEvec(rob.io.flush.bits.flush_typ)) {
+      debug_ghist := 0.U
+    }
+
+    var new_ghist = debug_ghist
+
+    for (w <- 0 until coreWidth) {
+      when (rob.io.commit.arch_valids(w) &&
+        (rob.io.commit.uops(w).is_br || rob.io.commit.uops(w).is_jal || rob.io.commit.uops(w).is_jalr)) {
+        // for (i <- 0 until globalHistoryLength) {
+        //   printf("%x", new_ghist(globalHistoryLength-i-1))
+        // }
+        // printf("\n")
+        printf("%x %x %x %x %x %x\n",
+          rob.io.commit.uops(w).debug_fsrc, rob.io.commit.uops(w).taken,
+          rob.io.commit.uops(w).is_br, rob.io.commit.uops(w).is_jal,
+          rob.io.commit.uops(w).is_jalr, Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen))
+
+      }
+      new_ghist = Mux(rob.io.commit.arch_valids(w) && rob.io.commit.uops(w).is_br,
+        Mux(rob.io.commit.uops(w).taken, new_ghist << 1 | 1.U(1.W), new_ghist << 1),
+        new_ghist)
+    }
+    debug_ghist := new_ghist
+  }
+
+  // TODO: Does anyone want this debugging functionality?
+  val coreMonitorBundle = Wire(new CoreMonitorBundle(xLen))
+  coreMonitorBundle := DontCare
+  coreMonitorBundle.clock  := clock
+  coreMonitorBundle.reset  := reset
+
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+  // Page Table Walker
+
+  io.ptw.ptbr       := csr.io.ptbr
+  io.ptw.status     := csr.io.status
+  io.ptw.pmp        := csr.io.pmp
+  io.ptw.sfence     := io.ifu.sfence
+
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+
+  io.rocc := DontCare
+  io.rocc.exception := csr.io.exception && csr.io.status.xs.orR
+  if (usingRoCC) {
+    exe_units.rocc_unit.io.rocc.rocc         <> io.rocc
+    exe_units.rocc_unit.io.rocc.dis_uops     := dis_uops
+    exe_units.rocc_unit.io.rocc.rob_head_idx := rob.io.rob_head_idx
+    exe_units.rocc_unit.io.rocc.rob_pnr_idx  := rob.io.rob_pnr_idx
+    exe_units.rocc_unit.io.com_exception     := rob.io.flush.valid
+    exe_units.rocc_unit.io.status            := csr.io.status
+
+    for (w <- 0 until coreWidth) {
+      exe_units.rocc_unit.io.rocc.dis_rocc_vals(w) := (
+        dis_fire(w) &&
+        dis_uops(w).uopc === uopROCC &&
+        !dis_uops(w).exception
+      )
+    }
+  }
+
+  if (usingTrace) {
+    for (w <- 0 until coreWidth) {
+      // Delay the trace so we have a cycle to pull PCs out of the FTQ
+      io.trace(w).valid      := RegNext(rob.io.commit.arch_valids(w))
+
+      // Recalculate the PC
+      io.ifu.debug_ftq_idx(w) := rob.io.commit.uops(w).ftq_idx
+      val iaddr = (AlignPCToBoundary(io.ifu.debug_fetch_pc(w), icBlockBytes)
+                   + RegNext(rob.io.commit.uops(w).pc_lob)
+                   - Mux(RegNext(rob.io.commit.uops(w).edge_inst), 2.U, 0.U))(vaddrBits-1,0)
+      io.trace(w).iaddr      := Sext(iaddr, xLen)
+
+      def getInst(uop: MicroOp, inst: UInt): UInt = {
+        Mux(uop.is_rvc, Cat(0.U(16.W), inst(15,0)), inst)
+      }
+
+      def getWdata(uop: MicroOp, wdata: UInt): UInt = {
+        Mux((uop.dst_rtype === RT_FIX && uop.ldst =/= 0.U) || (uop.dst_rtype === RT_FLT), wdata, 0.U(xLen.W))
+      }
+
+      // use debug_insts instead of uop.debug_inst to use the rob's debug_inst_mem
+      // note: rob.debug_insts comes 1 cycle later
+      io.trace(w).insn       := getInst(RegNext(rob.io.commit.uops(w)), rob.io.commit.debug_insts(w))
+      io.trace(w).wdata.map { _ := RegNext(getWdata(rob.io.commit.uops(w), rob.io.commit.debug_wdata(w))) }
+
+      // Comment out this assert because it blows up FPGA synth-asserts
+      // This tests correctedness of the debug_inst mem
+      // when (RegNext(rob.io.commit.valids(w))) {
+      //   assert(rob.io.commit.debug_insts(w) === RegNext(rob.io.commit.uops(w).debug_inst))
+      // }
+      // This tests correctedness of recovering pcs through ftq debug ports
+      // when (RegNext(rob.io.commit.valids(w))) {
+      //   assert(Sext(io.trace(w).iaddr, xLen) ===
+      //     RegNext(Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen)))
+      // }
+
+      // These csr signals do not exactly match up with the ROB commit signals.
+      io.trace(w).priv       := RegNext(csr.io.status.prv)
+      // Can determine if it is an interrupt or not based on the MSB of the cause
+      io.trace(w).exception  := RegNext(rob.io.com_xcpt.valid && !rob.io.com_xcpt.bits.cause(xLen - 1))
+      io.trace(w).interrupt  := RegNext(rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.cause(xLen - 1))
+      io.trace(w).cause      := RegNext(rob.io.com_xcpt.bits.cause)
+      io.trace(w).tval       := RegNext(csr.io.tval)
+    }
+    dontTouch(io.trace)
+  } else {
+    io.trace := DontCare
+    io.trace map (t => t.valid := false.B)
+    io.ifu.debug_ftq_idx := DontCare
   }
 }
