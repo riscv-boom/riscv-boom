@@ -127,7 +127,8 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 
   // Stores clear busy bit when stdata is received
   // memWidth for incoming addr/datagen, +1 for fp dgen, +1 for clr_head pointer
-  val clr_bsy         = Output(Vec(lsuWidth + memWidth + 2, Valid(UInt(robAddrSz.W))))
+  val clr_bsy         = Output(Vec(coreWidth, Valid(UInt(robAddrSz.W))))
+  //val clr_bsy         = Output(Vec(lsuWidth + memWidth + 2, Valid(UInt(robAddrSz.W))))
 
   // Speculatively safe load (barring memory ordering failure)
   val clr_unsafe      = Output(Vec(lsuWidth, Valid(UInt(robAddrSz.W))))
@@ -979,11 +980,11 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // Task 1: Clr ROB busy bit
 
   val stq_clr_head_idx = RegNext(AgePriorityEncoder((0 until numStqEntries).map(i => {
-    val e = WireInit(stq(i).bits)
-    e.addr.valid && e.data.valid && !e.addr_is_virtual && !e.cleared
+    val e = WireInit(stq(i))
+    e.valid && !e.bits.cleared
   }), stq_commit_head))
 
-  for (i <- 0 until lsuWidth + memWidth + 2) {
+  for (i <- 0 until coreWidth) {
     // Delay store clearing 1 extra cycle, as the store clear can't occur
     // too quickly before an order fail caused by this store propagates to ROB
     val clr_valid = Reg(Bool())
@@ -993,16 +994,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     val clr_valid_1 = RegNext(clr_valid && !io.core.exception && !IsKilledByBranch(io.core.brupdate, clr_uop))
     val clr_uop_1   = RegNext(UpdateBrMask(io.core.brupdate, clr_uop))
 
-    val stq_idx = Wire(UInt(stqAddrSz.W))
+    val stq_idx = stq_clr_head_idx + i.U
 
-    if (i < lsuWidth) {
-      stq_idx := Mux(fired_store_agen(i) , RegNext(stq_incoming_idx(i))
-                                         , RegNext(stq_retry_idx))
-    } else if (i < lsuWidth + memWidth + 1) {
-      stq_idx := io.core.dgen(i-lsuWidth).bits.uop.stq_idx
-    } else {
-      stq_idx := stq_clr_head_idx
-    }
     val stq_e   = WireInit(stq(stq_idx))
 
     when ( stq_e.valid &&
@@ -1086,6 +1079,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val wb_ldst_forward_ld_addr  = RegNext(lcam_addr)
   val wb_ldst_forward_stq_idx  = Wire(Vec(lsuWidth, UInt(stqAddrSz.W)))
 
+  val failed_load = WireInit(false.B)
+
   for (i <- 0 until numLdqEntries) {
     val l_valid = ldq(i).valid
     val l_bits  = ldq(i).bits
@@ -1098,6 +1093,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     val dword_addr_matches = widthMap(w => block_addr_matches(w) && lcam_addr(w)(blockOffBits-1,3) === l_addr(blockOffBits-1,3))
     val mask_match   = widthMap(w => (l_mask & lcam_mask(w)) === l_mask)
     val mask_overlap = widthMap(w => (l_mask & lcam_mask(w)).orR)
+
 
     // Searcher is a store
     for (w <- 0 until lsuWidth) {
@@ -1125,6 +1121,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         when (!l_bits.forward_std_val || // If the load wasn't forwarded, it definitely failed
           ((l_forward_stq_idx =/= lcam_stq_idx(w)) && forwarded_is_older)) { // If the load forwarded from us, we might be ok
           ldq(i).bits.order_fail := true.B
+          failed_load := true.B
         }
       }
       when (       do_ld_search(w)            &&
@@ -1139,6 +1136,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                 !s1_executing_loads(i) && // If the load is proceeding in parallel we don't need to kill it
                 l_bits.observed) {        // Its only a ordering failure if the cache line was observed between the younger load and us
             ldq(i).bits.order_fail := true.B
+            failed_load := true.B
           }
         } .elsewhen (lcam_ldq_idx(w) =/= i.U) {
           // The load is older, and it wasn't executed
@@ -1186,6 +1184,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
             wb_ldst_forward_e(wi).observed    &&
             IsOlder(lcam_ldq_idx(w), wb_ldst_forward_ldq_idx(wi), ldq_head)) {
         ldq(wb_ldst_forward_ldq_idx(wi)).bits.order_fail := true.B
+        failed_load := true.B
       }
 
       // A older store might find a younger load which is forwarding from the wrong place
@@ -1197,6 +1196,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
             wb_ldst_forward_e(wi).st_dep_mask(lcam_stq_idx(w)) &&
             forwarded_is_older) {
         ldq(wb_ldst_forward_ldq_idx(wi)).bits.order_fail := true.B
+        failed_load := true.B
       }
     }
   }
@@ -1306,7 +1306,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     io.core.clr_unsafe(w).valid := (
       RegNext(do_st_search(w)) ||
       (!io.dmem.nack(w).valid && RegNext(do_ld_search(w) && !fired_load_agen(w) && !io.dmem.s1_kill(w) && RegNext(dmem_req_fire(w))))
-    )
+    ) && !RegNext(failed_load)
     io.core.clr_unsafe(w).bits  := RegNext(lcam_uop(w).rob_idx)
   }
 
