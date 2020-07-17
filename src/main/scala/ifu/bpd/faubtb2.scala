@@ -125,7 +125,7 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
   io.f3_meta := RegNext(RegNext(s1_meta.asUInt))
 
   val s1_update_hit_oh = (0 until nWays) map { w =>
-    meta(w).tag === s1_update_idx(tagSz-1,0)
+    meta(w).tag === s1_update_idx(tagSz-1,0) && valids(w)
   }
   val s1_update_hit = s1_update_hit_oh.reduce(_||_)
   val s1_update_write_way = Mux(s1_update_hit, OHToUInt(s1_update_hit_oh), LFSR(16))
@@ -133,6 +133,7 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
   when (s1_update.valid && s1_update.bits.is_commit_update) {
     when (s1_update.bits.cfi_idx.valid) {
       btb(s1_update_write_way)(s1_update.bits.cfi_is_br) := s1_update.bits.target
+      valids(s1_update_write_way) := true.B
     }
     val rmeta = meta(s1_update_write_way)
     val wmeta = Wire(new MicroBTBMeta)
@@ -154,7 +155,6 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
     wmeta.cfi_idx := Mux(s1_update.bits.cfi_idx.valid, s1_update.bits.cfi_idx.bits, rmeta.cfi_idx)
     when (s1_update.bits.cfi_idx.valid || s1_update.bits.br_mask =/= 0.U) {
       meta(s1_update_write_way) := wmeta
-      valids(s1_update_write_way) := true.B
     }
     
   }

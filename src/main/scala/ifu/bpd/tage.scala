@@ -120,7 +120,11 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
   val update_wdata = Wire(Vec(bankWidth, new TageEntry))
   val wen = WireInit(doing_reset || io.update_mask.reduce(_||_))
   val rdata = if (singlePorted) table.read(s1_hashed_idx, !wen && io.f1_req_valid) else table.read(s1_hashed_idx, io.f1_req_valid)
-  s2_req_rtage := VecInit(rdata.map(_.asTypeOf(new TageEntry)))
+  when (RegNext(wen) && singlePorted.B) {
+    s2_req_rtage := 0.U.asTypeOf(Vec(bankWidth, new TageEntry))
+  } .otherwise {
+    s2_req_rtage := VecInit(rdata.map(_.asTypeOf(new TageEntry)))
+  }
   when (wen) {
     val widx = Mux(doing_reset, reset_idx, update_idx)
     val wdata = Mux(doing_reset, VecInit(Seq.fill(bankWidth) { 0.U(tageEntrySz.W) }), VecInit(update_wdata.map(_.asUInt)))

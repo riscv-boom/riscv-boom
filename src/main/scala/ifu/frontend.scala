@@ -341,15 +341,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s0_replay_resp = Wire(new TLBResp)
   val s0_replay_ppc  = Wire(UInt())
 
-  val jump_to_reset = RegInit(true.B)
-
-  when (jump_to_reset) {
-    s0_valid := true.B
-    s0_vpc   := io.reset_vector
-    s0_ghist := (0.U).asTypeOf(new GlobalHistory)
-    s0_tsrc  := BSRC_C
-    jump_to_reset := false.B
-  }
 
   icache.io.req.valid     := s0_valid
   icache.io.req.bits.addr := s0_vpc
@@ -396,7 +387,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   } else {
     require(nBanks == 2)
     Mux(f1_redirects.take(bankWidth).reduce(_||_), Mux1H(f1_redirects.take(bankWidth), f1_targs.take(bankWidth)),
-                                                   Mux1H(f1_redirects.drop(bankWidth), f1_targs.drop(bankWidth)))
+      Mux1H(f1_redirects.drop(bankWidth), f1_targs.drop(bankWidth)))
   }
   val f1_predicted_target = Mux(f1_do_redirect,
                                 f1_targ,
@@ -997,6 +988,21 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   ftq.io.debug_ftq_idx := io.cpu.debug_ftq_idx
   io.cpu.debug_fetch_pc := ftq.io.debug_fetch_pc
+
+  val jump_to_reset = RegInit(true.B)
+
+  when (jump_to_reset) {
+    s0_valid := true.B
+    s0_vpc   := io.reset_vector
+    s0_ghist := (0.U).asTypeOf(new GlobalHistory)
+    s0_tsrc  := BSRC_C
+    fb.io.clear := true.B
+    f4_clear    := true.B
+    f3_clear    := true.B
+    f2_clear    := true.B
+    f1_clear    := true.B
+    jump_to_reset := false.B
+  }
 
 
   override def toString: String =
