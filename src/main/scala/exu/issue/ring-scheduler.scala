@@ -109,7 +109,9 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
       dis_uops(w)(d) := dis_uop
       dis_vals(w)(d) := Mux1H(dis_sels(d), io.dis_uops.map(_.valid))
 
-      when (!dis_uop.column(w)) {
+      when (!dis_vals(w)(d)) {
+        dis_uops(w)(d).iw_state := s_invalid
+      } .elsewhen (!dis_uop.column(w)) {
         dis_uops(w)(d).iw_state := s_valid_3
       }
     }
