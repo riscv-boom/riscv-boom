@@ -535,7 +535,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     val probe_rdy = Output(Bool())
   })
 
-  val req_idx = OHToUInt(io.req.map(_.valid))
+  val req_idx = PriorityEncoder(io.req.map(_.valid))
   val req     = io.req(req_idx)
   val req_is_probe = io.req_is_probe(0)
 
