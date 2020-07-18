@@ -152,7 +152,7 @@ class RingIssueSlot(implicit p: Parameters)
   val next_lrs2_rtype = Wire(UInt()) // the next reg type of this slot (which might then get moved to a new slot)
 
   val slot_uop = RegInit(NullMicroOp)
-  val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, io.out_uop)
+  val next_uop = Mux(!is_valid || io.clear, io.in_uop.bits, io.out_uop)
   val woke_uop = wakeup(next_uop, io.fast_wakeup, io.chain_wakeup, io.pred_wakeup, io.slow_wakeups, io.load_wakeups, io.ll_wakeups, io.load_nacks)
 
   val p1 = slot_uop.prs1_ready
@@ -165,7 +165,7 @@ class RingIssueSlot(implicit p: Parameters)
 
   when (io.kill) {
     state := s_invalid
-  } .elsewhen (io.in_uop.valid) {
+  } .elsewhen (!is_valid || io.clear) {
     state := io.in_uop.bits.iw_state
   } .elsewhen (io.clear) {
     state := s_invalid
@@ -211,10 +211,6 @@ class RingIssueSlot(implicit p: Parameters)
   // we compact it into an other entry
   when (IsKilledByBranch(io.brupdate, slot_uop)) {
     next_state := s_invalid
-  }
-
-  when (!io.in_uop.valid) {
-    slot_uop.br_mask := next_br_mask
   }
 
   //----------------------------------------------------------------------------------------------------
