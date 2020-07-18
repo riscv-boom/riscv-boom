@@ -936,7 +936,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   issue_units.map(_.io.flush_pipeline := RegNext(rob.io.flush.valid))
 
   // Load-hit Misspeculations
-  require (mem_iss_unit.issueWidth <= 2)
   issue_units.map(_.io.ld_miss := io.lsu.ld_miss)
 
   mem_units.map(u => u.io.com_exception := RegNext(rob.io.flush.valid))

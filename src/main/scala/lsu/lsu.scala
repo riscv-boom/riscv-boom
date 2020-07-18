@@ -585,8 +585,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
      !will_fire_load_wakeup.reduce(_&&_)),
     "Some operations is proceeding down multiple pipes")
 
-  require(memWidth <= 2)
-
   //--------------------------------------------
   // TLB Access
 
