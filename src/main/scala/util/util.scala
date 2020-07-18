@@ -292,17 +292,6 @@ object ImmGen
 }
 
 /**
- * Object to get the FP rounding mode out of a packed immediate.
- */
-object ImmGenRm { def apply(ip: UInt): UInt = { return ip(2,0) } }
-
-/**
- * Object to get the FP function fype from a packed immediate.
- * Note: only works if !(IS_B or IS_S)
- */
-object ImmGenTyp { def apply(ip: UInt): UInt = { return ip(9,8) } }
-
-/**
  * Object to see if an instruction is a JALR.
  */
 object DebugIsJALR

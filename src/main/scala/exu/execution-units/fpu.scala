@@ -16,7 +16,6 @@ import freechips.rocketchip.rocket
 import freechips.rocketchip.util.uintToBitPat
 
 import boom.common._
-import boom.util.{ImmGenRm, ImmGenTyp}
 
 /**
  * FP Decoder for the FPU
@@ -182,7 +181,7 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
   val fp_decoder = Module(new UOPCodeFPUDecoder)
   fp_decoder.io.uopc := io_req.uop.uopc
   val fp_ctrl = fp_decoder.io.sigs
-  val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === 7.U, io_req.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
+  val fp_rm = Mux(io_req.uop.fp_rm === 7.U, io_req.fcsr_rm, io_req.uop.fp_rm)
 
   def fuInput(minT: Option[tile.FType]): tile.FPInput = {
     val req = Wire(new tile.FPInput)
@@ -193,11 +192,11 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
     req.in2 := unbox(io_req.rs2_data, tag, minT)
     req.in3 := unbox(io_req.rs3_data, tag, minT)
     when (fp_ctrl.swap23) { req.in3 := req.in2 }
-    req.typ := ImmGenTyp(io_req.uop.imm_packed)
+    req.typ := io_req.uop.fp_typ
 
     val fma_decoder = Module(new FMADecoder)
     fma_decoder.io.uopc := io_req.uop.uopc
-    req.fmaCmd := fma_decoder.io.cmd // ex_reg_inst(3,2) | (!fp_ctrl.ren3 && ex_reg_inst(27))
+    req.fmaCmd := fma_decoder.io.cmd
     req
   }
 

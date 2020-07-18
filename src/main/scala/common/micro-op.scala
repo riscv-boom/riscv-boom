@@ -139,6 +139,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // floating point information
   val fp_val           = Bool()             // is a floating-point instruction (F- or D-extension)?
                                             // If it's non-ld/st it will write back exception bits to the fcsr.
+  val fp_rm            = UInt(3.W)
+  val fp_typ           = UInt(2.W)
 
   // frontend exception information
   val xcpt_pf_if       = Bool()             // I-TLB page fault.

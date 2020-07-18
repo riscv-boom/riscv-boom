@@ -30,18 +30,18 @@ object DecodeTables
   val xpr64 = Y // TODO inform this from xLen
   val DC2 = BitPat.dontCare(2) // Makes the listing below more readable
   def decode_default: List[BitPat] =
-              //            xs                                                              frs3_en
-              //               is val inst?                                               |  imm sel                  bypassable (aka, known/fixed latency)
-              //               |  is fp inst?                                             |  |     uses_ldq           |  is_br
-              //               |  |                                       rs1 regtype     |  |     |  uses_stq        |  |  is unique? (clear pipeline for it)
-              //               |  |  micro-code                           |       rs2 type|  |     |  |  is_amo       |  |  |  flush on commit
-              //               |  |  |          iq-type  func unit        |       |       |  |     |  |  |            |  |  |  |  csr cmd
-              //               |  |  |          |        |                |       |       |  |     |  |  |            |  |  |  |  |      fcn_dw
-              //               |  |  |          |        |        dst     |       |       |  |     |  |  |  mem       |  |  |  |  |      |       fcn_op
-              //               |  |  |          |        |        regtype |       |       |  |     |  |  |  cmd       |  |  |  |  |      |       |
-              //               |  |  |          |        |        |       |       |       |  |     |  |  |  |         |  |  |  |  |      |       |
-              //               |  |  |          |        |        |       |       |       |  |     |  |  |  |         |  |  |  |  |      |       |
-                          List(N, N, uopX     , IQT_INT, FU_X   , RT_X  , DC2    ,DC2    ,X, IS_X, X, X, X, M_X,      X, X, N, X, CSR.X, DW_X  , FN_X  )
+              //            xs                                                             frs3_en
+              //               is val inst?                                                |  imm sel                  bypassable (aka, known/fixed latency)
+              //               |  is fp inst?                                              |  |     uses_ldq           |  is_br
+              //               |  |                                        rs1 regtype     |  |     |  uses_stq        |  |  is unique? (clear pipeline for it)
+              //               |  |  micro-code                            |       rs2 type|  |     |  |  is_amo       |  |  |  flush on commit
+              //               |  |  |           iq-type  func unit        |       |       |  |     |  |  |            |  |  |  |  csr cmd
+              //               |  |  |           |        |                |       |       |  |     |  |  |            |  |  |  |  |      fcn_dw
+              //               |  |  |           |        |        dst     |       |       |  |     |  |  |  mem       |  |  |  |  |      |       fcn_op
+              //               |  |  |           |        |        regtype |       |       |  |     |  |  |  cmd       |  |  |  |  |      |       |
+              //               |  |  |           |        |        |       |       |       |  |     |  |  |  |         |  |  |  |  |      |       |
+              //               |  |  |           |        |        |       |       |       |  |     |  |  |  |         |  |  |  |  |      |       |
+                          List(N, N, uopX      , IQT_INT, FU_X   , RT_X  , DC2    ,DC2    ,X, IS_X, X, X, X, M_X,      X, X, N, X, CSR.X, DW_X  , FN_X  )
 
   val X32_table: Array[(BitPat, List[BitPat])] = Array(
     SLLI_RV32          -> List(Y, N, uopSLLI   , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , Y, N, N, N, CSR.N, DW_XPR, FN_SL  ),
@@ -475,6 +475,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     uop.imm_packed := 0.U
   }
   uop.imm_sel := cs.imm_sel
+  uop.fp_rm   := inst(14,12)
+  uop.fp_typ  := inst(21,20)
 
   //-------------------------------------------------------------
 

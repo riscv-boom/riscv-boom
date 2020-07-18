@@ -391,7 +391,8 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
   val io_req = io.req.bits
   fp_decoder.io.uopc := io_req.uop.uopc
   val fp_ctrl = fp_decoder.io.sigs
-  val fp_rm = Mux(ImmGenRm(io_req.uop.imm_packed) === 7.U, io.fcsr_rm, ImmGenRm(io_req.uop.imm_packed))
+  val fp_rm = Mux(io_req.uop.fp_rm === 7.U, io.fcsr_rm, io_req.uop.fp_rm)
+
   val req = Wire(new tile.FPInput)
   val tag = !fp_ctrl.singleIn
 
@@ -401,7 +402,7 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
   req.in1 := unbox(io_req.rs1_data, tag, None)
   req.in2 := unbox(io_req.rs2_data, tag, None)
   req.in3 := DontCare
-  req.typ := ImmGenTyp(io_req.uop.imm_packed)
+  req.typ := io_req.uop.fp_typ
   req.fmaCmd := DontCare
 
   assert (!(io.req.valid && fp_ctrl.fromint && req.in1(xLen).asBool),
