@@ -984,6 +984,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     e.valid && !e.bits.cleared
   }), stq_commit_head))
 
+  var clr_idx = stq_clr_head_idx
   for (i <- 0 until coreWidth) {
     // Delay store clearing 1 extra cycle, as the store clear can't occur
     // too quickly before an order fail caused by this store propagates to ROB
@@ -994,9 +995,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     val clr_valid_1 = RegNext(clr_valid && !io.core.exception && !IsKilledByBranch(io.core.brupdate, clr_uop))
     val clr_uop_1   = RegNext(UpdateBrMask(io.core.brupdate, clr_uop))
 
-    val stq_idx = stq_clr_head_idx + i.U
 
-    val stq_e   = WireInit(stq(stq_idx))
+    val stq_e   = WireInit(stq(clr_idx))
 
     when ( stq_e.valid &&
            stq_e.bits.addr.valid &&
@@ -1009,11 +1009,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       clr_valid := true.B
       clr_uop   := UpdateBrMask(io.core.brupdate, stq_e.bits.uop)
 
-      stq(stq_idx).bits.cleared := true.B
+      stq(clr_idx).bits.cleared := true.B
     }
 
     io.core.clr_bsy(i).valid := clr_valid_1 && !io.core.exception && !IsKilledByBranch(io.core.brupdate, clr_uop_1)
     io.core.clr_bsy(i).bits  := clr_uop_1.rob_idx
+
+    clr_idx = WrapInc(clr_idx, numStqEntries)
   }
 
 

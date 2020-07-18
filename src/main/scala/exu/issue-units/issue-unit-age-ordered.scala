@@ -45,7 +45,7 @@ class IssueUnitCollapsing(
 
 
   val vacants = issue_slots.map(s => !(s.valid)) ++ io.dis_uops.map(_.valid).map(!_.asBool)
-  val shamts_oh = Array.fill(numIssueSlots+dispatchWidth) {Wire(UInt(width=dispatchWidth.W))}
+  val shamts_oh = Wire(Vec(numIssueSlots+dispatchWidth, UInt(width=dispatchWidth.W)))
   // track how many to shift up this entry by by counting previous vacant spots
   def SaturatingCounterOH(count_oh:UInt, inc: Bool, max: Int): UInt = {
      val next = Wire(UInt(width=max.W))
@@ -95,7 +95,7 @@ class IssueUnitCollapsing(
   is_available := VecInit((nSlowSlots until numIssueSlots).map(i =>
     (!issue_slots(i).will_be_valid || issue_slots(i).clear) && !(issue_slots(i).in_uop.valid)))
   for (w <- 0 until dispatchWidth) {
-    io.dis_uops(w).ready := RegNext(PopCount(is_available) > w.U + PopCount(io.dis_uops.map(_.fire)))
+    io.dis_uops(w).ready := RegNext(PopCount(is_available) > w.U(log2Ceil(nFastSlots).W) + PopCount(io.dis_uops.map(_.fire)))
     // io.dis_uops(w).ready := RegNext(PopCount(will_be_available) > w.U)
     assert (!io.dis_uops(w).ready || (shamts_oh(w+numIssueSlots) >> w) =/= 0.U)
   }
