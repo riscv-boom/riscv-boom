@@ -32,7 +32,7 @@ class ComposedBranchPredictorBank(implicit p: Parameters) extends BranchPredicto
     }
     meta_sz = meta_sz + c.metaSz
   }
-  require(meta_sz < bpdMaxMetaLength)
+  require(meta_sz <= bpdMaxMetaLength)
   io.f3_meta := metas
 
 

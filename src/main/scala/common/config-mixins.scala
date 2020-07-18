@@ -316,6 +316,101 @@ class WithNGigaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
 )
 
 /**
+ * 8-wide BOOM.
+  */
+class WithNTeraBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
+  new WithTAGELBPD ++ // Default to TAGE-L BPD
+  new Config((site, here, up) => {
+    case TilesLocated(InSubsystem) => {
+      val prev = up(TilesLocated(InSubsystem), site)
+      val idOffset = overrideIdOffset.getOrElse(prev.size)
+      (0 until n).map { i =>
+        BoomTileAttachParams(
+          tileParams = BoomTileParams(
+            core = BoomCoreParams(
+              fetchWidth = 16,
+              decodeWidth = 8,
+              numRobEntries = 256,
+              issueParams = Seq(
+                IssueParams(issueWidth=3, numEntries=36, iqType=IQT_MEM.litValue, dispatchWidth=8),
+                IssueParams(issueWidth=8, numEntries=64, iqType=IQT_INT.litValue, dispatchWidth=8),
+                IssueParams(issueWidth=4, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=8)),
+              numIntPhysRegisters = 256,
+              numFpPhysRegisters = 256,
+              numLdqEntries = 64,
+              numStqEntries = 64,
+              maxBrCount = 32,
+              numFetchBufferEntries = 100,
+              enablePrefetching = true,
+              numDCacheBanks = 1,
+              ftq = FtqParameters(nEntries=40),
+              fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
+            ),
+            dcache = Some(
+              DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=16, nMSHRs=8, nTLBEntries=32)
+            ),
+            icache = Some(
+              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=16, fetchBytes=4*8)
+            ),
+            hartId = i + idOffset
+          ),
+          crossingParams = RocketCrossingParams()
+        )
+      } ++ prev
+    }
+    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+    case XLen => 64
+  })
+)
+
+/**
+ * 10-wide BOOM.
+  */
+class WithNPetaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
+  new WithTAGELBPD ++ // Default to TAGE-L BPD
+  new Config((site, here, up) => {
+    case TilesLocated(InSubsystem) => {
+      val prev = up(TilesLocated(InSubsystem), site)
+      val idOffset = overrideIdOffset.getOrElse(prev.size)
+      (0 until n).map { i =>
+        BoomTileAttachParams(
+          tileParams = BoomTileParams(
+            core = BoomCoreParams(
+              fetchWidth = 16,
+              decodeWidth = 10,
+              numRobEntries = 320,
+              issueParams = Seq(
+                IssueParams(issueWidth=5 , numEntries=50 , iqType=IQT_MEM.litValue, dispatchWidth=10),
+                IssueParams(issueWidth=10, numEntries=100, iqType=IQT_INT.litValue, dispatchWidth=10),
+                IssueParams(issueWidth=8 , numEntries=80 , iqType=IQT_FP.litValue , dispatchWidth=10)),
+              numIntPhysRegisters = 256,
+              numFpPhysRegisters = 256,
+              numLdqEntries = 64,
+              numStqEntries = 64,
+              maxBrCount = 32,
+              numFetchBufferEntries = 100,
+              enablePrefetching = true,
+              numDCacheBanks = 1,
+              ftq = FtqParameters(nEntries=40),
+              fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
+            ),
+            dcache = Some(
+              DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=16, nMSHRs=8, nTLBEntries=32)
+            ),
+            icache = Some(
+              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=16, fetchBytes=4*8)
+            ),
+            hartId = i + idOffset
+          ),
+          crossingParams = RocketCrossingParams()
+        )
+      } ++ prev
+    }
+    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 16)
+    case XLen => 64
+  })
+)
+/**
   * BOOM Configs for CS152 lab
   */
 class WithNCS152BaselineBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
@@ -424,7 +519,7 @@ class WithNCS152DefaultBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) e
 class WithTAGELBPD extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
-      bpdMaxMetaLength = 120,
+      bpdMaxMetaLength = 221,
       globalHistoryLength = 64,
       localHistoryLength = 1,
       localHistoryNSets = 0,
