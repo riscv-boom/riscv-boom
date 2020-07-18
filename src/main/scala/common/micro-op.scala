@@ -128,6 +128,9 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def prs1_bypass_gen  = prs1_status(1)
   def prs2_bypass_gen  = prs2_status(1)
 
+  def prs1_bypassable  = prs1_bypass_gen || prs1_bypass_alu
+  def prs2_bypassable  = prs2_bypass_gen || prs2_bypass_alu
+
   // Check if a load nack kills this uop while being issued
   def load_wakeup_nacked(load_nacks: Vec[Bool]) = ((prs1_bypass_mem.asUInt | prs2_bypass_mem.asUInt) & load_nacks.asUInt).orR
 
