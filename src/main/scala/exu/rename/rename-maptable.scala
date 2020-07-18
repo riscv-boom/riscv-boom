@@ -57,6 +57,7 @@ class RenameMapTable(
 
     // Remapping an ldst to a newly allocated pdst?
     val remap_reqs  = Input(Vec(plWidth, new RemapReq(lregSz, pregSz)))
+    val com_remap_reqs = Input(Vec(plWidth, new RemapReq(lregSz, pregSz)))
 
     // Dispatching branches: need to take snapshots of table state.
     val ren_br_tags = Input(Vec(plWidth, Valid(UInt(brTagSz.W))))
@@ -68,22 +69,31 @@ class RenameMapTable(
 
   // The map table register array and its branch snapshots.
   val map_table = RegInit(VecInit((0 until numLregs) map { i => i.U(pregSz.W) }))
+  val com_map_table = RegInit(VecInit((0 until numLregs) map { i => i.U(pregSz.W) }))
   val br_snapshots = Reg(Vec(maxBrCount, Vec(numLregs, UInt(pregSz.W))))
 
   // The intermediate states of the map table following modification by each pipeline slot.
   val remap_table = Wire(Vec(plWidth+1, Vec(numLregs, UInt(pregSz.W))))
+  val com_remap_table = Wire(Vec(plWidth+1, Vec(numLregs, UInt(pregSz.W))))
 
   // Uops requesting changes to the map table.
   val remap_pdsts = io.remap_reqs map (_.pdst)
   val remap_ldsts_oh = io.remap_reqs map (req => UIntToOH(req.ldst) & Fill(numLregs, req.valid.asUInt))
+
+  val com_remap_pdsts = io.com_remap_reqs map (_.pdst)
+  val com_remap_ldsts_oh = io.com_remap_reqs map (req => UIntToOH(req.ldst) & Fill(numLregs, req.valid.asUInt))
 
   // Figure out the new mappings seen by each pipeline slot.
   for (i <- 0 until numLregs) {
     val remapped_row = (remap_ldsts_oh.map(ldst => ldst(i)) zip remap_pdsts)
       .scanLeft(map_table(i)) {case (pdst, (ldst, new_pdst)) => Mux(ldst, new_pdst, pdst)}
 
+    val com_remapped_row = (com_remap_ldsts_oh.map(ldst => ldst(i)) zip com_remap_pdsts)
+      .scanLeft(com_map_table(i)) {case (pdst, (ldst, new_pdst)) => Mux(ldst, new_pdst, pdst)}
+
     for (j <- 0 until plWidth+1) {
       remap_table(j)(i) := remapped_row(j)
+      com_remap_table(j)(i) := com_remapped_row(j)
     }
   }
 
@@ -97,10 +107,13 @@ class RenameMapTable(
   when (io.brupdate.b2.mispredict) {
     // Restore the map table to a branch snapshot.
     map_table := br_snapshots(io.brupdate.b2.uop.br_tag)
+  } .elsewhen (io.rollback) {
+    map_table := com_map_table
   } .otherwise {
     // Update mappings.
     map_table := remap_table(plWidth)
   }
+  com_map_table := com_remap_table(plWidth)
 
   // Read out mappings.
   for (i <- 0 until plWidth) {

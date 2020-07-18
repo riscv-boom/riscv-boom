@@ -32,7 +32,10 @@ class RenameFreeList(
     val alloc_pregs   = Output(Vec(plWidth, Valid(UInt(pregSz.W))))
 
     // Pregs returned by the ROB.
-    val dealloc_pregs = Input(Vec(plWidth, Valid(UInt(pregSz.W))))
+    val com_reqs    = Input(Vec(plWidth, Valid(new Bundle {
+      val stale_pdst = UInt(pregSz.W)
+      val pdst       = UInt(pregSz.W)
+    })))
 
     // Branch info for starting new allocation lists.
     val ren_br_tags   = Input(Vec(plWidth, Valid(UInt(brTagSz.W))))
@@ -40,14 +43,11 @@ class RenameFreeList(
     // Mispredict info for recovering speculatively allocated registers.
     val brupdate        = Input(new BrUpdateInfo)
 
-    val debug = new Bundle {
-      val pipeline_empty = Input(Bool())
-      val freelist = Output(Bits(numPregs.W))
-      val isprlist = Output(Bits(numPregs.W))
-    }
+    val rollback      = Input(Bool())
   })
   // The free list register array and its branch allocation lists.
   val free_list = RegInit(UInt(numPregs.W), Cat(~(0.U((numPregs-numLregs).W)), 0.U(numLregs.W)))
+  val spec_alloc_list = RegInit(0.U(numPregs.W))
   val br_alloc_lists = Reg(Vec(maxBrCount, UInt(numPregs.W)))
 
   // Select pregs from the free list.
@@ -55,13 +55,18 @@ class RenameFreeList(
   val sel_fire  = Wire(Vec(plWidth, Bool()))
 
   // Allocations seen by branches in each pipeline slot.
-  val allocs = io.alloc_pregs map (a => UIntToOH(a.bits))
+  val allocs = io.alloc_pregs map (a => UIntToOH(a.bits)(n-1,0))
   val alloc_masks = (allocs zip io.reqs).scanRight(0.U(n.W)) { case ((a,r),m) => m | a & Fill(n,r) }
 
   // Masks that modify the freelist array.
   val sel_mask = (sels zip sel_fire) map { case (s,f) => s & Fill(n,f) } reduce(_|_)
+
   val br_deallocs = br_alloc_lists(io.brupdate.b2.uop.br_tag) & Fill(n, io.brupdate.b2.mispredict)
-  val dealloc_mask = io.dealloc_pregs.map(d => UIntToOH(d.bits)(numPregs-1,0) & Fill(n,d.valid)).reduce(_|_) | br_deallocs
+  val com_deallocs = io.com_reqs.map(d => UIntToOH(d.bits.stale_pdst)(numPregs-1,0) & Fill(n,d.valid)).reduce(_|_)
+  val roll_deallocs = spec_alloc_list & Fill(n, io.rollback)
+  val dealloc_mask = com_deallocs | br_deallocs | roll_deallocs
+
+  val com_despec = io.com_reqs.map(d => UIntToOH(d.bits.pdst)(numPregs-1,0) & Fill(n,d.valid)).reduce(_|_)
 
   val br_slots = VecInit(io.ren_br_tags.map(tag => tag.valid)).asUInt
   // Create branch allocation lists.
@@ -71,9 +76,10 @@ class RenameFreeList(
     br_alloc_lists(i) := Mux(new_list, Mux1H(list_req, alloc_masks.slice(1, plWidth+1)),
                                        br_alloc_lists(i) & ~br_deallocs | alloc_masks(0))
   }
+  spec_alloc_list := (spec_alloc_list | alloc_masks(0)) & ~dealloc_mask & ~com_despec
 
   // Update the free list.
-  free_list := (free_list & ~sel_mask | dealloc_mask) & ~(1.U(numPregs.W))
+  free_list     := (free_list & ~sel_mask) | dealloc_mask
 
   // Pipeline logic | hookup outputs.
   for (w <- 0 until plWidth) {
@@ -88,10 +94,9 @@ class RenameFreeList(
     io.alloc_pregs(w).valid := r_valid
   }
 
-  io.debug.freelist := free_list | io.alloc_pregs.map(p => UIntToOH(p.bits) & Fill(n,p.valid)).reduce(_|_)
-  io.debug.isprlist := 0.U  // TODO track commit free list.
+  val debug_freelist = free_list | io.alloc_pregs.map(p => UIntToOH(p.bits)(n-1,0) & Fill(n,p.valid)).reduce(_|_)
 
-  assert (!(io.debug.freelist & dealloc_mask).orR, "[freelist] Returning a free physical register.")
-  assert (!io.debug.pipeline_empty || PopCount(io.debug.freelist) >= (numPregs - numLregs - 1).U,
+  assert (!(debug_freelist & dealloc_mask).orR, "[freelist] Returning a free physical register.")
+  assert (!RegNext(io.rollback) || PopCount(debug_freelist) === (numPregs - numLregs).U,
     "[freelist] Leaking physical registers.")
 }

@@ -104,7 +104,6 @@ abstract class IssueUnit(
     }
     for (spec_wakeup <- io.spec_ld_wakeup) {
       when (spec_wakeup.valid) {
-        assert (spec_wakeup.bits =/= 0.U)
         when (spec_wakeup.bits === io.dis_uops(w).bits.prs1) {
           dis_uops(w).prs1_busy := false.B
           dis_uops(w).iw_p1_poisoned := true.B
@@ -135,6 +134,7 @@ abstract class IssueUnit(
       assert(!(io.dis_uops(w).bits.ppred_busy && io.dis_uops(w).valid))
       dis_uops(w).ppred_busy := false.B
     }
+
   }
 
   //-------------------------------------------------------------

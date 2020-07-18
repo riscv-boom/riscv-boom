@@ -116,7 +116,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
   val rename_stage     = Module(new RenameStage(coreWidth, numIntPhysRegs, numIntRenameWakeupPorts, false))
   val fp_rename_stage  = if (usingFPU) Module(new RenameStage(coreWidth, numFpPhysRegs, numFpWakeupPorts, true)) else null
-  val pred_rename_stage = Module(new PredRenameStage(coreWidth, ftqSz, 1))
+  val pred_rename_stage = Module(new PredRenameStage(coreWidth, 1))
   val rename_stages    = if (usingFPU) Seq(rename_stage, fp_rename_stage, pred_rename_stage) else Seq(rename_stage, pred_rename_stage)
 
   val mem_iss_unit     = Module(new IssueUnitCollapsing(memIssueParam, numIntIssueWakeupPorts))
@@ -229,7 +229,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
 
   assert (!((brupdate.b1.mispredict_mask =/= 0.U || brupdate.b2.mispredict)
-    && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
+    && rob.io.rollback), "Can't have a mispredict during rollback.")
 
   io.ifu.brupdate := brupdate
 
@@ -576,7 +576,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
                       (  !dis_ready
-                      || rob.io.commit.rollback
+                      || rob.io.rollback
                       || dec_xcpt_stall
                       || branch_mask_full(w)
                       || brupdate.b1.mispredict_mask =/= 0.U
@@ -632,9 +632,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
     rename.io.com_valids := rob.io.commit.valids
     rename.io.com_uops := rob.io.commit.uops
-    rename.io.rbk_valids := rob.io.commit.rbk_valids
-    rename.io.rollback := rob.io.commit.rollback
+    rename.io.rollback := rob.io.rollback
   }
+
 
 
   // Outputs

@@ -25,35 +25,10 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util._
 
-/**
- * IO bundle to interface with the Register Rename logic
- *
- * @param plWidth pipeline width
- * @param numIntPregs number of int physical registers
- * @param numFpPregs number of FP physical registers
- * @param numWbPorts number of int writeback ports
- * @param numWbPorts number of FP writeback ports
- */
-class RenameStageIO(
-  val plWidth: Int,
-  val numPhysRegs: Int,
-  val numWbPorts: Int)
-  (implicit p: Parameters) extends BoomBundle
 
-
-/**
- * IO bundle to debug the rename stage
- */
-class DebugRenameStageIO(val numPhysRegs: Int)(implicit p: Parameters) extends BoomBundle
-{
-  val freelist  = Bits(numPhysRegs.W)
-  val isprlist  = Bits(numPhysRegs.W)
-  val busytable = UInt(numPhysRegs.W)
-}
 
 abstract class AbstractRenameStage(
   plWidth: Int,
-  numPhysRegs: Int,
   numWbPorts: Int)
   (implicit p: Parameters) extends BoomModule
 {
@@ -81,11 +56,9 @@ abstract class AbstractRenameStage(
     // commit stage
     val com_valids = Input(Vec(plWidth, Bool()))
     val com_uops = Input(Vec(plWidth, new MicroOp()))
-    val rbk_valids = Input(Vec(plWidth, Bool()))
     val rollback = Input(Bool())
 
     val debug_rob_empty = Input(Bool())
-    val debug = Output(new DebugRenameStageIO(numPhysRegs))
   })
 
   def BypassAllocations(uop: MicroOp, older_uops: Seq[MicroOp], alloc_reqs: Seq[Bool]): MicroOp
@@ -162,7 +135,7 @@ class RenameStage(
   numPhysRegs: Int,
   numWbPorts: Int,
   float: Boolean)
-(implicit p: Parameters) extends AbstractRenameStage(plWidth, numPhysRegs, numWbPorts)(p)
+(implicit p: Parameters) extends AbstractRenameStage(plWidth, numWbPorts)(p)
 {
   val pregSz = log2Ceil(numPhysRegs)
   val rtype = if (float) RT_FLT else RT_FIX
@@ -234,14 +207,12 @@ class RenameStage(
 
   // Commit/Rollback
   val com_valids      = Wire(Vec(plWidth, Bool()))
-  val rbk_valids      = Wire(Vec(plWidth, Bool()))
 
   for (w <- 0 until plWidth) {
     ren2_alloc_reqs(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === rtype && ren2_fire(w)
     ren2_br_tags(w).valid := ren2_fire(w) && ren2_uops(w).allocate_brtag
 
     com_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.com_valids(w)
-    rbk_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.rbk_valids(w)
     ren2_br_tags(w).bits  := ren2_uops(w).br_tag
   }
 
@@ -251,26 +222,30 @@ class RenameStage(
   // Maptable inputs.
   val map_reqs   = Wire(Vec(plWidth, new MapReq(lregSz)))
   val remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
-
+  val com_remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
   // Generate maptable requests.
-  for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops zip io.com_uops.reverse zipWithIndex) {
+  for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops zip io.com_uops zipWithIndex) {
     map_reqs(w).lrs1 := ren1.lrs1
     map_reqs(w).lrs2 := ren1.lrs2
     map_reqs(w).lrs3 := ren1.lrs3
     map_reqs(w).ldst := ren1.ldst
 
-    remap_reqs(w).ldst := Mux(io.rollback, com.ldst      , ren2.ldst)
-    remap_reqs(w).pdst := Mux(io.rollback, com.stale_pdst, ren2.pdst)
+    remap_reqs(w).valid := ren2_alloc_reqs(w)
+    remap_reqs(w).ldst := ren2.ldst
+    remap_reqs(w).pdst := ren2.pdst
+
+    com_remap_reqs(w).valid := com_valids(w)
+    com_remap_reqs(w).ldst := io.com_uops(w).ldst
+    com_remap_reqs(w).pdst := io.com_uops(w).pdst
   }
-  ren2_alloc_reqs zip rbk_valids.reverse zip remap_reqs map {
-    case ((a,r),rr) => rr.valid := a || r}
 
   // Hook up inputs.
   maptable.io.map_reqs    := map_reqs
   maptable.io.remap_reqs  := remap_reqs
   maptable.io.ren_br_tags := ren2_br_tags
-  maptable.io.brupdate      := io.brupdate
+  maptable.io.brupdate    := io.brupdate
   maptable.io.rollback    := io.rollback
+  maptable.io.com_remap_reqs := com_remap_reqs
 
   // Maptable outputs.
   for ((uop, w) <- ren1_uops.zipWithIndex) {
@@ -289,16 +264,14 @@ class RenameStage(
 
   // Freelist inputs.
   freelist.io.reqs := ren2_alloc_reqs
-  freelist.io.dealloc_pregs zip com_valids zip rbk_valids map
-    {case ((d,c),r) => d.valid := c || r}
-  freelist.io.dealloc_pregs zip io.com_uops map
-    {case (d,c) => d.bits := Mux(io.rollback, c.pdst, c.stale_pdst)}
+  for (w <- 0 until plWidth) {
+    freelist.io.com_reqs(w).valid           := com_valids(w)
+    freelist.io.com_reqs(w).bits.pdst       := io.com_uops(w).pdst
+    freelist.io.com_reqs(w).bits.stale_pdst := io.com_uops(w).stale_pdst
+  }
   freelist.io.ren_br_tags := ren2_br_tags
   freelist.io.brupdate := io.brupdate
-  freelist.io.debug.pipeline_empty := io.debug_rob_empty
-
-  // assert (ren2_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
-  //          "[rename-stage] A uop is trying to allocate the zero physical register.")
+  freelist.io.rollback := io.rollback
 
   // Freelist outputs.
   for ((uop, w) <- ren2_uops.zipWithIndex) {
@@ -345,19 +318,12 @@ class RenameStage(
     io.ren2_uops(w) := GetNewUopAndBrMask(bypassed_uop, io.brupdate)
   }
 
-  //-------------------------------------------------------------
-  // Debug signals
-
-  io.debug.freelist  := freelist.io.debug.freelist
-  io.debug.isprlist  := freelist.io.debug.isprlist
-  io.debug.busytable := busytable.io.debug.busytable
 }
 
 class PredRenameStage(
   plWidth: Int,
-  numPhysRegs: Int,
   numWbPorts: Int)
-  (implicit p: Parameters) extends AbstractRenameStage(plWidth, numPhysRegs, numWbPorts)(p)
+  (implicit p: Parameters) extends AbstractRenameStage(plWidth, numWbPorts)(p)
 {
 
   def BypassAllocations(uop: MicroOp, older_uops: Seq[MicroOp], alloc_reqs: Seq[Bool]): MicroOp = {

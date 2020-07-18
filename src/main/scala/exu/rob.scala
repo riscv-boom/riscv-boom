@@ -77,8 +77,9 @@ class RobIo(
   val fflags = Flipped(Vec(numFFlagsPorts, new ValidIO(new FFlagsResp())))
   val lxcpt = Flipped(new ValidIO(new Exception())) // LSU
 
-  // Commit stage (free resources; also used for rollback).
+  // Commit stage (free resources).
   val commit = Output(new CommitSignals())
+  val rollback   = Bool()
 
   // tell the LSU that the head of the ROB is a load
   // (some loads can only execute once they are at the head of the ROB).
@@ -117,10 +118,6 @@ class CommitSignals(implicit p: Parameters) extends BoomBundle
 
   // These come a cycle later
   val debug_insts = Vec(retireWidth, UInt(32.W))
-
-  // Perform rollback of rename state (in conjuction with commit.uops).
-  val rbk_valids = Vec(retireWidth, Bool())
-  val rollback   = Bool()
 
   val debug_wdata = Vec(retireWidth, UInt(xLen.W))
 }
@@ -211,7 +208,7 @@ class Rob(
   val io = IO(new RobIo(numWakeupPorts, numFFlagPorts))
 
   // ROB Finite State Machine
-  val s_reset :: s_normal :: s_rollback :: s_wait_till_empty :: Nil = Enum(4)
+  val s_reset :: s_normal :: s_wait_till_empty :: s_rollback :: Nil = Enum(4)
   val rob_state = RegInit(s_reset)
 
   //commit entries at the head, and unwind exceptions from the tail
@@ -227,10 +224,8 @@ class Rob(
   val rob_pnr_lsb  = RegInit(0.U((1 max log2Ceil(coreWidth)).W))
   val rob_pnr_idx  = if (coreWidth == 1) rob_pnr  else Cat(rob_pnr , rob_pnr_lsb)
 
-  val com_idx = Mux(rob_state === s_rollback, rob_tail, rob_head)
 
 
-  val maybe_full   = RegInit(false.B)
   val full         = Wire(Bool())
   val empty        = Wire(Bool())
 
@@ -333,7 +328,7 @@ class Rob(
       assert (rob_val(rob_tail) === false.B, "[rob] overwriting a valid entry.")
       assert ((io.enq_uops(w).rob_idx >> log2Ceil(coreWidth)) === rob_tail)
     } .elsewhen (io.enq_valids.reduce(_|_) && !rob_val(rob_tail)) {
-      rob_uop(rob_tail).debug_inst := BUBBLE // just for debug purposes
+
     }
 
     //-----------------------------------------------
@@ -394,7 +389,7 @@ class Rob(
     can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)
 
     //-----------------------------------------------
-    // Commit or Rollback
+    // Commit
 
     // Can this instruction commit? (the check for exceptions/rob_state happens later).
     can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
@@ -402,42 +397,24 @@ class Rob(
 
     // use the same "com_uop" for both rollback AND commit
     // Perform Commit
-    io.commit.valids(w) := will_commit(w)
-    io.commit.arch_valids(w) := will_commit(w) && !rob_predicated(com_idx)
-    io.commit.uops(w)   := rob_uop(com_idx)
+    io.commit.valids(w)      := will_commit(w)
+    io.commit.arch_valids(w) := will_commit(w) && !rob_predicated(rob_head)
+    io.commit.uops(w)        := rob_uop(rob_head)
     io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
 
     // We unbusy branches in b1, but its easier to mark the taken/provider src in b2,
     // when the branch might be committing
     when (io.brupdate.b2.mispredict &&
       MatchBank(GetBankIdx(io.brupdate.b2.uop.rob_idx)) &&
-      GetRowIdx(io.brupdate.b2.uop.rob_idx) === com_idx) {
+      GetRowIdx(io.brupdate.b2.uop.rob_idx) === rob_head) {
       io.commit.uops(w).debug_fsrc := BSRC_C
       io.commit.uops(w).taken      := io.brupdate.b2.taken
     }
 
-
-    // Don't attempt to rollback the tail's row when the rob is full.
-    val rbk_row = rob_state === s_rollback && !full
-
-    io.commit.rbk_valids(w) := rbk_row && rob_val(com_idx) && !(enableCommitMapTable.B)
-    io.commit.rollback := (rob_state === s_rollback)
-
-    assert (!(io.commit.valids.reduce(_||_) && io.commit.rbk_valids.reduce(_||_)),
-      "com_valids and rbk_valids are mutually exclusive")
-
-    when (rbk_row) {
-      rob_val(com_idx)       := false.B
-      rob_exception(com_idx) := false.B
-    }
-
-    if (enableCommitMapTable) {
-      when (RegNext(exception_thrown)) {
-        for (i <- 0 until numRobRows) {
-          rob_val(i) := false.B
-          rob_bsy(i) := false.B
-          rob_uop(i).debug_inst := BUBBLE
-        }
+    when (rob_state === s_rollback) {
+      for (i <- 0 until numRobRows) {
+        rob_val(i) := false.B
+        rob_bsy(i) := false.B
       }
     }
 
@@ -450,7 +427,6 @@ class Rob(
       when (IsKilledByBranch(io.brupdate, br_mask))
       {
         rob_val(i) := false.B
-        rob_uop(i.U).debug_inst := BUBBLE
       } .elsewhen (rob_val(i)) {
         // clear speculation bit even on correct speculation
         rob_uop(i).br_mask := GetNewBrMask(io.brupdate, br_mask)
@@ -488,13 +464,6 @@ class Rob(
     // Read unsafe status of PNR row.
     rob_pnr_unsafe(w) := rob_val(rob_pnr) && (rob_unsafe(rob_pnr) || rob_exception(rob_pnr))
 
-    // -----------------------------------------------
-    // debugging write ports that should not be synthesized
-    when (will_commit(w)) {
-      rob_uop(rob_head).debug_inst := BUBBLE
-    } .elsewhen (rbk_row) {
-      rob_uop(rob_tail).debug_inst := BUBBLE
-    }
 
     //--------------------------------------------------
     // Debug: for debug purposes, track side-effects to all register destinations
@@ -583,6 +552,7 @@ class Rob(
                                                 flush_commit && flush_uop.is_eret,
                                                 refetch_inst)
 
+  io.rollback := rob_state === s_rollback
 
   // -----------------------------------------------
   // FP Exceptions
@@ -625,7 +595,7 @@ class Rob(
     enq_xcpts(i) := io.enq_valids(i) && io.enq_uops(i).exception
   }
 
-  when (!(io.flush.valid || exception_thrown) && rob_state =/= s_rollback) {
+  when (!(io.flush.valid || exception_thrown)) {
     when (io.lxcpt.valid) {
       val new_xcpt_uop = io.lxcpt.bits.uop
 
@@ -670,22 +640,18 @@ class Rob(
   // dispatch the rest of it.
   // update when committed ALL valid instructions in commit_bundle
 
-  val rob_deq = WireInit(false.B)
   val r_partial_row = RegInit(false.B)
-
-  when (io.enq_valids.reduce(_|_)) {
-    r_partial_row := io.enq_partial_stall
-  }
 
   val finished_committing_row =
     (io.commit.valids.asUInt =/= 0.U) &&
     ((will_commit.asUInt ^ rob_head_vals.asUInt) === 0.U) &&
-    !(r_partial_row && rob_head === rob_tail && !maybe_full)
+    !(r_partial_row && rob_head === rob_tail && !io.brupdate.b2.mispredict)
 
   when (finished_committing_row) {
     rob_head     := WrapInc(rob_head, numRobRows)
     rob_head_lsb := 0.U
-    rob_deq      := true.B
+  } .elsewhen (rob_state === s_rollback) {
+    rob_head_lsb := 0.U
   } .otherwise {
     rob_head_lsb := OHToUInt(PriorityEncoderOH(rob_head_vals.asUInt))
   }
@@ -706,13 +672,12 @@ class Rob(
     if (coreWidth > 1)
       rob_pnr_lsb := next_rob_pnr_idx(log2Ceil(coreWidth)-1, 0)
   } else {
-    // Distinguish between PNR being at head/tail when ROB is full.
-    // Works the same as maybe_full tracking for the ROB tail.
-    val pnr_maybe_at_tail = RegInit(false.B)
-
     val safe_to_inc = rob_state === s_normal || rob_state === s_wait_till_empty
-    val do_inc_row  = !rob_pnr_unsafe.reduce(_||_) && (rob_pnr =/= rob_tail || (full && !pnr_maybe_at_tail))
-    when (empty && io.enq_valids.asUInt =/= 0.U) {
+    val do_inc_row = !rob_pnr_unsafe.reduce(_||_) && !(rob_pnr === rob_tail && !io.brupdate.b2.mispredict)
+    when (rob_state === s_rollback) {
+      assert(rob_pnr === rob_head)
+      rob_pnr_lsb := 0.U
+    } .elsewhen (empty && io.enq_valids.asUInt =/= 0.U) {
       // Unforunately for us, the ROB does not use its entries in monotonically
       //  increasing order, even in the case of no exceptions. The edge case
       //  arises when partial rows are enqueued and committed, leaving an empty
@@ -722,15 +687,11 @@ class Rob(
     } .elsewhen (safe_to_inc && do_inc_row) {
       rob_pnr     := WrapInc(rob_pnr, numRobRows)
       rob_pnr_lsb := 0.U
-    } .elsewhen (safe_to_inc && (rob_pnr =/= rob_tail || (full && !pnr_maybe_at_tail))) {
+    } .elsewhen (safe_to_inc && (rob_pnr =/= rob_tail)) {
       rob_pnr_lsb := PriorityEncoder(rob_pnr_unsafe)
     } .elsewhen (safe_to_inc && !full && !empty) {
       rob_pnr_lsb := PriorityEncoder(rob_pnr_unsafe.asUInt | ~MaskLower(rob_tail_vals.asUInt))
-    } .elsewhen (full && pnr_maybe_at_tail) {
-      rob_pnr_lsb := 0.U
     }
-
-    pnr_maybe_at_tail := !rob_deq && (do_inc_row || pnr_maybe_at_tail)
   }
 
   // Head overrunning PNR likely means an entry hasn't been marked as safe when it should have been.
@@ -742,46 +703,24 @@ class Rob(
   // -----------------------------------------------
   // ROB Tail Logic
 
-  val rob_enq = WireInit(false.B)
-
-  when (rob_state === s_rollback && (rob_tail =/= rob_head || maybe_full)) {
-    // Rollback a row
-    rob_tail     := WrapDec(rob_tail, numRobRows)
-    rob_tail_lsb := (coreWidth-1).U
-    rob_deq := true.B
-  } .elsewhen (rob_state === s_rollback && (rob_tail === rob_head) && !maybe_full) {
-    // Rollback an entry
-    rob_tail_lsb := rob_head_lsb
-  } .elsewhen (io.brupdate.b2.mispredict) {
-    rob_tail     := WrapInc(GetRowIdx(io.brupdate.b2.uop.rob_idx), numRobRows)
-    rob_tail_lsb := 0.U
+  when (io.brupdate.b2.mispredict) {
+    rob_tail      := WrapInc(GetRowIdx(io.brupdate.b2.uop.rob_idx), numRobRows)
+    rob_tail_lsb  := 0.U
+    r_partial_row := false.B
   } .elsewhen (io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall) {
-    rob_tail     := WrapInc(rob_tail, numRobRows)
-    rob_tail_lsb := 0.U
-    rob_enq      := true.B
+    rob_tail      := WrapInc(rob_tail, numRobRows)
+    rob_tail_lsb  := 0.U
+    r_partial_row := false.B
   } .elsewhen (io.enq_valids.asUInt =/= 0.U && io.enq_partial_stall) {
-    rob_tail_lsb := PriorityEncoder(~MaskLower(io.enq_valids.asUInt))
+    rob_tail_lsb  := PriorityEncoder(~MaskLower(io.enq_valids.asUInt))
+    r_partial_row := true.B
   }
 
-
-  if (enableCommitMapTable) {
-    when (RegNext(exception_thrown)) {
-      rob_tail     := 0.U
-      rob_tail_lsb := 0.U
-      rob_head     := 0.U
-      rob_pnr      := 0.U
-      rob_pnr_lsb  := 0.U
-    }
-  }
 
   // -----------------------------------------------
   // Full/Empty Logic
-  // The ROB can be completely full, but only if it did not dispatch a row in the prior cycle.
-  // I.E. at least one entry will be empty when in a steady state of dispatching and committing a row each cycle.
-  // TODO should we add an extra 'parity bit' onto the ROB pointers to simplify this logic?
 
-  maybe_full := !rob_deq && (rob_enq || maybe_full) || io.brupdate.b1.mispredict_mask =/= 0.U
-  full       := rob_tail === rob_head && maybe_full
+  full       := WrapInc(rob_tail, numRobRows) === rob_head
   empty      := (rob_head === rob_tail) && (rob_head_vals.asUInt === 0.U)
 
   io.rob_head_idx := rob_head_idx
@@ -795,63 +734,31 @@ class Rob(
   //-----------------------------------------------
 
   // ROB FSM
-  if (!enableCommitMapTable) {
-    switch (rob_state) {
-      is (s_reset) {
-        rob_state := s_normal
-      }
-      is (s_normal) {
-        // Delay rollback 2 cycles so branch mispredictions can drain
-        when (RegNext(RegNext(exception_thrown))) {
-          rob_state := s_rollback
-        } .otherwise {
-          for (w <- 0 until coreWidth) {
-            when (io.enq_valids(w) && io.enq_uops(w).is_unique) {
-              rob_state := s_wait_till_empty
-            }
+  switch (rob_state) {
+    is (s_reset) {
+      rob_state := s_normal
+    }
+    is (s_normal) {
+      when (RegNext(RegNext(exception_thrown))) {
+        rob_state := s_rollback
+      } .otherwise {
+        for (w <- 0 until coreWidth) {
+          when (io.enq_valids(w) && io.enq_uops(w).is_unique) {
+            rob_state := s_wait_till_empty
           }
-        }
-      }
-      is (s_rollback) {
-        when (empty) {
-          rob_state := s_normal
-        }
-      }
-      is (s_wait_till_empty) {
-        when (RegNext(exception_thrown)) {
-          rob_state := s_rollback
-        } .elsewhen (empty) {
-          rob_state := s_normal
         }
       }
     }
-  } else {
-    switch (rob_state) {
-      is (s_reset) {
+    is (s_rollback) {
+      rob_tail     := rob_head
+      rob_tail_lsb := 0.U
+      rob_state    := s_normal
+    }
+    is (s_wait_till_empty) {
+      when (RegNext(RegNext(exception_thrown))) {
+        rob_state := s_rollback
+      } .elsewhen (empty) {
         rob_state := s_normal
-      }
-      is (s_normal) {
-        when (exception_thrown) {
-          ; //rob_state := s_rollback
-        } .otherwise {
-          for (w <- 0 until coreWidth) {
-            when (io.enq_valids(w) && io.enq_uops(w).is_unique) {
-              rob_state := s_wait_till_empty
-            }
-          }
-        }
-      }
-      is (s_rollback) {
-        when (rob_tail_idx  === rob_head_idx) {
-          rob_state := s_normal
-        }
-      }
-      is (s_wait_till_empty) {
-        when (exception_thrown) {
-          ; //rob_state := s_rollback
-        } .elsewhen (rob_tail === rob_head) {
-          rob_state := s_normal
-        }
       }
     }
   }
