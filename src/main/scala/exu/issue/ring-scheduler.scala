@@ -132,11 +132,11 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   val sel_vals = Wire(Vec(coreWidth, Bool()))
 
   for (w <- 0 until coreWidth) {
-    val col_reqs = slots(w).map(_.request)
-    val ptr_reqs = slots(w).map(_.request_ptr)
-    val col_uops = slots(w).map(_.uop)
+    val col_reqs    = slots(w).map(_.request)
+    val col_reqs_hp = slots(w).map(_.request_hp)
+    val col_uops    = slots(w).map(_.uop)
 
-    val tmp = VecInit(PriorityEncoderOH(ptr_reqs ++ col_reqs)).asUInt
+    val tmp = VecInit(PriorityEncoderOH(col_reqs_hp ++ col_reqs)).asUInt
     val n = numSlotsPerColumn
     iss_sels(w) := (tmp(n*2-1,n) | tmp(n-1,0)).asBools
     sel_uops(w) := Mux1H(iss_sels(w), col_uops)
