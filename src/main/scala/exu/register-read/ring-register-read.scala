@@ -27,7 +27,7 @@ class RingRegisterReadIO
   val iss_valids = Input(Vec(coreWidth, Bool()))
 
   // interface with register file's read ports
-  val rf_read_ports  = Flipped(Vec(coreWidth, new BankReadPort(log2Ceil(numIntPhysRegs/coreWidth), xLen)))
+  val rf_read_ports  = Flipped(Vec(coreWidth, new BankReadPorts(log2Ceil(numIntPhysRegs/coreWidth), xLen)))
   val prf_read_ports = Flipped(Vec(coreWidth, new RegisterFileReadPortIO(ftqSz, 1)))
 
   // send micro-ops to the execution pipelines
@@ -74,22 +74,20 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // read ports
 
-  val prs1_addr_cols = Transpose(VecInit(io.iss_uops zip io.iss_valids map { case (u,v) =>
-                         u.prs1_col & Fill(coreWidth, v && u.prs1_reads_irf) } ))
-  val prs2_addr_cols = Transpose(VecInit(io.iss_uops zip io.iss_valids map { case (u,v) =>
-                         u.prs2_col & Fill(coreWidth, v && u.prs2_reads_irf) } ))
-
   io.prf_read_ports := DontCare
 
-  // Col -> Bank Address Crossbar
+  val addr_xbar_reqs = Transpose(io.iss_uops.map(u => Seq(u.prs1_port, u.prs2_port)).reduce(_++_))
+  val specifiers     = io.iss_uops.map(u => Seq(u.prs1, u.prs2)).reduce(_++_)
+
+  // Col -> Port Address Crossbar
   for (w <- 0 until coreWidth) {
-    io.rf_read_ports(w).prs1_addr := Mux1H(prs1_addr_cols(w), io.iss_uops.map(_.prs1_spec))
-    io.rf_read_ports(w).prs2_addr := Mux1H(prs2_addr_cols(w), io.iss_uops.map(_.prs2_spec))
+    for (p <- 0 until numIrfReadPortsPerBank) {
+      val n = numIrfReadPortsPerBank
+      io.rf_read_ports(w).addr(p) := Mux1H(addr_xbar_reqs(n*w + p), specifiers)
+      assert (PopCount(addr_xbar_reqs(n*w + p)) <= 1.U, "[rrd] addr xbar collision on port " + (n*w + p))
+    }
 
     if (enableSFBOpt) io.prf_read_ports(w).addr := io.iss_uops(w).ppred
-
-    assert (PopCount(prs1_addr_cols(w)) <= 1.U, "[rrd] prs1_addr xbar collision on port " + w)
-    assert (PopCount(prs2_addr_cols(w)) <= 1.U, "[rrd] prs2_addr xbar collision on port " + w)
   }
 
   val rrd_rs1_data  = Wire(Vec(coreWidth, Bits(xLen.W)))
@@ -97,22 +95,21 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
   val rrd_pred_data = Wire(Vec(coreWidth, Bool()))
   rrd_pred_data    := DontCare
 
-  val prs1_data_banks = RegNext(Transpose(prs1_addr_cols))
-  val prs2_data_banks = RegNext(Transpose(prs2_addr_cols))
-
-  // Bank -> Col Data Crossbar
+  // Port -> Col Data Crossbar
   for (w <- 0 until coreWidth) {
+    val irf_port_data = io.rf_read_ports.map(_.data.toSeq).reduce(_++_)
+
     rrd_rs1_data(w) := Mux(rrd_uops(w).prs1 === 0.U,
                          0.U,
-                         Mux1H(prs1_data_banks(w), io.rf_read_ports.map(_.prs1_data)))
+                         Mux1H(rrd_uops(w).prs1_port, irf_port_data))
     rrd_rs2_data(w) := Mux(rrd_uops(w).prs2 === 0.U,
                          0.U,
-                         Mux1H(prs2_data_banks(w), io.rf_read_ports.map(_.prs2_data)))
+                         Mux1H(rrd_uops(w).prs2_port, irf_port_data))
 
     if (enableSFBOpt) rrd_pred_data(w) := Mux(rrd_uops(w).is_sfb_shadow, io.prf_read_ports(w).data, false.B)
 
-    assert (PopCount(prs1_data_banks(w)) <= 1.U, "[rrd] prs1_data xbar collision on port " + w)
-    assert (PopCount(prs2_data_banks(w)) <= 1.U, "[rrd] prs2_data xbar collision on port " + w)
+    assert (!rrd_valids(w) || PopCount(rrd_uops(w).prs1_port) <= 1.U, "[rrd] prs1_data xbar collision on port " + w)
+    assert (!rrd_valids(w) || PopCount(rrd_uops(w).prs2_port) <= 1.U, "[rrd] prs2_data xbar collision on port " + w)
   }
 
   //-------------------------------------------------------------

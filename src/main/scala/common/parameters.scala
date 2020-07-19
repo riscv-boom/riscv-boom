@@ -34,6 +34,7 @@ case class BoomCoreParams(
   memWidth: Int = 1,
   numLdqEntries: Int = 16,
   numStqEntries: Int = 16,
+  numIrfReadPortsPerBank: Int = 2,
   numIntPhysRegisters: Int = 96,
   numFpPhysRegisters: Int = 64,
   maxBrCount: Int = 4,
@@ -169,6 +170,10 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   val numIntPhysRegs= boomParams.numIntPhysRegisters // size of the integer physical register file
   val numFpPhysRegs = boomParams.numFpPhysRegisters  // size of the floating point physical register file
+
+  val numIrfReadPortsPerBank = boomParams.numIrfReadPortsPerBank
+  val numIrfReadPorts = coreWidth * numIrfReadPortsPerBank
+  require(numIrfReadPortsPerBank >= 2)
 
   //************************************
   // Functional Units
