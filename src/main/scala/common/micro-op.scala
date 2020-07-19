@@ -131,6 +131,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // Check if a load nack kills this uop while being issued
   def load_wakeup_nacked(load_nacks: Vec[Bool]) = ((prs1_bypass_mem.asUInt | prs2_bypass_mem.asUInt) & load_nacks.asUInt).orR
 
+  // Keep track of which irf read ports we are using
+  val prs1_port = UInt(numIrfReadPorts.W)
+  val prs2_port = UInt(numIrfReadPorts.W)
+
   val ppred_busy       = Bool()
   val exception        = Bool()
   val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity

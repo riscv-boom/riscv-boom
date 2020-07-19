@@ -176,6 +176,11 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
   wb_arb.io.fire := arb_gnts.asBools
 
+  for (w <- 0 until coreWidth) {
+    sel_uops(w).prs1_port := rrd_arb.io.prs1_port(w)
+    sel_uops(w).prs2_port := rrd_arb.io.prs2_port(w)
+  }
+
   //-------------------------
   // Chain arbitration
 

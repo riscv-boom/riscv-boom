@@ -21,13 +21,10 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
-class BankReadPort(val addrWidth: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
+class BankReadPorts(val addrWidth: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 {
-  val prs1_addr = Input(UInt(addrWidth.W))
-  val prs1_data = Output(UInt(dataWidth.W))
-
-  val prs2_addr = Input(UInt(addrWidth.W))
-  val prs2_data = Output(UInt(dataWidth.W))
+  val addr = Input (Vec(numIrfReadPortsPerBank, UInt(addrWidth.W)))
+  val data = Output(Vec(numIrfReadPortsPerBank, UInt(dataWidth.W)))
 }
 
 class BankWritePort(val addrWidth: Int, val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
@@ -69,12 +66,12 @@ abstract class BankedRegisterFile(
   require (numRegisters % coreWidth == 0)
 
   val io = IO(new BoomBundle {
-    val read_ports     = Vec(coreWidth, new BankReadPort(bankAddrSz, registerWidth))
+    val read_ports     = Vec(coreWidth, new BankReadPorts(bankAddrSz, registerWidth))
     val write_ports    = Flipped(Vec(coreWidth, Valid(new BankWritePort(bankAddrSz, registerWidth))))
     val ll_write_ports = Flipped(Vec(coreWidth, Valid(new BankWritePort(bankAddrSz, registerWidth))))
   })
 
-  private val rf_cost = coreWidth * (2 + 1) * (2 + 1*2) // TODO Does this estimate even make much sense?
+  private val rf_cost = coreWidth * (numIrfReadPortsPerBank + 2) * (numIrfReadPortsPerBank + 2*2)
   private val type_str = if (registerWidth == fLen+1) "Floating Point" else "Integer"
   override def toString: String = BoomCoreStringPrefix(
     "==" + type_str + " Regfile==",
@@ -103,11 +100,10 @@ class BankedRegisterFileSynthesizable(
   // Regfile addresses are registered here rather than in regread
   // so that this synthezied regfile can easily be replaced by SRAMs.
   for (w <- 0 until coreWidth) {
-    val prs1_addr = RegNext(io.read_ports(w).prs1_addr)
-    val prs2_addr = RegNext(io.read_ports(w).prs2_addr)
-
-    io.read_ports(w).prs1_data := regfile(w)(prs1_addr)
-    io.read_ports(w).prs2_data := regfile(w)(prs2_addr)
+    for (p <- 0 until numIrfReadPortsPerBank) {
+      val addr = RegNext(io.read_ports(w).addr(p))
+      io.read_ports(w).data(p) := regfile(w)(addr)
+    }
   }
 
   // --------------------------------------------------------------

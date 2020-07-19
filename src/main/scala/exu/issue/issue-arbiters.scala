@@ -29,6 +29,9 @@ abstract class IssueArbiter(implicit p: Parameters) extends BoomModule
     val gnts = Output(Vec(coreWidth, Bool()))
 
     val fire = Input(Vec(coreWidth, Bool()))
+
+    val prs1_port = Output(Vec(coreWidth, UInt(numIrfReadPorts.W)))
+    val prs2_port = Output(Vec(coreWidth, UInt(numIrfReadPorts.W)))
   })
 
   // Rotating priority
@@ -43,19 +46,28 @@ abstract class IssueArbiter(implicit p: Parameters) extends BoomModule
   val num_nacks = RegInit(0.U(32.W))
   num_nacks := num_nacks + PopCount(nacks)
   dontTouch(num_nacks)
+
+  io.prs1_port := DontCare
+  io.prs2_port := DontCare
 }
 
 class RegisterReadArbiter(implicit p: Parameters) extends IssueArbiter
 {
-  val prs1_bank_reqs = Transpose(VecInit((0 until coreWidth).map(w => io.uops(w).prs1_col & Fill(coreWidth, io.reqs(w) && io.uops(w).prs1_reads_irf))))
-  val prs2_bank_reqs = Transpose(VecInit((0 until coreWidth).map(w => io.uops(w).prs2_col & Fill(coreWidth, io.reqs(w) && io.uops(w).prs2_reads_irf))))
-
-  val prs1_bank_gnts = Transpose(VecInit(prs1_bank_reqs.map(r => Grant(r))))
-  val prs2_bank_gnts = Transpose(VecInit(prs2_bank_reqs.map(r => Grant(r))))
+  val bank_reqs = Wire(Vec(coreWidth*2, UInt(coreWidth.W)))
+  for (w <- 0 until coreWidth) {
+    val uop = io.uops(w)
+    bank_reqs(2*w  ) := Mux(io.reqs(w) && uop.prs1_reads_irf, uop.prs1_col, 0.U)
+    bank_reqs(2*w+1) := Mux(io.reqs(w) && uop.prs2_reads_irf, uop.prs2_col, 0.U)
+  }
+  val n = numIrfReadPortsPerBank
+  val port_pri  = (0 until coreWidth).map(w => Fill(2, pri(w))).reduce(Cat(_,_))
+  val port_gnts = Transpose(Transpose(bank_reqs).map(r => AgeSelectFirstN(r, port_pri, n).toSeq).reduce(_++_))
 
   for (w <- 0 until coreWidth) {
-    io.gnts(w) := (prs1_bank_gnts(w).orR || !io.uops(w).prs1_reads_irf && io.reqs(w)) &&
-                  (prs2_bank_gnts(w).orR || !io.uops(w).prs2_reads_irf && io.reqs(w))
+    io.gnts(w) := (port_gnts(2*w  ).orR || !io.uops(w).prs1_reads_irf && io.reqs(w)) &&
+                  (port_gnts(2*w+1).orR || !io.uops(w).prs2_reads_irf && io.reqs(w))
+    io.prs1_port(w) := port_gnts(2*w  )
+    io.prs2_port(w) := port_gnts(2*w+1)
   }
 }
 
