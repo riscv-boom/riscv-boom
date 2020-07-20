@@ -60,7 +60,7 @@ class RegisterReadArbiter(implicit p: Parameters) extends IssueArbiter
     bank_reqs(2*w+1) := Mux(io.reqs(w) && uop.prs2_reads_irf, uop.prs2_col, 0.U)
   }
   val n = numIrfReadPortsPerBank
-  val port_pri  = (0 until coreWidth).map(w => Cat(0.U(1.W), pri(w))).reduce(Cat(_,_))
+  val port_pri  = (0 until coreWidth).map(w => Cat(0.U(1.W), pri(w))).reduce((l,u) => Cat(u,l))
   val port_gnts = Transpose(Transpose(bank_reqs).map(r => AgeSelectFirstN(r, port_pri, n).toSeq).reduce(_++_))
 
   for (w <- 0 until coreWidth) {
