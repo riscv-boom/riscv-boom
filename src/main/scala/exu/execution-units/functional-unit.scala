@@ -73,6 +73,7 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   val rs2_data = UInt(dataWidth.W)
   val rs3_data = UInt(dataWidth.W) // only used for FMA units
   val pred_data = Bool()
+  val imm_data = UInt(xLen.W) // only used for integer ALU and AGen units
 }
 /**
  * Branch resolution information given from the branch unit
@@ -162,7 +163,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
   val uop = io.req.bits.uop
 
   // immediate generation
-  val imm_xprlen = ImmGen(uop.imm_packed, uop.imm_sel)
+  val imm_xprlen = io.req.bits.imm_data //ImmGen(uop.imm_packed, uop.imm_sel)
 
   // operand 1 select
   var op1_data: UInt = null
@@ -180,7 +181,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
   }
 
   // operand 2 select
-  val op2_data = Mux(uop.op2_sel === OP2_IMM,  Sext(imm_xprlen.asUInt, xLen),
+  val op2_data = Mux(uop.op2_sel === OP2_IMM,  Sext(imm_xprlen, xLen),
                  Mux(uop.op2_sel === OP2_IMMC, io.req.bits.uop.prs1(4,0),
                  Mux(uop.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
                  Mux(uop.op2_sel === OP2_NEXT, Mux(uop.is_rvc, 2.U, 4.U),

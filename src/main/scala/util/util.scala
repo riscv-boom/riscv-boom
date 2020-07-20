@@ -270,14 +270,17 @@ object Sext
   }
 }
 
+
 /**
  * Object to translate from BOOM's special "packed immediate" to a 32b signed immediate
  * Asking for U-type gives it shifted up 12 bits.
  */
 object ImmGen
 {
-  import boom.common.{LONGEST_IMM_SZ, IS_B, IS_I, IS_J, IS_S, IS_U}
-  def apply(ip: UInt, isel: UInt): SInt = {
+  import boom.common.{LONGEST_IMM_SZ, IS_B, IS_I, IS_J, IS_S, IS_U, IS_N}
+  def apply(i: UInt, isel: UInt): UInt = {
+    val ip = Mux(isel === IS_N, 0.U(LONGEST_IMM_SZ.W), i)
+
     val sign = ip(LONGEST_IMM_SZ-1).asSInt
     val i30_20 = Mux(isel === IS_U, ip(18,8).asSInt, sign)
     val i19_12 = Mux(isel === IS_U || isel === IS_J, ip(7,0).asSInt, sign)
@@ -287,7 +290,8 @@ object ImmGen
     val i4_1   = Mux(isel === IS_U, 0.S, ip(13,9).asSInt)
     val i0     = Mux(isel === IS_S || isel === IS_I, ip(8).asSInt, 0.S)
 
-    return Cat(sign, i30_20, i19_12, i11, i10_5, i4_1, i0).asSInt
+
+    return Cat(sign, i30_20, i19_12, i11, i10_5, i4_1, i0)
   }
 }
 

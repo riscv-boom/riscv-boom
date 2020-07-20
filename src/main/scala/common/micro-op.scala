@@ -78,9 +78,9 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // Was this a branch that was predicted taken?
   val taken            = Bool()
 
-  val imm_sel          = UInt(IS_X.getWidth.W)
-  val imm_packed       = UInt(LONGEST_IMM_SZ.W) // densely pack the imm in decode...
-                                              // then translate and sign-extend in execute
+  val imm_sel          = UInt(IS_N.getWidth.W)
+  val pimm             = UInt(immPregSz.W)
+  val imm_packed       = UInt(LONGEST_IMM_SZ.W) // densely pack the imm in decode
 
   val op1_sel          = UInt(OP1_X.getWidth.W)
   val op2_sel          = UInt(OP2_X.getWidth.W)

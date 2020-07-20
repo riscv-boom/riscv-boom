@@ -15,9 +15,12 @@ import chisel3._
 import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.util._
 
 import boom.common._
 import boom.util._
+
+import boom.exu.FUConstants._
 
 /**
  * Handle the register read and bypass network for the OoO backend
@@ -44,6 +47,9 @@ class RegisterRead(
     // interface with register file's read ports
     val rf_read_ports = Flipped(Vec(numTotalReadPorts, new RegisterFileReadPortIO(maxPregSz, registerWidth)))
     val prf_read_ports = Flipped(Vec(issueWidth, new RegisterFileReadPortIO(log2Ceil(ftqSz), 1)))
+    val immrf_read_ports = Flipped(Vec(issueWidth, new RegisterFileReadPortIO(immPregSz, LONGEST_IMM_SZ)))
+    // immediate pregs are unbusied after they are read
+    val imm_wakeups = Output(Vec(issueWidth, Valid(new ExeUnitResp(1))))
 
     val bypass = Input(Vec(numTotalBypassPorts, Valid(new ExeUnitResp(registerWidth))))
     val pred_bypass = Input(Vec(numTotalPredBypassPorts, Valid(new ExeUnitResp(1))))
@@ -64,6 +70,7 @@ class RegisterRead(
   val exe_reg_rs2_data = Reg(Vec(issueWidth, Bits(registerWidth.W)))
   val exe_reg_rs3_data = Reg(Vec(issueWidth, Bits(registerWidth.W)))
   val exe_reg_pred_data = Reg(Vec(issueWidth, Bool()))
+  val exe_reg_imm_data = Reg(Vec(issueWidth, UInt(xLen.W)))
 
   //-------------------------------------------------------------
   // hook up inputs
@@ -82,6 +89,7 @@ class RegisterRead(
   val rrd_rs2_data   = Wire(Vec(issueWidth, Bits(registerWidth.W)))
   val rrd_rs3_data   = Wire(Vec(issueWidth, Bits(registerWidth.W)))
   val rrd_pred_data  = Wire(Vec(issueWidth, Bool()))
+  val rrd_imm_data   = Wire(Vec(issueWidth, UInt(LONGEST_IMM_SZ.W)))
   rrd_rs1_data := DontCare
   rrd_rs2_data := DontCare
   rrd_rs3_data := DontCare
@@ -101,18 +109,21 @@ class RegisterRead(
     val rs2_addr = io.iss_uops(w).bits.prs2
     val rs3_addr = io.iss_uops(w).bits.prs3
     val pred_addr = io.iss_uops(w).bits.ppred
+    val imm_addr = io.iss_uops(w).bits.pimm
 
     if (numReadPorts > 0) io.rf_read_ports(idx+0).addr := rs1_addr
     if (numReadPorts > 1) io.rf_read_ports(idx+1).addr := rs2_addr
     if (numReadPorts > 2) io.rf_read_ports(idx+2).addr := rs3_addr
 
     if (enableSFBOpt) io.prf_read_ports(w).addr := pred_addr
+    io.immrf_read_ports(w).addr := imm_addr
 
     if (numReadPorts > 0) rrd_rs1_data(w) := io.rf_read_ports(idx+0).data
     if (numReadPorts > 1) rrd_rs2_data(w) := io.rf_read_ports(idx+1).data
     if (numReadPorts > 2) rrd_rs3_data(w) := io.rf_read_ports(idx+2).data
 
     if (enableSFBOpt) rrd_pred_data(w) := Mux(RegNext(io.iss_uops(w).bits.is_sfb_shadow), io.prf_read_ports(w).data, false.B)
+    rrd_imm_data(w) := io.immrf_read_ports(w).data
 
     val rrd_kill = io.kill || IsKilledByBranch(io.brupdate, rrd_uops(w))
 
@@ -167,7 +178,10 @@ class RegisterRead(
     exe_reg_rs2_data(w)  := rrd_rs2_data(w)
     exe_reg_rs3_data(w)  := rrd_rs3_data(w)
     exe_reg_pred_data(w) := rrd_pred_data(w)
-
+    exe_reg_imm_data(w)  := Mux(rrd_uops(w).imm_sel === IS_SH,
+      Sext(rrd_uops(w).pimm, xLen),
+      Sext(ImmGen(rrd_imm_data(w), rrd_uops(w).imm_sel), xLen)
+    )
     if (numTotalBypassPorts > 0) {
       when (rs1_bypass_hits.reduce(_||_)) {
         exe_reg_rs1_data(w)  := Mux1H(rs1_bypass_hits, bypass_data)
@@ -203,5 +217,12 @@ class RegisterRead(
     io.exe_reqs(w).bits.rs2_data := exe_reg_rs2_data(w)
     io.exe_reqs(w).bits.rs3_data := exe_reg_rs3_data(w)
     io.exe_reqs(w).bits.pred_data := exe_reg_pred_data(w)
+    io.exe_reqs(w).bits.imm_data := exe_reg_imm_data(w)
+
+    io.imm_wakeups(w).valid := ( exe_reg_valids(w) &&
+                                !exe_reg_uops(w).fu_code_is(FU_DGEN) &&
+                                !exe_reg_uops(w).imm_sel.isOneOf(IS_N, IS_SH))
+    io.imm_wakeups(w).bits     := DontCare
+    io.imm_wakeups(w).bits.uop := exe_reg_uops(w)
   }
 }

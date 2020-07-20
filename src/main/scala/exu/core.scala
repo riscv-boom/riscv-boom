@@ -112,12 +112,15 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val numIntRenameWakeupPorts = numIntIssueWakeupPorts
   val numFpWakeupPorts        = fp_pipeline.io.wakeups.length
 
-  val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
-  val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
-  val rename_stage     = Module(new RenameStage(coreWidth, numIntPhysRegs, numIntRenameWakeupPorts, false))
-  val fp_rename_stage  = if (usingFPU) Module(new RenameStage(coreWidth, numFpPhysRegs, numFpWakeupPorts, true)) else null
+  val numImmWakeupPorts = intWidth + memWidth // "Wakeup" immediates when they are read
+
+  val decode_units      = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
+  val dec_brmask_logic  = Module(new BranchMaskGenerationLogic(coreWidth))
+  val rename_stage      = Module(new RenameStage(coreWidth, numIntPhysRegs, numIntRenameWakeupPorts, false))
+  val fp_rename_stage   = if (usingFPU) Module(new RenameStage(coreWidth, numFpPhysRegs, numFpWakeupPorts, true)) else null
   val pred_rename_stage = Module(new PredRenameStage(coreWidth, 1))
-  val rename_stages    = if (usingFPU) Seq(rename_stage, fp_rename_stage, pred_rename_stage) else Seq(rename_stage, pred_rename_stage)
+  val imm_rename_stage  = Module(new ImmRenameStage(coreWidth, intWidth + memWidth)) // wakeup ports used when insts read imm
+  val rename_stages     = if (usingFPU) Seq(rename_stage, fp_rename_stage, pred_rename_stage, imm_rename_stage) else Seq(rename_stage, pred_rename_stage, imm_rename_stage)
 
   val mem_iss_unit     = Module(new IssueUnitCollapsing(memIssueParam, numIntIssueWakeupPorts))
   mem_iss_unit.suggestName("mem_issue_unit")
@@ -137,6 +140,12 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
                             1,
                             1))
   pregfile.io := DontCare // Only use the IO if enableSFBOpt
+  val immregfile       = Module(new RegisterFileSynthesizable(
+                            numImmPhysRegs,
+                            memWidth + intWidth,
+                            coreWidth,
+                            LONGEST_IMM_SZ))
+  
 
   // wb arbiter for the 0th ll writeback
   // TODO: should this be a multi-arb?
@@ -649,11 +658,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
    * Won't have to do this anymore with a properly decoupled FP pipeline.
    */
   for (w <- 0 until coreWidth) {
-    val i_uop   = rename_stage.io.ren2_uops(w)
-    val f_uop   = fp_rename_stage.io.ren2_uops(w)
-    val p_uop   = if (enableSFBOpt) pred_rename_stage.io.ren2_uops(w) else NullMicroOp
-    val f_stall = fp_rename_stage.io.ren_stalls(w)
-    val p_stall = if (enableSFBOpt) pred_rename_stage.io.ren_stalls(w) else false.B
+    val i_uop     = rename_stage.io.ren2_uops(w)
+    val f_uop     = fp_rename_stage.io.ren2_uops(w)
+    val p_uop     = if (enableSFBOpt) pred_rename_stage.io.ren2_uops(w) else NullMicroOp
+    val imm_uop   = imm_rename_stage.io.ren2_uops(w)
+    val f_stall   = fp_rename_stage.io.ren_stalls(w)
+    val p_stall   = if (enableSFBOpt) pred_rename_stage.io.ren_stalls(w) else false.B
+    val imm_stall = imm_rename_stage.io.ren_stalls(w)
 
     // lrs1 can "pass through" to prs1. Used solely to index the csr file.
     dis_uops(w).prs1 := Mux(dis_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1,
@@ -664,6 +675,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype  === RT_FLT, f_uop.pdst,
                         Mux(dis_uops(w).dst_rtype  === RT_FIX, i_uop.pdst,
                                                                p_uop.pdst))
+    dis_uops(w).imm_sel := imm_uop.imm_sel
+    dis_uops(w).pimm    := imm_uop.pimm
+
     dis_uops(w).stale_pdst := Mux(dis_uops(w).dst_rtype === RT_FLT, f_uop.stale_pdst, i_uop.stale_pdst)
 
     dis_uops(w).prs1_busy := i_uop.prs1_busy && (dis_uops(w).lrs1_rtype === RT_FIX) ||
@@ -673,7 +687,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     dis_uops(w).prs3_busy := f_uop.prs3_busy && dis_uops(w).frs3_en
     dis_uops(w).ppred_busy := p_uop.ppred_busy && dis_uops(w).is_sfb_shadow
 
-    ren_stalls(w) := rename_stage.io.ren_stalls(w) || f_stall || p_stall
+    ren_stalls(w) := rename_stage.io.ren_stalls(w) || f_stall || p_stall || imm_stall
   }
 
   //-------------------------------------------------------------
@@ -789,6 +803,22 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   }
 
   //-------------------------------------------------------------
+  // Write immediates into immediate file
+  for (w <- 0 until coreWidth) {
+    // val uop  = RegNext(dis_uops(w))
+    // val inst = uop.inst
+    // // repackage the immediate, and then pass the fewest number of bits around
+    // val di24_20 = Mux(uop.imm_sel === IS_B || uop.imm_sel === IS_S, inst(11,7), inst(24,20))
+    // val imm_packed = Cat(inst(31,25), di24_20, inst(19,12))
+
+
+    immregfile.io.write_ports(w).valid     := RegNext(dis_fire(w) && !dis_uops(w).imm_sel.isOneOf(IS_N, IS_SH))
+    immregfile.io.write_ports(w).bits.addr := RegNext(dis_uops(w).pimm)
+    immregfile.io.write_ports(w).bits.data := RegNext(dis_uops(w).imm_packed)
+  }
+
+
+  //-------------------------------------------------------------
   //-------------------------------------------------------------
   // **** Issue Stage ****
   //-------------------------------------------------------------
@@ -825,15 +855,12 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     val resp = unit.io.resp
     assert(!(resp.valid && resp.bits.uop.rf_wen && resp.bits.uop.dst_rtype =/= RT_FIX))
 
-    val squash_wakeup = io.lsu.ld_miss && (int_iss_uops(i).bits.iw_p1_poisoned || int_iss_uops(i).bits.iw_p2_poisoned)
-
     // Fast Wakeup (uses just-issued uops that have known latencies)
     fast_wakeup.bits.uop := int_iss_uops(i).bits
     fast_wakeup.valid    := int_iss_uops(i).valid &&
                             int_iss_uops(i).bits.bypassable &&
                             int_iss_uops(i).bits.dst_rtype === RT_FIX &&
-                            int_iss_uops(i).bits.ldst_val &&
-                            !squash_wakeup
+                            int_iss_uops(i).bits.ldst_val
 
     // Slow Wakeup (uses write-port to register file)
     slow_wakeup.bits.uop := resp.bits.uop
@@ -860,7 +887,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     }
 
     if (unit.hasJmp) {
-      pred_wakeup.valid := int_iss_uops(i).valid && int_iss_uops(i).bits.is_sfb_br && !squash_wakeup
+      pred_wakeup.valid := int_iss_uops(i).valid && int_iss_uops(i).bits.is_sfb_br
       pred_wakeup.bits.uop := int_iss_uops(i).bits
     }
   }
@@ -896,6 +923,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   } else {
     pred_rename_stage.io.wakeups := DontCare
   }
+  imm_rename_stage.io.wakeups := iregister_read.io.imm_wakeups
 
   mem_iss_unit.io.fu_types := mem_exe_units.map(_.io.fu_types)
   int_iss_unit.io.fu_types := int_exe_units.map(_.io.fu_types)
@@ -927,6 +955,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   if (enableSFBOpt) {
     iregister_read.io.prf_read_ports <> pregfile.io.read_ports
   }
+  iregister_read.io.immrf_read_ports <> immregfile.io.read_ports
 
   iregister_read.io.iss_uops := mem_iss_unit.io.iss_uops ++ int_iss_unit.io.iss_uops
   iregister_read.io.brupdate := brupdate
@@ -948,7 +977,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   // for critical path reasons, we aren't zero'ing this out if resp is not valid
   val csr_resp = csr_exe_unit.io.csr_resp
-  csr.io.rw.addr        := ImmGen(csr_resp.bits.uop.imm_packed, IS_I).asUInt
+  csr.io.rw.addr        := csr_resp.bits.addr
   csr.io.rw.cmd         := CSR.maskCmd(csr_resp.valid, csr_resp.bits.uop.csr_cmd)
   csr.io.rw.wdata       := csr_resp.bits.data
 

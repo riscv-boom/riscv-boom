@@ -21,7 +21,7 @@ import chisel3._
 import chisel3.util._
 
 import freechips.rocketchip.config.{Parameters}
-import freechips.rocketchip.rocket.{BP, SFenceReq}
+import freechips.rocketchip.rocket.{BP, SFenceReq, CSR}
 import freechips.rocketchip.tile.{XLen, RoCCCoreIO}
 import freechips.rocketchip.tile
 
@@ -40,6 +40,13 @@ class ExeUnitResp(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 {
   val data = Bits(dataWidth.W)
   val predicated = Bool() // Was this predicated off?
+}
+
+class CSRResp(implicit p: Parameters) extends BoomBundle
+  with HasBoomUOP
+{
+  val data = UInt(xLen.W)
+  val addr = UInt(CSR.ADDRSZ.W)
 }
 
 /**
@@ -91,7 +98,7 @@ abstract class ExecutionUnit(
     val fflags = if (hasFCSR) new Valid(new FFlagsResp) else null
 
     val sfence   = if (hasCSR) new Valid(new SFenceReq) else null
-    val csr_resp = if (hasCSR) new Valid(new ExeUnitResp(xLen)) else null
+    val csr_resp = if (hasCSR) new Valid(new CSRResp) else null
 
     val bypass   = Output(Vec(numBypassStages, Valid(new ExeUnitResp(dataWidth))))
     val brupdate = Input(new BrUpdateInfo())
@@ -166,7 +173,7 @@ class MemExeUnit(
 
   assert (!(io.req.valid && io.req.bits.uop.fu_code_is(FU_STORE)))
   if (hasAGen) {
-    val sum = (io.req.bits.rs1_data.asSInt + io.req.bits.uop.imm_packed(19,8).asSInt).asUInt
+    val sum = (io.req.bits.rs1_data.asSInt + io.req.bits.imm_data.asSInt).asUInt
     val ea_sign = Mux(sum(vaddrBits-1), ~sum(63,vaddrBits) === 0.U,
                                          sum(63,vaddrBits) =/= 0.U)
     val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).asUInt
@@ -371,6 +378,7 @@ class ALUExeUnit(
     io.csr_resp.valid     := alu.io.resp.valid
     io.csr_resp.bits.uop  := alu.io.resp.bits.uop
     io.csr_resp.bits.data := alu.io.resp.bits.data
+    io.csr_resp.bits.addr := ShiftRegister(io.req.bits.imm_data, numBypassStages) // time this with the ALU response
   }
 
 
