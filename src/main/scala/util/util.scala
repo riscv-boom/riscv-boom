@@ -479,7 +479,7 @@ object AgeSelectFirstN
 
     val k = in.getWidth
     val vec = Cat(in,in)
-    val mask = MaskUpper(Cat(0.U(k.W),head))
+    val mask = Cat(MaskBelow(head), MaskUpper(head))
     var masked = vec & mask
 
     val sels = Wire(Vec(n, UInt(k.W)))
