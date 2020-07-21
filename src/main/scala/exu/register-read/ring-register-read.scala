@@ -84,7 +84,6 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
     for (p <- 0 until numIrfReadPortsPerBank) {
       val n = numIrfReadPortsPerBank
       io.rf_read_ports(w).addr(p) := Mux1H(addr_xbar_reqs(n*w + p), specifiers)
-      assert (PopCount(addr_xbar_reqs(n*w + p)) <= 1.U, "[rrd] addr xbar collision on port " + (n*w + p))
     }
 
     if (enableSFBOpt) io.prf_read_ports(w).addr := io.iss_uops(w).ppred
@@ -107,9 +106,6 @@ class RingRegisterRead(implicit p: Parameters) extends BoomModule
                          Mux1H(rrd_uops(w).prs2_port, irf_port_data))
 
     if (enableSFBOpt) rrd_pred_data(w) := Mux(rrd_uops(w).is_sfb_shadow, io.prf_read_ports(w).data, false.B)
-
-    assert (!rrd_valids(w) || PopCount(rrd_uops(w).prs1_port) <= 1.U, "[rrd] prs1_data xbar collision on port " + w)
-    assert (!rrd_valids(w) || PopCount(rrd_uops(w).prs2_port) <= 1.U, "[rrd] prs2_data xbar collision on port " + w)
   }
 
   //-------------------------------------------------------------
