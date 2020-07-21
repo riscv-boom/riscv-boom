@@ -659,9 +659,9 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_lrsc_addr_match = widthMap(w => lrsc_valid && lrsc_addr === (s2_req(w).addr >> blockOffBits))
   val s2_sc_fail = s2_sc && !s2_lrsc_addr_match(memWidth-1)
   when (lrsc_count > 0.U) { lrsc_count := lrsc_count - 1.U }
-  when (s2_valid(0) && ((s2_type === t_lsu && s2_hit(0) && !s2_nack(0)) ||
-        s2_valid(memWidth-1) && ((s2_type === t_lsu && s2_hit(memWidth-1) && !s2_nack(memWidth-1)) ||
-                     (s2_type === t_replay && s2_req(memWidth-1).uop.mem_cmd =/= M_FLUSH_ALL))) {
+  when ((s2_valid(0) && s2_type === t_lsu && s2_hit(0) && !s2_nack(0)) ||
+         s2_valid(memWidth-1) && ((s2_type === t_lsu && s2_hit(memWidth-1) && !s2_nack(memWidth-1)) ||
+        (s2_type === t_replay && s2_req(memWidth-1).uop.mem_cmd =/= M_FLUSH_ALL))) {
     when (s2_lr) {
       lrsc_count := (lrscCycles - 1).U
       lrsc_addr := s2_req(0).addr >> blockOffBits
