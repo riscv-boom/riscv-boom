@@ -107,12 +107,12 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
 
   for (spec_wakeup <- io.spec_ld_wakeup) {
     when (spec_wakeup.valid) {
-      when (spec_wakeup.bits === slot_uop.prs1) {
+      when (spec_wakeup.bits === slot_uop.prs1 && slot_uop.prs1_busy) {
         next_uop.prs1_busy := false.B
         next_uop.iw_p1_poisoned := true.B
         assert(!slot_uop.iw_p1_poisoned)
       }
-      when (spec_wakeup.bits === slot_uop.prs2) {
+      when (spec_wakeup.bits === slot_uop.prs2 && slot_uop.prs2_busy) {
         next_uop.prs2_busy := false.B
         next_uop.iw_p2_poisoned := true.B
         assert(!slot_uop.iw_p2_poisoned)
@@ -157,6 +157,8 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
       io.iss_uop.bits.prs1       := slot_uop.prs2
       io.iss_uop.bits.lrs1_rtype := slot_uop.lrs2_rtype
     }
+    io.iss_uop.bits.lrs2_rtype := RT_X
+    io.iss_uop.bits.prs2       := io.iss_uop.bits.prs1 // helps with DCE
   }
 
 
