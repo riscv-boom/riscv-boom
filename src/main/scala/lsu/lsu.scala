@@ -156,6 +156,12 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
     val release = Bool()
     val tlbMiss = Bool()
   })
+
+  val debug_stcom = Vec(coreWidth, new Bundle {
+    val idx  = Input(UInt(stqAddrSz.W))
+    val addr = Output(UInt(xLen.W))
+    val data = Output(UInt(xLen.W))
+  })
 }
 
 class LSUIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
@@ -1645,7 +1651,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                     ~(st_brkilled_mask.asUInt) &
                     ~(st_exc_killed_mask.asUInt)
 
+  //----------------------------------------------------------------------------------------------------
+  // Debug store commit ports for commit log
 
+  for (w <- 0 until coreWidth) {
+    if (COMMIT_LOG_PRINTF) {
+      io.core.debug_stcom(w).addr := stq(io.core.debug_stcom(w).idx).bits.addr.bits
+      io.core.debug_stcom(w).data := stq(io.core.debug_stcom(w).idx).bits.data.bits
+    } else {
+      io.core.debug_stcom(w).addr := DontCare
+      io.core.debug_stcom(w).data := DontCare
+    }
+  }
 }
 
 /**
