@@ -171,7 +171,6 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
   val io = IO(new Bundle {
     val req = Flipped(new ValidIO(new FpuReq))
     val resp = new ValidIO(new ExeUnitResp(65))
-    val fflags = new ValidIO(new FFlagsResp)
   })
 
   // all FP units are padded out to the same latency for easy scheduling of the write port
@@ -240,7 +239,7 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
     Mux(fpiu_out.valid,    fpiu_result.exc,
                            fpmu.io.out.bits.exc)))
 
-  io.resp.bits.data    := fpu_out_data
-  io.fflags.valid      := io.resp.valid
-  io.fflags.bits.flags := fpu_out_exc
+  io.resp.bits.data         := fpu_out_data
+  io.resp.bits.fflags.valid := io.resp.valid
+  io.resp.bits.fflags.bits  := fpu_out_exc
 }

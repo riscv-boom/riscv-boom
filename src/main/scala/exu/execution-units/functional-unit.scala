@@ -30,6 +30,7 @@ import boom.common._
 import boom.ifu._
 import boom.util._
 
+
 /**t
  * Functional unit constants
  */
@@ -51,9 +52,13 @@ object FUConstants
   val FU_F2I =1024.U(FUC_SZ.W)
 
   // FP stores generate data through FP F2I, and generate address through MemAddrCalc
-  val FU_F2IMEM = 1028.U(FUC_SZ.W)
+  val FU_F2IMEM = (1024 + 4).U(FUC_SZ.W)
 
-  val FU_STORE  = 12.U(FUC_SZ.W)
+  val FU_STORE  = (4 + 8).U(FUC_SZ.W)
+
+  val MEM_FUS = (4 + 8).U(FUC_SZ.W)
+  val INT_FUS = (1 + 2 + 16 + 32 + 64 + 512).U(FUC_SZ.W)
+  val FP_FUS  = (8 + 128 + 256 + 1024).U(FUC_SZ.W)
 }
 import FUConstants._
 
@@ -111,12 +116,10 @@ class BrUpdateMasks(implicit p: Parameters) extends BoomBundle
  *
  * @param isPipelined is the functional unit pipelined?
  * @param numStages how many pipeline stages does the functional unit have
- * @param numBypassStages how many bypass stages does the function unit have
  * @param dataWidth width of the data being operated on in the functional unit
  * @param hasBranchUnit does this functional unit have a branch unit?
  */
 abstract class FunctionalUnit(
-  val numBypassStages: Int,
   val dataWidth: Int,
   val isJmpUnit: Boolean = false,
   val isAluUnit: Boolean = false,
@@ -128,11 +131,9 @@ abstract class FunctionalUnit(
 
     val req    = Flipped(new DecoupledIO(new FuncUnitReq(dataWidth)))
     val resp   = (new DecoupledIO(new ExeUnitResp(dataWidth)))
-    val fflags = new ValidIO(new FFlagsResp)
+    //val fflags = new ValidIO(new FFlagsResp)
 
     val brupdate = Input(new BrUpdateInfo())
-
-    val bypass = Output(Vec(numBypassStages, Valid(new ExeUnitResp(dataWidth))))
 
     // only used by the fpu unit
     val fcsr_rm = if (needsFcsr) Input(UInt(tile.FPConstants.RM_SZ.W)) else null
@@ -141,6 +142,9 @@ abstract class FunctionalUnit(
     val brinfo     = if (isAluUnit) Output(Valid(new BrResolutionInfo)) else null
     val get_ftq_pc = if (isJmpUnit) Flipped(new GetPCFromFtqIO()) else null
   })
+  io.resp.bits.fflags.valid := false.B
+  io.resp.bits.fflags.bits  := DontCare
+
 }
 
 /**
@@ -151,9 +155,8 @@ abstract class FunctionalUnit(
  * @param dataWidth width of the data being operated on in the functional unit
  */
 @chiselName
-class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(implicit p: Parameters)
+class ALUUnit(isJmpUnit: Boolean = false, dataWidth: Int)(implicit p: Parameters)
   extends FunctionalUnit(
-    numBypassStages = numStages,
     isAluUnit = true,
     dataWidth = dataWidth,
     isJmpUnit = isJmpUnit)
@@ -286,12 +289,8 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
 
   brinfo.bits.target_offset := target_offset
 
+  io.brinfo := brinfo
 
-  if (isJmpUnit) {
-    io.brinfo := RegNext(UpdateBrMask(io.brupdate, brinfo))
-  } else {
-    io.brinfo := brinfo
-  }
 
 
 
@@ -304,34 +303,13 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
   val alu_out = Mux(io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data,
       Mux(io.req.bits.uop.ldst_is_rs1, io.req.bits.rs1_data, io.req.bits.rs2_data),
       Mux(io.req.bits.uop.is_mov, io.req.bits.rs2_data, alu.io.out))
-  if (numStages == 0) {
-    require (numBypassStages == 0)
-    io.resp.valid := io.req.valid
-    io.resp.bits.uop := io.req.bits.uop
-    io.resp.bits.data := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
-    io.resp.bits.predicated := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data
-  } else {
-    require(numStages == numBypassStages)
+  io.resp.valid := io.req.valid
+  io.resp.bits.uop := io.req.bits.uop
+  io.resp.bits.data := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
+  io.resp.bits.predicated := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data
+  assert(io.resp.ready)
 
-    val pipe = Module(new BranchKillablePipeline(new ExeUnitResp(xLen), numStages))
-    pipe.io.req.valid           := io.req.valid
-    pipe.io.req.bits.uop        := io.req.bits.uop
-    pipe.io.req.bits.data       := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
-    pipe.io.req.bits.predicated := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data
 
-    pipe.io.brupdate := io.brupdate
-    pipe.io.flush := io.kill
-
-    io.bypass(0) := pipe.io.req
-    for (i <- 0 until numStages-1) {
-      io.bypass(i+1) := pipe.io.resp(i)
-    }
-    io.resp.valid := pipe.io.resp(numStages-1).valid
-    io.resp.bits  := pipe.io.resp(numStages-1).bits
-  }
-
-  // Exceptions
-  io.fflags.valid := false.B
 }
 
 
@@ -345,7 +323,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 0, dataWidth: Int)(im
  */
 class FPUUnit(implicit p: Parameters)
   extends FunctionalUnit(
-    numBypassStages = 0,
+  //numBypassStages = 0,
     dataWidth = 65,
     needsFcsr = true)
 {
@@ -366,10 +344,8 @@ class FPUUnit(implicit p: Parameters)
   io.resp.valid        := pipe.io.resp(numStages-1).valid
   io.resp.bits.uop     := pipe.io.resp(numStages-1).bits.uop
   io.resp.bits.data    := fpu.io.resp.bits.data
-
-  io.fflags.valid      := fpu.io.fflags.valid && io.resp.valid
-  io.fflags.bits       := fpu.io.fflags.bits
-  io.fflags.bits.uop   := io.resp.bits.uop
+  io.resp.bits.fflags.valid := io.resp.valid
+  io.resp.bits.fflags.bits  := fpu.io.resp.bits.fflags.bits
 }
 
 /**
@@ -379,7 +355,7 @@ class FPUUnit(implicit p: Parameters)
  */
 class IntToFPUnit(latency: Int)(implicit p: Parameters)
   extends FunctionalUnit(
-    numBypassStages = 0,
+  //numBypassStages = 0,
     dataWidth = 65,
     needsFcsr = true)
   with tile.HasFPUParameters
@@ -421,9 +397,8 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
   io.resp.valid        := pipe.io.resp(latency-1).valid
   io.resp.bits.uop     := pipe.io.resp(latency-1).bits.uop
   io.resp.bits.data    := box(ifpu.io.out.bits.data, out_double)
-  io.fflags.valid      := io.resp.valid
-  io.fflags.bits.uop   := io.resp.bits.uop
-  io.fflags.bits.flags := ifpu.io.out.bits.exc
+  io.resp.bits.fflags.valid     := io.resp.valid
+  io.resp.bits.fflags.bits      := ifpu.io.out.bits.exc
 }
 
 /**
@@ -432,7 +407,7 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
  * @param dataWidth data to be passed into the functional unit
  */
 class DivUnit(dataWidth: Int)(implicit p: Parameters)
-  extends FunctionalUnit(numBypassStages = 0, dataWidth = dataWidth)
+  extends FunctionalUnit(dataWidth = dataWidth)
 {
 
   // We don't use the iterative multiply functionality here.
@@ -482,7 +457,7 @@ class DivUnit(dataWidth: Int)(implicit p: Parameters)
  * @param dataWidth size of the data being passed into the functional unit
  */
 class PipelinedMulUnit(numStages: Int, dataWidth: Int)(implicit p: Parameters)
-  extends FunctionalUnit(numBypassStages = 0, dataWidth = dataWidth)
+  extends FunctionalUnit(dataWidth = dataWidth)
 {
   val imul = Module(new PipelinedMultiplier(xLen, numStages))
   val pipe = Module(new BranchKillablePipeline(new FuncUnitReq(dataWidth), numStages))

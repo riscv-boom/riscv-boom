@@ -9,6 +9,7 @@ import chisel3._
 import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.tile.FPConstants
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.rocket.RVCExpander
@@ -114,9 +115,9 @@ object DecodeTables
     REMW               -> List(Y, N, uopREMW   , IQT_INT, FU_DIV , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, N, N, CSR.N, DW_32 , FN_REM ),
     REMUW              -> List(Y, N, uopREMUW  , IQT_INT, FU_DIV , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, N, N, CSR.N, DW_32 , FN_REMU),
 
-    AUIPC              -> List(Y, N, uopAUIPC  , IQT_INT, FU_JMP , RT_FIX, RT_X  , RT_X  , N, IS_U, N, N, N, M_X     , N, N, N, N, CSR.N, DW_XPR, FN_ADD ), // use BRU for the PC read
-    JAL                -> List(Y, N, uopJAL    , IQT_INT, FU_JMP , RT_FIX, RT_X  , RT_X  , N, IS_J, N, N, N, M_X     , N, N, N, N, CSR.N, DW_XPR, FN_ADD ),
-    JALR               -> List(Y, N, uopJALR   , IQT_INT, FU_JMP , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, N, N, CSR.N, DW_XPR, FN_ADD ),
+    AUIPC              -> List(Y, N, uopAUIPC  , IQT_INT, FU_JMP , RT_FIX, RT_X  , RT_X  , N, IS_U, N, N, N, M_X     , Y, N, N, N, CSR.N, DW_XPR, FN_ADD ), // use BRU for the PC read
+    JAL                -> List(Y, N, uopJAL    , IQT_INT, FU_JMP , RT_FIX, RT_X  , RT_X  , N, IS_J, N, N, N, M_X     , Y, N, N, N, CSR.N, DW_XPR, FN_ADD ),
+    JALR               -> List(Y, N, uopJALR   , IQT_INT, FU_JMP , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , Y, N, N, N, CSR.N, DW_XPR, FN_ADD ),
     BEQ                -> List(Y, N, uopBEQ    , IQT_INT, FU_ALU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, M_X     , N, Y, N, N, CSR.N, DW_XPR, FN_SUB ),
     BNE                -> List(Y, N, uopBNE    , IQT_INT, FU_ALU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, M_X     , N, Y, N, N, CSR.N, DW_XPR, FN_SUB ),
     BGE                -> List(Y, N, uopBGE    , IQT_INT, FU_ALU , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, M_X     , N, Y, N, N, CSR.N, DW_XPR, FN_SLT ),
@@ -133,7 +134,7 @@ object DecodeTables
     CSRRSI             -> List(Y, N, uopCSRRSI , IQT_INT, FU_CSR , RT_FIX, RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.S, DW_XPR, FN_ADD ),
     CSRRCI             -> List(Y, N, uopCSRRCI , IQT_INT, FU_CSR , RT_FIX, RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.C, DW_XPR, FN_ADD ),
 
-    SFENCE_VMA          ->List(Y, N, uopSFENCE , IQT_INT, FU_CSR , RT_X  , RT_FIX, RT_FIX, N, IS_N, N, N, N,M_SFENCE , N, N, Y, Y, CSR.N, DW_XPR, FN_ADD ),
+    SFENCE_VMA          ->List(Y, N, uopSFENCE , IQT_INT, FU_CSR , RT_X  , RT_FIX, RT_FIX, N, IS_N, N, N, N,M_SFENCE , N, N, Y, Y, CSR.R, DW_XPR, FN_ADD ),
     SCALL              -> List(Y, N, uopSCALL  , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
     SBREAK             -> List(Y, N, uopSBREAK , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
     SRET               -> List(Y, N, uopSRET   , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
@@ -342,6 +343,7 @@ class DecodeUnitIo(implicit p: Parameters) extends BoomBundle
   // from CSRFile
   val status = Input(new freechips.rocketchip.rocket.MStatus())
   val csr_decode = Flipped(new freechips.rocketchip.rocket.CSRDecodeIO)
+  val fcsr_rm = Input(UInt(FPConstants.RM_SZ.W))
   val interrupt = Input(Bool())
   val interrupt_cause = Input(UInt(xLen.W))
 }
@@ -379,8 +381,9 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
 //   dontTouch(cs_legal)
 
   require (fLen >= 64)
+  val illegal_rm = inst(14,12).isOneOf(5.U,6.U) || (inst(14,12) === 7.U && io.fcsr_rm >= 5.U)
   val id_illegal_insn = !cs_legal ||
-    cs.fp_val && io.csr_decode.fp_illegal || // TODO check for illegal rm mode: (io.fpu.illegal_rm)
+    cs.fp_val && (io.csr_decode.fp_illegal || illegal_rm) ||
     cs.uopc === uopROCC && io.csr_decode.rocc_illegal ||
     cs.is_amo && !io.status.isa('a'-'a')  ||
     csr_en && (io.csr_decode.read_illegal || !csr_ren && io.csr_decode.write_illegal) ||

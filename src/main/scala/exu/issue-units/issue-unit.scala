@@ -53,7 +53,7 @@ class IssueUnitIO(
   val dis_uops         = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
   val iss_uops         = Output(Vec(issueWidth, Valid(new MicroOp())))
-  val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(UInt(maxPregSz.W))))
+  val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new ExeUnitResp(xLen))))
   val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
 
   val spec_ld_wakeup   = Flipped(Vec(lsuWidth, Valid(UInt(width=maxPregSz.W))))
@@ -94,9 +94,9 @@ abstract class IssueUnit(
     // Handle wakeups on dispatch
     for (wakeup <- io.wakeup_ports) {
       when (wakeup.valid) {
-        when (wakeup.bits === io.dis_uops(w).bits.prs1) { dis_uops(w).prs1_busy := false.B }
-        when (wakeup.bits === io.dis_uops(w).bits.prs2) { dis_uops(w).prs2_busy := false.B }
-        when (wakeup.bits === io.dis_uops(w).bits.prs3) { dis_uops(w).prs3_busy := false.B }
+        when (wakeup.bits.uop.pdst === io.dis_uops(w).bits.prs1) { dis_uops(w).prs1_busy := false.B }
+        when (wakeup.bits.uop.pdst === io.dis_uops(w).bits.prs2) { dis_uops(w).prs2_busy := false.B }
+        when (wakeup.bits.uop.pdst === io.dis_uops(w).bits.prs3) { dis_uops(w).prs3_busy := false.B }
       }
     }
     when (io.pred_wakeup_port.valid && io.pred_wakeup_port.bits === io.dis_uops(w).bits.ppred) {

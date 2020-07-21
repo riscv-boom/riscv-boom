@@ -41,7 +41,7 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
   val ldspec_miss   = Input(Bool()) // Previous cycle's speculative load wakeup was mispredicted.
 
-  val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(UInt(maxPregSz.W))))
+  val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(new ExeUnitResp(xLen))))
   val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
   val spec_ld_wakeup = Flipped(Vec(lsuWidth, Valid(UInt(width=maxPregSz.W))))
 }
@@ -95,10 +95,10 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
 
   for (wakeup <- io.wakeup_ports) {
     when (wakeup.valid) {
-      when (wakeup.bits === slot_uop.prs1) { next_uop.prs1_busy := false.B }
-      when (wakeup.bits === slot_uop.prs2) { next_uop.prs2_busy := false.B }
+      when (wakeup.bits.uop.pdst === slot_uop.prs1) { next_uop.prs1_busy := false.B }
+      when (wakeup.bits.uop.pdst === slot_uop.prs2) { next_uop.prs2_busy := false.B }
       if (isFp)
-        when (wakeup.bits === slot_uop.prs3) { next_uop.prs3_busy := false.B }
+        when (wakeup.bits.uop.pdst === slot_uop.prs3) { next_uop.prs3_busy := false.B }
     }
   }
   when (io.pred_wakeup_port.valid && io.pred_wakeup_port.bits === slot_uop.ppred) {

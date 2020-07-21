@@ -52,7 +52,7 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util.Str
 
 import boom.common._
-import boom.exu.{BrUpdateInfo, Exception, CommitSignals, ExeUnitResp}
+import boom.exu.{BrUpdateInfo, Exception, CommitSignals, MemGen, ExeUnitResp}
 import boom.util._
 
 class BoomDCacheReq(implicit p: Parameters) extends BoomBundle()(p)
@@ -107,8 +107,8 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
 class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 {
 
-  val agen        = Flipped(Vec(lsuWidth, Valid(new ExeUnitResp(xLen))))
-  val dgen        = Flipped(Vec(memWidth + 1, Valid(new ExeUnitResp(xLen))))
+  val agen        = Flipped(Vec(lsuWidth, Valid(new MemGen)))
+  val dgen        = Flipped(Vec(memWidth + 1, Valid(new MemGen)))
 
   val iresp       = Vec(lsuWidth, Valid(new ExeUnitResp(xLen)))
   val fresp       = Vec(lsuWidth, Valid(new ExeUnitResp(xLen)))
@@ -482,7 +482,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                stq_enq_retry_e.bits.addr.valid                  &&
                                stq_enq_retry_e.bits.addr_is_virtual)
 
-  val retry_queue = Module(new BranchKillableQueue(new ExeUnitResp(xLen), 8))
+  val retry_queue = Module(new BranchKillableQueue(new MemGen, 8))
   retry_queue.io.brupdate := io.core.brupdate
   retry_queue.io.flush    := io.core.exception
 

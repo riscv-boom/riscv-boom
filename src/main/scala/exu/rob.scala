@@ -42,8 +42,7 @@ import boom.util._
  * @param numFpuPorts number of fpu ports that will write back fflags
  */
 class RobIo(
-  val numWakeupPorts: Int,
-  val numFFlagsPorts: Int
+  val numWakeupPorts: Int
   )(implicit p: Parameters)  extends BoomBundle
 {
   // Decode Stage
@@ -74,7 +73,6 @@ class RobIo(
   // Port for unmarking loads/stores as speculation hazards..
   val lsu_clr_unsafe   = Input(Vec(lsuWidth, Valid(UInt(robAddrSz.W))))
 
-  val fflags = Flipped(Vec(numFFlagsPorts, new ValidIO(new FFlagsResp())))
   val lxcpt = Flipped(new ValidIO(new Exception())) // LSU
 
   // Commit stage (free resources).
@@ -201,12 +199,10 @@ class DebugRobSignals(implicit p: Parameters) extends BoomBundle
 @chiselName
 class Rob(
   val numWakeupPorts: Int,
-  val numFFlagPorts: Int,
   val usingTrace: Boolean
   )(implicit p: Parameters) extends BoomModule
 {
-  val io = IO(new RobIo(numWakeupPorts, numFFlagPorts))
-
+  val io = IO(new RobIo(numWakeupPorts))
   // ROB Finite State Machine
   val s_reset :: s_normal :: s_wait_till_empty :: s_rollback :: Nil = Enum(4)
   val rob_state = RegInit(s_reset)
@@ -342,6 +338,13 @@ class Rob(
         rob_bsy(row_idx)      := false.B
         rob_unsafe(row_idx)   := false.B
         rob_predicated(row_idx)  := wb_resp.bits.predicated
+        when (wb_resp.bits.fflags.valid) {
+          assert(!rob_fflags(row_idx).valid)
+
+          rob_fflags(row_idx).valid := true.B
+          rob_fflags(row_idx).bits  := wb_resp.bits.fflags.bits
+
+        }
       }
     }
 
@@ -362,17 +365,6 @@ class Rob(
       }
     }
 
-
-    //-----------------------------------------------
-    // Accruing fflags
-    for (fflag <- io.fflags) {
-      when (fflag.valid && MatchBank(GetBankIdx(fflag.bits.uop.rob_idx))) {
-        assert(!rob_fflags(GetRowIdx(fflag.bits.uop.rob_idx)).valid)
-        assert(rob_val(GetRowIdx(fflag.bits.uop.rob_idx)))
-        rob_fflags(GetRowIdx(fflag.bits.uop.rob_idx)).valid := true.B
-        rob_fflags(GetRowIdx(fflag.bits.uop.rob_idx)).bits  := fflag.bits.flags
-      }
-    }
 
     //-----------------------------------------------------
     // Exceptions
@@ -777,6 +769,5 @@ class Rob(
     "Rob Entries        : " + numRobEntries,
     "Rob Rows           : " + numRobRows,
     "Rob Row size       : " + log2Ceil(numRobRows),
-    "log2Ceil(coreWidth): " + log2Ceil(coreWidth),
-    "FPU FFlag Ports    : " + numFFlagPorts)
+    "log2Ceil(coreWidth): " + log2Ceil(coreWidth))
 }

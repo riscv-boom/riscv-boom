@@ -55,7 +55,7 @@ class RegisterRead(
     val pred_bypass = Input(Vec(numTotalPredBypassPorts, Valid(new ExeUnitResp(1))))
 
     // send micro-ops to the execution pipelines
-    val exe_reqs = Vec(issueWidth, (new DecoupledIO(new FuncUnitReq(registerWidth))))
+    val exe_reqs = Vec(issueWidth, Output(Valid(new FuncUnitReq(registerWidth))))
 
     val kill   = Input(Bool())
     val brupdate = Input(new BrUpdateInfo())

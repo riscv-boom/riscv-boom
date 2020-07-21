@@ -79,7 +79,6 @@ class UOPCodeFDivDecoder extends Module
  */
 class FDivSqrtUnit(implicit p: Parameters)
   extends FunctionalUnit(
-    numBypassStages = 0,
     dataWidth = 65,
     needsFcsr = true)
   with tile.HasFPUParameters
@@ -216,8 +215,6 @@ class FDivSqrtUnit(implicit p: Parameters)
       box(downvert_d2s.io.out, false.B),
       box(r_out_wdata_double, true.B))
 
-  io.fflags.valid := io.resp.valid
-  io.fflags.bits.uop := r_out_uop
-  io.fflags.bits.uop.br_mask := GetNewBrMask(io.brupdate, r_out_uop)
-  io.fflags.bits.flags := out_flags
+  io.resp.bits.fflags.valid := io.resp.valid
+  io.resp.bits.fflags.bits  := out_flags
 }
