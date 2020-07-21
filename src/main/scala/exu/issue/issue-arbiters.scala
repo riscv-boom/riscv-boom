@@ -61,13 +61,34 @@ class RegisterReadArbiter(implicit p: Parameters) extends IssueArbiter
   }
   val n = numIrfReadPortsPerBank
   val port_pri  = (0 until coreWidth).map(w => Cat(0.U(1.W), pri(w))).reduce((l,u) => Cat(u,l))
-  val port_gnts = Transpose(Transpose(bank_reqs).map(r => AgeSelectFirstN(r, port_pri, n).toSeq).reduce(_++_))
+  val port_gnts = Transpose(bank_reqs).map(r => AgeSelectFirstN(r, port_pri, n).toSeq).reduce(_++_)
+  val port_sels = Transpose(port_gnts)
+  val gnts      = port_gnts.reduce(_|_)
+
+  val specifiers = io.uops.map(u => Seq(u.prs1, u.prs2)).reduce(_++_)
+  val matches = Wire(Vec(2*coreWidth, Vec(2*coreWidth, Bool())))
+  for (i <- 0 until 2*coreWidth) {
+    for (j <- 0 until 2*coreWidth) {
+      if (i < j) {
+        matches(i)(j) := false.B
+      } else if (i == j) {
+        matches(i)(j) := true.B
+      } else {
+        matches(i)(j) := specifiers(i) === specifiers(j)
+      }
+    }
+  }
 
   for (w <- 0 until coreWidth) {
-    io.gnts(w) := (port_gnts(2*w  ).orR || !io.uops(w).prs1_reads_irf && io.reqs(w)) &&
-                  (port_gnts(2*w+1).orR || !io.uops(w).prs2_reads_irf && io.reqs(w))
-    io.prs1_port(w) := port_gnts(2*w  )
-    io.prs2_port(w) := port_gnts(2*w+1)
+    val prs1_matches = VecInit((0 until 2*coreWidth).map(i => if (i < 2*w  ) matches(2*w  )(i) else matches(i)(2*w  ))).asUInt
+    val prs2_matches = VecInit((0 until 2*coreWidth).map(i => if (i < 2*w+1) matches(2*w+1)(i) else matches(i)(2*w+1))).asUInt
+
+    val prs1_gnts = gnts & prs1_matches
+    val prs2_gnts = gnts & prs2_matches
+    io.gnts(w) := (prs1_gnts.orR || !io.uops(w).prs1_reads_irf && io.reqs(w)) &&
+                  (prs2_gnts.orR || !io.uops(w).prs2_reads_irf && io.reqs(w))
+    io.prs1_port(w) := Mux1H(prs1_matches, port_sels)
+    io.prs2_port(w) := Mux1H(prs2_matches, port_sels)
   }
 }
 
