@@ -70,8 +70,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // construct all of the modules
 
   // Only holds integer-registerfile execution units.
-  val mem_exe_units: Seq[IntExeUnit] = (0 until memWidth) map { w =>
-    Module(new IntExeUnit(hasAGen = w >= (memWidth - lsuWidth), hasDGen = true))
+  val mem_exe_units: Seq[MemExeUnit] = (0 until memWidth) map { w =>
+    Module(new MemExeUnit(hasAGen = w >= (memWidth - lsuWidth), hasDGen = true))
   }
 
   val int_exe_units: Seq[IntExeUnit] = (0 until intWidth) map { w =>
@@ -353,8 +353,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   override def toString: String =
     (BoomCoreStringPrefix("====Overall Core Params====") + "\n\n"
-    + mem_exe_units.map(_.toString).mkString("\n\n")
-    + int_exe_units.map(_.toString).mkString("\n\n")
+    + mem_exe_units.map(_.toString).mkString("") + "\n"
+    + int_exe_units.map(_.toString).mkString("") + "\n\n"
     + fpPipelineStr + "\n\n"
     + rob.toString + "\n\n"
     + BoomCoreStringPrefix(

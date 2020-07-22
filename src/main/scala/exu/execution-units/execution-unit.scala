@@ -64,6 +64,7 @@ abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomM
   val io_kill = IO(Input(Bool()))
   val io_brupdate = IO(Input(new BrUpdateInfo))
   val io_status = IO(Input(new freechips.rocketchip.rocket.MStatus))
+  val io_ready_fu_types = IO(Output(UInt(FUC_SZ.W)))
 
   val io_fcsr_rm = IO(Input(UInt(tile.FPConstants.RM_SZ.W)))
   override def toString = {
@@ -72,19 +73,10 @@ abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomM
   }
 }
 
-class IntExeUnit(
+class MemExeUnit(
   val hasAGen          : Boolean       = false,
-  val hasDGen          : Boolean       = false,
-  val hasCSR           : Boolean       = false,
-  val hasJmp           : Boolean       = false,
-  val hasAlu           : Boolean       = false,
-  val hasMul           : Boolean       = false,
-  val hasDiv           : Boolean       = false,
-  val hasIfpu          : Boolean       = false,
-  val hasRocc          : Boolean       = false
-)(implicit p: Parameters) extends ExecutionUnit("Int") {
-  val alwaysBypassable = hasAlu && !hasMul
-
+  val hasDGen          : Boolean       = false
+)(implicit p: Parameters) extends ExecutionUnit("Mem") {
   val io_req = IO(Input(Valid(new FuncUnitReq(xLen))))
 
   val io_agen = if (hasAGen) {
@@ -122,6 +114,24 @@ class IntExeUnit(
     assert(!(io_req.valid && io_req.bits.uop.fu_code_is(FU_DGEN)))
     None
   }
+
+  io_ready_fu_types := fu_types.map { case (code, ready, _) => Mux(ready, code, 0.U(FUC_SZ.W)) }.reduce(_|_)
+
+
+}
+class IntExeUnit(
+  val hasCSR           : Boolean       = false,
+  val hasJmp           : Boolean       = false,
+  val hasAlu           : Boolean       = false,
+  val hasMul           : Boolean       = false,
+  val hasDiv           : Boolean       = false,
+  val hasIfpu          : Boolean       = false,
+  val hasRocc          : Boolean       = false
+)(implicit p: Parameters) extends ExecutionUnit("Int") {
+  val alwaysBypassable = hasAlu && !hasMul
+
+  val io_req = IO(Input(Valid(new FuncUnitReq(xLen))))
+
 
   val (io_alu_resp, io_brinfo, io_get_ftq_pc, io_csr, io_sfence) = if (hasAlu) {
     val alu_ready = WireInit(true.B)
@@ -225,33 +235,6 @@ class IntExeUnit(
     (None, None)
   }
 
-  // val (io_mul_resp) = if (hasMul) {
-  //   val imul_ready = Wire(Bool())
-  //   fu_types += ((FU_MUL, imul_ready, "IMul"))
-
-
-
-  //   val imul = Module(new PipelinedMulUnit(imulLatency, xLen))
-  //   imul.io.req.valid := io_req.valid && io_req.bits.uop.fu_code_is(FU_MUL)
-  //   imul.io.req.bits  := io_req.bits
-  //   imul.io.brupdate  := io_brupdate
-  //   imul.io.kill      := io_kill
-
-  //   val queue = Module(new BranchKillableQueue(new ExeUnitResp(xLen), imulLatency + 6))
-  //   queue.io.enq <> imul.io.resp
-  //   queue.io.brupdate := io_brupdate
-  //   queue.io.flush := io_kill
-  //   assert(!(queue.io.enq.valid && !queue.io.enq.ready))
-  //   imul_ready := RegNext(queue.io.count < 2.U)
-
-  //   val mul_resp = IO(Decoupled(new ExeUnitResp(xLen)))
-  //   mul_resp <> queue.io.deq
-  //   Some(mul_resp)
-  // } else {
-  //   assert(!(io_req.valid && io_req.bits.uop.fu_code_is(FU_MUL)))
-  //   None
-  // }
-
   val (io_ifpu_resp) = if (hasIfpu) {
     val ifpu_ready = Wire(Bool())
     fu_types += ((FU_I2F, ifpu_ready, "IFPU"))
@@ -305,7 +288,6 @@ class IntExeUnit(
     (None)
   }
 
-  val io_ready_fu_types = IO(Output(UInt(FUC_SZ.W)))
   io_ready_fu_types := fu_types.map { case (code, ready, _) => Mux(ready, code, 0.U(FUC_SZ.W)) }.reduce(_|_)
 
 }
@@ -382,7 +364,6 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
     (None, None)
   }
 
-  val io_ready_fu_types = IO(Output(UInt(FUC_SZ.W)))
   io_ready_fu_types := fu_types.map { case (code, ready, _) => Mux(ready, code, 0.U(FUC_SZ.W)) }.reduce(_|_)
 }
 
