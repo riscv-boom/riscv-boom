@@ -259,7 +259,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
   assert (ren2_alloc_reqs zip ren2_uops map {case (r,u) => !r || u.pdst_spec =/= 0.U} reduce (_&&_),
            "[rename-stage] A uop is trying to allocate the zero physical register.")
 
-  assert (!io.debug_rob_empty ||
+  assert (!io.debug_rob_empty || io.flashback ||
           freelists.foldLeft(0.U) ((c,f) => c +& PopCount(f.io.debug_freelist)) >= (numIntPhysRegs - 31 - coreWidth).U,
           "[freelist] Leaking physical registers.")
 

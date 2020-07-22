@@ -99,6 +99,6 @@ class RenameFreeList(
   val debug_freelist = free_list | io.alloc_pregs.map(p => UIntToOH(p.bits) & Fill(n,p.valid)).reduce(_|_)
 
   assert (!(debug_freelist & dealloc_mask).orR, "[freelist] Returning a free physical register.")
-  assert (!io.pipeline_empty || PopCount(debug_freelist) >= (numPregs - numLregs - 1).U,
+  assert (!io.pipeline_empty || io.flashback || PopCount(debug_freelist) >= (numPregs - numLregs - 1).U,
     "[freelist] Leaking physical registers.")
 }
