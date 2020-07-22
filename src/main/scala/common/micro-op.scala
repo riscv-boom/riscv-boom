@@ -155,7 +155,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
                                 // else copy rs2 to dst
   def ppred_ready      = !is_sfb_shadow || !ppred_busy
 
-  // logical specifiers (only used in Decode->Rename), except rollback (ldst)
+  // logical specifiers (only used in Decode->Rename)
   val ldst             = UInt(lregSz.W)
   val lrs1             = UInt(lregSz.W)
   val lrs2             = UInt(lregSz.W)
@@ -224,6 +224,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def stale_spec = ColSpec(stale_pdst)
 
   def writes_irf = dst_rtype === RT_FIX && ldst_val
+  def writes_frf = dst_rtype === RT_FLT
 
   // Getters that help with scheduling
   def prs1_reads_irf = lrs1_rtype === RT_FIX && !prs1_status(2,1).orR && lrs1 =/= 0.U

@@ -41,7 +41,6 @@ case class BoomCoreParams(
   enableAgePriorityIssue: Boolean = true,
   enablePrefetching: Boolean = false,
   enableFastLoadUse: Boolean = true,
-  enableCommitMapTable: Boolean = false,
   enableFastPNR: Boolean = false,
   enableSFBOpt: Boolean = false,
   enableGHistStallRepair: Boolean = true,
@@ -243,8 +242,6 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   //************************************
   // Extra Knobs and Features
-  val enableCommitMapTable = boomParams.enableCommitMapTable
-  require(!enableCommitMapTable) // TODO Fix the commit map table.
   val enableFastPNR = boomParams.enableFastPNR
   val enableSFBOpt = boomParams.enableSFBOpt
   val enableGHistStallRepair = boomParams.enableGHistStallRepair

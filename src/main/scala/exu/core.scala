@@ -187,10 +187,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftq_idx
 
-
-  assert (!((brupdate.b1.mispredict_mask =/= 0.U || brupdate.b2.mispredict)
-    && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
-
   io.ifu.brupdate := brupdate
 
   if (usingFPU) {
@@ -524,7 +520,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val dec_hazards = (0 until coreWidth).map(w =>
                       dec_valids(w) &&
                       (  !dis_ready
-                      || rob.io.commit.rollback
                       || dec_xcpt_stall
                       || branch_mask_full(w)
                       || brupdate.b1.mispredict_mask =/= 0.U
@@ -570,6 +565,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   int_rename.io.kill := io.ifu.redirect_flush
   int_rename.io.brupdate := brupdate
+  int_rename.io.flashback := RegNext(RegNext(rob.io.flush.valid))
 
   int_rename.io.debug_rob_empty := rob.io.empty
 
@@ -581,12 +577,11 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   int_rename.io.com_valids := rob.io.commit.valids
   int_rename.io.com_uops := rob.io.commit.uops
-  int_rename.io.rbk_valids := rob.io.commit.rbk_valids
-  int_rename.io.rollback := rob.io.commit.rollback
 
   for (rename <- other_renamers) {
     rename.io.kill := io.ifu.redirect_flush
     rename.io.brupdate := brupdate
+    rename.io.flashback := RegNext(RegNext(rob.io.flush.valid))
 
     rename.io.debug_rob_empty := rob.io.empty
 
@@ -598,8 +593,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
     rename.io.com_valids := rob.io.commit.valids
     rename.io.com_uops := rob.io.commit.uops
-    rename.io.rbk_valids := rob.io.commit.rbk_valids
-    rename.io.rollback := rob.io.commit.rollback
   }
 
   //-------------------------------------------------------------
