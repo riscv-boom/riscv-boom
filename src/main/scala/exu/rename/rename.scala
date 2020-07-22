@@ -46,17 +46,17 @@ abstract class AbstractRename(
 
     val ren_stalls = Output(Vec(plWidth, Bool()))
 
-    val kill = Input(Bool())
-
     val dec_fire  = Input(Vec(plWidth, Bool())) // will commit state updates
-    val dec_uops  = Input(Vec(plWidth, new MicroOp()))
+    val dec_uops  = Input(Vec(plWidth, new MicroOp))
 
     // physical specifiers available AND busy/ready status available.
     val ren2_mask = Vec(plWidth, Output(Bool())) // mask of valid instructions
-    val ren2_uops = Vec(plWidth, Output(new MicroOp()))
+    val ren2_uops = Vec(plWidth, Output(new MicroOp))
 
     // branch resolution (execute)
-    val brupdate = Input(new BrUpdateInfo())
+    val brupdate  = Input(new BrUpdateInfo())
+    val kill      = Input(Bool())
+    val flashback = Input(Bool())
 
     val dis_fire  = Input(Vec(coreWidth, Bool()))
     val dis_ready = Input(Bool())
@@ -65,10 +65,8 @@ abstract class AbstractRename(
     val wakeups = Flipped(Vec(numWbPorts, Valid(new ExeUnitResp(xLen))))
 
     // commit stage
-    val com_valids = Input(Vec(plWidth, Bool()))
-    val com_uops = Input(Vec(plWidth, new MicroOp()))
-    val rbk_valids = Input(Vec(plWidth, Bool()))
-    val rollback = Input(Bool())
+    val com_valids = Input(Vec(coreWidth, Bool()))
+    val com_uops   = Input(Vec(coreWidth, new MicroOp))
 
     val debug_rob_empty = Input(Bool())
   })
@@ -211,43 +209,37 @@ class Rename(
 
   // Commit/Rollback
   val com_valids      = Wire(Vec(plWidth, Bool()))
-  val rbk_valids      = Wire(Vec(plWidth, Bool()))
 
   for (w <- 0 until plWidth) {
     ren2_alloc_reqs(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === rtype && ren2_fire(w)
     ren2_br_tags(w).valid := ren2_fire(w) && ren2_uops(w).allocate_brtag
 
     com_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.com_valids(w)
-    rbk_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.rbk_valids(w)
     ren2_br_tags(w).bits  := ren2_uops(w).br_tag
   }
 
   //-------------------------------------------------------------
   // Rename Table
 
-  // Maptable inputs.
-  val map_reqs   = Wire(Vec(plWidth, new MapReq(lregSz)))
-  val remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
-
-  // Generate maptable requests.
-  for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops zip io.com_uops.reverse zipWithIndex) {
-    map_reqs(w).lrs1 := ren1.lrs1
-    map_reqs(w).lrs2 := ren1.lrs2
-    map_reqs(w).lrs3 := ren1.lrs3
-    map_reqs(w).ldst := ren1.ldst
-
-    remap_reqs(w).ldst := Mux(io.rollback, com.ldst      , ren2.ldst)
-    remap_reqs(w).pdst := Mux(io.rollback, com.stale_pdst, ren2.pdst)
-  }
-  ren2_alloc_reqs zip rbk_valids.reverse zip remap_reqs map {
-    case ((a,r),rr) => rr.valid := a || r}
-
   // Hook up inputs.
-  maptable.io.map_reqs    := map_reqs
-  maptable.io.remap_reqs  := remap_reqs
+  for (w <- 0 until coreWidth) {
+    maptable.io.map_reqs(w).lrs1 := ren1_uops(w).lrs1
+    maptable.io.map_reqs(w).lrs2 := ren1_uops(w).lrs2
+    maptable.io.map_reqs(w).lrs3 := ren1_uops(w).lrs3
+    maptable.io.map_reqs(w).ldst := ren1_uops(w).ldst
+
+    maptable.io.remap_reqs(w).bits.ldst := ren2_uops(w).ldst
+    maptable.io.remap_reqs(w).bits.pdst := ren2_uops(w).pdst
+    maptable.io.remap_reqs(w).valid     := ren2_alloc_reqs(w)
+
+    maptable.io.commit_reqs(w).bits.ldst := io.com_uops(w).ldst
+    maptable.io.commit_reqs(w).bits.pdst := io.com_uops(w).pdst
+    maptable.io.commit_reqs(w).valid     := com_valids(w)
+  }
+
   maptable.io.ren_br_tags := ren2_br_tags
-  maptable.io.brupdate      := io.brupdate
-  maptable.io.rollback    := io.rollback
+  maptable.io.brupdate    := io.brupdate
+  maptable.io.flashback   := io.flashback
 
   // Maptable outputs.
   for ((uop, w) <- ren1_uops.zipWithIndex) {
@@ -263,13 +255,14 @@ class Rename(
   // Free List
 
   // Freelist inputs.
-  freelist.io.reqs := ren2_alloc_reqs
-  freelist.io.dealloc_pregs zip com_valids zip rbk_valids map
-    {case ((d,c),r) => d.valid := c || r}
-  freelist.io.dealloc_pregs zip io.com_uops map
-    {case (d,c) => d.bits := Mux(io.rollback, c.pdst, c.stale_pdst)}
-  freelist.io.ren_br_tags := ren2_br_tags
-  freelist.io.brupdate := io.brupdate
+  freelist.io.reqs           := ren2_alloc_reqs
+  for (w <- 0 until coreWidth) {
+    freelist.io.com_uops(w).valid := com_valids(w)
+    freelist.io.com_uops(w).bits  := io.com_uops(w)
+  }
+  freelist.io.ren_br_tags    := ren2_br_tags
+  freelist.io.brupdate       := io.brupdate
+  freelist.io.flashback      := io.flashback
   freelist.io.pipeline_empty := io.debug_rob_empty
 
   assert (ren2_alloc_reqs zip freelist.io.alloc_pregs map {case (r,p) => !r || p.bits =/= 0.U} reduce (_&&_),
