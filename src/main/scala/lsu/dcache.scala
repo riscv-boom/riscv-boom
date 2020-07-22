@@ -572,7 +572,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
   val s0_valid = Mux(io.lsu.req.fire(), VecInit(io.lsu.req.bits.map(_.valid)),
                  Mux(mshrs.io.replay.fire() || wb_fire || prober_fire || prefetch_fire || mshrs.io.meta_read.fire(),
-                                        VecInit(Cat(1.U(1.W), 0.U((memWidth-1).W)).asBools), VecInit(0.U(memWidth.W).asBools)))
+                                        VecInit(((1 << memWidth-1).U(memWidth.W)).asBools), VecInit(0.U(memWidth.W).asBools)))
   val s0_req   = Mux(io.lsu.req.fire()        , VecInit(io.lsu.req.bits.map(_.bits)),
                  Mux(wb_fire                  , wb_req,
                  Mux(prober_fire              , prober_req,
@@ -588,7 +588,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
   // Does this request need to send a response or nack
   val s0_send_resp_or_nack = Mux(io.lsu.req.fire(), s0_valid,
-    VecInit(Mux(mshrs.io.replay.fire() && isRead(mshrs.io.replay.bits.uop.mem_cmd), Cat(1.U(1.W), 0.U((memWidth-1).W)), 0.U(memWidth.W)).asBools))
+    VecInit(Mux(mshrs.io.replay.fire() && isRead(mshrs.io.replay.bits.uop.mem_cmd), (1 << memWidth-1).U(memWidth.W), 0.U(memWidth.W)).asBools))
 
 
   val s1_req          = RegNext(s0_req)
