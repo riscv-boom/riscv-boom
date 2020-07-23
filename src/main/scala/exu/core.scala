@@ -73,7 +73,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val mem_exe_units: Seq[MemExeUnit] = (0 until memWidth) map { w =>
     Module(new MemExeUnit(hasAGen = w >= (memWidth - lsuWidth), hasDGen = true))
   }
-
+  val agen_exe_units: Seq[MemExeUnit] = mem_exe_units.filter(_.hasAGen)
   val int_exe_units: Seq[IntExeUnit] = (0 until intWidth) map { w =>
     def last = w == intWidth - 1
     Module(new IntExeUnit(
@@ -89,6 +89,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   val jmp_unit_idx = int_exe_units.indexWhere(_.hasJmp)
   val jmp_unit = int_exe_units(jmp_unit_idx)
+  val csr_exe_unit = int_exe_units.find(_.hasCSR).get
+  val csr_resp = csr_exe_unit.io_csr.get
 
   // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
   val fp_pipeline = Module(new FpPipeline)
@@ -103,10 +105,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val numIrfWritePorts        = intWidth + lsuWidth
   val numIrfReadPorts         = memWidth + (intWidth) * 2
 
-  val numFastWakeupPorts      = intWidth
-  val numTotalBypassPorts     = numIrfWritePorts
-
-  val numIntWakeups           = numIrfWritePorts + int_exe_units.count(!_.alwaysBypassable)
+  val numIntWakeups           = coreWidth + lsuWidth + 1
   val numFpWakeupPorts        = fp_pipeline.io.wakeups.length
 
   val numImmWakeupPorts = intWidth + memWidth // "Wakeup" immediates when they are read
@@ -143,19 +142,11 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
                             coreWidth,
                             LONGEST_IMM_SZ))
 
-
-  // wb arbiter for the 0th ll writeback
-  // TODO: should this be a multi-arb?
-  val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 1 +
-                                                                   1 + // FP2Int
-                                                                   1 + // idiv
-                                                                   1 + // csr
-                                                                   (if (usingRoCC) 1 else 0)))
   val iregister_read   = Module(new RegisterRead(
                            memWidth + intWidth,
                            numIrfReadPorts,
                            Seq.fill(memWidth) {1} ++ Seq.fill(intWidth) {2},
-                           numTotalBypassPorts,
+                           numIrfWritePorts,
                            1,
                            xLen))
   val rob              = Module(new Rob(
@@ -167,6 +158,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val pred_wakeup  = Reg(Valid(new ExeUnitResp(1)))
   pred_wakeup.valid := false.B
   pred_wakeup.bits := DontCare
+  val int_bypasses  = Wire(Vec(numIrfWritePorts, Valid(new ExeUnitResp(xLen))))
+  val pred_bypass  = Wire(Valid(new ExeUnitResp(1)))
 
   //***********************************
   // Pipeline State Registers and Wires
@@ -189,9 +182,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // Issue Stage/Register Read
   val mem_iss_uops = mem_iss_unit.io.iss_uops
   val int_iss_uops = int_iss_unit.io.iss_uops
-
-  val bypasses    = Wire(Vec(numTotalBypassPorts, Valid(new ExeUnitResp(xLen))))
-  val pred_bypass = Wire(Valid(new ExeUnitResp(1)))
 
   // --------------------------------------
   // Dealing with branch resolutions
@@ -246,7 +236,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   fp_pipeline.io.brupdate := brupdate
 
   // Load/Store Unit & ExeUnits
-  val mem_resps = io.lsu.iresp
+  // val mem_resps = io.lsu.iresp
   var agen_idx = 0
   var dgen_idx = 0
   for (eu <- mem_exe_units) {
@@ -344,10 +334,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     if (enableAgePriorityIssue) " (Age-based Priority)"
     else " (Unordered Priority)"
 
-  // val btbStr =
-  //   if (enableBTB) ("" + boomParams.btb.nSets * boomParams.btb.nWays + " entries (" + boomParams.btb.nSets + " x " + boomParams.btb.nWays + " ways)")
-  //   else 0
-  val btbStr = ""
 
   val fpPipelineStr = fp_pipeline.toString
 
@@ -371,7 +357,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     + "\n\n" + iregfile.toString + "\n\n"
     + BoomCoreStringPrefix(
         "Num Wakeup Ports      : " + numIntWakeups,
-        "Num Bypass Ports      : " + numTotalBypassPorts) + "\n"
+        "Num Bypass Ports      : " + numIrfWritePorts) + "\n"
     + BoomCoreStringPrefix(
         "DCache Ways           : " + dcacheParams.nWays,
         "DCache Sets           : " + dcacheParams.nSets,
@@ -486,12 +472,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
 
 
-
-  //-------------------------------------------------------------
-  //-------------------------------------------------------------
-  // **** Branch Prediction ****
-  //-------------------------------------------------------------
-  //-------------------------------------------------------------
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -821,29 +801,42 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
+  val int_exe_block_fu_types = WireInit(VecInit(Seq.fill(intWidth) (0.U(FUC_SZ.W))))
 
-  var wu_idx = 1
-  // The 0th wakeup port goes to the ll_wbarb
-  int_wakeups(0).valid := ll_wbarb.io.out.fire() && ll_wbarb.io.out.bits.uop.dst_rtype === RT_FIX
-  int_wakeups(0).bits  := ll_wbarb.io.out.bits
-
-  for (i <- 1 until lsuWidth) {
-    int_wakeups(i).valid := mem_resps(i).valid && mem_resps(i).bits.uop.dst_rtype === RT_FIX
-    int_wakeups(i).bits  := mem_resps(i).bits
-
+  var wu_idx = 0
+  var wb_idx = 0
+  for (i <- 0 until lsuWidth) {
+    int_wakeups(wu_idx) := io.lsu.iresp(i)
+    rob.io.wb_resps(wb_idx) := RegNext(UpdateBrMask(brupdate, io.lsu.iresp(i)))
+    int_bypasses(wb_idx)     := io.lsu.iresp(i)
+    iregfile.io.write_ports(wb_idx) := WritePort(io.lsu.iresp(i), ipregSz, xLen, RT_FIX)
     wu_idx += 1
+    wb_idx += 1
   }
 
   // loop through each issue-port (exe_units are statically connected to an issue-port)
-  for (i <- 0 until int_exe_units.length) {
+  for (i <- 0 until intWidth) {
+    val last = i == intWidth-1
     val unit = int_exe_units(i)
     val fast_wakeup = Wire(Valid(new ExeUnitResp(xLen)))
     val slow_wakeup = Wire(Valid(new ExeUnitResp(xLen)))
     fast_wakeup := DontCare
     slow_wakeup := DontCare
 
-    val resp = unit.io_alu_resp.get
-    assert(!(resp.valid && resp.bits.uop.rf_wen && resp.bits.uop.dst_rtype =/= RT_FIX))
+    val sharesF2I = last
+    val sharesIDiv = unit.hasDiv
+    val sharesCSR = unit.hasCSR
+    val sharesRoCC = unit.hasRocc
+
+    val arb = Module(new Arbiter(new ExeUnitResp(xLen), 1 +
+      (if (sharesF2I) 1 else 0) +
+      (if (sharesIDiv) 1 else 0) +
+      (if (sharesCSR) 1 else 0) +
+      (if (sharesRoCC) 1 else 0)))
+
+    var arb_idx = 1
+    arb.io.in(0).valid := unit.io_alu_resp.get.valid
+    arb.io.in(0).bits  := unit.io_alu_resp.get.bits
 
     // Fast Wakeup (uses just-issued uops that have known latencies)
     fast_wakeup.bits.uop := int_iss_uops(i).bits
@@ -854,16 +847,16 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
 
     // Slow Wakeup (uses write-port to register file)
-    slow_wakeup.bits.uop := resp.bits.uop
-    slow_wakeup.valid    := resp.valid &&
-                            resp.bits.uop.rf_wen &&
-                           !resp.bits.uop.bypassable &&
-                            resp.bits.uop.dst_rtype === RT_FIX
+    slow_wakeup.bits.uop := arb.io.out.bits.uop
+    slow_wakeup.valid    := arb.io.out.valid &&
+                            arb.io.out.bits.uop.rf_wen &&
+                           !arb.io.out.bits.uop.bypassable &&
+                            arb.io.out.bits.uop.dst_rtype === RT_FIX
 
     int_wakeups(wu_idx) := fast_wakeup
     wu_idx += 1
 
-    if (!unit.alwaysBypassable) {
+    if (sharesF2I || sharesIDiv || sharesCSR || sharesRoCC) {
       int_wakeups(wu_idx) := slow_wakeup
       wu_idx += 1
     }
@@ -872,8 +865,53 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       pred_wakeup.valid    := int_iss_uops(i).valid && int_iss_uops(i).bits.is_sfb_br
       pred_wakeup.bits.uop := int_iss_uops(i).bits
     }
+
+
+    if (sharesF2I) {
+      arb.io.in(arb_idx) <> fp_pipeline.io.to_int
+      arb_idx += 1
+    }
+    if (sharesIDiv) {
+      arb.io.in(arb_idx) <> unit.io_div_resp.get
+      arb_idx += 1
+    }
+    if (sharesCSR) {
+      arb.io.in(arb_idx).valid     := csr_resp.valid
+      arb.io.in(arb_idx).bits.uop  := csr_resp.bits.uop
+      arb.io.in(arb_idx).bits.data := csr.io.rw.rdata
+      arb.io.in(arb_idx).bits.predicated   := false.B
+      arb.io.in(arb_idx).bits.fflags.valid := false.B
+      arb.io.in(arb_idx).bits.fflags.bits  := false.B
+      assert(!(arb.io.in(arb_idx).valid && !arb.io.in(arb_idx).ready))
+      arb_idx += 1
+    }
+    if (sharesRoCC) {
+      arb.io.in(arb_idx) <> unit.io_rocc_resp.get
+      arb_idx += 1
+    }
+
+    rob.io.wb_resps(wb_idx).valid  := RegNext(arb.io.out.valid &&
+      !IsKilledByBranch(brupdate, arb.io.out.bits))
+    rob.io.wb_resps(wb_idx).bits   := RegNext(arb.io.out.bits)
+
+    int_bypasses(wb_idx).valid := (
+      arb.io.out.valid &&
+      arb.io.out.bits.uop.dst_rtype === RT_FIX
+    )
+    int_bypasses(wb_idx).bits := arb.io.out.bits
+    iregfile.io.write_ports(wb_idx) := WritePort(arb.io.out, ipregSz, xLen, RT_FIX)
+
+    if (unit.hasJmp) {
+      pred_bypass.valid := arb.io.out.valid && arb.io.out.bits.uop.is_sfb_br
+      pred_bypass.bits  := arb.io.out.bits
+      pregfile.io.write_ports(0).valid     := arb.io.out.valid && arb.io.out.bits.uop.is_sfb_br
+      pregfile.io.write_ports(0).bits.addr := arb.io.out.bits.uop.pdst
+      pregfile.io.write_ports(0).bits.data := arb.io.out.bits.data
+    }
+    wb_idx += 1
   }
   require (wu_idx == numIntWakeups)
+  require (wb_idx == numIrfWritePorts)
 
   // Perform load-hit speculative wakeup through a special port (performs a poison wake-up).
   int_iss_unit.io.spec_ld_wakeup := io.lsu.spec_ld_wakeup
@@ -906,7 +944,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   imm_rename_stage.io.wakeups := iregister_read.io.imm_wakeups
 
   mem_iss_unit.io.fu_types := mem_exe_units.map(_.io_ready_fu_types)
-  int_iss_unit.io.fu_types := int_exe_units.map(_.io_ready_fu_types)
+  int_iss_unit.io.fu_types := (0 until intWidth) map {w => int_exe_units(w).io_ready_fu_types & ~int_exe_block_fu_types(w)}
 
   int_iss_unit.io.tsc_reg  := debug_tsc_reg
   int_iss_unit.io.brupdate := brupdate
@@ -941,7 +979,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   iregister_read.io.brupdate := brupdate
   iregister_read.io.kill   := RegNext(rob.io.flush.valid)
 
-  iregister_read.io.bypass := bypasses
+  iregister_read.io.bypass := int_bypasses
   iregister_read.io.pred_bypass := Seq(pred_bypass)
 
   //-------------------------------------------------------------
@@ -950,13 +988,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // committing, so to get this to work I stall the entire pipeline for
   // CSR instructions so I never speculate these instructions.
 
-  val csr_exe_unit = int_exe_units.find(_.hasCSR).get
-
   io.lsu.sfence := csr_exe_unit.io_sfence.get
   io.ifu.sfence := csr_exe_unit.io_sfence.get
 
   // for critical path reasons, we aren't zero'ing this out if resp is not valid
-  val csr_resp = csr_exe_unit.io_csr.get
   csr.io.rw.addr        := csr_resp.bits.addr
   csr.io.rw.cmd         := CSR.maskCmd(csr_resp.valid, csr_resp.bits.uop.csr_cmd)
   csr.io.rw.wdata       := csr_resp.bits.data
@@ -1016,11 +1051,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   csr.io.hartid := io.hartid
   csr.io.interrupts := io.interrupts
 
-// TODO can we add this back in, but handle reset properly and save us
-//      the mux above on csr.io.rw.cmd?
-//   assert (!(csr_rw_cmd =/= rocket.CSR.N && !exe_units(0).io.resp(0).valid),
-//   "CSRFile is being written to spuriously.")
-
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // **** Execute Stage ****
@@ -1068,86 +1098,11 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   io.lsu.tsc_reg := debug_tsc_reg
 
-
-  //-------------------------------------------------------------
-  //-------------------------------------------------------------
-  // **** Writeback Stage ****
-  //-------------------------------------------------------------
-  //-------------------------------------------------------------
-
-  var w_cnt = 0
-  var bypass_idx = 0
-
-  iregfile.io.write_ports(w_cnt) := WritePort(ll_wbarb.io.out, ipregSz, xLen, RT_FIX)
-  bypasses(bypass_idx).valid := iregfile.io.write_ports(w_cnt).valid
-  bypasses(bypass_idx).bits  := ll_wbarb.io.out.bits
-  w_cnt += 1
-  bypass_idx += 1
-
-  ll_wbarb.io.in(0).valid := mem_resps(0).valid
-  ll_wbarb.io.in(0).bits  := mem_resps(0).bits
-
-  for (i <- 1 until lsuWidth) {
-    iregfile.io.write_ports(w_cnt) := WritePort(mem_resps(i), ipregSz, xLen, RT_FIX)
-    bypasses(bypass_idx).valid := iregfile.io.write_ports(w_cnt).valid
-    bypasses(bypass_idx).bits  := mem_resps(i).bits
-    bypass_idx += 1
-    w_cnt += 1
-  }
-
-  for (i <- 0 until int_exe_units.length) {
-    val exe_unit = int_exe_units(i)
-    val wbresp = exe_unit.io_alu_resp.get
-    val wbpdst = wbresp.bits.uop.pdst
-    val wbdata = wbresp.bits.data
-
-    def wbIsValid(rtype: UInt) =
-      wbresp.valid && wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype === rtype
-
-    bypasses(bypass_idx).valid := wbIsValid(RT_FIX)
-    bypasses(bypass_idx).bits  := wbresp.bits
-
-
-    iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
-    iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
-    iregfile.io.write_ports(w_cnt).bits.data := wbdata
-
-    bypass_idx += 1
-    w_cnt += 1
-  }
-
-  pregfile.io.write_ports(0).valid     := jmp_unit.io_alu_resp.get.valid && jmp_unit.io_alu_resp.get.bits.uop.is_sfb_br
-  pregfile.io.write_ports(0).bits.addr := jmp_unit.io_alu_resp.get.bits.uop.pdst
-  pregfile.io.write_ports(0).bits.data := jmp_unit.io_alu_resp.get.bits.data
-
-  pred_bypass.valid := jmp_unit.io_alu_resp.get.valid && jmp_unit.io_alu_resp.get.bits.uop.is_sfb_br
-  pred_bypass.bits  := jmp_unit.io_alu_resp.get.bits
-
-  require (w_cnt == iregfile.io.write_ports.length)
-  require (bypass_idx == numTotalBypassPorts)
-
-
   // Connect IFPU
   fp_pipeline.io.from_int  <> int_exe_units.find(_.hasIfpu).get.io_ifpu_resp.get
-  // Connect FPIU
-  ll_wbarb.io.in(1)        <> fp_pipeline.io.to_int
-  // Connect long-latency div
-  ll_wbarb.io.in(2)        <> int_exe_units.find(_.hasDiv).get.io_div_resp.get
-  // Connect CSR read/write
-  ll_wbarb.io.in(3).valid           := csr_resp.valid
-  ll_wbarb.io.in(3).bits.uop        := csr_resp.bits.uop
-  ll_wbarb.io.in(3).bits.data       := csr.io.rw.rdata
-  ll_wbarb.io.in(3).bits.predicated := false.B
-  ll_wbarb.io.in(3).bits.fflags.valid := false.B
-  ll_wbarb.io.in(3).bits.fflags.bits  := 0.U
-  assert(!(ll_wbarb.io.in(3).valid && !ll_wbarb.io.in(3).ready))
 
   // Connect FLDs
   fp_pipeline.io.ll_wports <> io.lsu.fresp
-
-  if (usingRoCC) {
-    ll_wbarb.io.in(4)      <> int_exe_units.find(_.hasRocc).get.io_rocc_resp.get
-  }
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -1155,34 +1110,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  // Writeback
-  // ---------
-  // First connect the ll_wport
-  val ll_uop = ll_wbarb.io.out.bits.uop
-  rob.io.wb_resps(0).valid  := RegNext(ll_wbarb.io.out.valid && !(ll_uop.uses_stq && !ll_uop.is_amo) && !IsKilledByBranch(brupdate, ll_wbarb.io.out.bits))
-  rob.io.wb_resps(0).bits   := RegNext(ll_wbarb.io.out.bits)
-  var cnt = 1
-  for (i <- 1 until lsuWidth) {
-    val mem_uop = mem_resps(i).bits.uop
-    rob.io.wb_resps(cnt).valid := RegNext(mem_resps(i).valid && !(mem_uop.uses_stq && !mem_uop.is_amo) && !IsKilledByBranch(brupdate, mem_uop))
-    rob.io.wb_resps(cnt).bits  := RegNext(mem_resps(i).bits)
-    cnt += 1
-  }
-//  var f_cnt = 0 // rob fflags port index
-  for (eu <- int_exe_units) {
-    val resp   = eu.io_alu_resp.get
-    val wb_uop = resp.bits.uop
-    val data   = resp.bits.data
-
-    // For ALUs, delay the rob wakeup a cycle, since the branch broadcast happens later
-    rob.io.wb_resps(cnt).valid := RegNext(resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo) && !IsKilledByBranch(brupdate, resp))
-    rob.io.wb_resps(cnt).bits  := RegNext(resp.bits)
-
-    cnt += 1
-  }
-
-
-  require(cnt == numIrfWritePorts)
+  var cnt = numIrfWritePorts
   for (wakeup <- fp_pipeline.io.wakeups) {
     rob.io.wb_resps(cnt) := wakeup
     rob.io.wb_resps(cnt).bits.data := ieee(wakeup.bits.data)
