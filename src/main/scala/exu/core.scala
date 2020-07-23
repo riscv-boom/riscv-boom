@@ -146,7 +146,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
                            memWidth + intWidth,
                            numIrfReadPorts,
                            Seq.fill(memWidth) {1} ++ Seq.fill(intWidth) {2},
-                           numIrfWritePorts,
+                           coreWidth,
                            1,
                            xLen))
   val rob              = Module(new Rob(
@@ -158,7 +158,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val pred_wakeup  = Reg(Valid(new ExeUnitResp(1)))
   pred_wakeup.valid := false.B
   pred_wakeup.bits := DontCare
-  val int_bypasses  = Wire(Vec(numIrfWritePorts, Valid(new ExeUnitResp(xLen))))
+  val int_bypasses  = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
   val pred_bypass  = Wire(Valid(new ExeUnitResp(1)))
 
   //***********************************
@@ -357,7 +357,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     + "\n\n" + iregfile.toString + "\n\n"
     + BoomCoreStringPrefix(
         "Num Wakeup Ports      : " + numIntWakeups,
-        "Num Bypass Ports      : " + numIrfWritePorts) + "\n"
+        "Num Bypass Ports      : " + coreWidth) + "\n"
     + BoomCoreStringPrefix(
         "DCache Ways           : " + dcacheParams.nWays,
         "DCache Sets           : " + dcacheParams.nSets,
@@ -808,7 +808,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   for (i <- 0 until lsuWidth) {
     int_wakeups(wu_idx) := io.lsu.iresp(i)
     rob.io.wb_resps(wb_idx) := RegNext(UpdateBrMask(brupdate, io.lsu.iresp(i)))
-    int_bypasses(wb_idx)     := io.lsu.iresp(i)
     iregfile.io.write_ports(wb_idx) := WritePort(io.lsu.iresp(i), ipregSz, xLen, RT_FIX)
     wu_idx += 1
     wb_idx += 1
@@ -894,11 +893,11 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       !IsKilledByBranch(brupdate, arb.io.out.bits))
     rob.io.wb_resps(wb_idx).bits   := RegNext(arb.io.out.bits)
 
-    int_bypasses(wb_idx).valid := (
+    int_bypasses(i).valid := (
       arb.io.out.valid &&
       arb.io.out.bits.uop.dst_rtype === RT_FIX
     )
-    int_bypasses(wb_idx).bits := arb.io.out.bits
+    int_bypasses(i).bits := arb.io.out.bits
     iregfile.io.write_ports(wb_idx) := WritePort(arb.io.out, ipregSz, xLen, RT_FIX)
 
     if (unit.hasJmp) {
