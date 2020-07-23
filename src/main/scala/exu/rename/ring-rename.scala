@@ -27,7 +27,7 @@ class RingRenameIO(implicit p: Parameters) extends BoomBundle
   val ren_stalls = Output(Vec(coreWidth, Bool()))
 
   val dec_fire  = Input(Vec(coreWidth, Bool())) // will commit state updates
-  val dec_uops  = Input(Vec(coreWidth, new MicroOp()))
+  val dec_uops  = Input(Vec(coreWidth, new MicroOp))
 
   // physical specifiers available AND busy/ready status available.
   val ren2_mask = Output(Vec(coreWidth, Bool())) // mask of valid instructions
@@ -36,6 +36,7 @@ class RingRenameIO(implicit p: Parameters) extends BoomBundle
   // branch resolution (execute)
   val brupdate  = Input(new BrUpdateInfo)
   val kill      = Input(Bool())
+  val flashback = Input(Bool())
 
   val dis_fire  = Input(Vec(coreWidth, Bool()))
   val dis_ready = Input(Bool())
@@ -45,9 +46,7 @@ class RingRenameIO(implicit p: Parameters) extends BoomBundle
 
   // commit stage
   val com_valids = Input(Vec(coreWidth, Bool()))
-  val com_uops = Input(Vec(coreWidth, new MicroOp()))
-  val rbk_valids = Input(Vec(coreWidth, Bool()))
-  val rollback = Input(Bool())
+  val com_uops   = Input(Vec(coreWidth, new MicroOp))
 
   val debug_rob_empty = Input(Bool())
 }
@@ -129,9 +128,8 @@ class RingRename(implicit p: Parameters) extends BoomModule
   val ren2_alloc_reqs = Wire(Vec(coreWidth, Bool()))
   val ren2_br_tags    = Wire(Vec(coreWidth, Valid(UInt(brTagSz.W))))
 
-  // Commit/Rollback
+  // Commit
   val com_valids      = Wire(Vec(coreWidth, Bool()))
-  val rbk_valids      = Wire(Vec(coreWidth, Bool()))
 
   for (w <- 0 until coreWidth) {
     ren1_fire(w)          := io.dec_fire(w)
@@ -141,36 +139,31 @@ class RingRename(implicit p: Parameters) extends BoomModule
     ren2_br_tags(w).valid := ren2_fire(w) && ren2_uops(w).allocate_brtag
 
     com_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.com_valids(w)
-    rbk_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.rbk_valids(w)
     ren2_br_tags(w).bits  := ren2_uops(w).br_tag
   }
 
   //----------------------------------------------------------------------------------------------------
   // Map Table
 
-  // Maptable inputs.
-  val map_reqs   = Wire(Vec(coreWidth, new MapReq(lregSz)))
-  val remap_reqs = Wire(Vec(coreWidth, new RemapReq(lregSz, ipregSz)))
-
-  // Generate maptable requests.
-  for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops zip io.com_uops.reverse zipWithIndex) {
-    map_reqs(w).lrs1 := ren1.lrs1
-    map_reqs(w).lrs2 := ren1.lrs2
-    map_reqs(w).lrs3 := DontCare
-    map_reqs(w).ldst := ren1.ldst
-
-    remap_reqs(w).ldst := Mux(io.rollback, com.ldst      , ren2.ldst)
-    remap_reqs(w).pdst := Mux(io.rollback, com.stale_pdst, ren2.pdst)
-  }
-  ren2_alloc_reqs zip rbk_valids.reverse zip remap_reqs map {
-    case ((a,r),rr) => rr.valid := a || r}
-
   // Hook up inputs.
-  maptable.io.map_reqs    := map_reqs
-  maptable.io.remap_reqs  := remap_reqs
+  for (w <- 0 until coreWidth) {
+    maptable.io.map_reqs(w).lrs1 := ren1_uops(w).lrs1
+    maptable.io.map_reqs(w).lrs2 := ren1_uops(w).lrs2
+    maptable.io.map_reqs(w).lrs3 := ren1_uops(w).lrs3
+    maptable.io.map_reqs(w).ldst := ren1_uops(w).ldst
+
+    maptable.io.remap_reqs(w).bits.ldst := ren2_uops(w).ldst
+    maptable.io.remap_reqs(w).bits.pdst := ren2_uops(w).pdst
+    maptable.io.remap_reqs(w).valid     := ren2_alloc_reqs(w)
+
+    maptable.io.commit_reqs(w).bits.ldst := io.com_uops(w).ldst
+    maptable.io.commit_reqs(w).bits.pdst := io.com_uops(w).pdst
+    maptable.io.commit_reqs(w).valid     := com_valids(w)
+  }
+
   maptable.io.ren_br_tags := ren2_br_tags
   maptable.io.brupdate    := io.brupdate
-  maptable.io.rollback    := io.rollback
+  maptable.io.flashback   := io.flashback
 
   // Maptable outputs.
   for ((uop, w) <- ren1_uops.zipWithIndex) {
@@ -246,12 +239,15 @@ class RingRename(implicit p: Parameters) extends BoomModule
 
   for (c <- 0 until coreWidth) {
     for (w <- 0 until coreWidth) {
-      freelists(c).io.reqs(w)                := col_gnts(w)(c) && ren2_alloc_reqs(w)
-      freelists(c).io.dealloc_pregs(w).valid := io.com_uops(w).stale_col(c) && com_valids(w) || io.com_uops(w).column(c) && rbk_valids(w)
-      freelists(c).io.dealloc_pregs(w).bits  := Mux(io.rollback, io.com_uops(w).pdst, io.com_uops(w).stale_pdst)
+      freelists(c).io.reqs(w) := col_gnts(w)(c) && ren2_alloc_reqs(w)
+      freelists(c).io.stale_pdsts(w).valid := io.com_uops(w).stale_col(c) && com_valids(w)
+      freelists(c).io.stale_pdsts(w).bits  := io.com_uops(w).stale_pdst
+      freelists(c).io.com_pdsts  (w).valid := io.com_uops(w).pdst_col (c) && com_valids(w)
+      freelists(c).io.com_pdsts  (w).bits  := io.com_uops(w).pdst
     }
     freelists(c).io.ren_br_tags := ren2_br_tags
     freelists(c).io.brupdate    := io.brupdate
+    freelists(c).io.flashback   := io.flashback
   }
 
   // Freelist outputs.
@@ -263,7 +259,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
   assert (ren2_alloc_reqs zip ren2_uops map {case (r,u) => !r || u.pdst_spec =/= 0.U} reduce (_&&_),
            "[rename-stage] A uop is trying to allocate the zero physical register.")
 
-  assert (!io.debug_rob_empty ||
+  assert (!io.debug_rob_empty || io.flashback ||
           freelists.foldLeft(0.U) ((c,f) => c +& PopCount(f.io.debug_freelist)) >= (numIntPhysRegs - 31 - coreWidth).U,
           "[freelist] Leaking physical registers.")
 
