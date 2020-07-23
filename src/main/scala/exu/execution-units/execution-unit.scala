@@ -24,6 +24,7 @@ import freechips.rocketchip.config.{Parameters}
 import freechips.rocketchip.rocket.{BP, SFenceReq, CSR}
 import freechips.rocketchip.tile.{XLen, RoCCCoreIO}
 import freechips.rocketchip.tile
+import freechips.rocketchip.util._
 
 import FUConstants._
 import boom.common._
@@ -71,16 +72,74 @@ abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomM
     BoomCoreStringPrefix(s"===${name}ExeUnit") +
     fu_types.map { case (_, _, s) => BoomCoreStringPrefix(s" - ${s}") }.reduce(_+_)
   }
+
+  val io_iss_uop = IO(Input(Valid(new MicroOp)))
+  val rrd_uop = Reg(Valid(new MicroOp))
+  rrd_uop.valid := io_iss_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, io_iss_uop.bits)
+  rrd_uop.bits  := UpdateBrMask(io_brupdate, io_iss_uop.bits)
+  val exe_uop = Reg(Valid(new MicroOp))
+  exe_uop.valid := rrd_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, rrd_uop.bits)
+  exe_uop.bits  := UpdateBrMask(io_brupdate, rrd_uop.bits)
+}
+
+trait HasIrfReadPorts { this: ExecutionUnit =>
+  def nReaders: Int
+  val io_rrd_irf_reqs     = IO(Output(Vec(nReaders , Valid(UInt(maxPregSz.W)))))
+  val io_rrd_irf_resps    = IO(Input (Vec(nReaders , UInt(xLen.W))))
+  val io_rrd_irf_bypasses = IO(Input (Vec(coreWidth, Valid(new ExeUnitResp(xLen)))))
+
+  def rrd_bypass_hit(prs: UInt, rdata: UInt): (Bool, UInt) = {
+    val hits = io_rrd_irf_bypasses map { b => b.valid && prs === b.bits.uop.pdst }
+    (hits.reduce(_||_), Mux(hits.reduce(_||_), Mux1H(hits, io_rrd_irf_bypasses.map(_.bits.data)), rdata))
+  }
+}
+
+trait HasImmrfReadPort { this: ExecutionUnit =>
+  val io_rrd_immrf_req    = IO(Output(Valid(new ExeUnitResp(1))))
+  val io_rrd_immrf_resp   = IO(Input(UInt(xLen.W)))
+}
+
+trait HasPrfReadPort { this: ExecutionUnit =>
+  val io_rrd_prf_req    = IO(Output(Valid(UInt(log2Ceil(ftqSz).W))))
+  val io_rrd_prf_resp   = IO(Input(Bool()))
+  val io_rrd_prf_bypass = IO(Input(Valid(new ExeUnitResp(1))))
+}
+
+trait HasFrfReadPorts { this: ExecutionUnit =>
+  val io_rrd_frf_reqs  = IO(Output(Vec(3, Valid(UInt(maxPregSz.W)))))
+  val io_rrd_frf_resps = IO(Input (Vec(3, UInt((xLen+1).W))))
 }
 
 class MemExeUnit(
   val hasAGen          : Boolean       = false,
   val hasDGen          : Boolean       = false
-)(implicit p: Parameters) extends ExecutionUnit("Mem") {
-  val io_req = IO(Input(Valid(new FuncUnitReq(xLen))))
+)(implicit p: Parameters) extends ExecutionUnit("Mem")
+  with HasIrfReadPorts
+  with HasImmrfReadPort
+{
+  def nReaders = 1
+
+  io_rrd_irf_reqs(0).valid := rrd_uop.valid && rrd_uop.bits.lrs1_rtype === RT_FIX
+  io_rrd_irf_reqs(0).bits  := rrd_uop.bits.prs1
+  io_rrd_immrf_req.valid := (rrd_uop.valid &&
+    !rrd_uop.bits.fu_code_is(FU_DGEN) &&
+    !rrd_uop.bits.imm_sel.isOneOf(IS_N, IS_SH)
+  )
+  io_rrd_immrf_req.bits      := DontCare
+  io_rrd_immrf_req.bits.uop  := rrd_uop.bits
+
+
+  val exe_rs1_data = Reg(UInt(xLen.W))
+  val (_, rs1_data) = rrd_bypass_hit(rrd_uop.bits.prs1, io_rrd_irf_resps(0))
+  exe_rs1_data := Mux(rrd_uop.bits.lrs1_rtype === RT_ZERO, 0.U, rs1_data)
+
+  val exe_imm_data = RegNext(Mux(rrd_uop.bits.imm_sel === IS_SH,
+    Sext(rrd_uop.bits.pimm, xLen),
+    Sext(ImmGen(io_rrd_immrf_resp, rrd_uop.bits.imm_sel), xLen)
+  ))
 
   val io_agen = if (hasAGen) {
-    val loads_saturating = io_req.valid && io_req.bits.uop.uses_ldq && io_req.bits.uop.fu_code_is(FU_AGEN)
+    val loads_saturating = exe_uop.valid && exe_uop.bits.uses_ldq && exe_uop.bits.fu_code_is(FU_AGEN)
     val saturating_loads_counter = RegInit(0.U(5.W))
     when (loads_saturating) { saturating_loads_counter := saturating_loads_counter + 1.U }
       .otherwise { saturating_loads_counter := 0.U }
@@ -88,30 +147,30 @@ class MemExeUnit(
     val load_ready = !pause_mem
     fu_types += ((FU_AGEN, load_ready, "AGen"))
 
-    val sum = (io_req.bits.rs1_data.asSInt + io_req.bits.imm_data.asSInt).asUInt
+    val sum = (exe_rs1_data.asSInt + exe_imm_data.asSInt).asUInt
     val ea_sign = Mux(sum(vaddrBits-1), ~sum(63,vaddrBits) === 0.U,
                                          sum(63,vaddrBits) =/= 0.U)
     val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).asUInt
 
     val agen = IO(Output(Valid(new MemGen)))
-    agen.valid     := io_req.valid && io_req.bits.uop.fu_code_is(FU_AGEN)
-    agen.bits.uop  := io_req.bits.uop
+    agen.valid     := exe_uop.valid && exe_uop.bits.fu_code_is(FU_AGEN)
+    agen.bits.uop  := exe_uop.bits
     agen.bits.data := Sext(effective_address, xLen)
     Some(agen)
   } else {
-    assert(!(io_req.valid && io_req.bits.uop.fu_code_is(FU_AGEN)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_AGEN)))
     None
   }
 
   val io_dgen = if (hasDGen) {
     fu_types += ((FU_DGEN, true.B, "DGen"))
     val dgen = IO(Output(Valid(new MemGen)))
-    dgen.valid     := io_req.valid && io_req.bits.uop.fu_code_is(FU_DGEN)
-    dgen.bits.data := io_req.bits.rs1_data
-    dgen.bits.uop  := io_req.bits.uop
+    dgen.valid     := exe_uop.valid && exe_uop.bits.fu_code_is(FU_DGEN)
+    dgen.bits.data := exe_rs1_data
+    dgen.bits.uop  := exe_uop.bits
     Some(dgen)
   } else {
-    assert(!(io_req.valid && io_req.bits.uop.fu_code_is(FU_DGEN)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_DGEN)))
     None
   }
 
@@ -127,24 +186,59 @@ class IntExeUnit(
   val hasDiv           : Boolean       = false,
   val hasIfpu          : Boolean       = false,
   val hasRocc          : Boolean       = false
-)(implicit p: Parameters) extends ExecutionUnit("Int") {
-  val alwaysBypassable = hasAlu && !hasMul
+)(implicit p: Parameters) extends ExecutionUnit("Int")
+  with HasIrfReadPorts
+  with HasPrfReadPort
+  with HasImmrfReadPort
+{
+  def nReaders = 2
+  io_rrd_irf_reqs(0).valid := rrd_uop.valid && rrd_uop.bits.lrs1_rtype === RT_FIX
+  io_rrd_irf_reqs(0).bits  := rrd_uop.bits.prs1
+  io_rrd_irf_reqs(1).valid := rrd_uop.valid && rrd_uop.bits.lrs2_rtype === RT_FIX
+  io_rrd_irf_reqs(1).bits  := rrd_uop.bits.prs2
+  io_rrd_immrf_req.valid := (rrd_uop.valid && !rrd_uop.bits.imm_sel.isOneOf(IS_N, IS_SH))
+  io_rrd_immrf_req.bits      := DontCare
+  io_rrd_immrf_req.bits.uop  := rrd_uop.bits
 
-  val io_req = IO(Input(Valid(new FuncUnitReq(xLen))))
+  io_rrd_prf_req.valid := rrd_uop.valid
+  io_rrd_prf_req.bits  := rrd_uop.bits.ppred
 
+  val exe_rs1_data = Reg(UInt(xLen.W))
+  val exe_rs2_data = Reg(UInt(xLen.W))
+  val (_, rs1_data) = rrd_bypass_hit(rrd_uop.bits.prs1, io_rrd_irf_resps(0))
+  val (_, rs2_data) = rrd_bypass_hit(rrd_uop.bits.prs2, io_rrd_irf_resps(1))
+  exe_rs1_data := Mux(rrd_uop.bits.lrs1_rtype === RT_ZERO, 0.U, rs1_data)
+  exe_rs2_data := Mux(rrd_uop.bits.lrs2_rtype === RT_ZERO, 0.U, rs2_data)
 
-  val (io_alu_resp, io_brinfo, io_get_ftq_pc, io_csr, io_sfence) = if (hasAlu) {
+  val exe_imm_data = RegNext(Mux(rrd_uop.bits.imm_sel === IS_SH,
+    Sext(rrd_uop.bits.pimm, xLen),
+    Sext(ImmGen(io_rrd_immrf_resp, rrd_uop.bits.imm_sel), xLen)
+  ))
+
+  val exe_pred_data = Reg(Bool())
+  exe_pred_data := Mux(io_rrd_prf_bypass.valid && io_rrd_prf_bypass.bits.uop.pdst === rrd_uop.bits.ppred,
+    io_rrd_prf_bypass.bits.data, io_rrd_prf_resp)
+
+  val exe_int_req = Wire(new FuncUnitReq(xLen))
+  exe_int_req.uop := exe_uop.bits
+  exe_int_req.rs1_data := exe_rs1_data
+  exe_int_req.rs2_data := exe_rs2_data
+  exe_int_req.rs3_data := DontCare
+  exe_int_req.imm_data := exe_imm_data
+  exe_int_req.pred_data := exe_pred_data
+
+  val (io_alu_resp, io_brinfo, io_get_ftq_pc, io_csr, io_sfence, io_bypass, io_pred_bypass) = if (hasAlu) {
     val alu_ready = WireInit(true.B)
     fu_types += ((FU_ALU, alu_ready, "ALU"))
 
     val alu = Module(new ALUUnit(isJmpUnit = hasJmp,
                                  dataWidth = xLen))
-    val req_valid = (io_req.bits.uop.fu_code_is(FU_ALU) ||
-      (if (hasJmp) io_req.bits.uop.fu_code_is(FU_JMP) else false.B) ||
-      (if (hasCSR) io_req.bits.uop.fu_code_is(FU_CSR) else false.B)
+    val req_valid = (exe_uop.bits.fu_code_is(FU_ALU) ||
+      (if (hasJmp) exe_uop.bits.fu_code_is(FU_JMP) else false.B) ||
+      (if (hasCSR) exe_uop.bits.fu_code_is(FU_CSR) else false.B)
     )
-    alu.io.req.valid  := io_req.valid && req_valid && !io_req.bits.uop.is_rocc
-    alu.io.req.bits   := io_req.bits
+    alu.io.req.valid  := exe_uop.valid && req_valid && !exe_uop.bits.is_rocc
+    alu.io.req.bits   := exe_int_req
     alu.io.resp.ready := true.B
     alu.io.brupdate   := io_brupdate
     alu.io.kill       := io_kill
@@ -156,13 +250,17 @@ class IntExeUnit(
     val brinfo = IO(Output(Valid(new BrResolutionInfo)))
     brinfo := alu.io.brinfo
 
-    val get_ftq_pc = if (hasJmp) {
+    val (get_ftq_pc, pred_bypass) = if (hasJmp) {
       fu_types += ((FU_JMP, alu_ready, "Jmp"))
       val g = IO(Flipped(new GetPCFromFtqIO))
       alu.io.get_ftq_pc <> g
-      Some(g)
+
+      val pred = IO(Output(Valid(new ExeUnitResp(1))))
+      pred.valid := alu.io.resp.valid && alu.io.resp.bits.uop.is_sfb_br
+      pred.bits  := alu.io.resp.bits
+      (Some(g), Some(pred))
     } else {
-      None
+      (None, None)
     }
 
     if (hasMul) {
@@ -170,8 +268,8 @@ class IntExeUnit(
 
       val imul = Module(new PipelinedMulUnit(imulLatency, xLen))
       require(imulLatency > 2)
-      imul.io.req.valid  := io_req.valid && io_req.bits.uop.fu_code_is(FU_MUL)
-      imul.io.req.bits   := io_req.bits
+      imul.io.req.valid  := exe_uop.valid && exe_uop.bits.fu_code_is(FU_MUL)
+      imul.io.req.bits   := exe_int_req
       imul.io.brupdate   := io_brupdate
       imul.io.kill       := io_kill
       imul.io.resp.ready := true.B
@@ -187,42 +285,49 @@ class IntExeUnit(
         assert(!(alu.io.resp.valid && !alu.io.resp.bits.uop.fu_code_is(FU_CSR)))
       }
     } else {
-      assert(!(io_req.valid && io_req.bits.uop.fu_code_is(FU_MUL)))
+      assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_MUL)))
     }
 
     val (csr, sfence) = if (hasCSR) {
       fu_types += ((FU_CSR, true.B, "CSR"))
       val c = IO(Output(Valid(new CSRResp)))
-      c.valid     := RegNext(alu.io.resp.valid && io_req.bits.uop.csr_cmd =/= CSR.N)
+      c.valid     := RegNext(alu.io.resp.valid && exe_uop.bits.csr_cmd =/= CSR.N)
       c.bits.uop  := RegNext(alu.io.resp.bits.uop)
       c.bits.data := RegNext(alu.io.resp.bits.data)
-      c.bits.addr := RegNext(io_req.bits.imm_data)
+      c.bits.addr := RegNext(exe_imm_data)
 
       val s = IO(Valid(new SFenceReq))
-      s.valid    := RegNext(io_req.valid && io_req.bits.uop.is_sfence)
-      s.bits.rs1 := RegNext(io_req.bits.uop.mem_size(0))
-      s.bits.rs2 := RegNext(io_req.bits.uop.mem_size(1))
-      s.bits.addr := RegNext(io_req.bits.rs1_data)
-      s.bits.asid := RegNext(io_req.bits.rs2_data)
+      s.valid    := RegNext(exe_uop.valid && exe_uop.bits.is_sfence)
+      s.bits.rs1 := RegNext(exe_uop.bits.mem_size(0))
+      s.bits.rs2 := RegNext(exe_uop.bits.mem_size(1))
+      s.bits.addr := RegNext(exe_rs1_data)
+      s.bits.asid := RegNext(exe_rs2_data)
       (Some(c), Some(s))
     } else {
-      assert(!(io_req.valid && io_req.bits.uop.fu_code_is(FU_CSR)))
-      assert(!(io_req.valid && io_req.bits.uop.is_sfence))
+      assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_CSR)))
+      assert(!(exe_uop.valid && exe_uop.bits.is_sfence))
       (None, None)
     }
-    (Some(alu_resp), Some(brinfo), get_ftq_pc, csr, sfence)
+
+    val bypass = IO(Valid(new ExeUnitResp(xLen)))
+    bypass.valid := (alu_resp.valid &&
+      alu_resp.bits.uop.bypassable &&
+      alu_resp.bits.uop.rf_wen &&
+      alu_resp.bits.uop.dst_rtype === RT_FIX)
+    bypass.bits := alu_resp.bits
+    (Some(alu_resp), Some(brinfo), get_ftq_pc, csr, sfence, Some(bypass), pred_bypass)
   } else {
-    assert(!(io_req.valid && io_req.bits.uop.fu_code_is(FU_ALU)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_ALU)))
     require(!hasJmp && !hasCSR)
-    (None, None, None, None, None)
+    (None, None, None, None, None, None, None)
   }
 
   val (io_rocc_resp, io_rocc_core) = if (hasRocc) {
     val rocc_core = IO(new RoCCShimCoreIO)
-    val rocc_resp = IO(Output(Valid(new ExeUnitResp(xLen))))
+    val rocc_resp = IO(Decoupled(new ExeUnitResp(xLen)))
     val rocc = Module(new RoCCShim)
-    rocc.io.req.valid         := io_req.valid && io_req.bits.uop.is_rocc
-    rocc.io.req.bits          := io_req.bits
+    rocc.io.req.valid         := exe_uop.valid && exe_uop.bits.is_rocc
+    rocc.io.req.bits          := exe_int_req
     rocc.io.brupdate          := io_brupdate // We should assert on this somewhere
     rocc.io.status            := io_status
     rocc.io.exception         := io_kill
@@ -231,7 +336,7 @@ class IntExeUnit(
     rocc_resp <> rocc.io.resp
     (Some(rocc_resp), Some(rocc_core))
   } else {
-    assert(!(io_req.valid && io_req.bits.uop.is_rocc))
+    assert(!(exe_uop.valid && exe_uop.bits.is_rocc))
     (None, None)
   }
 
@@ -240,8 +345,8 @@ class IntExeUnit(
     fu_types += ((FU_I2F, ifpu_ready, "IFPU"))
 
     val ifpu = Module(new IntToFPUnit(latency=intToFpLatency))
-    ifpu.io.req.valid  := io_req.valid && io_req.bits.uop.fu_code_is(FU_I2F)
-    ifpu.io.req.bits   := io_req.bits
+    ifpu.io.req.valid  := exe_uop.valid && exe_uop.bits.fu_code_is(FU_I2F)
+    ifpu.io.req.bits   := exe_int_req
     ifpu.io.fcsr_rm    := io_fcsr_rm
     ifpu.io.brupdate   := io_brupdate
     ifpu.io.kill       := io_kill
@@ -259,7 +364,7 @@ class IntExeUnit(
     ifpu_resp <> queue.io.deq
     (Some(ifpu_resp))
   } else {
-    assert(!(io_req.valid && io_req.bits.uop.fu_code_is(FU_I2F)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_I2F)))
     (None)
   }
 
@@ -269,8 +374,8 @@ class IntExeUnit(
 
     val divq = Module(new BranchKillableQueue(new FuncUnitReq(xLen), 3))
     div_ready := divq.io.empty
-    divq.io.enq.valid := (io_req.valid && io_req.bits.uop.fu_code_is(FU_DIV))
-    divq.io.enq.bits  := io_req.bits
+    divq.io.enq.valid := (exe_uop.valid && exe_uop.bits.fu_code_is(FU_DIV))
+    divq.io.enq.bits  := exe_int_req
     divq.io.brupdate  := io_brupdate
     divq.io.flush     := io_kill
     assert(!(divq.io.enq.valid && !divq.io.enq.ready))
@@ -284,7 +389,7 @@ class IntExeUnit(
     div_resp <> div.io.resp
     Some(div_resp)
   } else {
-    assert(!(io_req.valid && io_req.bits.uop.fu_code_is(FU_DIV)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_DIV)))
     (None)
   }
 
@@ -293,15 +398,35 @@ class IntExeUnit(
 }
 
 class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(implicit p: Parameters)
-    extends ExecutionUnit("FP") with tile.HasFPUParameters
+  extends ExecutionUnit("FP")
+  with tile.HasFPUParameters
+  with HasFrfReadPorts
 {
-  val io_req     = IO(Input(Valid(new FuncUnitReq(xLen+1))))
+  io_rrd_frf_reqs(0).valid := rrd_uop.valid && rrd_uop.bits.lrs1_rtype === RT_FLT
+  io_rrd_frf_reqs(0).bits  := rrd_uop.bits.prs1
+  io_rrd_frf_reqs(1).valid := rrd_uop.valid && rrd_uop.bits.lrs2_rtype === RT_FLT
+  io_rrd_frf_reqs(1).bits  := rrd_uop.bits.prs2
+  io_rrd_frf_reqs(2).valid := rrd_uop.valid && rrd_uop.bits.frs3_en
+  io_rrd_frf_reqs(2).bits  := rrd_uop.bits.prs3
+
+  val exe_rs1_data = RegNext(io_rrd_frf_resps(0))
+  val exe_rs2_data = RegNext(io_rrd_frf_resps(1))
+  val exe_rs3_data = RegNext(io_rrd_frf_resps(2))
+
+  val exe_fp_req = Wire(new FuncUnitReq(xLen+1))
+  exe_fp_req.uop := exe_uop.bits
+  exe_fp_req.rs1_data := exe_rs1_data
+  exe_fp_req.rs2_data := exe_rs2_data
+  exe_fp_req.rs3_data := exe_rs3_data
+  exe_fp_req.pred_data := DontCare
+  exe_fp_req.imm_data := DontCare
+
   val fpu = Module(new FPUUnit)
   fu_types += ((FU_FPU, true.B, "FPU"))
-  fpu.io.req.valid := io_req.valid && (
-    io_req.bits.uop.fu_code_is(FU_FPU) || (if (hasFpiu) io_req.bits.uop.fu_code_is(FU_F2I) else false.B)
+  fpu.io.req.valid := exe_uop.valid && (
+    exe_uop.bits.fu_code_is(FU_FPU) || (if (hasFpiu) exe_uop.bits.fu_code_is(FU_F2I) else false.B)
   )
-  fpu.io.req.bits := io_req.bits
+  fpu.io.req.bits := exe_fp_req
   fpu.io.fcsr_rm  := io_fcsr_rm
   fpu.io.brupdate := io_brupdate
   fpu.io.kill     := io_kill
@@ -317,8 +442,8 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
 
     val divq = Module(new BranchKillableQueue(new FuncUnitReq(xLen+1), 3))
     fdivsqrt_ready    := divq.io.empty
-    divq.io.enq.valid := (io_req.valid && io_req.bits.uop.fu_code_is(FU_FDV))
-    divq.io.enq.bits  := io_req.bits
+    divq.io.enq.valid := (exe_uop.valid && exe_uop.bits.fu_code_is(FU_FDV))
+    divq.io.enq.bits  := exe_fp_req
     divq.io.brupdate  := io_brupdate
     divq.io.flush     := io_kill
 
@@ -332,7 +457,7 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
     fdiv_resp <> fdivsqrt.io.resp
     Some(fdiv_resp)
   } else {
-    assert(!(io_req.valid && io_req.bits.uop.fu_code_is(FU_FDV)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_FDV)))
     None
   }
 
@@ -355,15 +480,14 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
     fpiu_resp <> queue.io.deq
 
     val dgen = IO(Valid(new MemGen))
-    dgen.valid     := RegNext(io_req.valid && io_req.bits.uop.uses_stq && !IsKilledByBranch(io_brupdate, io_req))
-    dgen.bits.uop  := RegNext(io_req.bits.uop)
-    dgen.bits.data := RegNext(ieee(io_req.bits.rs2_data))
+    dgen.valid     := RegNext(exe_uop.valid && exe_uop.bits.uses_stq && !IsKilledByBranch(io_brupdate, exe_uop.bits))
+    dgen.bits.uop  := RegNext(exe_uop.bits)
+    dgen.bits.data := RegNext(ieee(exe_rs2_data))
     (Some(fpiu_resp), Some(dgen))
   } else {
-    assert(!(io_req.valid && io_req.bits.uop.fu_code_is(FU_F2I)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_F2I)))
     (None, None)
   }
 
   io_ready_fu_types := fu_types.map { case (code, ready, _) => Mux(ready, code, 0.U(FUC_SZ.W)) }.reduce(_|_)
 }
-

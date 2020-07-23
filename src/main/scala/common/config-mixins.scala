@@ -199,7 +199,6 @@ class WithNLargeBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends 
               numStqEntries = 24,
               maxBrCount = 16,
               numFetchBufferEntries = 24,
-              enableSFBOpt = true,
               ftq = FtqParameters(nEntries=32),
               fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
             ),
@@ -246,7 +245,6 @@ class WithNMegaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
               maxBrCount = 20,
               numFetchBufferEntries = 32,
               enablePrefetching = true,
-              enableSFBOpt = true,
               numDCacheBanks = 4,
               ftq = FtqParameters(nEntries=40),
               fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
@@ -293,7 +291,6 @@ class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) ex
               maxBrCount = 20,
               numFetchBufferEntries = 32,
               enablePrefetching = true,
-              enableSFBOpt = true,
               numDCacheBanks = 4,
               ftq = FtqParameters(nEntries=40),
               fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
@@ -344,7 +341,6 @@ class WithNGigaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
               maxBrCount = 20,
               numFetchBufferEntries = 32,
               enablePrefetching = true,
-              enableSFBOpt = true,
               numDCacheBanks = 1,
               ftq = FtqParameters(nEntries=40),
               fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))

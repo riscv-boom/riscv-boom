@@ -123,7 +123,7 @@ class RegisterFileSynthesizable(
   val read_data = Wire(Vec(numReadPorts, UInt(registerWidth.W)))
 
   // Register the read port addresses to give a full cycle to the RegisterRead Stage (if desired).
-  val read_addrs = io.read_ports.map(p => RegNext(p.addr))
+  val read_addrs = io.read_ports.map(p => p.addr)
 
   for (i <- 0 until numReadPorts) {
     read_data(i) := regfile(read_addrs(i))

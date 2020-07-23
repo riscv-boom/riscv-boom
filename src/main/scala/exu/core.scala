@@ -132,34 +132,26 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
                              xLen))
   val pregfile         = Module(new RegisterFileSynthesizable(
                             ftqSz,
-                            memWidth + intWidth,
+                            intWidth,
                             1,
                             1))
-  pregfile.io := DontCare // Only use the IO if enableSFBOpt
   val immregfile       = Module(new RegisterFileSynthesizable(
                             numImmPhysRegs,
                             memWidth + intWidth,
                             coreWidth,
                             LONGEST_IMM_SZ))
 
-  val iregister_read   = Module(new RegisterRead(
-                           memWidth + intWidth,
-                           numIrfReadPorts,
-                           Seq.fill(memWidth) {1} ++ Seq.fill(intWidth) {2},
-                           coreWidth,
-                           1,
-                           xLen))
   val rob              = Module(new Rob(
                            numIrfWritePorts + numFpWakeupPorts,
                            usingTrace
   ))
   // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
   val int_wakeups  = Wire(Vec(numIntWakeups, Valid(new ExeUnitResp(xLen))))
-  val pred_wakeup  = Reg(Valid(new ExeUnitResp(1)))
+  val pred_wakeup  = Wire(Valid(new ExeUnitResp(1)))
   pred_wakeup.valid := false.B
   pred_wakeup.bits := DontCare
   val int_bypasses  = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
-  val pred_bypass  = Wire(Valid(new ExeUnitResp(1)))
+  val pred_bypass   = Wire(Valid(new ExeUnitResp(1)))
 
   //***********************************
   // Pipeline State Registers and Wires
@@ -637,10 +629,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   for (w <- 0 until coreWidth) {
     val i_uop     = rename_stage.io.ren2_uops(w)
     val f_uop     = fp_rename_stage.io.ren2_uops(w)
-    val p_uop     = if (enableSFBOpt) pred_rename_stage.io.ren2_uops(w) else NullMicroOp
+    val p_uop     = pred_rename_stage.io.ren2_uops(w)
     val imm_uop   = imm_rename_stage.io.ren2_uops(w)
     val f_stall   = fp_rename_stage.io.ren_stalls(w)
-    val p_stall   = if (enableSFBOpt) pred_rename_stage.io.ren_stalls(w) else false.B
+    val p_stall   = pred_rename_stage.io.ren_stalls(w)
     val imm_stall = imm_rename_stage.io.ren_stalls(w)
 
     // lrs1 can "pass through" to prs1. Used solely to index the csr file.
@@ -833,6 +825,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       (if (sharesCSR) 1 else 0) +
       (if (sharesRoCC) 1 else 0)))
 
+    int_bypasses(i) := unit.io_bypass.get
+
     var arb_idx = 1
     arb.io.in(0).valid := unit.io_alu_resp.get.valid
     arb.io.in(0).bits  := unit.io_alu_resp.get.bits
@@ -893,16 +887,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       !IsKilledByBranch(brupdate, arb.io.out.bits))
     rob.io.wb_resps(wb_idx).bits   := RegNext(arb.io.out.bits)
 
-    int_bypasses(i).valid := (
-      arb.io.out.valid &&
-      arb.io.out.bits.uop.dst_rtype === RT_FIX
-    )
-    int_bypasses(i).bits := arb.io.out.bits
     iregfile.io.write_ports(wb_idx) := WritePort(arb.io.out, ipregSz, xLen, RT_FIX)
 
     if (unit.hasJmp) {
-      pred_bypass.valid := arb.io.out.valid && arb.io.out.bits.uop.is_sfb_br
-      pred_bypass.bits  := arb.io.out.bits
+      pred_bypass := unit.io_pred_bypass.get
       pregfile.io.write_ports(0).valid     := arb.io.out.valid && arb.io.out.bits.uop.is_sfb_br
       pregfile.io.write_ports(0).bits.addr := arb.io.out.bits.uop.pdst
       pregfile.io.write_ports(0).bits.data := arb.io.out.bits.data
@@ -935,12 +923,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     }
   }
 
-  if (enableSFBOpt) {
-    pred_rename_stage.io.wakeups(0) := pred_wakeup
-  } else {
-    pred_rename_stage.io.wakeups := DontCare
-  }
-  imm_rename_stage.io.wakeups := iregister_read.io.imm_wakeups
+  pred_rename_stage.io.wakeups(0) := pred_wakeup
+  imm_rename_stage.io.wakeups := (mem_exe_units ++ int_exe_units).map(_.io_rrd_immrf_req)
 
   mem_iss_unit.io.fu_types := mem_exe_units.map(_.io_ready_fu_types)
   int_iss_unit.io.fu_types := (0 until intWidth) map {w => int_exe_units(w).io_ready_fu_types & ~int_exe_block_fu_types(w)}
@@ -960,6 +944,12 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   mem_iss_unit.io.wakeup_ports := int_wakeups
   int_iss_unit.io.wakeup_ports := int_wakeups
 
+
+  mem_iss_unit.io.iss_uops zip mem_exe_units map { case (i, u) => u.io_iss_uop := i }
+  int_iss_unit.io.iss_uops zip int_exe_units map { case (i, u) => u.io_iss_uop := i }
+
+
+
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // **** Register Read Stage ****
@@ -967,19 +957,26 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   // Register Read <- Issue (rrd <- iss)
-  iregister_read.io.rf_read_ports <> iregfile.io.read_ports
-  iregister_read.io.prf_read_ports := DontCare
-  if (enableSFBOpt) {
-    iregister_read.io.prf_read_ports <> pregfile.io.read_ports
+  var rd_idx = 0
+  for ((unit, w) <- (mem_exe_units ++ int_exe_units) zipWithIndex) {
+    for (i <- 0 until unit.nReaders) {
+      iregfile.io.read_ports(rd_idx).addr := unit.io_rrd_irf_reqs(i).bits
+      unit.io_rrd_irf_resps(i) := iregfile.io.read_ports(rd_idx).data
+      rd_idx += 1
+    }
+    immregfile.io.read_ports(w).addr := unit.io_rrd_immrf_req.bits.uop.pimm
+    unit.io_rrd_immrf_resp := immregfile.io.read_ports(w).data
+
+    unit.io_rrd_irf_bypasses := int_bypasses
   }
-  iregister_read.io.immrf_read_ports <> immregfile.io.read_ports
-
-  iregister_read.io.iss_uops := mem_iss_unit.io.iss_uops ++ int_iss_unit.io.iss_uops
-  iregister_read.io.brupdate := brupdate
-  iregister_read.io.kill   := RegNext(rob.io.flush.valid)
-
-  iregister_read.io.bypass := int_bypasses
-  iregister_read.io.pred_bypass := Seq(pred_bypass)
+  require (rd_idx == numIrfReadPorts)
+  for ((unit, w) <- int_exe_units.zipWithIndex) {
+    unit match { case u: HasPrfReadPort =>
+      pregfile.io.read_ports(w).addr := u.io_rrd_prf_req.bits
+      u.io_rrd_prf_resp := pregfile.io.read_ports(w).data
+      u.io_rrd_prf_bypass := pred_bypass
+    }
+  }
 
   //-------------------------------------------------------------
   // Privileged Co-processor 0 Register File
@@ -1056,18 +1053,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  var read_idx = 0
-  for (w <- 0 until mem_exe_units.length) {
-    val exe_unit = mem_exe_units(w)
-    exe_unit.io_req <> iregister_read.io.exe_reqs(read_idx)
-    exe_unit.io_req.bits.rs2_data := 0.U
-    read_idx += 1
-  }
-  for (w <- 0 until int_exe_units.length) {
-    val exe_unit = int_exe_units(w)
-    exe_unit.io_req <> iregister_read.io.exe_reqs(read_idx)
-    read_idx += 1
-  }
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------

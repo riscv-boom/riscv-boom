@@ -74,13 +74,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
                          numFrfWritePorts,
                          fLen+1
                          ))
-  val fregister_read = Module(new RegisterRead(
-                         issue_unit.issueWidth,
-                         numFrfReadPorts,
-                         exe_units.map(x => 3),
-                         0, // No bypass for FP
-                         0,
-                         fLen+1))
 
   //*************************************************************
   // Issue window logic
@@ -127,19 +120,22 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   issue_unit.io.pred_wakeup_port.valid := false.B
   issue_unit.io.pred_wakeup_port.bits := DontCare
 
+
+  issue_unit.io.iss_uops zip exe_units map { case (i, u) => u.io_iss_uop := i }
+
   //-------------------------------------------------------------
   // **** Register Read Stage ****
   //-------------------------------------------------------------
 
-  // Register Read <- Issue (rrd <- iss)
-  fregister_read.io.rf_read_ports <> fregfile.io.read_ports
-  fregister_read.io.prf_read_ports map { port => port.data := false.B }
-  fregister_read.io.immrf_read_ports map { port => port.data := 0.U }
+  var rd_idx = 0
+  for (unit <- exe_units) {
+    for (i <- 0 until 3) {
+      fregfile.io.read_ports(rd_idx).addr := unit.io_rrd_frf_reqs(i).bits
+      unit.io_rrd_frf_resps(i) := fregfile.io.read_ports(rd_idx).data
+      rd_idx += 1
+    }
+  }
 
-  fregister_read.io.iss_uops := iss_uops
-
-  fregister_read.io.brupdate := io.brupdate
-  fregister_read.io.kill := io.flush_pipeline
 
   //-------------------------------------------------------------
   // **** Execute Stage ****
@@ -147,9 +143,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   exe_units.map(_.io_brupdate := io.brupdate)
 
-  for ((ex,w) <- exe_units.zipWithIndex) {
-    ex.io_req <> fregister_read.io.exe_reqs(w)
-  }
+
 
   //-------------------------------------------------------------
   // **** Writeback Stage ****

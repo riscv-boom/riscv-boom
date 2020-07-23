@@ -43,7 +43,7 @@ case class BoomCoreParams(
   enablePrefetching: Boolean = false,
   enableFastLoadUse: Boolean = true,
   enableFastPNR: Boolean = false,
-  enableSFBOpt: Boolean = false,
+  enableSFBOpt: Boolean = true,
   enableGHistStallRepair: Boolean = true,
   enableBTBFastRepair: Boolean = true,
   enableLoadToStoreForwarding: Boolean = true,
