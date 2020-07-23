@@ -77,7 +77,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val int_exe_units: Seq[IntExeUnit] = (0 until intWidth) map { w =>
     def last = w == intWidth - 1
     Module(new IntExeUnit(
-      hasAlu         = true,
       hasJmp         = last,
       hasCSR         = last,
       hasRocc        = last && usingRoCC,
@@ -193,8 +192,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   brupdate.b2 := b2
 
   for ((b, a) <- brinfos zip int_exe_units) {
-    b.bits := UpdateBrMask(brupdate, a.io_brinfo.get.bits)
-    b.valid := a.io_brinfo.get.valid && !rob.io.flush.valid && !IsKilledByBranch(brupdate, a.io_brinfo.get.bits)
+    b.bits := UpdateBrMask(brupdate, a.io_brinfo.bits)
+    b.valid := a.io_brinfo.valid && !rob.io.flush.valid && !IsKilledByBranch(brupdate, a.io_brinfo.bits)
   }
   b1.resolve_mask := brinfos.map(x => x.valid << x.bits.uop.br_tag).reduce(_|_)
   b1.mispredict_mask := brinfos.map(x => (x.valid && x.bits.mispredict) << x.bits.uop.br_tag).reduce(_|_)
@@ -210,7 +209,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   b2.taken       := oldest_mispredict.bits.taken
   b2.pc_sel      := oldest_mispredict.bits.pc_sel
   b2.uop         := UpdateBrMask(brupdate, oldest_mispredict.bits.uop)
-  b2.jalr_target := RegNext(jmp_unit.io_brinfo.get.bits.jalr_target)
+  b2.jalr_target := RegNext(jmp_unit.io_brinfo.bits.jalr_target)
   b2.target_offset := oldest_mispredict.bits.target_offset
 
   val oldest_mispredict_ftq_idx = oldest_mispredict.bits.uop.ftq_idx
@@ -396,14 +395,14 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
     val new_ghist = WireInit((0.U).asTypeOf(new GlobalHistory))
     new_ghist.current_saw_branch_not_taken := true.B
-    new_ghist.ras_idx := io.ifu.get_pc(0).entry.ras_idx
+    new_ghist.ras_idx := io.ifu.get_ftq_resp(0).entry.ras_idx
     io.ifu.redirect_ghist := new_ghist
     when (FlushTypes.useCsrEvec(flush_typ)) {
       io.ifu.redirect_pc  := Mux(flush_typ === FlushTypes.eret,
                                  ShiftRegister(csr.io.evec, 3),
                                  csr.io.evec)
     } .otherwise {
-      val flush_pc = (AlignPCToBoundary(io.ifu.get_pc(0).pc, icBlockBytes)
+      val flush_pc = (AlignPCToBoundary(io.ifu.get_ftq_resp(0).pc, icBlockBytes)
                       + RegNext(rob.io.flush.bits.pc_lob)
                       - Mux(RegNext(rob.io.flush.bits.edge_inst), 2.U, 0.U))
       val flush_pc_next = flush_pc + Mux(RegNext(rob.io.flush.bits.is_rvc), 2.U, 4.U)
@@ -413,7 +412,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     }
     io.ifu.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
   } .elsewhen (brupdate.b2.mispredict && !RegNext(rob.io.flush.valid)) {
-    val block_pc = AlignPCToBoundary(io.ifu.get_pc(1).pc, icBlockBytes)
+    val block_pc = AlignPCToBoundary(io.ifu.get_ftq_resp(1).pc, icBlockBytes)
     val uop_maybe_pc = block_pc | brupdate.b2.uop.pc_lob
     val npc = uop_maybe_pc + Mux(brupdate.b2.uop.is_rvc || brupdate.b2.uop.edge_inst, 2.U, 4.U)
     val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
@@ -428,17 +427,17 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     val use_same_ghist = (brupdate.b2.cfi_type === CFI_BR &&
                           !brupdate.b2.taken &&
                           bankAlign(block_pc) === bankAlign(npc))
-    val ftq_entry = io.ifu.get_pc(1).entry
+    val ftq_entry = io.ifu.get_ftq_resp(1).entry
     val cfi_idx = (brupdate.b2.uop.pc_lob ^
       Mux(ftq_entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
-    val ftq_ghist = io.ifu.get_pc(1).ghist
+    val ftq_ghist = io.ifu.get_ftq_resp(1).ghist
     val next_ghist = ftq_ghist.update(
       ftq_entry.br_mask.asUInt,
       brupdate.b2.taken,
       brupdate.b2.cfi_type === CFI_BR,
       cfi_idx,
       true.B,
-      io.ifu.get_pc(1).pc,
+      io.ifu.get_ftq_resp(1).pc,
       ftq_entry.cfi_is_call && ftq_entry.cfi_idx.bits === cfi_idx,
       ftq_entry.cfi_is_ret  && ftq_entry.cfi_idx.bits === cfi_idx)
 
@@ -515,32 +514,27 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   ftq_arb.io.in(2) <> xcpt_pc_req
 
   // Hookup FTQ
-  io.ifu.get_pc(0).ftq_idx := ftq_arb.io.out.bits
+  io.ifu.get_ftq_req(0) := ftq_arb.io.out.bits
   ftq_arb.io.out.ready  := true.B
 
   // Branch Unit Requests (for JALs) (Should delay issue of JALs if this not ready)
-  jmp_pc_req.valid := RegNext(int_iss_uops(jmp_unit_idx).valid && int_iss_uops(jmp_unit_idx).bits.fu_code === FU_JMP)
-  jmp_pc_req.bits  := RegNext(int_iss_uops(jmp_unit_idx).bits.ftq_idx)
+  jmp_pc_req.valid := jmp_unit.io_get_ftq_req.get.valid
+  jmp_pc_req.bits  := jmp_unit.io_get_ftq_req.get.bits
 
-  jmp_unit.io_get_ftq_pc.get := DontCare
-  jmp_unit.io_get_ftq_pc.get.pc               := io.ifu.get_pc(0).pc
-  jmp_unit.io_get_ftq_pc.get.entry            := io.ifu.get_pc(0).entry
-  jmp_unit.io_get_ftq_pc.get.next_val         := io.ifu.get_pc(0).next_val
-  jmp_unit.io_get_ftq_pc.get.next_pc          := io.ifu.get_pc(0).next_pc
-
+  jmp_unit.io_get_ftq_resp.get := io.ifu.get_ftq_resp(0)
 
   // Frontend Exception Requests
   val xcpt_idx = PriorityEncoder(dec_xcpts)
   xcpt_pc_req.valid    := dec_xcpts.reduce(_||_)
   xcpt_pc_req.bits     := dec_uops(xcpt_idx).ftq_idx
   //rob.io.xcpt_fetch_pc := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
-  rob.io.xcpt_fetch_pc := io.ifu.get_pc(0).pc
+  rob.io.xcpt_fetch_pc := io.ifu.get_ftq_resp(0).pc
 
   flush_pc_req.valid   := rob.io.flush.valid
   flush_pc_req.bits    := rob.io.flush.bits.ftq_idx
 
   // Mispredict requests (to get the correct target)
-  io.ifu.get_pc(1).ftq_idx := oldest_mispredict_ftq_idx
+  io.ifu.get_ftq_req(1) := oldest_mispredict_ftq_idx
 
 
   //-------------------------------------------------------------
@@ -825,11 +819,11 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       (if (sharesCSR) 1 else 0) +
       (if (sharesRoCC) 1 else 0)))
 
-    int_bypasses(i) := unit.io_bypass.get
+    int_bypasses(i) := unit.io_bypass
 
     var arb_idx = 1
-    arb.io.in(0).valid := unit.io_alu_resp.get.valid
-    arb.io.in(0).bits  := unit.io_alu_resp.get.bits
+    arb.io.in(0).valid := unit.io_alu_resp.valid
+    arb.io.in(0).bits  := unit.io_alu_resp.bits
 
     // Fast Wakeup (uses just-issued uops that have known latencies)
     fast_wakeup.bits.uop := int_iss_uops(i).bits
@@ -998,7 +992,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   csr.io.exception := RegNext(rob.io.com_xcpt.valid)
   // csr.io.pc used for setting EPC during exception or CSR.io.trace.
 
-  csr.io.pc        := (boom.util.AlignPCToBoundary(io.ifu.get_pc(0).com_pc, icBlockBytes)
+  csr.io.pc        := (boom.util.AlignPCToBoundary(io.ifu.get_ftq_resp(0).com_pc, icBlockBytes)
                      + RegNext(rob.io.com_xcpt.bits.pc_lob)
                      - Mux(RegNext(rob.io.com_xcpt.bits.edge_inst), 2.U, 0.U))
   // Cause not valid for for CALL or BREAKPOINTs (CSRFile will override it).

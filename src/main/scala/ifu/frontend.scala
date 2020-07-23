@@ -246,7 +246,9 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   val fetchpacket       = Flipped(new DecoupledIO(new FetchBufferResp))
 
   // 1 for xcpt/jalr/auipc/flush
-  val get_pc            = Flipped(Vec(2, new GetPCFromFtqIO()))
+  val get_ftq_req       = Output(Vec(2, UInt(log2Ceil(ftqSz).W)))
+  val get_ftq_resp      = Input(Vec(2, new GetPCFromFtq))
+
   val debug_ftq_idx     = Output(Vec(coreWidth, UInt(log2Ceil(ftqSz).W)))
   val debug_fetch_pc    = Input(Vec(coreWidth, UInt(vaddrBitsExtended.W)))
 
@@ -949,7 +951,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // -------------------------------------------------------
 
   io.cpu.fetchpacket <> fb.io.deq
-  io.cpu.get_pc <> ftq.io.get_ftq_pc
+  ftq.io.get_ftq_req := io.cpu.get_ftq_req
+  io.cpu.get_ftq_resp := ftq.io.get_ftq_resp
   ftq.io.deq := io.cpu.commit
   ftq.io.brupdate := io.cpu.brupdate
 

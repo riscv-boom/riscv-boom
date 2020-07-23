@@ -74,19 +74,17 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
  * IO to provide a port for a FunctionalUnit to get the PC of an instruction.
  * And for JALRs, the PC of the next instruction.
  */
-class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle
+class GetPCFromFtq(implicit p: Parameters) extends BoomBundle
 {
-  val ftq_idx   = Input(UInt(log2Ceil(ftqSz).W))
+  val entry     = new FTQBundle
+  val ghist     = new GlobalHistory
 
-  val entry     = Output(new FTQBundle)
-  val ghist     = Output(new GlobalHistory)
-
-  val pc        = Output(UInt(vaddrBitsExtended.W))
-  val com_pc    = Output(UInt(vaddrBitsExtended.W))
+  val pc        = UInt(vaddrBitsExtended.W)
+  val com_pc    = UInt(vaddrBitsExtended.W)
 
   // the next_pc may not be valid (stalled or still being fetched)
-  val next_val  = Output(Bool())
-  val next_pc   = Output(UInt(vaddrBitsExtended.W))
+  val next_val  = Bool()
+  val next_pc   = UInt(vaddrBitsExtended.W)
 }
 
 /**
@@ -111,7 +109,8 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     val deq = Flipped(Valid(UInt(idx_sz.W)))
 
     // Give PC info to BranchUnit.
-    val get_ftq_pc = Vec(2, new GetPCFromFtqIO())
+    val get_ftq_req = Input(Vec(2, UInt(log2Ceil(ftqSz).W)))
+    val get_ftq_resp = Output(Vec(2, new GetPCFromFtq))
 
 
     // Used to regenerate PC for trace port stuff in FireSim
@@ -342,21 +341,21 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   for (i <- 0 until 2) {
-    val idx = io.get_ftq_pc(i).ftq_idx
+    val idx = io.get_ftq_req(i)
     val next_idx = WrapInc(idx, num_entries)
     val next_is_enq = (next_idx === enq_ptr) && io.enq.fire()
     val next_pc = Mux(next_is_enq, io.enq.bits.pc, pcs(next_idx))
     val get_entry = ram(idx)
     val next_entry = ram(next_idx)
-    io.get_ftq_pc(i).entry     := RegNext(get_entry)
+    io.get_ftq_resp(i).entry     := RegNext(get_entry)
     if (i == 1)
-      io.get_ftq_pc(i).ghist   := ghist(1).read(idx, true.B)
+      io.get_ftq_resp(i).ghist   := ghist(1).read(idx, true.B)
     else
-      io.get_ftq_pc(i).ghist   := DontCare
-    io.get_ftq_pc(i).pc        := RegNext(pcs(idx))
-    io.get_ftq_pc(i).next_pc   := RegNext(next_pc)
-    io.get_ftq_pc(i).next_val  := RegNext(next_idx =/= enq_ptr || next_is_enq)
-    io.get_ftq_pc(i).com_pc    := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))
+      io.get_ftq_resp(i).ghist   := DontCare
+    io.get_ftq_resp(i).pc        := RegNext(pcs(idx))
+    io.get_ftq_resp(i).next_pc   := RegNext(next_pc)
+    io.get_ftq_resp(i).next_val  := RegNext(next_idx =/= enq_ptr || next_is_enq)
+    io.get_ftq_resp(i).com_pc    := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))
   }
 
   for (w <- 0 until coreWidth) {

@@ -28,7 +28,7 @@ import freechips.rocketchip.util._
 
 import FUConstants._
 import boom.common._
-import boom.ifu.{GetPCFromFtqIO}
+import boom.ifu.{GetPCFromFtq}
 import boom.util._
 
 /**
@@ -74,7 +74,13 @@ abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomM
   }
 
   val io_iss_uop = IO(Input(Valid(new MicroOp)))
+
+  // val arb_uop = Reg(Valid(new MicroOp))
+  // arb_uop.valid := io_iss_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, io_iss_uop.bits)
+  // arb_uop.bits  := UpdateBrMask(io_brupdate, io_iss_uop.bits)
   val rrd_uop = Reg(Valid(new MicroOp))
+  // rrd_uop.valid := arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits)
+  // rrd_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
   rrd_uop.valid := io_iss_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, io_iss_uop.bits)
   rrd_uop.bits  := UpdateBrMask(io_brupdate, io_iss_uop.bits)
   val exe_uop = Reg(Valid(new MicroOp))
@@ -181,7 +187,6 @@ class MemExeUnit(
 class IntExeUnit(
   val hasCSR           : Boolean       = false,
   val hasJmp           : Boolean       = false,
-  val hasAlu           : Boolean       = false,
   val hasMul           : Boolean       = false,
   val hasDiv           : Boolean       = false,
   val hasIfpu          : Boolean       = false,
@@ -227,100 +232,99 @@ class IntExeUnit(
   exe_int_req.imm_data := exe_imm_data
   exe_int_req.pred_data := exe_pred_data
 
-  val (io_alu_resp, io_brinfo, io_get_ftq_pc, io_csr, io_sfence, io_bypass, io_pred_bypass) = if (hasAlu) {
-    val alu_ready = WireInit(true.B)
-    fu_types += ((FU_ALU, alu_ready, "ALU"))
+  val alu_ready = WireInit(true.B)
+  fu_types += ((FU_ALU, alu_ready, "ALU"))
 
-    val alu = Module(new ALUUnit(isJmpUnit = hasJmp,
+  val alu = Module(new ALUUnit(isJmpUnit = hasJmp,
                                  dataWidth = xLen))
-    val req_valid = (exe_uop.bits.fu_code_is(FU_ALU) ||
-      (if (hasJmp) exe_uop.bits.fu_code_is(FU_JMP) else false.B) ||
-      (if (hasCSR) exe_uop.bits.fu_code_is(FU_CSR) else false.B)
-    )
-    alu.io.req.valid  := exe_uop.valid && req_valid && !exe_uop.bits.is_rocc
-    alu.io.req.bits   := exe_int_req
-    alu.io.resp.ready := true.B
-    alu.io.brupdate   := io_brupdate
-    alu.io.kill       := io_kill
+  val req_valid = (exe_uop.bits.fu_code_is(FU_ALU) ||
+    (if (hasJmp) exe_uop.bits.fu_code_is(FU_JMP) else false.B) ||
+    (if (hasCSR) exe_uop.bits.fu_code_is(FU_CSR) else false.B)
+  )
+  alu.io.req.valid  := exe_uop.valid && req_valid && !exe_uop.bits.is_rocc
+  alu.io.req.bits   := exe_int_req
+  alu.io.resp.ready := true.B
+  alu.io.brupdate   := io_brupdate
+  alu.io.kill       := io_kill
 
-    val alu_resp = IO(Output(Valid(new ExeUnitResp(xLen))))
-    alu_resp.valid := alu.io.resp.valid && !alu.io.resp.bits.uop.fu_code_is(FU_CSR)
-    alu_resp.bits  := alu.io.resp.bits
+  val io_alu_resp = IO(Output(Valid(new ExeUnitResp(xLen))))
+  io_alu_resp.valid := alu.io.resp.valid && !alu.io.resp.bits.uop.fu_code_is(FU_CSR)
+  io_alu_resp.bits  := alu.io.resp.bits
 
-    val brinfo = IO(Output(Valid(new BrResolutionInfo)))
-    brinfo := alu.io.brinfo
+  val io_brinfo = IO(Output(Valid(new BrResolutionInfo)))
+  io_brinfo := alu.io.brinfo
 
-    val (get_ftq_pc, pred_bypass) = if (hasJmp) {
-      fu_types += ((FU_JMP, alu_ready, "Jmp"))
-      val g = IO(Flipped(new GetPCFromFtqIO))
-      alu.io.get_ftq_pc <> g
+  val (io_get_ftq_req, io_get_ftq_resp, io_pred_bypass) = if (hasJmp) {
+    fu_types += ((FU_JMP, alu_ready, "Jmp"))
 
-      val pred = IO(Output(Valid(new ExeUnitResp(1))))
-      pred.valid := alu.io.resp.valid && alu.io.resp.bits.uop.is_sfb_br
-      pred.bits  := alu.io.resp.bits
-      (Some(g), Some(pred))
-    } else {
-      (None, None)
-    }
+    val req = IO(Output(Valid(UInt(log2Ceil(ftqSz).W))))
+    req.valid := rrd_uop.valid && rrd_uop.bits.fu_code === FU_JMP
+    req.bits  := rrd_uop.bits.ftq_idx
 
-    if (hasMul) {
-      fu_types += ((FU_MUL, true.B, "IMul"))
+    val resp = IO(Input(new GetPCFromFtq))
+    alu.io.get_ftq_resp := resp
 
-      val imul = Module(new PipelinedMulUnit(imulLatency, xLen))
-      require(imulLatency > 2)
-      imul.io.req.valid  := exe_uop.valid && exe_uop.bits.fu_code_is(FU_MUL)
-      imul.io.req.bits   := exe_int_req
-      imul.io.brupdate   := io_brupdate
-      imul.io.kill       := io_kill
-      imul.io.resp.ready := true.B
+    val pred = IO(Output(Valid(new ExeUnitResp(1))))
+    pred.valid := alu.io.resp.valid && alu.io.resp.bits.uop.is_sfb_br
+    pred.bits  := alu.io.resp.bits
+    (Some(req), Some(resp), Some(pred))
+  } else {
+    (None, None, None)
+  }
 
-      // If the mul unit is going to write, block issue of a ALU op so the mul can take the write port
-      val imul_block_alu = ShiftRegister(imul.io.req.valid, imulLatency-2)
+  if (hasMul) {
+    fu_types += ((FU_MUL, true.B, "IMul"))
+
+    val imul = Module(new PipelinedMulUnit(imulLatency, xLen))
+    require(imulLatency > 2)
+    imul.io.req.valid  := exe_uop.valid && exe_uop.bits.fu_code_is(FU_MUL)
+    imul.io.req.bits   := exe_int_req
+    imul.io.brupdate   := io_brupdate
+    imul.io.kill       := io_kill
+    imul.io.resp.ready := true.B
+
+    // If the mul unit is going to write, block issue of a ALU op so the mul can take the write por0
+
+    val imul_block_alu = ShiftRegister(io_iss_uop.valid && io_iss_uop.bits.fu_code_is(FU_MUL), imulLatency)
       when (imul_block_alu) {
         alu_ready := false.B
       }
 
-      when (imul.io.resp.valid) {
-        alu_resp := imul.io.resp
+    when (imul.io.resp.valid) {
+      io_alu_resp := imul.io.resp
         assert(!(alu.io.resp.valid && !alu.io.resp.bits.uop.fu_code_is(FU_CSR)))
-      }
-    } else {
-      assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_MUL)))
     }
-
-    val (csr, sfence) = if (hasCSR) {
-      fu_types += ((FU_CSR, true.B, "CSR"))
-      val c = IO(Output(Valid(new CSRResp)))
-      c.valid     := RegNext(alu.io.resp.valid && exe_uop.bits.csr_cmd =/= CSR.N)
-      c.bits.uop  := RegNext(alu.io.resp.bits.uop)
-      c.bits.data := RegNext(alu.io.resp.bits.data)
-      c.bits.addr := RegNext(exe_imm_data)
-
-      val s = IO(Valid(new SFenceReq))
-      s.valid    := RegNext(exe_uop.valid && exe_uop.bits.is_sfence)
-      s.bits.rs1 := RegNext(exe_uop.bits.mem_size(0))
-      s.bits.rs2 := RegNext(exe_uop.bits.mem_size(1))
-      s.bits.addr := RegNext(exe_rs1_data)
-      s.bits.asid := RegNext(exe_rs2_data)
-      (Some(c), Some(s))
-    } else {
-      assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_CSR)))
-      assert(!(exe_uop.valid && exe_uop.bits.is_sfence))
-      (None, None)
-    }
-
-    val bypass = IO(Valid(new ExeUnitResp(xLen)))
-    bypass.valid := (alu_resp.valid &&
-      alu_resp.bits.uop.bypassable &&
-      alu_resp.bits.uop.rf_wen &&
-      alu_resp.bits.uop.dst_rtype === RT_FIX)
-    bypass.bits := alu_resp.bits
-    (Some(alu_resp), Some(brinfo), get_ftq_pc, csr, sfence, Some(bypass), pred_bypass)
   } else {
-    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_ALU)))
-    require(!hasJmp && !hasCSR)
-    (None, None, None, None, None, None, None)
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_MUL)))
   }
+
+  val (io_csr, io_sfence) = if (hasCSR) {
+    fu_types += ((FU_CSR, true.B, "CSR"))
+    val c = IO(Output(Valid(new CSRResp)))
+    c.valid     := RegNext(alu.io.resp.valid && exe_uop.bits.csr_cmd =/= CSR.N)
+    c.bits.uop  := RegNext(alu.io.resp.bits.uop)
+    c.bits.data := RegNext(alu.io.resp.bits.data)
+    c.bits.addr := RegNext(exe_imm_data)
+
+    val s = IO(Valid(new SFenceReq))
+    s.valid    := RegNext(exe_uop.valid && exe_uop.bits.is_sfence)
+    s.bits.rs1 := RegNext(exe_uop.bits.mem_size(0))
+    s.bits.rs2 := RegNext(exe_uop.bits.mem_size(1))
+    s.bits.addr := RegNext(exe_rs1_data)
+    s.bits.asid := RegNext(exe_rs2_data)
+    (Some(c), Some(s))
+  } else {
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_CSR)))
+    assert(!(exe_uop.valid && exe_uop.bits.is_sfence))
+    (None, None)
+  }
+
+  val io_bypass = IO(Valid(new ExeUnitResp(xLen)))
+  io_bypass.valid := (io_alu_resp.valid &&
+    io_alu_resp.bits.uop.bypassable &&
+    io_alu_resp.bits.uop.rf_wen &&
+    io_alu_resp.bits.uop.dst_rtype === RT_FIX)
+  io_bypass.bits := io_alu_resp.bits
 
   val (io_rocc_resp, io_rocc_core) = if (hasRocc) {
     val rocc_core = IO(new RoCCShimCoreIO)

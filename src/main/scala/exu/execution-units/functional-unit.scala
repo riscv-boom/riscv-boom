@@ -140,7 +140,7 @@ abstract class FunctionalUnit(
 
     // only used by branch unit
     val brinfo     = if (isAluUnit) Output(Valid(new BrResolutionInfo)) else null
-    val get_ftq_pc = if (isJmpUnit) Flipped(new GetPCFromFtqIO()) else null
+    val get_ftq_resp = if (isJmpUnit) Input(new GetPCFromFtq) else null
   })
   io.resp.bits.fflags.valid := false.B
   io.resp.bits.fflags.bits  := DontCare
@@ -172,7 +172,7 @@ class ALUUnit(isJmpUnit: Boolean = false, dataWidth: Int)(implicit p: Parameters
   var op1_data: UInt = null
   if (isJmpUnit) {
     // Get the uop PC for jumps
-    val block_pc = AlignPCToBoundary(io.get_ftq_pc.pc, icBlockBytes)
+    val block_pc = AlignPCToBoundary(io.get_ftq_resp.pc, icBlockBytes)
     val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
 
     op1_data = Mux(uop.op1_sel === OP1_RS1 , io.req.bits.rs1_data,
@@ -277,13 +277,13 @@ class ALUUnit(isJmpUnit: Boolean = false, dataWidth: Int)(implicit p: Parameters
     val jalr_target = (encodeVirtualAddress(jalr_target_xlen, jalr_target_xlen).asSInt & -2.S).asUInt
 
     brinfo.bits.jalr_target := jalr_target
-    val cfi_idx = ((uop.pc_lob ^ Mux(io.get_ftq_pc.entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth),1)
+    val cfi_idx = ((uop.pc_lob ^ Mux(io.get_ftq_resp.entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth),1)
 
     when (pc_sel === PC_JALR) {
-      mispredict := !io.get_ftq_pc.next_val ||
-                    (io.get_ftq_pc.next_pc =/= jalr_target) ||
-                    !io.get_ftq_pc.entry.cfi_idx.valid ||
-                    (io.get_ftq_pc.entry.cfi_idx.bits =/= cfi_idx)
+      mispredict := !io.get_ftq_resp.next_val ||
+                    (io.get_ftq_resp.next_pc =/= jalr_target) ||
+                    !io.get_ftq_resp.entry.cfi_idx.valid ||
+                    (io.get_ftq_resp.entry.cfi_idx.bits =/= cfi_idx)
     }
   }
 
