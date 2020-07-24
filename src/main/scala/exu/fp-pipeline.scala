@@ -130,7 +130,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   var rd_idx = 0
   for (unit <- exe_units) {
     for (i <- 0 until 3) {
-      fregfile.io.read_ports(rd_idx).addr := unit.io_rrd_frf_reqs(i).bits
+      fregfile.io.read_ports(rd_idx).addr := unit.io_rrd_frf_reqs(i)
       unit.io_rrd_frf_resps(i) := fregfile.io.read_ports(rd_idx).data
       rd_idx += 1
     }
@@ -170,14 +170,17 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   // Cut up critical path by delaying the write by a cycle.
   // Wakeup signal is sent on cycle S0, write is now delayed until end of S1,
   // but Issue happens on S1 and RegRead doesn't happen until S2 so we're safe.
-  fregfile.io.write_ports(0) := WritePort(ll_wbarb.io.out, fpregSz, fLen+1, RT_FLT)
+  fregfile.io.write_ports(0).valid := ll_wbarb.io.out.valid && ll_wbarb.io.out.bits.uop.dst_rtype === RT_FLT
+  fregfile.io.write_ports(0).bits.addr := ll_wbarb.io.out.bits.uop.pdst
+  fregfile.io.write_ports(0).bits.data := ll_wbarb.io.out.bits.data
 
   assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
   when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
 
   var w_cnt = 1
   for (i <- 1 until lsuWidth) {
-    fregfile.io.write_ports(w_cnt) := RegNext(WritePort(io.ll_wports(i), fpregSz, fLen+1, RT_FLT))
+    fregfile.io.write_ports(w_cnt).valid := RegNext(io.ll_wports(i).valid)
+    fregfile.io.write_ports(w_cnt).bits.addr := RegNext(io.ll_wports(i).bits.uop.pdst)
     fregfile.io.write_ports(w_cnt).bits.data := recode(RegNext(io.ll_wports(i).bits.data),
                                                        RegNext(io.ll_wports(i).bits.uop.mem_size =/= 2.U))
     w_cnt += 1

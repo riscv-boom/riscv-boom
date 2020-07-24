@@ -794,7 +794,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   for (i <- 0 until lsuWidth) {
     int_wakeups(wu_idx) := io.lsu.iresp(i)
     rob.io.wb_resps(wb_idx) := RegNext(UpdateBrMask(brupdate, io.lsu.iresp(i)))
-    iregfile.io.write_ports(wb_idx) := WritePort(io.lsu.iresp(i), ipregSz, xLen, RT_FIX)
+    iregfile.io.write_ports(wb_idx).valid := io.lsu.iresp(i).valid
+    iregfile.io.write_ports(wb_idx).bits.addr := io.lsu.iresp(i).bits.uop.pdst
+    iregfile.io.write_ports(wb_idx).bits.data := io.lsu.iresp(i).bits.data
     wu_idx += 1
     wb_idx += 1
   }
@@ -818,7 +820,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       (if (sharesIDiv) 1 else 0) +
       (if (sharesCSR) 1 else 0) +
       (if (sharesRoCC) 1 else 0)))
-
+    arb.io.out.ready := true.B
     int_bypasses(i) := unit.io_bypass
 
     var arb_idx = 1
@@ -881,7 +883,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       !IsKilledByBranch(brupdate, arb.io.out.bits))
     rob.io.wb_resps(wb_idx).bits   := RegNext(arb.io.out.bits)
 
-    iregfile.io.write_ports(wb_idx) := WritePort(arb.io.out, ipregSz, xLen, RT_FIX)
+    iregfile.io.write_ports(wb_idx).valid := arb.io.out.valid && arb.io.out.bits.uop.dst_rtype === RT_FIX
+    iregfile.io.write_ports(wb_idx).bits.addr := arb.io.out.bits.uop.pdst
+    iregfile.io.write_ports(wb_idx).bits.data := arb.io.out.bits.data
 
     if (unit.hasJmp) {
       pred_bypass := unit.io_pred_bypass.get
@@ -954,11 +958,12 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   var rd_idx = 0
   for ((unit, w) <- (mem_exe_units ++ int_exe_units) zipWithIndex) {
     for (i <- 0 until unit.nReaders) {
-      iregfile.io.read_ports(rd_idx).addr := unit.io_rrd_irf_reqs(i).bits
+      iregfile.io.read_ports(rd_idx).addr := unit.io_rrd_irf_reqs(i)
       unit.io_rrd_irf_resps(i) := iregfile.io.read_ports(rd_idx).data
       rd_idx += 1
     }
-    immregfile.io.read_ports(w).addr := unit.io_rrd_immrf_req.bits.uop.pimm
+    immregfile.io.read_ports(w).addr.valid := unit.io_rrd_immrf_req.valid
+    immregfile.io.read_ports(w).addr.bits  := unit.io_rrd_immrf_req.bits.uop.pimm
     unit.io_rrd_immrf_resp := immregfile.io.read_ports(w).data
 
     unit.io_rrd_irf_bypasses := int_bypasses
@@ -966,7 +971,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   require (rd_idx == numIrfReadPorts)
   for ((unit, w) <- int_exe_units.zipWithIndex) {
     unit match { case u: HasPrfReadPort =>
-      pregfile.io.read_ports(w).addr := u.io_rrd_prf_req.bits
+      pregfile.io.read_ports(w).addr := u.io_rrd_prf_req
       u.io_rrd_prf_resp := pregfile.io.read_ports(w).data
       u.io_rrd_prf_bypass := pred_bypass
     }

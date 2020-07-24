@@ -234,7 +234,7 @@ class WithNMegaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
               decodeWidth = 4,
               numRobEntries = 128,
               issueParams = Seq(
-                IssueParams(issueWidth=3, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=4),
+                IssueParams(issueWidth=2, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4),
                 IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4),
                 IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
               lsuWidth = 2,
@@ -280,7 +280,7 @@ class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) ex
               decodeWidth = 4,
               numRobEntries = 128,
               issueParams = Seq(
-                IssueParams(issueWidth=3, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=4, numSlowEntries=8),
+                IssueParams(issueWidth=2, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4, numSlowEntries=8),
                 IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4, numSlowEntries=24, useFullIssueSel=false),
                 IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4, numSlowEntries=16)),
               lsuWidth = 2,
