@@ -117,6 +117,7 @@ class WithRingBooms(n: Int, f: Int, c: Int, overrideIdOffset: Option[Int] = None
 							numStqEntries = 4*n,
 							maxBrCount = 4*n,
 							enableSFBOpt = true,
+              enableSLOpt = true,
               numFetchBufferEntries = 8*n,
 							ftq = FtqParameters(nEntries=50*n/f),
 							fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))),
