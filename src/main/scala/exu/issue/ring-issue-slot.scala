@@ -237,7 +237,7 @@ class RingIssueSlot(implicit p: Parameters)
     io.request_chain := false.B
   }
 
-  when (state =/= s_invalid) {
+  when (state =/= s_invalid && enableSLOpt.B) {
     io.request_hp := (p1 && slot_uop.is_ptr_bump || slot_uop.prs1_bypassable && slot_uop.prs2_bypassable) && can_request
   } .otherwise {
     io.request_hp := false.B
