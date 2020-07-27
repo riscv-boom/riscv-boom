@@ -29,23 +29,14 @@ abstract class RegisterFile(
   (implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BoomBundle {
-    val read_ports = Vec(numReadPorts, new Bundle {
-      val addr = Input(Valid(UInt(maxPregSz.W)))
-      val data = Output(UInt(registerWidth.W))
-    })
+    val arb_read_reqs  = Vec(numReadPorts, Flipped(Decoupled(UInt(log2Ceil(numRegisters).W))))
+    val rrd_read_resps = Vec(numReadPorts, Output(UInt(registerWidth.W)))
+
     val write_ports = Vec(numWritePorts, Flipped(Valid(new Bundle {
       val addr = Output(UInt(maxPregSz.W))
       val data = Output(UInt(registerWidth.W))
     })))
   })
-
-  private val rf_cost = (numReadPorts + numWritePorts) * (numReadPorts + 2*numWritePorts)
-  private val type_str = if (registerWidth == fLen+1) "Floating Point" else "Integer"
-  override def toString: String = BoomCoreStringPrefix(
-    "==" + type_str + " Regfile==",
-    "Num RF Read Ports     : " + numReadPorts,
-    "Num RF Write Ports    : " + numWritePorts,
-    "RF Cost (R+W)*(R+2W)  : " + rf_cost)
 
   // ensure there is only 1 writer per register (unless to preg0)
   if (numWritePorts > 1) {
@@ -58,29 +49,144 @@ abstract class RegisterFile(
       }
     }
   }
-
 }
 
-class RegisterFileSynthesizable(
-   numRegisters: Int,
-   numReadPorts: Int,
-   numWritePorts: Int,
-   registerWidth: Int)
-   (implicit p: Parameters)
-   extends RegisterFile(numRegisters, numReadPorts, numWritePorts, registerWidth)
+class BankedRF(
+  numBanks: Int,
+  numLogicalReadPortsPerBank: Int,
+  numRegisters: Int,
+  numLogicalReadPorts: Int,
+  numPhysicalReadPorts: Int,
+  numWritePorts: Int,
+  registerWidth: Int,
+  typeStr: String
+)(implicit p: Parameters)
+    extends RegisterFile(numRegisters, numLogicalReadPorts, numWritePorts, registerWidth)
 {
+  require(isPow2(numBanks))
+  require(numRegisters % numBanks == 0)
+  def bankIdx(i: UInt): UInt = i(log2Ceil(numBanks)-1,0)
+  val rfs = (0 until numBanks) map { w => Module(new PartiallyPortedRF(
+    numRegisters / numBanks,
+    numLogicalReadPortsPerBank,
+    numPhysicalReadPorts,
+    numWritePorts,
+    registerWidth,
+    typeStr + s" Bank ${w}"
+  )) }
+  if (numBanks == 1) {
+    require(numLogicalReadPortsPerBank == numLogicalReadPorts)
+    io <> rfs(0).io
+  } else {
+    for (i <- 0 until numWritePorts) {
+      for (w <- 0 until numBanks) {
+        rfs(w).io.write_ports(i).valid     := io.write_ports(i).valid && bankIdx(io.write_ports(i).bits.addr) === w.U
+        rfs(w).io.write_ports(i).bits.addr := io.write_ports(i).bits.addr >> log2Ceil(numBanks)
+        rfs(w).io.write_ports(i).bits.data := io.write_ports(i).bits.data
+      }
+    }
+    if (numLogicalReadPortsPerBank == numLogicalReadPorts) {
+      for (i <- 0 until numLogicalReadPorts) {
+        val bidx = bankIdx(io.arb_read_reqs(i).bits)
+        for (w <- 0 until numBanks) {
+          rfs(w).io.arb_read_reqs(i).valid := io.arb_read_reqs(i).valid && bankIdx(io.arb_read_reqs(i).bits) === w.U
+          rfs(w).io.arb_read_reqs(i).bits  := io.arb_read_reqs(i).bits >> log2Ceil(numBanks)
+        }
+        io.arb_read_reqs(i).ready := rfs.map(_.io.arb_read_reqs(i).ready).reduce(_||_)
+        val data_sel = RegNext(UIntToOH(bidx))
+        io.rrd_read_resps(i) := Mux1H(data_sel, rfs.map(_.io.rrd_read_resps(i)))
+      }
+    }
+  }
+  override def toString: String = rfs.map(_.toString).mkString
+}
+
+class PartiallyPortedRF(
+  numRegisters: Int,
+  numLogicalReadPorts: Int,
+  numPhysicalReadPorts: Int,
+  numWritePorts: Int,
+  registerWidth: Int,
+  typeStr: String
+)(implicit p: Parameters)
+    extends RegisterFile(numRegisters, numLogicalReadPorts, numWritePorts, registerWidth)
+{
+  val rf = Module(new FullyPortedRF(
+    numRegisters = numRegisters,
+    numReadPorts = numPhysicalReadPorts,
+    numWritePorts = numWritePorts,
+    registerWidth = registerWidth,
+    typeStr = "Partially Ported " + typeStr,
+  ))
+  rf.io.write_ports := io.write_ports
+
+  val port_issued = Array.fill(numPhysicalReadPorts) { false.B }
+  val port_addrs  = Array.fill(numPhysicalReadPorts) { 0.U(log2Ceil(numRegisters).W) }
+  val data_sels   = Wire(Vec(numLogicalReadPorts , UInt(numPhysicalReadPorts.W)))
+  data_sels := DontCare
+
+
+  for (i <- 0 until numLogicalReadPorts) {
+    var read_issued = false.B
+    for (j <- 0 until numPhysicalReadPorts) {
+      val issue_read = WireInit(false.B)
+      val use_port = WireInit(false.B)
+      when (!read_issued && port_issued(j) && io.arb_read_reqs(i).valid && io.arb_read_reqs(i).bits === port_addrs(j)) {
+        issue_read := true.B
+        data_sels(i) := UIntToOH(j.U)
+      }
+      when (!read_issued && !port_issued(j) && io.arb_read_reqs(i).valid) {
+        issue_read := true.B
+        use_port := true.B
+        data_sels(i) := UIntToOH(j.U)
+      }
+      val was_port_issued_yet = port_issued(j)
+      port_issued(j) = use_port || port_issued(j)
+      port_addrs(j) = port_addrs(j) | Mux(was_port_issued_yet || !use_port, 0.U, io.arb_read_reqs(i).bits)
+      read_issued = issue_read || read_issued
+    }
+    io.arb_read_reqs(i).ready := read_issued
+  }
+  for (j <- 0 until numPhysicalReadPorts) {
+    rf.io.arb_read_reqs(j).valid := port_issued(j)
+    rf.io.arb_read_reqs(j).bits  := port_addrs(j)
+    assert(rf.io.arb_read_reqs(j).ready)
+  }
+
+  val rrd_data_sels = RegNext(data_sels)
+
+  for (i <- 0 until numLogicalReadPorts) {
+    io.rrd_read_resps(i) := Mux1H(rrd_data_sels(i).toBools, rf.io.rrd_read_resps)
+  }
+  override def toString: String = rf.toString
+}
+
+
+class FullyPortedRF(
+  numRegisters: Int,
+  numReadPorts: Int,
+  numWritePorts: Int,
+  registerWidth: Int,
+  typeStr: String,
+)(implicit p: Parameters)
+    extends RegisterFile(numRegisters, numReadPorts, numWritePorts, registerWidth)
+{
+  val rf_cost = (numReadPorts + numWritePorts) * (numReadPorts + 2*numWritePorts)
+  override def toString: String = BoomCoreStringPrefix(
+    "==" + typeStr + " Regfile==",
+    "Num RF Read Ports     : " + numReadPorts,
+    "Num RF Write Ports    : " + numWritePorts,
+    "RF Cost (R+W)*(R+2W)  : " + rf_cost)
+
+  dontTouch(io)
+
+  io.arb_read_reqs.map(p => p.ready := true.B)
 
   val regfile = Mem(numRegisters, UInt(registerWidth.W))
 
-  for (i <- 0 until numReadPorts) {
-    io.read_ports(i).data := regfile(io.read_ports(i).addr.bits)
-  }
+  (0 until numReadPorts) map {p => io.rrd_read_resps(p) := regfile(RegNext(io.arb_read_reqs(p).bits)) }
 
-
-  for (wport <- io.write_ports) {
-    when (wport.valid) {
-      regfile(wport.bits.addr) := wport.bits.data
-    }
-  }
-
+  io.write_ports map { p => when (p.valid) { regfile(p.bits.addr) := p.bits.data }}
 }
+
+

@@ -102,7 +102,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
 
   val numIrfWritePorts        = intWidth + lsuWidth
-  val numIrfReadPorts         = memWidth + (intWidth) * 2
+  val numIrfLogicalReadPorts  = memWidth + (intWidth) * 2
 
   val numIntWakeups           = coreWidth + lsuWidth + 1
   val numFpWakeupPorts        = fp_pipeline.io.wakeups.length
@@ -124,21 +124,30 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   val dispatcher       = Module(new BasicDispatcher)
 
-  val iregfile         = Module(new RegisterFileSynthesizable(
+  val iregfile         = Module(new BankedRF(
+                             numIrfBanks,
+                             numIrfLogicalReadPorts,
                              numIntPhysRegs,
+                             numIrfLogicalReadPorts,
                              numIrfReadPorts,
                              numIrfWritePorts,
-                             xLen))
-  val pregfile         = Module(new RegisterFileSynthesizable(
+                             xLen,
+                             "Integer"
+  ))
+  val pregfile         = Module(new FullyPortedRF(
                             ftqSz,
                             intWidth,
                             1,
-                            1))
-  val immregfile       = Module(new RegisterFileSynthesizable(
+                            1,
+                            "Predicate"
+  ))
+  val immregfile       = Module(new FullyPortedRF(
                             numImmPhysRegs,
                             memWidth + intWidth,
                             coreWidth,
-                            LONGEST_IMM_SZ))
+                            LONGEST_IMM_SZ,
+                            "Immediate"
+  ))
 
   val rob              = Module(new Rob(
                            numIrfWritePorts + numFpWakeupPorts,
@@ -149,6 +158,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val pred_wakeup  = Wire(Valid(new ExeUnitResp(1)))
   pred_wakeup.valid := false.B
   pred_wakeup.bits := DontCare
+
+
   val int_bypasses  = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
   val pred_bypass   = Wire(Valid(new ExeUnitResp(1)))
 
@@ -922,7 +933,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   }
 
   pred_rename_stage.io.wakeups(0) := pred_wakeup
-  imm_rename_stage.io.wakeups := (mem_exe_units ++ int_exe_units).map(_.io_rrd_immrf_req)
+  imm_rename_stage.io.wakeups := (mem_exe_units ++ int_exe_units).map(_.io_rrd_immrf_wakeup)
 
   mem_iss_unit.io.fu_types := mem_exe_units.map(_.io_ready_fu_types)
   int_iss_unit.io.fu_types := (0 until intWidth) map {w => int_exe_units(w).io_ready_fu_types & ~int_exe_block_fu_types(w)}
@@ -937,6 +948,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   mem_iss_unit.io.flush_pipeline := RegNext(rob.io.flush.valid)
   mem_iss_unit.io.ld_miss  := io.lsu.ld_miss
 
+  int_iss_unit.io.squash_grant := int_exe_units.map(_.io_squash_iss).reduce(_||_)
+  mem_iss_unit.io.squash_grant := int_exe_units.map(_.io_squash_iss).reduce(_||_)
+
 
   // Wakeup (Issue & Writeback)
   mem_iss_unit.io.wakeup_ports := int_wakeups
@@ -946,6 +960,23 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   mem_iss_unit.io.iss_uops zip mem_exe_units map { case (i, u) => u.io_iss_uop := i }
   int_iss_unit.io.iss_uops zip int_exe_units map { case (i, u) => u.io_iss_uop := i }
 
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+  // **** Register Read Arbitrate Stage ****
+  //-------------------------------------------------------------
+  //-------------------------------------------------------------
+  var arb_idx = 0
+  for ((unit, w) <- (mem_exe_units ++ int_exe_units) zipWithIndex) {
+    for (i <- 0 until unit.nReaders) {
+      iregfile.io.arb_read_reqs(arb_idx) <> unit.io_arb_irf_reqs(i)
+      arb_idx += 1
+    }
+    immregfile.io.arb_read_reqs(w) <> unit.io_arb_immrf_req
+  }
+  require(arb_idx == numIrfLogicalReadPorts)
+  for ((unit, w) <- (int_exe_units) zipWithIndex) {
+    pregfile.io.arb_read_reqs(w) <> unit.io_arb_prf_req
+  }
 
 
   //-------------------------------------------------------------
@@ -958,23 +989,16 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   var rd_idx = 0
   for ((unit, w) <- (mem_exe_units ++ int_exe_units) zipWithIndex) {
     for (i <- 0 until unit.nReaders) {
-      iregfile.io.read_ports(rd_idx).addr := unit.io_rrd_irf_reqs(i)
-      unit.io_rrd_irf_resps(i) := iregfile.io.read_ports(rd_idx).data
+      unit.io_rrd_irf_resps(i) := iregfile.io.rrd_read_resps(rd_idx)
       rd_idx += 1
     }
-    immregfile.io.read_ports(w).addr.valid := unit.io_rrd_immrf_req.valid
-    immregfile.io.read_ports(w).addr.bits  := unit.io_rrd_immrf_req.bits.uop.pimm
-    unit.io_rrd_immrf_resp := immregfile.io.read_ports(w).data
-
+    unit.io_rrd_immrf_resp := immregfile.io.rrd_read_resps(w)
     unit.io_rrd_irf_bypasses := int_bypasses
   }
-  require (rd_idx == numIrfReadPorts)
+  require (rd_idx == numIrfLogicalReadPorts)
   for ((unit, w) <- int_exe_units.zipWithIndex) {
-    unit match { case u: HasPrfReadPort =>
-      pregfile.io.read_ports(w).addr := u.io_rrd_prf_req
-      u.io_rrd_prf_resp := pregfile.io.read_ports(w).data
-      u.io_rrd_prf_bypass := pred_bypass
-    }
+    unit.io_rrd_prf_resp := pregfile.io.rrd_read_resps(w)
+    unit.io_rrd_prf_bypass := pred_bypass
   }
 
   //-------------------------------------------------------------

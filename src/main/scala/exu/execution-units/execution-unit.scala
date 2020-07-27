@@ -75,14 +75,12 @@ abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomM
 
   val io_iss_uop = IO(Input(Valid(new MicroOp)))
 
-  // val arb_uop = Reg(Valid(new MicroOp))
-  // arb_uop.valid := io_iss_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, io_iss_uop.bits)
-  // arb_uop.bits  := UpdateBrMask(io_brupdate, io_iss_uop.bits)
+  val arb_uop = Reg(Valid(new MicroOp))
+  arb_uop.valid := io_iss_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, io_iss_uop.bits)
+  arb_uop.bits  := UpdateBrMask(io_brupdate, io_iss_uop.bits)
   val rrd_uop = Reg(Valid(new MicroOp))
-  // rrd_uop.valid := arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits)
-  // rrd_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
-  rrd_uop.valid := io_iss_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, io_iss_uop.bits)
-  rrd_uop.bits  := UpdateBrMask(io_brupdate, io_iss_uop.bits)
+  rrd_uop.valid := arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits)
+  rrd_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
   val exe_uop = Reg(Valid(new MicroOp))
   exe_uop.valid := rrd_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, rrd_uop.bits)
   exe_uop.bits  := UpdateBrMask(io_brupdate, rrd_uop.bits)
@@ -90,7 +88,8 @@ abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomM
 
 trait HasIrfReadPorts { this: ExecutionUnit =>
   def nReaders: Int
-  val io_rrd_irf_reqs     = IO(Output(Vec(nReaders , Valid(UInt(maxPregSz.W)))))
+
+  val io_arb_irf_reqs = IO(Vec(nReaders, Decoupled(UInt(maxPregSz.W))))
   val io_rrd_irf_resps    = IO(Input (Vec(nReaders , UInt(xLen.W))))
   val io_rrd_irf_bypasses = IO(Input (Vec(coreWidth, Valid(new ExeUnitResp(xLen)))))
 
@@ -101,18 +100,22 @@ trait HasIrfReadPorts { this: ExecutionUnit =>
 }
 
 trait HasImmrfReadPort { this: ExecutionUnit =>
-  val io_rrd_immrf_req    = IO(Output(Valid(new ExeUnitResp(1))))
+  val io_arb_immrf_req    = IO(Decoupled(UInt(immPregSz.W)))
+  assert(io_arb_immrf_req.ready)
   val io_rrd_immrf_resp   = IO(Input(UInt(xLen.W)))
+  val io_rrd_immrf_wakeup = IO(Output(Valid(new ExeUnitResp(1))))
 }
 
 trait HasPrfReadPort { this: ExecutionUnit =>
-  val io_rrd_prf_req    = IO(Output(Valid(UInt(log2Ceil(ftqSz).W))))
+  val io_arb_prf_req    = IO(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  assert(io_arb_prf_req.ready)
   val io_rrd_prf_resp   = IO(Input(Bool()))
   val io_rrd_prf_bypass = IO(Input(Valid(new ExeUnitResp(1))))
 }
 
 trait HasFrfReadPorts { this: ExecutionUnit =>
-  val io_rrd_frf_reqs  = IO(Output(Vec(3, Valid(UInt(maxPregSz.W)))))
+  val io_arb_frf_reqs  = IO(Vec(3, Decoupled(UInt(maxPregSz.W))))
+  io_arb_frf_reqs.map { r => assert(r.ready) }
   val io_rrd_frf_resps = IO(Input (Vec(3, UInt((xLen+1).W))))
 }
 
@@ -124,19 +127,28 @@ class MemExeUnit(
   with HasImmrfReadPort
 {
   def nReaders = 1
+  // Mem pipe is iss->rrd->exu
+  io_arb_irf_reqs(0).valid := arb_uop.valid && arb_uop.bits.lrs1_rtype === RT_FIX && !arb_uop.bits.iw_p1_bypass_hint
+  io_arb_irf_reqs(0).bits  := arb_uop.bits.prs1
+  assert(!(io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready))
 
-  io_rrd_irf_reqs(0).valid := rrd_uop.valid && rrd_uop.bits.lrs1_rtype === RT_FIX
-  io_rrd_irf_reqs(0).bits  := rrd_uop.bits.prs1
-  io_rrd_immrf_req.valid := (rrd_uop.valid &&
+  io_arb_immrf_req.valid := (arb_uop.valid &&
+    !arb_uop.bits.fu_code_is(FU_DGEN) &&
+    !arb_uop.bits.imm_sel.isOneOf(IS_N, IS_SH)
+  )
+  io_arb_immrf_req.bits      := arb_uop.bits.pimm
+
+  io_rrd_immrf_wakeup.valid := (rrd_uop.valid &&
     !rrd_uop.bits.fu_code_is(FU_DGEN) &&
     !rrd_uop.bits.imm_sel.isOneOf(IS_N, IS_SH)
   )
-  io_rrd_immrf_req.bits      := DontCare
-  io_rrd_immrf_req.bits.uop  := rrd_uop.bits
+  io_rrd_immrf_wakeup.bits := DontCare
+  io_rrd_immrf_wakeup.bits.uop := rrd_uop.bits
 
 
   val exe_rs1_data = Reg(UInt(xLen.W))
-  val (_, rs1_data) = rrd_bypass_hit(rrd_uop.bits.prs1, io_rrd_irf_resps(0))
+  val (rs1_hit, rs1_data) = rrd_bypass_hit(rrd_uop.bits.prs1, io_rrd_irf_resps(0))
+  assert(!(rrd_uop.valid && rrd_uop.bits.lrs1_rtype === RT_FIX && rrd_uop.bits.iw_p1_bypass_hint && !rs1_hit))
   exe_rs1_data := Mux(rrd_uop.bits.lrs1_rtype === RT_ZERO, 0.U, rs1_data)
 
   val exe_imm_data = RegNext(Mux(rrd_uop.bits.imm_sel === IS_SH,
@@ -196,22 +208,44 @@ class IntExeUnit(
   with HasPrfReadPort
   with HasImmrfReadPort
 {
-  def nReaders = 2
-  io_rrd_irf_reqs(0).valid := rrd_uop.valid && rrd_uop.bits.lrs1_rtype === RT_FIX
-  io_rrd_irf_reqs(0).bits  := rrd_uop.bits.prs1
-  io_rrd_irf_reqs(1).valid := rrd_uop.valid && rrd_uop.bits.lrs2_rtype === RT_FIX
-  io_rrd_irf_reqs(1).bits  := rrd_uop.bits.prs2
-  io_rrd_immrf_req.valid := (rrd_uop.valid && !rrd_uop.bits.imm_sel.isOneOf(IS_N, IS_SH))
-  io_rrd_immrf_req.bits      := DontCare
-  io_rrd_immrf_req.bits.uop  := rrd_uop.bits
+  io_arb_irf_reqs(0).valid := arb_uop.valid && arb_uop.bits.lrs1_rtype === RT_FIX && !arb_uop.bits.iw_p1_bypass_hint
+  io_arb_irf_reqs(0).bits  := arb_uop.bits.prs1
+  io_arb_irf_reqs(1).valid := arb_uop.valid && arb_uop.bits.lrs2_rtype === RT_FIX && !arb_uop.bits.iw_p2_bypass_hint
+  io_arb_irf_reqs(1).bits  := arb_uop.bits.prs2
 
-  io_rrd_prf_req.valid := rrd_uop.valid
-  io_rrd_prf_req.bits  := rrd_uop.bits.ppred
+  val io_squash_iss = IO(Output(Bool()))
+  io_squash_iss := ((io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready) ||
+                    (io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready))
+
+  // The arbiter didn't grant us a slot. Thus, we should replay the instruction in this slot,
+  // But next time we read, it reads from the regfile, not the bypass paths, so disable the bypass hints
+  when (io_squash_iss) {
+    arb_uop.valid := arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits)
+    arb_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
+    arb_uop.bits.iw_p1_bypass_hint := false.B
+    arb_uop.bits.iw_p2_bypass_hint := false.B
+    rrd_uop.valid := false.B
+  }
+
+  def nReaders = 2
+  io_arb_immrf_req.valid     := (arb_uop.valid && !arb_uop.bits.imm_sel.isOneOf(IS_N, IS_SH))
+  io_arb_immrf_req.bits      := arb_uop.bits.pimm
+
+  io_rrd_immrf_wakeup.valid    := (rrd_uop.valid && !rrd_uop.bits.imm_sel.isOneOf(IS_N, IS_SH))
+  io_rrd_immrf_wakeup.bits     := DontCare
+  io_rrd_immrf_wakeup.bits.uop := rrd_uop.bits
+
+
+
+  io_arb_prf_req.valid := arb_uop.valid
+  io_arb_prf_req.bits  := arb_uop.bits.ppred
 
   val exe_rs1_data = Reg(UInt(xLen.W))
   val exe_rs2_data = Reg(UInt(xLen.W))
-  val (_, rs1_data) = rrd_bypass_hit(rrd_uop.bits.prs1, io_rrd_irf_resps(0))
-  val (_, rs2_data) = rrd_bypass_hit(rrd_uop.bits.prs2, io_rrd_irf_resps(1))
+  val (rs1_hit, rs1_data) = rrd_bypass_hit(rrd_uop.bits.prs1, io_rrd_irf_resps(0))
+  val (rs2_hit, rs2_data) = rrd_bypass_hit(rrd_uop.bits.prs2, io_rrd_irf_resps(1))
+  assert(!(rrd_uop.valid && rrd_uop.bits.lrs1_rtype === RT_FIX && rrd_uop.bits.iw_p1_bypass_hint && !rs1_hit))
+  assert(!(rrd_uop.valid && rrd_uop.bits.lrs2_rtype === RT_FIX && rrd_uop.bits.iw_p2_bypass_hint && !rs2_hit))
   exe_rs1_data := Mux(rrd_uop.bits.lrs1_rtype === RT_ZERO, 0.U, rs1_data)
   exe_rs2_data := Mux(rrd_uop.bits.lrs2_rtype === RT_ZERO, 0.U, rs2_data)
 
@@ -285,14 +319,14 @@ class IntExeUnit(
 
     // If the mul unit is going to write, block issue of a ALU op so the mul can take the write por0
 
-    val imul_block_alu = ShiftRegister(io_iss_uop.valid && io_iss_uop.bits.fu_code_is(FU_MUL), imulLatency)
-      when (imul_block_alu) {
-        alu_ready := false.B
-      }
+    val imul_block_alu = ShiftRegister(arb_uop.valid && arb_uop.bits.fu_code_is(FU_MUL), imulLatency-1)
+    when (imul_block_alu) {
+      alu_ready := false.B
+    }
 
     when (imul.io.resp.valid) {
       io_alu_resp := imul.io.resp
-        assert(!(alu.io.resp.valid && !alu.io.resp.bits.uop.fu_code_is(FU_CSR)))
+      assert(!(alu.io.resp.valid && !alu.io.resp.bits.uop.fu_code_is(FU_CSR)))
     }
   } else {
     assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_MUL)))
@@ -406,12 +440,13 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
   with tile.HasFPUParameters
   with HasFrfReadPorts
 {
-  io_rrd_frf_reqs(0).valid := rrd_uop.valid && rrd_uop.bits.lrs1_rtype === RT_FLT
-  io_rrd_frf_reqs(0).bits  := rrd_uop.bits.prs1
-  io_rrd_frf_reqs(1).valid := rrd_uop.valid && rrd_uop.bits.lrs2_rtype === RT_FLT
-  io_rrd_frf_reqs(1).bits  := rrd_uop.bits.prs2
-  io_rrd_frf_reqs(2).valid := rrd_uop.valid && rrd_uop.bits.frs3_en
-  io_rrd_frf_reqs(2).bits  := rrd_uop.bits.prs3
+
+  io_arb_frf_reqs(0).valid := arb_uop.valid && arb_uop.bits.lrs1_rtype === RT_FLT
+  io_arb_frf_reqs(0).bits  := arb_uop.bits.prs1
+  io_arb_frf_reqs(1).valid := arb_uop.valid && arb_uop.bits.lrs2_rtype === RT_FLT
+  io_arb_frf_reqs(1).bits  := arb_uop.bits.prs2
+  io_arb_frf_reqs(2).valid := arb_uop.valid && arb_uop.bits.frs3_en
+  io_arb_frf_reqs(2).bits  := arb_uop.bits.prs3
 
   val exe_rs1_data = RegNext(io_rrd_frf_resps(0))
   val exe_rs2_data = RegNext(io_rrd_frf_resps(1))

@@ -39,7 +39,9 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
   val brupdate      = Input(new BrUpdateInfo())
   val kill          = Input(Bool()) // pipeline flush
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
+
   val ldspec_miss   = Input(Bool()) // Previous cycle's speculative load wakeup was mispredicted.
+  val squash_grant  = Input(Bool())
 
   val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(new ExeUnitResp(xLen))))
   val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
@@ -85,6 +87,8 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
   // Wakeups
   next_uop.iw_p1_poisoned := false.B
   next_uop.iw_p2_poisoned := false.B
+  next_uop.iw_p1_bypass_hint := false.B
+  next_uop.iw_p2_bypass_hint := false.B
 
   when (io.ldspec_miss && slot_uop.iw_p1_poisoned) {
     next_uop.prs1_busy := true.B
@@ -95,8 +99,14 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
 
   for (wakeup <- io.wakeup_ports) {
     when (wakeup.valid) {
-      when (wakeup.bits.uop.pdst === slot_uop.prs1) { next_uop.prs1_busy := false.B }
-      when (wakeup.bits.uop.pdst === slot_uop.prs2) { next_uop.prs2_busy := false.B }
+      when (wakeup.bits.uop.pdst === slot_uop.prs1) {
+        next_uop.prs1_busy := false.B
+        next_uop.iw_p1_bypass_hint := wakeup.bits.uop.bypassable
+      }
+      when (wakeup.bits.uop.pdst === slot_uop.prs2) {
+        next_uop.prs2_busy := false.B
+        next_uop.iw_p2_bypass_hint := wakeup.bits.uop.bypassable
+      }
       if (isFp)
         when (wakeup.bits.uop.pdst === slot_uop.prs3) { next_uop.prs3_busy := false.B }
     }
@@ -136,7 +146,7 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
   io.iss_uop.bits  := slot_uop
 
   val squash_grant = ((io.ldspec_miss && (slot_uop.iw_p1_poisoned || slot_uop.iw_p2_poisoned)) ||
-                      io.kill)
+                      io.squash_grant)
 
   if (isMem) {
     when (slot_uop.fu_code === FU_STORE) {
@@ -152,10 +162,12 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
         io.iss_uop.bits.fu_code    := FU_DGEN
         io.iss_uop.bits.prs1       := slot_uop.prs2
         io.iss_uop.bits.lrs1_rtype := slot_uop.lrs2_rtype
+        io.iss_uop.bits.iw_p1_bypass_hint := slot_uop.iw_p2_bypass_hint
       }
     } .elsewhen (slot_uop.fu_code === FU_DGEN) {
       io.iss_uop.bits.prs1       := slot_uop.prs2
       io.iss_uop.bits.lrs1_rtype := slot_uop.lrs2_rtype
+      io.iss_uop.bits.iw_p1_bypass_hint := slot_uop.iw_p2_bypass_hint
     }
     io.iss_uop.bits.lrs2_rtype := RT_X
     io.iss_uop.bits.prs2       := io.iss_uop.bits.prs1 // helps with DCE

@@ -1448,7 +1448,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       val f_idx       = wb_ldst_forward_ldq_idx(w)
       val forward_uop = ldq(f_idx).bits.uop
       val stq_e       = WireInit(stq(wb_ldst_forward_stq_idx(w)))
-      val live        = !IsKilledByBranch(io.core.brupdate, forward_uop)
       val storegen = new freechips.rocketchip.rocket.StoreGen(
                                 stq_e.bits.uop.mem_size, stq_e.bits.addr.bits,
                                 stq_e.bits.data.bits, coreDataBytes)
@@ -1457,20 +1456,20 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                 wb_ldst_forward_ld_addr(w),
                                 storegen.data, false.B, coreDataBytes)
 
-      io.core.iresp(w).valid := (forward_uop.dst_rtype === RT_FIX) && live
-      io.core.fresp(w).valid := (forward_uop.dst_rtype === RT_FLT) && live
+      spec_ld_succeed(w) := forward_uop.dst_rtype === RT_FIX
+
+      io.core.iresp(w).valid := (forward_uop.dst_rtype === RT_FIX)
+      io.core.fresp(w).valid := (forward_uop.dst_rtype === RT_FLT)
       io.core.iresp(w).bits.uop  := forward_uop
       io.core.fresp(w).bits.uop  := forward_uop
       io.core.iresp(w).bits.data := loadgen.data
       io.core.fresp(w).bits.data := loadgen.data
 
-      when (live) {
-        ldq(f_idx).bits.succeeded := true.B
-        ldq(f_idx).bits.forward_std_val := true.B
-        ldq(f_idx).bits.forward_stq_idx := wb_ldst_forward_stq_idx(w)
+      ldq(f_idx).bits.succeeded := true.B
+      ldq(f_idx).bits.forward_std_val := true.B
+      ldq(f_idx).bits.forward_stq_idx := wb_ldst_forward_stq_idx(w)
 
-        ldq(f_idx).bits.debug_wb_data   := loadgen.data
-      }
+      ldq(f_idx).bits.debug_wb_data   := loadgen.data
     }
 
     // Forward loads to store-data

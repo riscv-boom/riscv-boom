@@ -79,6 +79,16 @@ class WithRationalBoomTiles extends Config((site, here, up) => {
   }
 })
 
+// class WithUnifiedIntIQ extends Config((site, here, up) => {
+//   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+//     case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
+//       issueParams = tp.tileParams.core.issueParams.filter(iqType != IQT_MEM.litValue)
+//     )))
+//     case other => other
+//   }
+// })
+
+
 /**
  * 1-wide BOOM.
  */
@@ -101,6 +111,7 @@ class WithNSmallBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends 
                 IssueParams(issueWidth=1, numEntries=8, iqType=IQT_FP.litValue , dispatchWidth=1)),
               numIntPhysRegisters = 52,
               numFpPhysRegisters = 48,
+              numIrfReadPorts = 3,
               numLdqEntries = 8,
               numStqEntries = 8,
               maxBrCount = 8,
@@ -148,6 +159,8 @@ class WithNMediumBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends
                 IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=2)),
               numIntPhysRegisters = 80,
               numFpPhysRegisters = 64,
+              numIrfReadPorts = 5,
+              numIrfBanks = 2,
               numLdqEntries = 16,
               numStqEntries = 16,
               maxBrCount = 12,
@@ -195,6 +208,8 @@ class WithNLargeBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends 
                 IssueParams(issueWidth=1, numEntries=24, iqType=IQT_FP.litValue , dispatchWidth=3)),
               numIntPhysRegisters = 100,
               numFpPhysRegisters = 96,
+              numIrfReadPorts = 6,
+              numIrfBanks = 2,
               numLdqEntries = 24,
               numStqEntries = 24,
               maxBrCount = 16,
@@ -234,12 +249,14 @@ class WithNMegaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
               decodeWidth = 4,
               numRobEntries = 128,
               issueParams = Seq(
-                IssueParams(issueWidth=2, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4),
+                IssueParams(issueWidth=3, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4),
                 IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4),
                 IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
               lsuWidth = 2,
               numIntPhysRegisters = 128,
               numFpPhysRegisters = 128,
+              numIrfReadPorts = 4,
+              numIrfBanks = 4,
               numLdqEntries = 32,
               numStqEntries = 32,
               maxBrCount = 20,
@@ -286,6 +303,8 @@ class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) ex
               lsuWidth = 2,
               numIntPhysRegisters = 128,
               numFpPhysRegisters = 128,
+              numIrfReadPorts = 4,
+              numIrfBanks = 4,
               numLdqEntries = 32,
               numStqEntries = 32,
               maxBrCount = 20,

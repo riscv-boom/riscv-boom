@@ -64,6 +64,7 @@ class IssueUnitIO(
   val brupdate         = Input(new BrUpdateInfo())
   val flush_pipeline   = Input(Bool())
   val ld_miss          = Input(Bool())
+  val squash_grant     = Input(Bool())
 
   val tsc_reg          = Input(UInt(width=xLen.W))
 }
@@ -90,13 +91,25 @@ abstract class IssueUnit(
   for (w <- 0 until dispatchWidth) {
     dis_uops(w) := io.dis_uops(w).bits
 
+    dis_uops(w).iw_p1_poisoned := false.B
+    dis_uops(w).iw_p2_poisoned := false.B
+    dis_uops(w).iw_p1_bypass_hint := false.B
+    dis_uops(w).iw_p2_bypass_hint := false.B
 
     // Handle wakeups on dispatch
     for (wakeup <- io.wakeup_ports) {
       when (wakeup.valid) {
-        when (wakeup.bits.uop.pdst === io.dis_uops(w).bits.prs1) { dis_uops(w).prs1_busy := false.B }
-        when (wakeup.bits.uop.pdst === io.dis_uops(w).bits.prs2) { dis_uops(w).prs2_busy := false.B }
-        when (wakeup.bits.uop.pdst === io.dis_uops(w).bits.prs3) { dis_uops(w).prs3_busy := false.B }
+        when (wakeup.bits.uop.pdst === io.dis_uops(w).bits.prs1) {
+          dis_uops(w).prs1_busy := false.B
+          dis_uops(w).iw_p1_bypass_hint := wakeup.bits.uop.bypassable
+        }
+        when (wakeup.bits.uop.pdst === io.dis_uops(w).bits.prs2) {
+          dis_uops(w).prs2_busy := false.B
+          dis_uops(w).iw_p2_bypass_hint := wakeup.bits.uop.bypassable
+        }
+        when (wakeup.bits.uop.pdst === io.dis_uops(w).bits.prs3) {
+          dis_uops(w).prs3_busy := false.B
+        }
       }
     }
     when (io.pred_wakeup_port.valid && io.pred_wakeup_port.bits === io.dis_uops(w).bits.ppred) {
@@ -148,6 +161,7 @@ abstract class IssueUnit(
     issue_slots(i).pred_wakeup_port := io.pred_wakeup_port
     issue_slots(i).spec_ld_wakeup   := io.spec_ld_wakeup
     issue_slots(i).ldspec_miss      := io.ld_miss
+    issue_slots(i).squash_grant     := io.squash_grant
     issue_slots(i).brupdate         := io.brupdate
     issue_slots(i).kill             := io.flush_pipeline
   }

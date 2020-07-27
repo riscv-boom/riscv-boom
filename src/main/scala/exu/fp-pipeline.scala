@@ -69,11 +69,13 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
                          issueParams.find(_.iqType == IQT_FP.litValue).get,
                          numWakeupPorts))
   issue_unit.suggestName("fp_issue_unit")
-  val fregfile       = Module(new RegisterFileSynthesizable(numFpPhysRegs,
-                         numFrfReadPorts,
-                         numFrfWritePorts,
-                         fLen+1
-                         ))
+  val fregfile       = Module(new FullyPortedRF(
+    numFpPhysRegs,
+    numFrfReadPorts,
+    numFrfWritePorts,
+    fLen+1,
+    "Floating Point"
+  ))
 
   //*************************************************************
   // Issue window logic
@@ -89,6 +91,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     issue_unit.io.spec_ld_wakeup(w).bits := 0.U
   }
   issue_unit.io.ld_miss := false.B
+  issue_unit.io.squash_grant := false.B
 
 
   //-------------------------------------------------------------
@@ -124,17 +127,30 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   issue_unit.io.iss_uops zip exe_units map { case (i, u) => u.io_iss_uop := i }
 
   //-------------------------------------------------------------
-  // **** Register Read Stage ****
+  // **** Register Arbitrate Stage ****
   //-------------------------------------------------------------
 
   var rd_idx = 0
   for (unit <- exe_units) {
     for (i <- 0 until 3) {
-      fregfile.io.read_ports(rd_idx).addr := unit.io_rrd_frf_reqs(i)
-      unit.io_rrd_frf_resps(i) := fregfile.io.read_ports(rd_idx).data
+      fregfile.io.arb_read_reqs(rd_idx) <> unit.io_arb_frf_reqs(i)
       rd_idx += 1
     }
   }
+  require(rd_idx == numFrfReadPorts)
+
+  //-------------------------------------------------------------
+  // **** Register Read Stage ****
+  //-------------------------------------------------------------
+
+  rd_idx = 0
+  for (unit <- exe_units) {
+    for (i <- 0 until 3) {
+      unit.io_rrd_frf_resps(i) := fregfile.io.rrd_read_resps(rd_idx)
+      rd_idx += 1
+    }
+  }
+  require(rd_idx == numFrfReadPorts)
 
 
   //-------------------------------------------------------------

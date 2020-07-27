@@ -46,6 +46,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // so we can ignore p3.
   val iw_p1_poisoned   = Bool()
   val iw_p2_poisoned   = Bool()
+  val iw_p1_bypass_hint = Bool()
+  val iw_p2_bypass_hint = Bool()
 
   val br_mask          = UInt(maxBrCount.W)  // which branches are we being speculated under?
   val br_tag           = UInt(brTagSz.W)
