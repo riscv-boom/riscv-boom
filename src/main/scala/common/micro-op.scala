@@ -61,9 +61,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val is_amo           = Bool()
   val is_eret          = Bool()
   val is_sys_pc2epc    = Bool()                      // Is a ECall or Breakpoint -- both set EPC to PC.
-  val is_mov           = Bool()                      // is a move uop
   val is_rocc          = Bool()
-  val is_sfence        = Bool()
 
 
   // Index into FTQ to figure out our fetch PC.
@@ -130,7 +128,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val lrs2             = UInt(lregSz.W)
   val lrs3             = UInt(lregSz.W)
 
-  val ldst_val         = Bool()              // is there a destination? invalid for stores, rd==x0, etc.
   val dst_rtype        = UInt(2.W)
   val lrs1_rtype       = UInt(2.W)
   val lrs2_rtype       = UInt(2.W)

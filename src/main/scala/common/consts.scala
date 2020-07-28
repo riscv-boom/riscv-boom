@@ -256,9 +256,7 @@ trait ScalarOpConstants
   val uopSFENCE    = 107.U(UOPC_SZ.W)
   val uopSCALL     = 108.U(UOPC_SZ.W)
   val uopSBREAK    = 109.U(UOPC_SZ.W)
-  val uopSRET      = 110.U(UOPC_SZ.W)
-  val uopMRET      = 111.U(UOPC_SZ.W)
-  val uopDRET      = 112.U(UOPC_SZ.W)
+
 
   val uopROCC      = 126.U(UOPC_SZ.W)
 

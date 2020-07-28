@@ -302,7 +302,7 @@ class ALUUnit(isJmpUnit: Boolean = false, dataWidth: Int)(implicit p: Parameters
 //   io.resp.bits.data := reg_data
   val alu_out = Mux(io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data,
       Mux(io.req.bits.uop.ldst_is_rs1, io.req.bits.rs1_data, io.req.bits.rs2_data),
-      Mux(io.req.bits.uop.is_mov, io.req.bits.rs2_data, alu.io.out))
+      Mux(io.req.bits.uop.uopc === uopMOV, io.req.bits.rs2_data, alu.io.out))
   io.resp.valid := io.req.valid
   io.resp.bits.uop := io.req.bits.uop
   io.resp.bits.data := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)

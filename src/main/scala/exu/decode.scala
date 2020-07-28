@@ -137,9 +137,9 @@ object DecodeTables
     SFENCE_VMA          ->List(Y, N, uopSFENCE , IQT_INT, FU_CSR , RT_X  , RT_FIX, RT_FIX, N, IS_N, N, N, N,M_SFENCE , N, Y, Y, CSR.R, DW_XPR, FN_ADD ),
     SCALL              -> List(Y, N, uopSCALL  , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
     SBREAK             -> List(Y, N, uopSBREAK , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
-    SRET               -> List(Y, N, uopSRET   , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
-    MRET               -> List(Y, N, uopMRET   , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
-    DRET               -> List(Y, N, uopDRET   , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
+    SRET               -> List(Y, N, uopERET   , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
+    MRET               -> List(Y, N, uopERET   , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
+    DRET               -> List(Y, N, uopERET   , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
 
     WFI                -> List(Y, N, uopWFI    , IQT_INT, FU_CSR , RT_X  , RT_X  , RT_X  , N, IS_I, N, N, N, M_X     , N, Y, Y, CSR.I, DW_XPR, FN_ADD ),
 
@@ -423,7 +423,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   uop.lrs2       := LRS2
   uop.lrs3       := LRS3
 
-  uop.ldst_val   := cs.dst_type =/= RT_X
   uop.dst_rtype  := cs.dst_type
   uop.lrs1_rtype := Mux(cs.rs1_type === RT_FIX && LRS1 === 0.U, RT_ZERO, cs.rs1_type)
   uop.lrs2_rtype := Mux(cs.rs2_type === RT_FIX && LRS2 === 0.U, RT_ZERO, cs.rs2_type)
@@ -431,14 +430,12 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
 
   uop.ldst_is_rs1 := uop.is_sfb_shadow
   // SFB optimization
-  uop.is_mov      := false.B
   when (uop.is_sfb_shadow && cs.rs2_type === RT_X) {
     uop.lrs2_rtype  := Mux(LDST === 0.U, RT_ZERO, RT_FIX)
     uop.lrs2        := LDST
     uop.ldst_is_rs1 := false.B
   } .elsewhen (uop.is_sfb_shadow && cs.uopc === uopADD && LRS1 === 0.U) {
     uop.uopc        := uopMOV
-    uop.is_mov      := true.B
     uop.lrs1        := LDST
     uop.lrs1_rtype  := Mux(LDST === 0.U, RT_ZERO, RT_FIX)
     uop.ldst_is_rs1 := true.B
@@ -462,7 +459,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   uop.is_eret    := inst === SCALL || inst === SBREAK || inst === SRET || inst === MRET || inst === DRET
   uop.is_unique  := cs.inst_unique
   uop.is_rocc    := cs.uopc === uopROCC
-  uop.is_sfence  := sfence
   uop.flush_on_commit := cs.flush_on_commit || (csr_en && !csr_ren && io.csr_decode.write_flush)
 
   uop.bypassable   := cs.bypassable

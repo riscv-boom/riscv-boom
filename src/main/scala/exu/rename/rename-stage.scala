@@ -216,9 +216,9 @@ class RenameStage(
   val com_valids      = Wire(Vec(plWidth, Bool()))
 
   for (w <- 0 until plWidth) {
-    ren2_alloc_reqs(w)    := ren2_uops(w).ldst_val && ren2_uops(w).dst_rtype === rtype && ren2_fire(w)
+    ren2_alloc_reqs(w)    := ren2_uops(w).dst_rtype === rtype && ren2_fire(w)
 
-    com_valids(w)         := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === rtype && io.com_valids(w)
+    com_valids(w)         := io.com_uops(w).dst_rtype === rtype && io.com_valids(w)
   }
 
   //-------------------------------------------------------------

@@ -842,8 +842,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     fast_wakeup.bits.uop := int_iss_uops(i).bits
     fast_wakeup.valid    := int_iss_uops(i).valid &&
                             int_iss_uops(i).bits.bypassable &&
-                            int_iss_uops(i).bits.dst_rtype === RT_FIX &&
-                            int_iss_uops(i).bits.ldst_val
+                            int_iss_uops(i).bits.dst_rtype === RT_FIX
 
 
     // Slow Wakeup (uses write-port to register file)

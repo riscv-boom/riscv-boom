@@ -83,17 +83,9 @@ abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomM
   rrd_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
   val exe_uop = Reg(Valid(new MicroOp))
   exe_uop.valid := rrd_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, rrd_uop.bits)
-  exe_uop.bits  := UpdateBrMask(io_brupdate, rrd_uop.bits)
-  exe_uop.bits.br_type := Seq(
-    (uopBEQ , B_EQ ),
-    (uopBNE , B_NE ),
-    (uopBGE , B_GE ),
-    (uopBGEU, B_GEU),
-    (uopBLT , B_LT ),
-    (uopBLTU, B_LTU),
-    (uopJAL , B_J  ),
-    (uopJALR, B_JR )
-  ) .map { case (c, b) => Mux(rrd_uop.bits.uopc === c, b, 0.U) } .reduce(_|_)
+  val decoder = Module(new RRDDecode)
+  decoder.io.in := rrd_uop.bits
+  exe_uop.bits  := UpdateBrMask(io_brupdate, decoder.io.out)
 }
 
 trait HasIrfReadPorts { this: ExecutionUnit =>
@@ -361,7 +353,7 @@ class IntExeUnit(
     c.bits.addr := RegNext(exe_imm_data)
 
     val s = IO(Valid(new SFenceReq))
-    s.valid    := RegNext(exe_uop.valid && exe_uop.bits.is_sfence)
+    s.valid    := RegNext(exe_uop.valid && exe_uop.bits.uopc === uopSFENCE)
     s.bits.rs1 := RegNext(exe_uop.bits.mem_size(0))
     s.bits.rs2 := RegNext(exe_uop.bits.mem_size(1))
     s.bits.addr := RegNext(exe_rs1_data)
@@ -369,7 +361,7 @@ class IntExeUnit(
     (Some(c), Some(s))
   } else {
     assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_CSR)))
-    assert(!(exe_uop.valid && exe_uop.bits.is_sfence))
+    assert(!(exe_uop.valid && exe_uop.bits.uopc === uopSFENCE))
     (None, None)
   }
 

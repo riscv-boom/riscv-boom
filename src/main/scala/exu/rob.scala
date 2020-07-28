@@ -474,7 +474,7 @@ class Rob(
                !rob_bsy(GetRowIdx(rob_idx))),
                "[rob] writeback (" + i + ") occurred to a not-busy ROB entry.")
       assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
-               temp_uop.ldst_val && temp_uop.pdst =/= io.wb_resps(i).bits.uop.pdst),
+               temp_uop.dst_rtype =/= RT_X && temp_uop.pdst =/= io.wb_resps(i).bits.uop.pdst),
                "[rob] writeback (" + i + ") occurred to the wrong pdst.")
     }
     io.commit.debug_wdata(w) := rob_debug_wdata(rob_head)
