@@ -849,7 +849,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     // Slow Wakeup (uses write-port to register file)
     slow_wakeup.bits.uop := arb.io.out.bits.uop
     slow_wakeup.valid    := arb.io.out.valid &&
-                            arb.io.out.bits.uop.rf_wen &&
                            !arb.io.out.bits.uop.bypassable &&
                             arb.io.out.bits.uop.dst_rtype === RT_FIX
 

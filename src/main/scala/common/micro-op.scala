@@ -15,6 +15,7 @@ import chisel3._
 import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
+import freechips.rocketchip.util._
 
 import boom.exu.FUConstants
 
@@ -54,9 +55,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
 
   val br_type          = UInt(4.W)
-  val is_br            = Bool()                      // is this micro-op a (branch) vs a regular PC+4 inst?
-  val is_jalr          = Bool()                      // is this a jump? (jal or jalr)
-  val is_jal           = Bool()                      // is this a JAL (doesn't include JR)? used for branch unit
   val is_sfb           = Bool()                      // is this a sfb or in the shadow of a sfb
   val is_fence         = Bool()
   val is_fencei        = Bool()
@@ -118,8 +116,11 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
 
   // Predication
-  def is_sfb_br        = is_br && is_sfb && enableSFBOpt.B // Does this write a predicate
-  def is_sfb_shadow    = !is_br && is_sfb && enableSFBOpt.B // Is this predicated
+  def is_br            = br_type.isOneOf(B_NE, B_EQ, B_GE, B_GEU, B_LT, B_LTU)
+  def is_jal           = br_type === B_J
+  def is_jalr          = br_type === B_JR
+  def is_sfb_br        = br_type =/= B_N && is_sfb && enableSFBOpt.B // Does this write a predicate
+  def is_sfb_shadow    = br_type === B_N && is_sfb && enableSFBOpt.B // Is this predicated
   val ldst_is_rs1      = Bool() // If this is set and we are predicated off, copy rs1 to dst,
                                 // else copy rs2 to dst
 
@@ -160,9 +161,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // Do we allocate a branch tag for this?
   // SFB branches don't get a mask, they get a predicate bit
   def allocate_brtag   = (is_br && !is_sfb) || is_jalr
-
-  // Does this register write-back
-  def rf_wen           = dst_rtype =/= RT_X
 
   // Is it possible for this uop to misspeculate, preventing the commit of subsequent uops?
   def unsafe           = uses_ldq || (uses_stq && !is_fence) || is_br || is_jalr

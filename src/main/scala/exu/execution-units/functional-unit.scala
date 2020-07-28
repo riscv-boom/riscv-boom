@@ -218,7 +218,7 @@ class ALUUnit(isJmpUnit: Boolean = false, dataWidth: Int)(implicit p: Parameters
                         ))
 
   val is_taken = io.req.valid &&
-                   (uop.is_br || uop.is_jalr || uop.is_jal) &&
+                   (uop.br_type =/= BR_N) &&
                    (pc_sel =/= PC_PLUS4)
 
   // "mispredict" means that a branch has been resolved and it must be killed

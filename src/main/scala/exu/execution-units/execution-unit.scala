@@ -84,6 +84,16 @@ abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomM
   val exe_uop = Reg(Valid(new MicroOp))
   exe_uop.valid := rrd_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, rrd_uop.bits)
   exe_uop.bits  := UpdateBrMask(io_brupdate, rrd_uop.bits)
+  exe_uop.bits.br_type := Seq(
+    (uopBEQ , B_EQ ),
+    (uopBNE , B_NE ),
+    (uopBGE , B_GE ),
+    (uopBGEU, B_GEU),
+    (uopBLT , B_LT ),
+    (uopBLTU, B_LTU),
+    (uopJAL , B_J  ),
+    (uopJALR, B_JR )
+  ) .map { case (c, b) => Mux(rrd_uop.bits.uopc === c, b, 0.U) } .reduce(_|_)
 }
 
 trait HasIrfReadPorts { this: ExecutionUnit =>
@@ -213,9 +223,14 @@ class IntExeUnit(
   io_arb_irf_reqs(1).valid := arb_uop.valid && arb_uop.bits.lrs2_rtype === RT_FIX && !arb_uop.bits.iw_p2_bypass_hint
   io_arb_irf_reqs(1).bits  := arb_uop.bits.prs2
 
+  val alu_ready = WireInit(true.B)
+
   val io_squash_iss = IO(Output(Bool()))
+  val arb_write_grant = Reg(Bool())
+  arb_write_grant := true.B
   io_squash_iss := ((io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready) ||
-                    (io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready))
+                    (io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready) ||
+                    !arb_write_grant)
 
   // The arbiter didn't grant us a slot. Thus, we should replay the instruction in this slot,
   // But next time we read, it reads from the regfile, not the bypass paths, so disable the bypass hints
@@ -225,6 +240,12 @@ class IntExeUnit(
     arb_uop.bits.iw_p1_bypass_hint := false.B
     arb_uop.bits.iw_p2_bypass_hint := false.B
     rrd_uop.valid := false.B
+
+    // We are going to replay this op, but in doing so, will cause a write conflict
+    // Actually need to replay in 2 cycles
+    when (!alu_ready && arb_uop.bits.fu_code.isOneOf(FU_ALU, FU_JMP)) {
+      arb_write_grant := false.B
+    }
   }
 
   def nReaders = 2
@@ -266,7 +287,6 @@ class IntExeUnit(
   exe_int_req.imm_data := exe_imm_data
   exe_int_req.pred_data := exe_pred_data
 
-  val alu_ready = WireInit(true.B)
   fu_types += ((FU_ALU, alu_ready, "ALU"))
 
   val alu = Module(new ALUUnit(isJmpUnit = hasJmp,
@@ -356,7 +376,6 @@ class IntExeUnit(
   val io_bypass = IO(Valid(new ExeUnitResp(xLen)))
   io_bypass.valid := (io_alu_resp.valid &&
     io_alu_resp.bits.uop.bypassable &&
-    io_alu_resp.bits.uop.rf_wen &&
     io_alu_resp.bits.uop.dst_rtype === RT_FIX)
   io_bypass.bits := io_alu_resp.bits
 

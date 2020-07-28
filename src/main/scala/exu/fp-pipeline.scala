@@ -191,7 +191,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   fregfile.io.write_ports(0).bits.data := ll_wbarb.io.out.bits.data
 
   assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
-  when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.rf_wen && ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
+  when (ifpu_resp.valid) { assert (ifpu_resp.bits.uop.dst_rtype === RT_FLT) }
 
   var w_cnt = 1
   for (i <- 1 until lsuWidth) {
@@ -202,7 +202,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     w_cnt += 1
   }
   for (eu <- exe_units) {
-    fregfile.io.write_ports(w_cnt).valid     := eu.io_fpu_resp.valid && eu.io_fpu_resp.bits.uop.rf_wen
+    fregfile.io.write_ports(w_cnt).valid     := eu.io_fpu_resp.valid && eu.io_fpu_resp.bits.uop.dst_rtype === RT_FLT
     fregfile.io.write_ports(w_cnt).bits.addr := eu.io_fpu_resp.bits.uop.pdst
     fregfile.io.write_ports(w_cnt).bits.data := eu.io_fpu_resp.bits.data
     w_cnt += 1
