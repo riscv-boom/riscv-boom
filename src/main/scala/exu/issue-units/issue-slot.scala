@@ -120,11 +120,13 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
       when (spec_wakeup.bits === slot_uop.prs1 && slot_uop.prs1_busy) {
         next_uop.prs1_busy := false.B
         next_uop.iw_p1_poisoned := true.B
+        next_uop.iw_p1_bypass_hint := true.B
         assert(!slot_uop.iw_p1_poisoned)
       }
       when (spec_wakeup.bits === slot_uop.prs2 && slot_uop.prs2_busy) {
         next_uop.prs2_busy := false.B
         next_uop.iw_p2_poisoned := true.B
+        next_uop.iw_p2_bypass_hint := true.B
         assert(!slot_uop.iw_p2_poisoned)
       }
     }

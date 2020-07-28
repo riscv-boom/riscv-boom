@@ -160,7 +160,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   pred_wakeup.bits := DontCare
 
 
-  val int_bypasses  = Wire(Vec(coreWidth, Valid(new ExeUnitResp(xLen))))
+  val int_bypasses  = Wire(Vec(coreWidth + lsuWidth, Valid(new ExeUnitResp(xLen))))
   val pred_bypass   = Wire(Valid(new ExeUnitResp(1)))
 
   //***********************************
@@ -802,14 +802,21 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   var wu_idx = 0
   var wb_idx = 0
+  var bypass_idx = 0
   for (i <- 0 until lsuWidth) {
     int_wakeups(wu_idx) := io.lsu.iresp(i)
     rob.io.wb_resps(wb_idx) := RegNext(UpdateBrMask(brupdate, io.lsu.iresp(i)))
-    iregfile.io.write_ports(wb_idx).valid := io.lsu.iresp(i).valid
-    iregfile.io.write_ports(wb_idx).bits.addr := io.lsu.iresp(i).bits.uop.pdst
-    iregfile.io.write_ports(wb_idx).bits.data := io.lsu.iresp(i).bits.data
+    iregfile.io.write_ports(wb_idx).valid := RegNext(io.lsu.iresp(i).valid)
+    iregfile.io.write_ports(wb_idx).bits.addr := RegNext(io.lsu.iresp(i).bits.uop.pdst)
+    iregfile.io.write_ports(wb_idx).bits.data := RegNext(io.lsu.iresp(i).bits.data)
+    val mem_bypass_shifter = Module(new BranchKillablePipeline(new ExeUnitResp(xLen), 2))
+    mem_bypass_shifter.io.req      := io.lsu.iresp(i)
+    mem_bypass_shifter.io.flush    := RegNext(rob.io.flush.valid)
+    mem_bypass_shifter.io.brupdate := brupdate
+    int_bypasses(bypass_idx)       := mem_bypass_shifter.io.resp(1)
     wu_idx += 1
     wb_idx += 1
+    bypass_idx += 1
   }
 
   // loop through each issue-port (exe_units are statically connected to an issue-port)
@@ -832,7 +839,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       (if (sharesCSR) 1 else 0) +
       (if (sharesRoCC) 1 else 0)))
     arb.io.out.ready := true.B
-    int_bypasses(i) := unit.io_bypass
+    int_bypasses(bypass_idx) := unit.io_bypass
+    bypass_idx += 1
 
     var arb_idx = 1
     arb.io.in(0).valid := unit.io_alu_resp.valid

@@ -93,7 +93,7 @@ trait HasIrfReadPorts { this: ExecutionUnit =>
 
   val io_arb_irf_reqs = IO(Vec(nReaders, Decoupled(UInt(maxPregSz.W))))
   val io_rrd_irf_resps    = IO(Input (Vec(nReaders , UInt(xLen.W))))
-  val io_rrd_irf_bypasses = IO(Input (Vec(coreWidth, Valid(new ExeUnitResp(xLen)))))
+  val io_rrd_irf_bypasses = IO(Input (Vec(coreWidth + lsuWidth, Valid(new ExeUnitResp(xLen)))))
 
   def rrd_bypass_hit(prs: UInt, rdata: UInt): (Bool, UInt) = {
     val hits = io_rrd_irf_bypasses map { b => b.valid && prs === b.bits.uop.pdst }

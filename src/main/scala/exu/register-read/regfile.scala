@@ -125,15 +125,18 @@ class PartiallyPortedRF(
   val data_sels   = Wire(Vec(numLogicalReadPorts , UInt(numPhysicalReadPorts.W)))
   data_sels := DontCare
 
+  val supportPortSharing = false
 
   for (i <- 0 until numLogicalReadPorts) {
     var read_issued = false.B
     for (j <- 0 until numPhysicalReadPorts) {
       val issue_read = WireInit(false.B)
       val use_port = WireInit(false.B)
-      when (!read_issued && port_issued(j) && io.arb_read_reqs(i).valid && io.arb_read_reqs(i).bits === port_addrs(j)) {
-        issue_read := true.B
-        data_sels(i) := UIntToOH(j.U)
+      if (supportPortSharing) {
+        when (!read_issued && port_issued(j) && io.arb_read_reqs(i).valid && io.arb_read_reqs(i).bits === port_addrs(j)) {
+          issue_read := true.B
+          data_sels(i) := UIntToOH(j.U)
+        }
       }
       when (!read_issued && !port_issued(j) && io.arb_read_reqs(i).valid) {
         issue_read := true.B

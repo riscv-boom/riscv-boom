@@ -120,10 +120,12 @@ abstract class IssueUnit(
         when (spec_wakeup.bits === io.dis_uops(w).bits.prs1) {
           dis_uops(w).prs1_busy := false.B
           dis_uops(w).iw_p1_poisoned := true.B
+          dis_uops(w).iw_p1_bypass_hint := true.B
         }
         when (spec_wakeup.bits === io.dis_uops(w).bits.prs2) {
           dis_uops(w).prs2_busy := false.B
           dis_uops(w).iw_p2_poisoned := true.B
+          dis_uops(w).iw_p2_bypass_hint := true.B
         }
       }
     }
