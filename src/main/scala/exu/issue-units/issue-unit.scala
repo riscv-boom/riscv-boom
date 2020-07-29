@@ -130,6 +130,15 @@ abstract class IssueUnit(
       }
     }
 
+    if (iqType == IQT_INT.litValue) {
+      when (io.dis_uops(w).bits.fu_code_is(FU_I2F)) {
+        dis_uops(w).prs2 := Cat(io.dis_uops(w).bits.fp_rm, io.dis_uops(w).bits.fp_typ)
+      }
+      when (io.dis_uops(w).bits.uopc === uopSFENCE) {
+        dis_uops(w).pimm := io.dis_uops(w).bits.mem_size
+      }
+    }
+
     if (iqType == IQT_MEM.litValue || iqType == IQT_INT.litValue) {
       // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here
       when (io.dis_uops(w).bits.uses_stq && io.dis_uops(w).bits.lrs2_rtype === RT_FLT) {

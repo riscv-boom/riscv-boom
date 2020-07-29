@@ -83,9 +83,7 @@ abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomM
   rrd_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
   val exe_uop = Reg(Valid(new MicroOp))
   exe_uop.valid := rrd_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, rrd_uop.bits)
-  val decoder = Module(new RRDDecode)
-  decoder.io.in := rrd_uop.bits
-  exe_uop.bits  := UpdateBrMask(io_brupdate, decoder.io.out)
+  exe_uop.bits  := UpdateBrMask(io_brupdate, RRDDecode(rrd_uop.bits))
 }
 
 trait HasIrfReadPorts { this: ExecutionUnit =>
@@ -113,6 +111,11 @@ trait HasPrfReadPort { this: ExecutionUnit =>
   assert(io_arb_prf_req.ready)
   val io_rrd_prf_resp   = IO(Input(Bool()))
   val io_rrd_prf_bypass = IO(Input(Valid(new ExeUnitResp(1))))
+}
+
+trait HasBrfReadPort { this: ExecutionUnit =>
+  val io_arb_brf_req    = IO(Decoupled(UInt(brTagSz.W)))
+  val io_rrd_brf_resp   = IO(Input(new BrInfoBundle))
 }
 
 trait HasFrfReadPorts { this: ExecutionUnit =>
@@ -209,6 +212,7 @@ class IntExeUnit(
   with HasIrfReadPorts
   with HasPrfReadPort
   with HasImmrfReadPort
+  with HasBrfReadPort
 {
   io_arb_irf_reqs(0).valid := arb_uop.valid && arb_uop.bits.lrs1_rtype === RT_FIX && !arb_uop.bits.iw_p1_bypass_hint
   io_arb_irf_reqs(0).bits  := arb_uop.bits.prs1
@@ -248,7 +252,8 @@ class IntExeUnit(
   io_rrd_immrf_wakeup.bits     := DontCare
   io_rrd_immrf_wakeup.bits.uop := rrd_uop.bits
 
-
+  io_arb_brf_req.valid := (arb_uop.valid && arb_uop.bits.is_br)
+  io_arb_brf_req.bits  := arb_uop.bits.br_tag
 
   io_arb_prf_req.valid := arb_uop.valid
   io_arb_prf_req.bits  := arb_uop.bits.ppred
@@ -270,6 +275,10 @@ class IntExeUnit(
   val exe_pred_data = Reg(Bool())
   exe_pred_data := Mux(io_rrd_prf_bypass.valid && io_rrd_prf_bypass.bits.uop.pdst === rrd_uop.bits.ppred,
     io_rrd_prf_bypass.bits.data, io_rrd_prf_resp)
+
+  exe_uop.bits.ldq_idx   := io_rrd_brf_resp.ldq_idx
+  exe_uop.bits.stq_idx   := io_rrd_brf_resp.stq_idx
+  exe_uop.bits.rxq_idx   := io_rrd_brf_resp.rxq_idx
 
   val exe_int_req = Wire(new FuncUnitReq(xLen))
   exe_int_req.uop := exe_uop.bits
@@ -354,8 +363,8 @@ class IntExeUnit(
 
     val s = IO(Valid(new SFenceReq))
     s.valid    := RegNext(exe_uop.valid && exe_uop.bits.uopc === uopSFENCE)
-    s.bits.rs1 := RegNext(exe_uop.bits.mem_size(0))
-    s.bits.rs2 := RegNext(exe_uop.bits.mem_size(1))
+    s.bits.rs1 := RegNext(exe_uop.bits.pimm(0))
+    s.bits.rs2 := RegNext(exe_uop.bits.pimm(1))
     s.bits.addr := RegNext(exe_rs1_data)
     s.bits.asid := RegNext(exe_rs2_data)
     (Some(c), Some(s))
@@ -396,6 +405,8 @@ class IntExeUnit(
     val ifpu = Module(new IntToFPUnit(latency=intToFpLatency))
     ifpu.io.req.valid  := exe_uop.valid && exe_uop.bits.fu_code_is(FU_I2F)
     ifpu.io.req.bits   := exe_int_req
+    ifpu.io.req.bits.uop.fp_rm  := exe_uop.bits.prs2(4,2)
+    ifpu.io.req.bits.uop.fp_typ := exe_uop.bits.prs2(1,0)
     ifpu.io.fcsr_rm    := io_fcsr_rm
     ifpu.io.brupdate   := io_brupdate
     ifpu.io.kill       := io_kill

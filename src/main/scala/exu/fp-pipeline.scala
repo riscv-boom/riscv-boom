@@ -70,10 +70,10 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
                          numWakeupPorts))
   issue_unit.suggestName("fp_issue_unit")
   val fregfile       = Module(new FullyPortedRF(
+    UInt((fLen+1).W),
     numFpPhysRegs,
     numFrfReadPorts,
     numFrfWritePorts,
-    fLen+1,
     "Floating Point"
   ))
 

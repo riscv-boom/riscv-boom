@@ -80,6 +80,14 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   val pred_data = Bool()
   val imm_data = UInt(xLen.W) // only used for integer ALU and AGen units
 }
+
+class BrInfoBundle(implicit p: Parameters) extends BoomBundle
+{
+  val ldq_idx = UInt(ldqAddrSz.W)
+  val stq_idx = UInt(stqAddrSz.W)
+  val rxq_idx = UInt(log2Ceil(numRxqEntries).W)
+}
+
 /**
  * Branch resolution information given from the branch unit
  */

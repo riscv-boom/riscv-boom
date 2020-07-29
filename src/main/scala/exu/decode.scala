@@ -181,8 +181,8 @@ object DecodeTables
     FCLASS_S           -> List(Y, Y, uopFCLASS_S,IQT_FP , FU_F2I , RT_FIX, RT_FLT, RT_X  , N, IS_N, N, N, N, M_X     , N, N, N, CSR.N, DW_X  , FN_X   ),
     FCLASS_D           -> List(Y, Y, uopFCLASS_D,IQT_FP , FU_F2I , RT_FIX, RT_FLT, RT_X  , N, IS_N, N, N, N, M_X     , N, N, N, CSR.N, DW_X  , FN_X   ),
 
-    FMV_S_X            -> List(Y, Y, uopFMV_S_X, IQT_INT, FU_I2F , RT_FLT, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, N, CSR.N, DW_X  , FN_X   ),
-    FMV_D_X            -> List(Y, Y, uopFMV_D_X, IQT_INT, FU_I2F , RT_FLT, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, N, CSR.N, DW_X  , FN_X   ),
+    FMV_S_X            -> List(Y, Y, uopFMV_S_X, IQT_INT, FU_I2F , RT_FLT, RT_FIX, RT_X  , N, IS_N, N, N, N, M_X     , N, N, N, CSR.N, DW_X  , FN_X   ),
+    FMV_D_X            -> List(Y, Y, uopFMV_D_X, IQT_INT, FU_I2F , RT_FLT, RT_FIX, RT_X  , N, IS_N, N, N, N, M_X     , N, N, N, CSR.N, DW_X  , FN_X   ),
     FMV_X_S            -> List(Y, Y, uopFMV_X_S, IQT_FP , FU_F2I , RT_FIX, RT_FLT, RT_X  , N, IS_N, N, N, N, M_X     , N, N, N, CSR.N, DW_X  , FN_X   ),
     FMV_X_D            -> List(Y, Y, uopFMV_X_D, IQT_FP , FU_F2I , RT_FIX, RT_FLT, RT_X  , N, IS_N, N, N, N, M_X     , N, N, N, CSR.N, DW_X  , FN_X   ),
 

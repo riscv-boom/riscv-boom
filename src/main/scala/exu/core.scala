@@ -125,33 +125,39 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val dispatcher       = Module(new BasicDispatcher)
 
   val iregfile         = Module(new BankedRF(
-                             numIrfBanks,
-                             numIrfLogicalReadPorts,
-                             numIntPhysRegs,
-                             numIrfLogicalReadPorts,
-                             numIrfReadPorts,
-                             numIrfWritePorts,
-                             xLen,
-                             "Integer"
+    UInt(xLen.W),
+    numIrfBanks,
+    numIrfLogicalReadPorts,
+    numIntPhysRegs,
+    numIrfLogicalReadPorts,
+    numIrfReadPorts,
+    numIrfWritePorts,
+    "Integer"
   ))
   val pregfile         = Module(new FullyPortedRF(
-                            ftqSz,
-                            intWidth,
-                            1,
-                            1,
-                            "Predicate"
+    Bool(),
+    ftqSz,
+    intWidth,
+    1,
+    "Predicate"
   ))
   val immregfile       = Module(new FullyPortedRF(
-                            numImmPhysRegs,
-                            memWidth + intWidth,
-                            coreWidth,
-                            LONGEST_IMM_SZ,
-                            "Immediate"
+    UInt(LONGEST_IMM_SZ.W),
+    numImmPhysRegs,
+    memWidth + intWidth,
+    coreWidth,
+    "Immediate"
   ))
-
+  val bregfile         = Module(new FullyPortedRF(
+    new BrInfoBundle,
+    maxBrCount,
+    intWidth,
+    coreWidth,
+    "Branch"
+  ))
   val rob              = Module(new Rob(
-                           numIrfWritePorts + numFpWakeupPorts,
-                           usingTrace
+    numIrfWritePorts + numFpWakeupPorts,
+    usingTrace
   ))
   // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
   val int_wakeups  = Wire(Vec(numIntWakeups, Valid(new ExeUnitResp(xLen))))
@@ -777,18 +783,19 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   }
 
   //-------------------------------------------------------------
-  // Write immediates into immediate file
+  // Write immediates, branches into immediate file
   for (w <- 0 until coreWidth) {
-    // val uop  = RegNext(dis_uops(w))
-    // val inst = uop.inst
-    // // repackage the immediate, and then pass the fewest number of bits around
-    // val di24_20 = Mux(uop.imm_sel === IS_B || uop.imm_sel === IS_S, inst(11,7), inst(24,20))
-    // val imm_packed = Cat(inst(31,25), di24_20, inst(19,12))
+    val uop = RegNext(dis_uops(w))
 
+    immregfile.io.write_ports(w).valid     := RegNext(dis_fire(w)) && !uop.imm_sel.isOneOf(IS_N, IS_SH)
+    immregfile.io.write_ports(w).bits.addr := uop.pimm
+    immregfile.io.write_ports(w).bits.data := uop.imm_packed
 
-    immregfile.io.write_ports(w).valid     := RegNext(dis_fire(w) && !dis_uops(w).imm_sel.isOneOf(IS_N, IS_SH))
-    immregfile.io.write_ports(w).bits.addr := RegNext(dis_uops(w).pimm)
-    immregfile.io.write_ports(w).bits.data := RegNext(dis_uops(w).imm_packed)
+    bregfile.io.write_ports(w).valid               := RegNext(dis_fire(w)) && uop.is_br
+    bregfile.io.write_ports(w).bits.addr           := uop.br_tag
+    bregfile.io.write_ports(w).bits.data.ldq_idx   := uop.ldq_idx
+    bregfile.io.write_ports(w).bits.data.stq_idx   := uop.stq_idx
+    bregfile.io.write_ports(w).bits.data.rxq_idx   := uop.rxq_idx
   }
 
 
@@ -982,6 +989,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   require(arb_idx == numIrfLogicalReadPorts)
   for ((unit, w) <- (int_exe_units) zipWithIndex) {
     pregfile.io.arb_read_reqs(w) <> unit.io_arb_prf_req
+    bregfile.io.arb_read_reqs(w) <> unit.io_arb_brf_req
   }
 
 
@@ -1005,6 +1013,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   for ((unit, w) <- int_exe_units.zipWithIndex) {
     unit.io_rrd_prf_resp := pregfile.io.rrd_read_resps(w)
     unit.io_rrd_prf_bypass := pred_bypass
+    unit.io_rrd_brf_resp := bregfile.io.rrd_read_resps(w)
   }
 
   //-------------------------------------------------------------

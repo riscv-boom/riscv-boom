@@ -21,20 +21,20 @@ import freechips.rocketchip.config.Parameters
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
-abstract class RegisterFile(
+abstract class RegisterFile[T <: Data](
+  dType: T,
   numRegisters: Int,
   numReadPorts: Int,
-  numWritePorts: Int,
-  registerWidth: Int)
+  numWritePorts: Int)
   (implicit p: Parameters) extends BoomModule
 {
   val io = IO(new BoomBundle {
     val arb_read_reqs  = Vec(numReadPorts, Flipped(Decoupled(UInt(log2Ceil(numRegisters).W))))
-    val rrd_read_resps = Vec(numReadPorts, Output(UInt(registerWidth.W)))
+    val rrd_read_resps = Vec(numReadPorts, Output(dType))
 
     val write_ports = Vec(numWritePorts, Flipped(Valid(new Bundle {
       val addr = Output(UInt(maxPregSz.W))
-      val data = Output(UInt(registerWidth.W))
+      val data = Output(dType)
     })))
   })
 
@@ -51,27 +51,27 @@ abstract class RegisterFile(
   }
 }
 
-class BankedRF(
+class BankedRF[T <: Data](
+  dType: T,
   numBanks: Int,
   numLogicalReadPortsPerBank: Int,
   numRegisters: Int,
   numLogicalReadPorts: Int,
   numPhysicalReadPorts: Int,
   numWritePorts: Int,
-  registerWidth: Int,
   typeStr: String
 )(implicit p: Parameters)
-    extends RegisterFile(numRegisters, numLogicalReadPorts, numWritePorts, registerWidth)
+    extends RegisterFile(dType, numRegisters, numLogicalReadPorts, numWritePorts)
 {
   require(isPow2(numBanks))
   require(numRegisters % numBanks == 0)
   def bankIdx(i: UInt): UInt = i(log2Ceil(numBanks)-1,0)
   val rfs = (0 until numBanks) map { w => Module(new PartiallyPortedRF(
+    dType,
     numRegisters / numBanks,
     numLogicalReadPortsPerBank,
     numPhysicalReadPorts,
     numWritePorts,
-    registerWidth,
     typeStr + s" Bank ${w}"
   )) }
   if (numBanks == 1) {
@@ -101,21 +101,21 @@ class BankedRF(
   override def toString: String = rfs.map(_.toString).mkString
 }
 
-class PartiallyPortedRF(
+class PartiallyPortedRF[T <: Data](
+  dType: T,
   numRegisters: Int,
   numLogicalReadPorts: Int,
   numPhysicalReadPorts: Int,
   numWritePorts: Int,
-  registerWidth: Int,
   typeStr: String
 )(implicit p: Parameters)
-    extends RegisterFile(numRegisters, numLogicalReadPorts, numWritePorts, registerWidth)
+    extends RegisterFile(dType, numRegisters, numLogicalReadPorts, numWritePorts)
 {
   val rf = Module(new FullyPortedRF(
+    dType = dType,
     numRegisters = numRegisters,
     numReadPorts = numPhysicalReadPorts,
     numWritePorts = numWritePorts,
-    registerWidth = registerWidth,
     typeStr = "Partially Ported " + typeStr,
   ))
   rf.io.write_ports := io.write_ports
@@ -165,14 +165,14 @@ class PartiallyPortedRF(
 }
 
 
-class FullyPortedRF(
+class FullyPortedRF[T <: Data](
+  dType: T,
   numRegisters: Int,
   numReadPorts: Int,
   numWritePorts: Int,
-  registerWidth: Int,
   typeStr: String,
 )(implicit p: Parameters)
-    extends RegisterFile(numRegisters, numReadPorts, numWritePorts, registerWidth)
+    extends RegisterFile(dType, numRegisters, numReadPorts, numWritePorts)
 {
   val rf_cost = (numReadPorts + numWritePorts) * (numReadPorts + 2*numWritePorts)
   override def toString: String = BoomCoreStringPrefix(
@@ -185,7 +185,7 @@ class FullyPortedRF(
 
   io.arb_read_reqs.map(p => p.ready := true.B)
 
-  val regfile = Mem(numRegisters, UInt(registerWidth.W))
+  val regfile = Mem(numRegisters, dType)
 
   (0 until numReadPorts) map {p => io.rrd_read_resps(p) := regfile(RegNext(io.arb_read_reqs(p).bits)) }
 

@@ -125,3 +125,18 @@ class RRDDecode(implicit p: Parameters) extends BoomModule {
     (uopJALR, B_JR )
   ) .map { case (c, b) => Mux(io.in.uopc === c, b, 0.U) } .reduce(_|_)
 }
+
+object RRDDecode {
+  def apply(uop: MicroOp)(implicit p: Parameters): MicroOp = {
+    val decoder = Module(new RRDDecode)
+    decoder.io.in := uop
+    val out = WireInit(uop)
+    out.fcn_op := decoder.io.out.fcn_op
+    out.fcn_dw := decoder.io.out.fcn_dw
+    out.op1_sel := decoder.io.out.op1_sel
+    out.op2_sel := decoder.io.out.op2_sel
+    out.csr_cmd := decoder.io.out.csr_cmd
+    out.br_type := decoder.io.out.br_type
+    out
+  }
+}
