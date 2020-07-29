@@ -26,7 +26,6 @@ import freechips.rocketchip.tile.{XLen, RoCCCoreIO}
 import freechips.rocketchip.tile
 import freechips.rocketchip.util._
 
-import FUConstants._
 import boom.common._
 import boom.ifu.{GetPCFromFtq}
 import boom.util._
@@ -59,13 +58,22 @@ class CSRResp(implicit p: Parameters) extends BoomBundle
 
 abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomMultiIOModule
 {
-  val fu_types = ArrayBuffer[(UInt, Bool, String)]()
-  def get_all_fu_types: UInt = fu_types.map(_._1).reduce(_|_)
+  val fu_types = ArrayBuffer[(Int, Bool, String)]()
+  def get_all_fu_types(): Vec[Bool] = {
+    val r = WireInit(VecInit(Seq.fill(FC_SZ) { false.B }))
+    fu_types.map { case (code, _, _) => { r(code) := true.B } }
+    r
+  }
+  def get_ready_fu_types(): Vec[Bool] = {
+    val r = WireInit(VecInit(Seq.fill(FC_SZ) { false.B }))
+    fu_types.map { case (code, ready, _) => { when (ready) { r(code) := true.B } } }
+    r
+  }
 
   val io_kill = IO(Input(Bool()))
   val io_brupdate = IO(Input(new BrUpdateInfo))
   val io_status = IO(Input(new freechips.rocketchip.rocket.MStatus))
-  val io_ready_fu_types = IO(Output(UInt(FUC_SZ.W)))
+  val io_ready_fu_types = IO(Output(Vec(FC_SZ, Bool())))
 
   val io_fcsr_rm = IO(Input(UInt(tile.FPConstants.RM_SZ.W)))
   override def toString = {
@@ -138,13 +146,13 @@ class MemExeUnit(
   assert(!(io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready))
 
   io_arb_immrf_req.valid := (arb_uop.valid &&
-    !arb_uop.bits.fu_code_is(FU_DGEN) &&
+    !arb_uop.bits.fu_code(FC_DGEN) &&
     !arb_uop.bits.imm_sel.isOneOf(IS_N, IS_SH)
   )
   io_arb_immrf_req.bits      := arb_uop.bits.pimm
 
   io_rrd_immrf_wakeup.valid := (rrd_uop.valid &&
-    !rrd_uop.bits.fu_code_is(FU_DGEN) &&
+    !rrd_uop.bits.fu_code(FC_DGEN) &&
     !rrd_uop.bits.imm_sel.isOneOf(IS_N, IS_SH)
   )
   io_rrd_immrf_wakeup.bits := DontCare
@@ -162,13 +170,13 @@ class MemExeUnit(
   ))
 
   val io_agen = if (hasAGen) {
-    val loads_saturating = exe_uop.valid && exe_uop.bits.uses_ldq && exe_uop.bits.fu_code_is(FU_AGEN)
+    val loads_saturating = exe_uop.valid && exe_uop.bits.uses_ldq && exe_uop.bits.fu_code(FC_AGEN)
     val saturating_loads_counter = RegInit(0.U(5.W))
     when (loads_saturating) { saturating_loads_counter := saturating_loads_counter + 1.U }
       .otherwise { saturating_loads_counter := 0.U }
     val pause_mem = RegNext(loads_saturating) && saturating_loads_counter === ~(0.U(5.W))
     val load_ready = !pause_mem
-    fu_types += ((FU_AGEN, load_ready, "AGen"))
+    fu_types += ((FC_AGEN, load_ready, "AGen"))
 
     val sum = (exe_rs1_data.asSInt + exe_imm_data.asSInt).asUInt
     val ea_sign = Mux(sum(vaddrBits-1), ~sum(63,vaddrBits) === 0.U,
@@ -176,28 +184,28 @@ class MemExeUnit(
     val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).asUInt
 
     val agen = IO(Output(Valid(new MemGen)))
-    agen.valid     := exe_uop.valid && exe_uop.bits.fu_code_is(FU_AGEN)
+    agen.valid     := exe_uop.valid && exe_uop.bits.fu_code(FC_AGEN)
     agen.bits.uop  := exe_uop.bits
     agen.bits.data := Sext(effective_address, xLen)
     Some(agen)
   } else {
-    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_AGEN)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code(FC_AGEN)))
     None
   }
 
   val io_dgen = if (hasDGen) {
-    fu_types += ((FU_DGEN, true.B, "DGen"))
+    fu_types += ((FC_DGEN, true.B, "DGen"))
     val dgen = IO(Output(Valid(new MemGen)))
-    dgen.valid     := exe_uop.valid && exe_uop.bits.fu_code_is(FU_DGEN)
+    dgen.valid     := exe_uop.valid && exe_uop.bits.fu_code(FC_DGEN)
     dgen.bits.data := exe_rs1_data
     dgen.bits.uop  := exe_uop.bits
     Some(dgen)
   } else {
-    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_DGEN)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code(FC_DGEN)))
     None
   }
 
-  io_ready_fu_types := fu_types.map { case (code, ready, _) => Mux(ready, code, 0.U(FUC_SZ.W)) }.reduce(_|_)
+  io_ready_fu_types := get_ready_fu_types()
 
 
 }
@@ -239,7 +247,7 @@ class IntExeUnit(
 
     // We are going to replay this op, but in doing so, will cause a write conflict
     // Actually need to replay in 2 cycles
-    when (!alu_ready && arb_uop.bits.fu_code.isOneOf(FU_ALU, FU_JMP)) {
+    when (!alu_ready && (arb_uop.bits.fu_code(FC_ALU) || arb_uop.bits.fu_code(FC_JMP))) {
       arb_write_grant := false.B
     }
   }
@@ -288,13 +296,13 @@ class IntExeUnit(
   exe_int_req.imm_data := exe_imm_data
   exe_int_req.pred_data := exe_pred_data
 
-  fu_types += ((FU_ALU, alu_ready, "ALU"))
+  fu_types += ((FC_ALU, alu_ready, "ALU"))
 
   val alu = Module(new ALUUnit(isJmpUnit = hasJmp,
                                  dataWidth = xLen))
-  val req_valid = (exe_uop.bits.fu_code_is(FU_ALU) ||
-    (if (hasJmp) exe_uop.bits.fu_code_is(FU_JMP) else false.B) ||
-    (if (hasCSR) exe_uop.bits.fu_code_is(FU_CSR) else false.B)
+  val req_valid = (exe_uop.bits.fu_code(FC_ALU) ||
+    (if (hasJmp) exe_uop.bits.fu_code(FC_JMP) else false.B) ||
+    (if (hasCSR) exe_uop.bits.fu_code(FC_CSR) else false.B)
   )
   alu.io.req.valid  := exe_uop.valid && req_valid && !exe_uop.bits.is_rocc
   alu.io.req.bits   := exe_int_req
@@ -303,17 +311,17 @@ class IntExeUnit(
   alu.io.kill       := io_kill
 
   val io_alu_resp = IO(Output(Valid(new ExeUnitResp(xLen))))
-  io_alu_resp.valid := alu.io.resp.valid && !alu.io.resp.bits.uop.fu_code_is(FU_CSR)
+  io_alu_resp.valid := alu.io.resp.valid && !alu.io.resp.bits.uop.fu_code(FC_CSR)
   io_alu_resp.bits  := alu.io.resp.bits
 
   val io_brinfo = IO(Output(Valid(new BrResolutionInfo)))
   io_brinfo := alu.io.brinfo
 
   val (io_get_ftq_req, io_get_ftq_resp, io_pred_bypass) = if (hasJmp) {
-    fu_types += ((FU_JMP, alu_ready, "Jmp"))
+    fu_types += ((FC_JMP, alu_ready, "Jmp"))
 
     val req = IO(Output(Valid(UInt(log2Ceil(ftqSz).W))))
-    req.valid := rrd_uop.valid && rrd_uop.bits.fu_code === FU_JMP
+    req.valid := rrd_uop.valid && rrd_uop.bits.fu_code(FC_JMP)
     req.bits  := rrd_uop.bits.ftq_idx
 
     val resp = IO(Input(new GetPCFromFtq))
@@ -328,11 +336,11 @@ class IntExeUnit(
   }
 
   if (hasMul) {
-    fu_types += ((FU_MUL, true.B, "IMul"))
+    fu_types += ((FC_MUL, true.B, "IMul"))
 
     val imul = Module(new PipelinedMulUnit(imulLatency, xLen))
     require(imulLatency > 2)
-    imul.io.req.valid  := exe_uop.valid && exe_uop.bits.fu_code_is(FU_MUL)
+    imul.io.req.valid  := exe_uop.valid && exe_uop.bits.fu_code(FC_MUL)
     imul.io.req.bits   := exe_int_req
     imul.io.brupdate   := io_brupdate
     imul.io.kill       := io_kill
@@ -340,21 +348,21 @@ class IntExeUnit(
 
     // If the mul unit is going to write, block issue of a ALU op so the mul can take the write por0
 
-    val imul_block_alu = ShiftRegister(arb_uop.valid && arb_uop.bits.fu_code_is(FU_MUL), imulLatency-1)
+    val imul_block_alu = ShiftRegister(arb_uop.valid && arb_uop.bits.fu_code(FC_MUL), imulLatency-1)
     when (imul_block_alu) {
       alu_ready := false.B
     }
 
     when (imul.io.resp.valid) {
       io_alu_resp := imul.io.resp
-      assert(!(alu.io.resp.valid && !alu.io.resp.bits.uop.fu_code_is(FU_CSR)))
+      assert(!(alu.io.resp.valid && !alu.io.resp.bits.uop.fu_code(FC_CSR)))
     }
   } else {
-    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_MUL)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code(FC_MUL)))
   }
 
   val (io_csr, io_sfence) = if (hasCSR) {
-    fu_types += ((FU_CSR, true.B, "CSR"))
+    fu_types += ((FC_CSR, true.B, "CSR"))
     val c = IO(Output(Valid(new CSRResp)))
     c.valid     := RegNext(alu.io.resp.valid && exe_uop.bits.csr_cmd =/= CSR.N)
     c.bits.uop  := RegNext(alu.io.resp.bits.uop)
@@ -369,7 +377,7 @@ class IntExeUnit(
     s.bits.asid := RegNext(exe_rs2_data)
     (Some(c), Some(s))
   } else {
-    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_CSR)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code(FC_CSR)))
     assert(!(exe_uop.valid && exe_uop.bits.uopc === uopSFENCE))
     (None, None)
   }
@@ -400,10 +408,10 @@ class IntExeUnit(
 
   val (io_ifpu_resp) = if (hasIfpu) {
     val ifpu_ready = Wire(Bool())
-    fu_types += ((FU_I2F, ifpu_ready, "IFPU"))
+    fu_types += ((FC_I2F, ifpu_ready, "IFPU"))
 
     val ifpu = Module(new IntToFPUnit(latency=intToFpLatency))
-    ifpu.io.req.valid  := exe_uop.valid && exe_uop.bits.fu_code_is(FU_I2F)
+    ifpu.io.req.valid  := exe_uop.valid && exe_uop.bits.fu_code(FC_I2F)
     ifpu.io.req.bits   := exe_int_req
     ifpu.io.req.bits.uop.fp_rm  := exe_uop.bits.prs2(4,2)
     ifpu.io.req.bits.uop.fp_typ := exe_uop.bits.prs2(1,0)
@@ -424,17 +432,17 @@ class IntExeUnit(
     ifpu_resp <> queue.io.deq
     (Some(ifpu_resp))
   } else {
-    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_I2F)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code(FC_I2F)))
     (None)
   }
 
   val (io_div_resp) = if (hasDiv) {
     val div_ready = Wire(Bool())
-    fu_types += ((FU_DIV, div_ready, "IDiv"))
+    fu_types += ((FC_DIV, div_ready, "IDiv"))
 
     val divq = Module(new BranchKillableQueue(new FuncUnitReq(xLen), 3))
     div_ready := divq.io.empty
-    divq.io.enq.valid := (exe_uop.valid && exe_uop.bits.fu_code_is(FU_DIV))
+    divq.io.enq.valid := (exe_uop.valid && exe_uop.bits.fu_code(FC_DIV))
     divq.io.enq.bits  := exe_int_req
     divq.io.brupdate  := io_brupdate
     divq.io.flush     := io_kill
@@ -449,11 +457,11 @@ class IntExeUnit(
     div_resp <> div.io.resp
     Some(div_resp)
   } else {
-    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_DIV)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code(FC_DIV)))
     (None)
   }
 
-  io_ready_fu_types := fu_types.map { case (code, ready, _) => Mux(ready, code, 0.U(FUC_SZ.W)) }.reduce(_|_)
+  io_ready_fu_types := get_ready_fu_types()
 
 }
 
@@ -483,9 +491,9 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
   exe_fp_req.imm_data := DontCare
 
   val fpu = Module(new FPUUnit)
-  fu_types += ((FU_FPU, true.B, "FPU"))
+  fu_types += ((FC_FPU, true.B, "FPU"))
   fpu.io.req.valid := exe_uop.valid && (
-    exe_uop.bits.fu_code_is(FU_FPU) || (if (hasFpiu) exe_uop.bits.fu_code_is(FU_F2I) else false.B)
+    exe_uop.bits.fu_code(FC_FPU) || (if (hasFpiu) exe_uop.bits.fu_code(FC_F2I) else false.B)
   )
   fpu.io.req.bits := exe_fp_req
   fpu.io.fcsr_rm  := io_fcsr_rm
@@ -494,16 +502,16 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
   fpu.io.resp.ready := true.B
 
   val io_fpu_resp = IO(Output(Valid(new ExeUnitResp(xLen+1))))
-  io_fpu_resp.valid := fpu.io.resp.valid && !fpu.io.resp.bits.uop.fu_code_is(FU_F2I)
+  io_fpu_resp.valid := fpu.io.resp.valid && !fpu.io.resp.bits.uop.fu_code(FC_F2I)
   io_fpu_resp.bits  := fpu.io.resp.bits
 
   val io_fdiv_resp = if (hasFDiv) {
     val fdivsqrt_ready = Wire(Bool())
-    fu_types += ((FU_FDV, fdivsqrt_ready, "FDiv"))
+    fu_types += ((FC_FDV, fdivsqrt_ready, "FDiv"))
 
     val divq = Module(new BranchKillableQueue(new FuncUnitReq(xLen+1), 3))
     fdivsqrt_ready    := divq.io.empty
-    divq.io.enq.valid := (exe_uop.valid && exe_uop.bits.fu_code_is(FU_FDV))
+    divq.io.enq.valid := (exe_uop.valid && exe_uop.bits.fu_code(FC_FDV))
     divq.io.enq.bits  := exe_fp_req
     divq.io.brupdate  := io_brupdate
     divq.io.flush     := io_kill
@@ -518,19 +526,19 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
     fdiv_resp <> fdivsqrt.io.resp
     Some(fdiv_resp)
   } else {
-    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_FDV)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code(FC_FDV)))
     None
   }
 
   val (io_fpiu_resp, io_dgen) = if (hasFpiu) {
     val fpiu_ready = Wire(Bool())
-    fu_types += ((FU_F2I, fpiu_ready, "Fpiu"))
+    fu_types += ((FC_F2I, fpiu_ready, "Fpiu"))
 
     val queue = Module(new BranchKillableQueue(new ExeUnitResp(xLen+1),
       entries = dfmaLatency + 6)) // TODO being overly conservative
     fpiu_ready               := RegNext(queue.io.count < 2.U)
     queue.io.enq.valid       := ( fpu.io.resp.valid &&
-                                  fpu.io.resp.bits.uop.fu_code_is(FU_F2I) &&
+                                  fpu.io.resp.bits.uop.fu_code(FC_F2I) &&
                                  !fpu.io.resp.bits.uop.uses_stq) // STA means store data gen for floating point
     queue.io.enq.bits        := fpu.io.resp.bits
     queue.io.brupdate        := io_brupdate
@@ -546,9 +554,9 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
     dgen.bits.data := RegNext(ieee(exe_rs2_data))
     (Some(fpiu_resp), Some(dgen))
   } else {
-    assert(!(exe_uop.valid && exe_uop.bits.fu_code_is(FU_F2I)))
+    assert(!(exe_uop.valid && exe_uop.bits.fu_code(FC_F2I)))
     (None, None)
   }
 
-  io_ready_fu_types := fu_types.map { case (code, ready, _) => Mux(ready, code, 0.U(FUC_SZ.W)) }.reduce(_|_)
+  io_ready_fu_types := get_ready_fu_types
 }

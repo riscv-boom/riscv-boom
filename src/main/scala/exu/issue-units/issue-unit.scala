@@ -18,7 +18,6 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.{Str}
 
 import boom.common._
-import boom.exu.FUConstants._
 import boom.util.{BoolToChar}
 
 /**
@@ -59,7 +58,7 @@ class IssueUnitIO(
   val spec_ld_wakeup   = Flipped(Vec(lsuWidth, Valid(UInt(width=maxPregSz.W))))
 
   // tell the issue unit what each execution pipeline has in terms of functional units
-  val fu_types         = Input(Vec(issueWidth, Bits(width=FUC_SZ.W)))
+  val fu_types         = Input(Vec(issueWidth, Vec(FC_SZ, Bool())))
 
   val brupdate         = Input(new BrUpdateInfo())
   val flush_pipeline   = Input(Bool())
@@ -131,7 +130,7 @@ abstract class IssueUnit(
     }
 
     if (iqType == IQT_INT.litValue) {
-      when (io.dis_uops(w).bits.fu_code_is(FU_I2F)) {
+      when (io.dis_uops(w).bits.fu_code(FC_I2F)) {
         dis_uops(w).prs2 := Cat(io.dis_uops(w).bits.fp_rm, io.dis_uops(w).bits.fp_typ)
       }
       when (io.dis_uops(w).bits.uopc === uopSFENCE) {

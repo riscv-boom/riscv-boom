@@ -17,7 +17,6 @@ import chisel3.util.{log2Ceil, PopCount}
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 
-import FUConstants._
 import boom.common._
 
 /**
@@ -129,7 +128,11 @@ class IssueUnitCollapsing(
     var uop_issued = false.B
 
     for (w <- 0 until issueWidth) {
-      val can_allocate = ((issue_slots(i).iss_uop.bits.fu_code & io.fu_types(w)) =/= 0.U) && iss_select_mask(w)(i).B
+      val fu_code_match = (issue_slots(i).iss_uop.bits.fu_code zip io.fu_types(w)).map {
+        case (r,c) => r && c
+      } .reduce(_||_)
+
+      val can_allocate = fu_code_match && iss_select_mask(w)(i).B
 
       when (requests(i) && !uop_issued && can_allocate && !port_issued(w)) {
         issue_slots(i).grant := true.B

@@ -44,7 +44,6 @@ import testchipip.{ExtendedTracedInstruction}
 
 import boom.common._
 import boom.ifu.{GlobalHistory, HasBoomFrontendParameters}
-import boom.exu.FUConstants._
 import boom.util._
 
 /**
@@ -791,7 +790,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     immregfile.io.write_ports(w).bits.addr := uop.pimm
     immregfile.io.write_ports(w).bits.data := uop.imm_packed
 
-    bregfile.io.write_ports(w).valid               := RegNext(dis_fire(w)) && uop.is_br
+    bregfile.io.write_ports(w).valid               := RegNext(dis_fire(w)) && uop.allocate_brtag
     bregfile.io.write_ports(w).bits.addr           := uop.br_tag
     bregfile.io.write_ports(w).bits.data.ldq_idx   := uop.ldq_idx
     bregfile.io.write_ports(w).bits.data.stq_idx   := uop.stq_idx
@@ -804,8 +803,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // **** Issue Stage ****
   //-------------------------------------------------------------
   //-------------------------------------------------------------
-
-  val int_exe_block_fu_types = WireInit(VecInit(Seq.fill(intWidth) (0.U(FUC_SZ.W))))
 
   var wu_idx = 0
   var wb_idx = 0
@@ -949,7 +946,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   imm_rename_stage.io.wakeups := (mem_exe_units ++ int_exe_units).map(_.io_rrd_immrf_wakeup)
 
   mem_iss_unit.io.fu_types := mem_exe_units.map(_.io_ready_fu_types)
-  int_iss_unit.io.fu_types := (0 until intWidth) map {w => int_exe_units(w).io_ready_fu_types & ~int_exe_block_fu_types(w)}
+  int_iss_unit.io.fu_types := int_exe_units.map(_.io_ready_fu_types)
 
   int_iss_unit.io.tsc_reg  := debug_tsc_reg
   int_iss_unit.io.brupdate := brupdate

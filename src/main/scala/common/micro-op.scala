@@ -17,19 +17,11 @@ import chisel3.util._
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util._
 
-import boom.exu.FUConstants
-
-/**
- * Extension to BoomBundle to add a MicroOp
- */
 abstract trait HasBoomUOP extends BoomBundle
 {
   val uop = new MicroOp()
 }
 
-/**
- * MicroOp passing through the pipeline
- */
 class MicroOp(implicit p: Parameters) extends BoomBundle
   with freechips.rocketchip.rocket.constants.MemoryOpConstants
   with freechips.rocketchip.rocket.constants.ScalarOpConstants
@@ -40,7 +32,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val is_rvc           = Bool()
   val debug_pc         = UInt(coreMaxAddrBits.W)
   val iq_type          = UInt(IQT_SZ.W)        // which issue unit do we use?
-  val fu_code          = UInt(FUConstants.FUC_SZ.W) // which functional unit do we use?
+  val fu_code          = Vec(FC_SZ, Bool()) // which functional unit do we use?
 
   // Has operand 1 or 2 been waken speculatively by a load?
   // Only integer operands are speculaively woken up,
@@ -161,8 +153,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
   // Is it possible for this uop to misspeculate, preventing the commit of subsequent uops?
   def unsafe           = uses_ldq || (uses_stq && !is_fence) || is_br || is_jalr
-
-  def fu_code_is(_fu: UInt) = (fu_code & _fu) === _fu
 }
 
 

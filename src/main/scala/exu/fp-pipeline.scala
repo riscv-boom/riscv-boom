@@ -18,7 +18,6 @@ import freechips.rocketchip.config.{Parameters}
 import freechips.rocketchip.rocket
 import freechips.rocketchip.tile
 
-import boom.exu.FUConstants._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 

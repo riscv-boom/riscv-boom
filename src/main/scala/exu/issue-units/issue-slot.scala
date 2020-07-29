@@ -22,7 +22,6 @@ import freechips.rocketchip.config.Parameters
 
 import boom.common._
 import boom.util._
-import FUConstants._
 
 class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomBundle
 {
@@ -132,9 +131,9 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
     }
   }
 
-  val agen_ready = (slot_valid && slot_uop.fu_code_is(FU_AGEN) &&
+  val agen_ready = (slot_valid && slot_uop.fu_code(FC_AGEN) &&
     !slot_uop.prs1_busy && !(slot_uop.ppred_busy && enableSFBOpt.B) && isMem.B)
-  val dgen_ready = (slot_valid && slot_uop.fu_code_is(FU_DGEN) &&
+  val dgen_ready = (slot_valid && slot_uop.fu_code(FC_DGEN) &&
     !slot_uop.prs2_busy && !(slot_uop.ppred_busy && enableSFBOpt.B) && isMem.B)
 
   io.request := (
@@ -151,22 +150,28 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
                       io.squash_grant)
 
   if (isMem) {
-    when (slot_uop.fu_code === FU_STORE) {
+    when (slot_uop.fu_code(FC_AGEN) && slot_uop.fu_code(FC_DGEN)) {
       when (agen_ready) {
+        // Issue the AGEN, next slot entry is a DGEN
         when (io.grant && !squash_grant) {
-          next_uop.fu_code      := FU_DGEN
+          next_uop.fu_code(FC_AGEN) := false.B
+          next_uop.fu_code(FC_DGEN) := true.B
         }
-        io.iss_uop.bits.fu_code := FU_AGEN
+        io.iss_uop.bits.fu_code(FC_AGEN) := true.B
+        io.iss_uop.bits.fu_code(FC_DGEN) := false.B
       } .otherwise {
+        // Issue the DGEN, next slot entry is the AGEN
         when (io.grant && !squash_grant) {
-          next_uop.fu_code      := FU_AGEN
+          next_uop.fu_code(FC_AGEN) := true.B
+          next_uop.fu_code(FC_DGEN) := false.B
         }
-        io.iss_uop.bits.fu_code    := FU_DGEN
+        io.iss_uop.bits.fu_code(FC_AGEN) := false.B
+        io.iss_uop.bits.fu_code(FC_DGEN) := true.B
         io.iss_uop.bits.prs1       := slot_uop.prs2
         io.iss_uop.bits.lrs1_rtype := slot_uop.lrs2_rtype
         io.iss_uop.bits.iw_p1_bypass_hint := slot_uop.iw_p2_bypass_hint
       }
-    } .elsewhen (slot_uop.fu_code === FU_DGEN) {
+    } .elsewhen (slot_uop.fu_code(FC_DGEN)) {
       io.iss_uop.bits.prs1       := slot_uop.prs2
       io.iss_uop.bits.lrs1_rtype := slot_uop.lrs2_rtype
       io.iss_uop.bits.iw_p1_bypass_hint := slot_uop.iw_p2_bypass_hint
@@ -179,7 +184,7 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
   // Update state for current micro-op based on grant
 
   when (io.grant && !squash_grant) {
-    next_valid := slot_uop.fu_code_is(FU_STORE) && isMem.B
+    next_valid := slot_uop.fu_code(FC_AGEN) && slot_uop.fu_code(FC_DGEN) && isMem.B
     io.iss_uop.valid := true.B
   }
 }

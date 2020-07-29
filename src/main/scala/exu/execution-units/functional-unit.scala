@@ -31,38 +31,6 @@ import boom.ifu._
 import boom.util._
 
 
-/**t
- * Functional unit constants
- */
-object FUConstants
-{
-  // bit mask, since a given execution pipeline may support multiple functional units
-  val FUC_SZ = 11
-  val FU_X   = BitPat.dontCare(FUC_SZ)
-  val FU_ALU =   1.U(FUC_SZ.W)
-  val FU_JMP =   2.U(FUC_SZ.W)
-  val FU_AGEN=   4.U(FUC_SZ.W)
-  val FU_DGEN=   8.U(FUC_SZ.W)
-  val FU_MUL =  16.U(FUC_SZ.W)
-  val FU_DIV =  32.U(FUC_SZ.W)
-  val FU_CSR =  64.U(FUC_SZ.W)
-  val FU_FPU = 128.U(FUC_SZ.W)
-  val FU_FDV = 256.U(FUC_SZ.W)
-  val FU_I2F = 512.U(FUC_SZ.W)
-  val FU_F2I =1024.U(FUC_SZ.W)
-
-  // FP stores generate data through FP F2I, and generate address through MemAddrCalc
-  val FU_F2IMEM = (1024 + 4).U(FUC_SZ.W)
-
-  val FU_STORE  = (4 + 8).U(FUC_SZ.W)
-
-  val MEM_FUS = (4 + 8).U(FUC_SZ.W)
-  val INT_FUS = (1 + 2 + 16 + 32 + 64 + 512).U(FUC_SZ.W)
-  val FP_FUS  = (8 + 128 + 256 + 1024).U(FUC_SZ.W)
-}
-import FUConstants._
-
-
 
 /**
  * Bundle for signals sent to the functional unit

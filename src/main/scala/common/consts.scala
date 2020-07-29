@@ -123,6 +123,22 @@ trait ScalarOpConstants
   val RT_X     = 2.U(2.W) // not-a-register (prs1 = lrs1 special case)
   val RT_ZERO  = 3.U(2.W)
 
+  // Functional unit select
+  // bit mask, since a given execution pipeline may support multiple functional units
+  val FC_SZ  = 11
+
+  val FC_ALU  = 0
+  val FC_JMP  = 1
+  val FC_AGEN = 2
+  val FC_DGEN = 3
+  val FC_MUL  = 4
+  val FC_DIV  = 5
+  val FC_CSR  = 6
+  val FC_FPU  = 7
+  val FC_FDV  = 8
+  val FC_I2F  = 9
+  val FC_F2I  = 10
+
   // Micro-op opcodes
   // TODO change micro-op opcodes into using enum
   val UOPC_SZ = 7
