@@ -128,11 +128,12 @@ class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p
   }
 
   for (c <- 0 until nCols) {
-    val wen = WireInit(doing_reset || (s1_update.valid && s1_update.bits.is_commit_update && s1_update_col_mask(c) && !s0_col_mask(c)))
+
 
     val rdata = Wire(Vec(bankWidth, UInt(2.W)))
     rdata := DontCare
     val (ren, ridx) = if (params.slow) (s1_col_mask(c), s1_col_idx) else (s0_col_mask(c), s0_col_idx)
+    val wen = WireInit(doing_reset || (s1_update.valid && s1_update.bits.is_commit_update && s1_update_col_mask(c) && !ren))
     if (params.slow) {
       s2_req_rdata_all(c) := rdata
     } else {
