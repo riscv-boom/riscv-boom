@@ -371,24 +371,25 @@ class BoomBankedDataArray(implicit p: Parameters) extends AbstractBoomDataArray 
  *
  * @param hartid hardware thread for the cache
  */
-class BoomNonBlockingDCache(hartid: Int)(implicit p: Parameters) extends LazyModule
+class BoomNonBlockingDCache(staticIdForMetadataUseOnly: Int)(implicit p: Parameters) extends LazyModule
 {
   private val tileParams = p(TileKey)
   protected val cfg = tileParams.dcache.get
 
   protected def cacheClientParameters = cfg.scratch.map(x => Seq()).getOrElse(Seq(TLClientParameters(
-    name          = s"Core ${hartid} DCache",
+    name          = s"Core ${staticIdForMetadataUseOnly} DCache",
     sourceId      = IdRange(0, 1 max (cfg.nMSHRs + 1)),
     supportsProbe = TransferSizes(cfg.blockBytes, cfg.blockBytes))))
 
   protected def mmioClientParameters = Seq(TLClientParameters(
-    name          = s"Core ${hartid} DCache MMIO",
+    name          = s"Core ${staticIdForMetadataUseOnly} DCache MMIO",
     sourceId      = IdRange(cfg.nMSHRs + 1, cfg.nMSHRs + 1 + cfg.nMMIOs),
     requestFifo   = true))
 
   val node = TLClientNode(Seq(TLClientPortParameters(
     cacheClientParameters ++ mmioClientParameters,
     minLatency = 1)))
+
 
   lazy val module = new BoomNonBlockingDCacheModule(this)
 
@@ -399,7 +400,6 @@ class BoomNonBlockingDCache(hartid: Int)(implicit p: Parameters) extends LazyMod
 
 
 class BoomDCacheBundle(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p) {
-  val hartid = Input(UInt(hartIdLen.W))
   val errors = new DCacheErrors
   val lsu   = Flipped(new LSUDMemIO)
 }
