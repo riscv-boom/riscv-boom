@@ -54,6 +54,10 @@ class RoCCShimIO(implicit p: Parameters) extends BoomBundle
   val exception        = Input(Bool())
 }
 
+class RCQEntry(implicit p: Parameters) extends BoomBundle {
+  val uop = new MicroOp()
+}
+
 /**
   * Structure similar to LSU
   *  - Holds instruction and operand bits prior to issuing RoCC inst to
@@ -75,7 +79,10 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   val rxq_rs2       = Reg(Vec(numRxqEntries, UInt(xLen.W)))
 
   // RoCC commit queue. Wait for response, or immediate unbusy
-  val rcq           = Module(new Queue(new MicroOp(), numRcqEntries))
+  val rcq           = Reg(Vec(numRcqEntries, Valid(new RCQEntry)))
+  val rcq_head      = RegInit(0.U(log2Ceil(numRcqEntries).W))
+  val rcq_tail      = RegInit(0.U(log2Ceil(numRcqEntries).W))
+  val rcq_full      = WrapInc(rcq_tail, numRcqEntries) === rcq_head
 
   // The instruction we are waiting for response from
   val rxq_head     = RegInit(0.U(log2Ceil(numRxqEntries).W))
@@ -134,19 +141,32 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
 
   // Execute
   io.core.rocc.cmd.valid := false.B
-  rcq.io.enq.valid       := false.B
-  rcq.io.enq.bits        := rxq_uop(rxq_head)
+  val resp_arb = Module(new Arbiter(new ExeUnitResp(xLen), 2))
+  resp_arb.io.in(0).valid     := false.B
+  resp_arb.io.in(0).bits.uop  := rxq_uop(rxq_head)
+  resp_arb.io.in(0).bits.data := DontCare
+  resp_arb.io.in(0).bits.predicated := false.B
+  resp_arb.io.in(0).bits.fflags.valid := false.B
+  resp_arb.io.in(0).bits.fflags.bits := DontCare
   when (rxq_op_val   (rxq_head) &&
         rxq_val      (rxq_head) &&
         rxq_committed(rxq_head) &&
-        io.core.rocc.cmd.ready &&
-        rcq.io.enq.ready) {
+        io.core.rocc.cmd.ready  &&
+        resp_arb.io.in(0).ready &&
+        !rcq_full) {
     io.core.rocc.cmd.valid         := true.B
     io.core.rocc.cmd.bits.inst     := rxq_inst(rxq_head).asTypeOf(new RoCCInstruction)
     io.core.rocc.cmd.bits.rs1      := rxq_rs1(rxq_head)
     io.core.rocc.cmd.bits.rs2      := rxq_rs2(rxq_head)
     io.core.rocc.cmd.bits.status   := io.status
-    rcq.io.enq.valid               := true.B
+
+    when (rxq_uop(rxq_head).dst_rtype =/= RT_X) {
+      rcq_tail                       := WrapInc(rcq_tail, numRcqEntries)
+      rcq(rcq_tail).valid            := true.B
+      rcq(rcq_tail).bits.uop         := rxq_uop(rxq_head)
+    } .otherwise {
+      resp_arb.io.in(0).valid        := true.B
+    }
 
     rxq_val(rxq_head)              := false.B
     rxq_head                       := WrapInc(rxq_head, numRxqEntries)
@@ -199,23 +219,26 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   //------------------
   // Handle responses
 
-  // Either we get a response, or the RoCC op expects no response
-  val handle_resp = ((io.core.rocc.resp.valid || rcq.io.deq.bits.dst_rtype === RT_X)
-                  && io.resp.ready
-                  && rcq.io.deq.valid)
+  resp_arb.io.in(1).valid     := io.core.rocc.resp.valid
+  resp_arb.io.in(1).bits.uop  := rcq(rcq_head).bits.uop
+  resp_arb.io.in(1).bits.data := io.core.rocc.resp.bits.data
+  resp_arb.io.in(1).bits.predicated := io.core.rocc.resp.bits.data
+  resp_arb.io.in(1).bits.fflags.valid := false.B
+  resp_arb.io.in(1).bits.fflags.bits := DontCare
+  io.core.rocc.resp.ready := resp_arb.io.in(1).ready
+  io.resp <> resp_arb.io.out
 
-  io.core.rocc.resp.ready := io.resp.ready && rcq.io.deq.bits.dst_rtype =/= RT_X
-  io.resp.valid           := false.B
-  rcq.io.deq.ready        := false.B
-  when (handle_resp) {
-    assert((rcq.io.deq.bits.dst_rtype === RT_X)
-        || io.core.rocc.resp.bits.rd === rcq.io.deq.bits.ldst,
-      "RoCC response destination register does not match expected")
-
-    io.resp.valid              := true.B
-    io.resp.bits.uop           := rcq.io.deq.bits
-    io.resp.bits.data          := io.core.rocc.resp.bits.data
-
-    rcq.io.deq.ready           := true.B
+  when (io.core.rocc.resp.fire()) {
+    assert(rcq(rcq_head).valid && rcq(rcq_head).bits.uop.ldst === io.core.rocc.resp.bits.rd)
+    rcq(rcq_head).valid := false.B
+    rcq_head := WrapInc(rcq_head, numRcqEntries)
   }
+
+
+  when (reset.asBool) {
+    for (i <- 0 until numRcqEntries) {
+      rcq(i).valid := false.B
+    }
+  }
+
 }

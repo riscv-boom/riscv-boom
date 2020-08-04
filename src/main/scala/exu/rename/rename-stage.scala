@@ -52,7 +52,8 @@ abstract class AbstractRenameStage(
     val dis_ready = Input(Bool())
 
     // wakeup ports
-    val wakeups = Flipped(Vec(numWbPorts, Valid(new ExeUnitResp(xLen))))
+    val wakeups = Flipped(Vec(numWbPorts, Valid(new Wakeup)))
+    val child_rebusys = Input(UInt(intWidth.W))
 
     // commit stage
     val com_valids = Input(Vec(plWidth, Bool()))
@@ -205,7 +206,6 @@ class RenameStage(
     plWidth,
     numPhysRegs,
     numWbPorts,
-    false,
     float))
 
 
@@ -290,8 +290,9 @@ class RenameStage(
 
   busytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
   busytable.io.rebusy_reqs := ren2_alloc_reqs
-  busytable.io.wb_valids := io.wakeups.map(_.valid)
-  busytable.io.wb_pdsts := io.wakeups.map(_.bits.uop.pdst)
+  busytable.io.wakeups := io.wakeups
+  busytable.io.child_rebusys := io.child_rebusys
+
 
   assert (!(io.wakeups.map(x => x.valid && x.bits.uop.dst_rtype =/= rtype).reduce(_||_)),
    "[rename] Wakeup has wrong rtype.")

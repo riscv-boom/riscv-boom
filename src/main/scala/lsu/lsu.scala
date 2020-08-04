@@ -52,7 +52,7 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util.Str
 
 import boom.common._
-import boom.exu.{BrUpdateInfo, Exception, CommitSignals, MemGen, ExeUnitResp}
+import boom.exu.{BrUpdateInfo, Exception, CommitSignals, MemGen, ExeUnitResp, Wakeup}
 import boom.util._
 
 class BoomDCacheReq(implicit p: Parameters) extends BoomBundle()(p)
@@ -85,6 +85,8 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
   // In our response stage, if we get a nack, we need to reexecute
   val nack        = Flipped(Vec(lsuWidth, new ValidIO(new BoomDCacheReq)))
 
+  val ll_resp     = Flipped(new DecoupledIO(new BoomDCacheResp))
+
   val brupdate       = Output(new BrUpdateInfo)
   val exception    = Output(Bool())
   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
@@ -110,6 +112,8 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val agen        = Flipped(Vec(lsuWidth, Valid(new MemGen)))
   val dgen        = Flipped(Vec(memWidth + 1, Valid(new MemGen)))
 
+  val iwakeups    = Vec(lsuWidth, Valid(new Wakeup))
+
   val iresp       = Vec(lsuWidth, Valid(new ExeUnitResp(xLen)))
   val fresp       = Vec(lsuWidth, Valid(new ExeUnitResp(xLen)))
 
@@ -128,7 +132,6 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   // Stores clear busy bit when stdata is received
   // memWidth for incoming addr/datagen, +1 for fp dgen, +1 for clr_head pointer
   val clr_bsy         = Output(Vec(coreWidth, Valid(UInt(robAddrSz.W))))
-  //val clr_bsy         = Output(Vec(lsuWidth + memWidth + 2, Valid(UInt(robAddrSz.W))))
 
   // Speculatively safe load (barring memory ordering failure)
   val clr_unsafe      = Output(Vec(lsuWidth, Valid(UInt(robAddrSz.W))))
@@ -136,12 +139,8 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   // Tell the DCache to clear prefetches/speculating misses
   val fence_dmem   = Input(Bool())
 
-  // Speculatively tell the IQs that we'll get load data back next cycle
-  val spec_ld_wakeup = Output(Vec(lsuWidth, Valid(UInt(maxPregSz.W))))
-  // Tell the IQs that the load we speculated last cycle was misspeculated
-  val ld_miss      = Output(Bool())
 
-  val brupdate       = Input(new BrUpdateInfo)
+  val brupdate     = Input(new BrUpdateInfo)
   val rob_pnr_idx  = Input(UInt(robAddrSz.W))
   val rob_head_idx = Input(UInt(robAddrSz.W))
   val exception    = Input(Bool())
@@ -937,6 +936,29 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   require (xLen >= fLen) // for correct SDQ size
 
+
+
+  //-------------------------------------------------------------
+  // Speculative wakeup
+  val wakeupArbs = Seq.fill(lsuWidth) { Module(new Arbiter(new Wakeup, 2)) }
+  for (w <- 0 until lsuWidth) {
+    wakeupArbs(w).io.out.ready := true.B
+    wakeupArbs(w).io.in := DontCare
+    io.core.iwakeups(w) := wakeupArbs(w).io.out
+
+
+    wakeupArbs(w).io.in(1).valid := (enableFastLoadUse.B                             &&
+                                     will_fire_load_agen_exec(w)                     &&
+                                     dmem_req_fire(w)                                &&
+                                    !agen(w).bits.uop.fp_val)
+    wakeupArbs(w).io.in(1).bits.uop := agen(w).bits.uop
+    wakeupArbs(w).io.in(1).bits.uop.bypassable := true.B
+    wakeupArbs(w).io.in(1).bits.speculative_mask := 0.U
+    wakeupArbs(w).io.in(1).bits.rebusy := false.B
+
+  }
+
+
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // Cache Access Cycle (Mem)
@@ -1341,13 +1363,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.core.lxcpt.bits  := r_xcpt
 
   // Task 4: Speculatively wakeup loads 1 cycle before they come back
-  for (w <- 0 until lsuWidth) {
-    io.core.spec_ld_wakeup(w).valid := (enableFastLoadUse.B                             &&
-                                        fired_load_agen_exec(w)                         &&
-                                        !io.dmem.s1_nack_advisory(w)                    &&
-                                        !mem_incoming_uop(w).fp_val)
-    io.core.spec_ld_wakeup(w).bits  := mem_incoming_uop(w).pdst
-  }
 
 
   //-------------------------------------------------------------
@@ -1364,16 +1379,28 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   }
 
   // Initially assume the speculative load wakeup failed
-  io.core.ld_miss    := RegNext(io.core.spec_ld_wakeup.map(_.valid).reduce(_||_))
-  val spec_ld_succeed = WireInit(widthMap(w => !RegNext(io.core.spec_ld_wakeup(w).valid)))
-  when (spec_ld_succeed.reduce(_&&_)) {
-    io.core.ld_miss := false.B
+  val wb_spec_wakeups = Wire(Vec(lsuWidth, Valid(new MicroOp)))
+  for (w <- 0 until lsuWidth) {
+    wb_spec_wakeups(w).valid := (ShiftRegister(wakeupArbs(w).io.in(1).fire(), 2)
+      && RegNext(fired_load_agen_exec(w)
+      && !IsKilledByBranch(io.core.brupdate, mem_ldq_e(w).bits.uop)))
+    wb_spec_wakeups(w).bits  := ShiftRegister(wakeupArbs(w).io.in(1).bits.uop, 2)
   }
-
+  val spec_ld_succeed = WireInit(widthMap(w => false.B))
 
   val dmem_resp_fired = WireInit(widthMap(w => false.B))
-
+  io.dmem.ll_resp.ready := false.B
   for (w <- 0 until lsuWidth) {
+    wakeupArbs(w).io.in(0).valid := false.B
+    wakeupArbs(w).io.in(0).bits.rebusy := false.B
+
+    when (wb_spec_wakeups(w).valid && !spec_ld_succeed(w)) {
+      wakeupArbs(w).io.in(0).valid := true.B
+      wakeupArbs(w).io.in(0).bits.uop := wb_spec_wakeups(w).bits
+      wakeupArbs(w).io.in(0).bits.speculative_mask := 0.U
+      wakeupArbs(w).io.in(0).bits.rebusy := true.B
+    }
+
     // Handle nacks
     when (io.dmem.nack(w).valid)
     {
@@ -1396,12 +1423,17 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       }
     }
     // Handle the response
-    when (io.dmem.resp(w).valid)
+    val resp = Mux(!io.dmem.resp(w).valid && (w == lsuWidth-1).B,
+      io.dmem.ll_resp.bits, io.dmem.resp(w).bits)
+    if (w == lsuWidth-1) {
+      io.dmem.ll_resp.ready := !io.dmem.resp(w).valid && !wb_spec_wakeups(w).valid
+    }
+    when (io.dmem.resp(w).valid || ((w == lsuWidth-1).B && io.dmem.ll_resp.fire()))
     {
-      when (io.dmem.resp(w).bits.uop.uses_ldq)
+      when (resp.uop.uses_ldq)
       {
-        assert(!io.dmem.resp(w).bits.is_hella)
-        val ldq_idx = io.dmem.resp(w).bits.uop.ldq_idx
+        assert(!resp.is_hella)
+        val ldq_idx = resp.uop.ldq_idx
         val ldq_e = WireInit(ldq(ldq_idx))
         val send_iresp = ldq_e.bits.uop.dst_rtype === RT_FIX
         val send_fresp = ldq_e.bits.uop.dst_rtype === RT_FLT
@@ -1410,27 +1442,42 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         io.core.fresp(w).bits.uop  := ldq_e.bits.uop
         io.core.iresp(w).valid     := send_iresp
 
-        spec_ld_succeed(w) := send_iresp && ldq_idx === RegNext(mem_incoming_uop(w).ldq_idx)
+        when (wb_spec_wakeups(w).valid) {
+          assert(send_iresp && ldq_idx === wb_spec_wakeups(w).bits.ldq_idx)
+          spec_ld_succeed(w) := true.B
+        }
 
-        io.core.iresp(w).bits.data := io.dmem.resp(w).bits.data
+
+        io.core.iresp(w).bits.data := resp.data
         io.core.fresp(w).valid     := send_fresp
-        io.core.fresp(w).bits.data := io.dmem.resp(w).bits.data
+        io.core.fresp(w).bits.data := resp.data
 
         assert(send_iresp ^ send_fresp)
         dmem_resp_fired(w) := true.B
 
         ldq(ldq_idx).bits.succeeded      := io.core.iresp(w).valid || io.core.fresp(w).valid
-        ldq(ldq_idx).bits.debug_wb_data  := io.dmem.resp(w).bits.data
+        ldq(ldq_idx).bits.debug_wb_data  := resp.data
+
+        wakeupArbs(w).io.in(0).valid    := !wb_spec_wakeups(w).valid && send_iresp
+        wakeupArbs(w).io.in(0).bits.uop := ldq_e.bits.uop
+        wakeupArbs(w).io.in(0).bits.speculative_mask := 0.U
+        wakeupArbs(w).io.in(0).bits.rebusy := false.B
       }
-        .elsewhen (io.dmem.resp(w).bits.uop.uses_stq)
+
+      when (resp.uop.uses_stq)
       {
-        assert(!io.dmem.resp(w).bits.is_hella && io.dmem.resp(w).bits.uop.is_amo)
+        assert(!resp.is_hella && resp.uop.is_amo)
         dmem_resp_fired(w) := true.B
         io.core.iresp(w).valid     := true.B
-        io.core.iresp(w).bits.uop  := stq(io.dmem.resp(w).bits.uop.stq_idx).bits.uop
-        io.core.iresp(w).bits.data := io.dmem.resp(w).bits.data
+        io.core.iresp(w).bits.uop  := stq(resp.uop.stq_idx).bits.uop
+        io.core.iresp(w).bits.data := resp.data
 
-        stq(io.dmem.resp(w).bits.uop.stq_idx).bits.debug_wb_data := io.dmem.resp(w).bits.data
+        wakeupArbs(w).io.in(0).valid    := true.B
+        wakeupArbs(w).io.in(0).bits.uop := stq(resp.uop.stq_idx).bits.uop
+        wakeupArbs(w).io.in(0).bits.speculative_mask := 0.U
+        wakeupArbs(w).io.in(0).bits.rebusy := false.B
+
+        stq(resp.uop.stq_idx).bits.debug_wb_data := resp.data
       }
     }
     // Handle store acks
@@ -1456,7 +1503,14 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                 wb_ldst_forward_ld_addr(w),
                                 storegen.data, false.B, coreDataBytes)
 
-      spec_ld_succeed(w) := forward_uop.dst_rtype === RT_FIX
+      when (wb_spec_wakeups(w).valid) {
+        spec_ld_succeed(w) := true.B
+      } .otherwise {
+        wakeupArbs(w).io.in(0).valid    := forward_uop.dst_rtype === RT_FIX
+        wakeupArbs(w).io.in(0).bits.uop := forward_uop
+        wakeupArbs(w).io.in(0).bits.speculative_mask := 0.U
+        wakeupArbs(w).io.in(0).bits.rebusy := false.B
+      }
 
       io.core.iresp(w).valid := (forward_uop.dst_rtype === RT_FIX)
       io.core.fresp(w).valid := (forward_uop.dst_rtype === RT_FLT)
@@ -1643,6 +1697,17 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       hella_state := h_wait
     }
   } .elsewhen (hella_state === h_wait) {
+    when (io.dmem.ll_resp.fire() && io.dmem.ll_resp.bits.is_hella) {
+      hella_state := h_ready
+
+      io.hellacache.resp.valid       := true.B
+      io.hellacache.resp.bits.addr   := hella_req.addr
+      io.hellacache.resp.bits.tag    := hella_req.tag
+      io.hellacache.resp.bits.cmd    := hella_req.cmd
+      io.hellacache.resp.bits.signed := hella_req.signed
+      io.hellacache.resp.bits.size   := hella_req.size
+      io.hellacache.resp.bits.data   := io.dmem.ll_resp.bits.data
+    }
     for (w <- 0 until lsuWidth) {
       when ((io.dmem.resp(w).valid && io.dmem.resp(w).bits.is_hella) ||
             (io.dmem.store_ack(w).valid && io.dmem.store_ack(w).bits.is_hella)) {
@@ -1667,6 +1732,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       hella_state := h_wait
     }
   } .elsewhen (hella_state === h_dead) {
+    when (io.dmem.ll_resp.fire() && io.dmem.ll_resp.bits.is_hella) {
+      hella_state := h_ready
+    }
     for (w <- 0 until lsuWidth) {
       when (io.dmem.resp(w).valid && io.dmem.resp(w).bits.is_hella) {
         hella_state := h_ready

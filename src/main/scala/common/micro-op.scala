@@ -34,11 +34,14 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val iq_type          = UInt(IQT_SZ.W)        // which issue unit do we use?
   val fu_code          = Vec(FC_SZ, Bool()) // which functional unit do we use?
 
-  // Has operand 1 or 2 been waken speculatively by a load?
-  // Only integer operands are speculaively woken up,
-  // so we can ignore p3.
-  val iw_p1_poisoned   = Bool()
-  val iw_p2_poisoned   = Bool()
+  val iw_issued              = Bool() // Was this uop issued last cycle? If so, it can vacate this cycle
+  val iw_issued_partial_agen = Bool()
+  val iw_issued_partial_dgen = Bool()
+  val iw_p1_speculative_child = UInt(intWidth.W)
+  val iw_p2_speculative_child = UInt(intWidth.W)
+
+
+  // Get the operand off the bypass network, avoid a register read port allocation
   val iw_p1_bypass_hint = Bool()
   val iw_p2_bypass_hint = Bool()
 

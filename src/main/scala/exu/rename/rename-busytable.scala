@@ -28,7 +28,6 @@ class RenameBusyTable(
   val plWidth: Int,
   val numPregs: Int,
   val numWbPorts: Int,
-  val bypass: Boolean,
   val float: Boolean)
   (implicit p: Parameters) extends BoomModule
 {
@@ -39,35 +38,55 @@ class RenameBusyTable(
     val busy_resps = Output(Vec(plWidth, new BusyResp))
     val rebusy_reqs = Input(Vec(plWidth, Bool()))
 
-    val wb_pdsts = Input(Vec(numWbPorts, UInt(pregSz.W)))
-    val wb_valids = Input(Vec(numWbPorts, Bool()))
+    val wakeups = Input(Vec(numWbPorts, Valid(new Wakeup)))
+    val child_rebusys = Input(UInt(intWidth.W))
 
     val debug = new Bundle { val busytable = Output(Bits(numPregs.W)) }
   })
+  val wakeups = io.wakeups.map { w =>
+    val wu = Wire(Valid(new Wakeup))
+    wu.valid := RegNext(w.valid) && ((RegNext(w.bits.speculative_mask) & io.child_rebusys) === 0.U)
+    wu.bits  := RegNext(w.bits)
+    wu
+  }
 
   val busy_table = RegInit(0.U(numPregs.W))
   // Unbusy written back registers.
-  val busy_table_wb = busy_table & ~(io.wb_pdsts zip io.wb_valids)
-    .map {case (pdst, valid) => UIntToOH(pdst) & Fill(numPregs, valid.asUInt)}.reduce(_|_)
+  val busy_table_wb = busy_table & ~(wakeups.map { w =>
+    UIntToOH(w.bits.uop.pdst) & Fill(numPregs, w.valid && !w.bits.rebusy)
+  } .reduce(_|_))
   // Rebusy newly allocated registers.
-  val busy_table_next = busy_table_wb | (io.ren_uops zip io.rebusy_reqs)
-    .map {case (uop, req) => UIntToOH(uop.pdst) & Fill(numPregs, req.asUInt)}.reduce(_|_)
+  val busy_table_next = busy_table_wb | (
+    (io.ren_uops zip io.rebusy_reqs)
+      .map {case (uop, req) => UIntToOH(uop.pdst) & Fill(numPregs, req)}.reduce(_|_)
+  ) | (wakeups.map { w =>
+    UIntToOH(w.bits.uop.pdst) & Fill(numPregs, w.valid && w.bits.rebusy)
+  } .reduce(_|_))
 
   busy_table := busy_table_next
 
   // Read the busy table.
   for (i <- 0 until plWidth) {
-    val prs1_was_bypassed = (0 until i).map(j =>
-      io.ren_uops(i).lrs1 === io.ren_uops(j).ldst && io.rebusy_reqs(j)).foldLeft(false.B)(_||_)
-    val prs2_was_bypassed = (0 until i).map(j =>
-      io.ren_uops(i).lrs2 === io.ren_uops(j).ldst && io.rebusy_reqs(j)).foldLeft(false.B)(_||_)
-    val prs3_was_bypassed = (0 until i).map(j =>
-      io.ren_uops(i).lrs3 === io.ren_uops(j).ldst && io.rebusy_reqs(j)).foldLeft(false.B)(_||_)
+    val prs1_match = wakeups.map { w => w.valid && w.bits.uop.pdst === io.ren_uops(i).prs1 }
+    val prs2_match = wakeups.map { w => w.valid && w.bits.uop.pdst === io.ren_uops(i).prs2 }
+    val prs3_match = wakeups.map { w => w.valid && w.bits.uop.pdst === io.ren_uops(i).prs3 }
 
-    io.busy_resps(i).prs1_busy := busy_table(io.ren_uops(i).prs1) || prs1_was_bypassed && bypass.B
-    io.busy_resps(i).prs2_busy := busy_table(io.ren_uops(i).prs2) || prs2_was_bypassed && bypass.B
-    io.busy_resps(i).prs3_busy := busy_table(io.ren_uops(i).prs3) || prs3_was_bypassed && bypass.B
+    io.busy_resps(i).prs1_busy := busy_table(io.ren_uops(i).prs1)
+    io.busy_resps(i).prs2_busy := busy_table(io.ren_uops(i).prs2)
+    io.busy_resps(i).prs3_busy := busy_table(io.ren_uops(i).prs3)
+
+    when (prs1_match.reduce(_||_)) {
+      io.busy_resps(i).prs1_busy := Mux1H(prs1_match, wakeups.map { w => w.valid && w.bits.rebusy })
+    }
+    when (prs2_match.reduce(_||_)) {
+      io.busy_resps(i).prs2_busy := Mux1H(prs2_match, wakeups.map { w => w.valid && w.bits.rebusy })
+    }
+    when (prs3_match.reduce(_||_)) {
+      io.busy_resps(i).prs3_busy := Mux1H(prs3_match, wakeups.map { w => w.valid && w.bits.rebusy })
+    }
+
     if (!float) io.busy_resps(i).prs3_busy := false.B
+
   }
 
   io.debug.busytable := busy_table

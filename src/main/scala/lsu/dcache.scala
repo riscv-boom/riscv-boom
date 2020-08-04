@@ -833,45 +833,23 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                 s2_data_word(w), s2_sc && (w == 0).B, wordBytes)
   }
   // Mux between cache responses and uncache responses
-  val cache_resp   = Wire(Vec(lsuWidth, Valid(new BoomDCacheResp)))
   for (w <- 0 until lsuWidth) {
-    cache_resp(w).valid         := s2_valid(w) && s2_send_resp(w)
-    cache_resp(w).bits.uop      := s2_req(w).uop
-    cache_resp(w).bits.data     := loadgen(w).data | s2_sc_fail
-    cache_resp(w).bits.is_hella := s2_req(w).is_hella
-  }
+    io.lsu.resp(w).valid := s2_valid(w) && s2_send_resp(w)
+    io.lsu.resp(w).bits.uop := s2_req(w).uop
+    io.lsu.resp(w).bits.data := loadgen(w).data | s2_sc_fail
+    io.lsu.resp(w).bits.is_hella := s2_req(w).is_hella
 
 
-  val uncache_resp = Wire(Valid(new BoomDCacheResp))
-  uncache_resp.bits     := mshrs.io.resp.bits
-  uncache_resp.valid    := mshrs.io.resp.valid
-  mshrs.io.resp.ready   := !(s2_valid.reduce(_&&_)) // We can backpressure the MSHRs, but not cache hits
 
-  val resp = WireInit(cache_resp)
-  var uncache_responding = false.B
-  for (w <- 0 until lsuWidth) {
-    val uncache_respond = !s2_valid(w) && !uncache_responding
-    when (uncache_respond) {
-      resp(w) := uncache_resp
-    }
-    uncache_responding = uncache_responding || uncache_respond
-  }
-
-  for (w <- 0 until lsuWidth) {
-    io.lsu.resp(w).valid := resp(w).valid &&
-                            !(io.lsu.exception && resp(w).bits.uop.uses_ldq) &&
-                            !IsKilledByBranch(io.lsu.brupdate, resp(w).bits.uop)
-    io.lsu.resp(w).bits  := UpdateBrMask(io.lsu.brupdate, resp(w).bits)
-
-    io.lsu.nack(w).valid := s2_valid(w) && s2_send_nack(w) &&
-                            !(io.lsu.exception && s2_req(w).uop.uses_ldq) &&
-                            !IsKilledByBranch(io.lsu.brupdate, s2_req(w).uop)
-    io.lsu.nack(w).bits  := UpdateBrMask(io.lsu.brupdate, s2_req(w))
+    io.lsu.nack(w).valid := s2_valid(w) && s2_send_nack(w)
+    io.lsu.nack(w).bits  := s2_req(w)
     assert(!(io.lsu.nack(w).valid && s2_type =/= t_lsu))
 
     io.lsu.store_ack(w).valid := s2_valid(w) && s2_send_store_ack(w) && (w == 0).B
     io.lsu.store_ack(w).bits  := s2_req(w)
   }
+
+  io.lsu.ll_resp <> mshrs.io.resp
 
   // Store/amo hits
   val s3_req   = Wire(new BoomDCacheReq)

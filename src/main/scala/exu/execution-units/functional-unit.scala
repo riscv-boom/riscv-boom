@@ -120,6 +120,7 @@ abstract class FunctionalUnit(
   })
   io.resp.bits.fflags.valid := false.B
   io.resp.bits.fflags.bits  := DontCare
+  io.resp.bits.predicated   := false.B
 
 }
 

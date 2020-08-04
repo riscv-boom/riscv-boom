@@ -19,7 +19,7 @@ import freechips.rocketchip.rocket
 import freechips.rocketchip.tile
 
 import boom.common._
-import boom.util.{BoomCoreStringPrefix}
+import boom.util._
 
 /**
  * Top level datapath that wraps the floating point issue window, regfile, and arithmetic units.
@@ -59,7 +59,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   val exe_units: Seq[FPExeUnit] = (0 until fpWidth) map { w =>
     Module(new FPExeUnit(
       hasFDiv = usingFDivSqrt && (w==fpWidth-1),
-      hasFpiu = (w==fpWidth-1)))
+      hasFpiu = (w==fpWidth-1)
+    )).suggestName(s"fp_exe_unit_{w}")
   }
   val numFrfReadPorts = fpWidth * 3
   val numFrfWritePorts = fpWidth + lsuWidth
@@ -84,12 +85,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   issue_unit.io.tsc_reg := io.debug_tsc_reg
   issue_unit.io.brupdate := io.brupdate
   issue_unit.io.flush_pipeline := io.flush_pipeline
-  // Don't support ld-hit speculation to FP window.
-  for (w <- 0 until lsuWidth) {
-    issue_unit.io.spec_ld_wakeup(w).valid := false.B
-    issue_unit.io.spec_ld_wakeup(w).bits := 0.U
-  }
-  issue_unit.io.ld_miss := false.B
   issue_unit.io.squash_grant := false.B
 
 
@@ -117,11 +112,13 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   // Wakeup
   for ((writeback, issue_wakeup) <- io.wakeups zip issue_unit.io.wakeup_ports) {
     issue_wakeup.valid := writeback.valid
-    issue_wakeup.bits  := writeback.bits
+    issue_wakeup.bits.uop  := writeback.bits.uop
+    issue_wakeup.bits.speculative_mask := 0.U
+    issue_wakeup.bits.rebusy      := false.B
   }
   issue_unit.io.pred_wakeup_port.valid := false.B
   issue_unit.io.pred_wakeup_port.bits := DontCare
-
+  issue_unit.io.child_rebusys := 0.U
 
   issue_unit.io.iss_uops zip exe_units map { case (i, u) => u.io_iss_uop := i }
 
@@ -171,8 +168,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
 
   // Hookup load writeback -- and recode FP values.
-  ll_wbarb.io.in(0).valid := RegNext(io.ll_wports(0).valid)
-  ll_wbarb.io.in(0).bits  := RegNext(io.ll_wports(0).bits)
+  ll_wbarb.io.in(0).valid := RegNext(io.ll_wports(0).valid &&
+    !io.flush_pipeline && !IsKilledByBranch(io.brupdate, io.ll_wports(0).bits))
+  ll_wbarb.io.in(0).bits  := RegNext(UpdateBrMask(io.brupdate, io.ll_wports(0).bits))
   ll_wbarb.io.in(0).bits.data := recode(RegNext(io.ll_wports(0).bits.data),
                                         RegNext(io.ll_wports(0).bits.uop.mem_size =/= 2.U))
 

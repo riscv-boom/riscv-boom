@@ -39,12 +39,11 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
   val kill          = Input(Bool()) // pipeline flush
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
 
-  val ldspec_miss   = Input(Bool()) // Previous cycle's speculative load wakeup was mispredicted.
   val squash_grant  = Input(Bool())
 
-  val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(new ExeUnitResp(xLen))))
+  val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(new Wakeup)))
   val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
-  val spec_ld_wakeup = Flipped(Vec(lsuWidth, Valid(UInt(width=maxPregSz.W))))
+  val child_rebusys = Input(UInt(intWidth.W))
 }
 
 class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(implicit p: Parameters)
@@ -84,86 +83,92 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
 
 
   // Wakeups
-  next_uop.iw_p1_poisoned := false.B
-  next_uop.iw_p2_poisoned := false.B
   next_uop.iw_p1_bypass_hint := false.B
   next_uop.iw_p2_bypass_hint := false.B
+  next_uop.iw_p1_speculative_child := 0.U
+  next_uop.iw_p2_speculative_child := 0.U
 
-  when (io.ldspec_miss && slot_uop.iw_p1_poisoned) {
+  val squash_grant = WireInit(io.squash_grant)
+
+  val rebusied_prs1 = WireInit(false.B)
+  val rebusied_prs2 = WireInit(false.B)
+  val rebusied = rebusied_prs1 || rebusied_prs2
+
+  val prs1_matches = io.wakeup_ports.map { w => w.bits.uop.pdst === slot_uop.prs1 }
+  val prs2_matches = io.wakeup_ports.map { w => w.bits.uop.pdst === slot_uop.prs2 }
+  val prs3_matches = io.wakeup_ports.map { w => w.bits.uop.pdst === slot_uop.prs3 }
+  val prs1_wakeups = (io.wakeup_ports zip prs1_matches).map { case (w,m) => w.valid && m }
+  val prs2_wakeups = (io.wakeup_ports zip prs2_matches).map { case (w,m) => w.valid && m }
+  val prs3_wakeups = (io.wakeup_ports zip prs3_matches).map { case (w,m) => w.valid && m }
+  val prs1_rebusys = (io.wakeup_ports zip prs1_matches).map { case (w,m) => w.bits.rebusy && m }
+  val prs2_rebusys = (io.wakeup_ports zip prs2_matches).map { case (w,m) => w.bits.rebusy && m }
+  val bypassables  = io.wakeup_ports.map { w => w.bits.uop.bypassable }
+  val speculative_masks = io.wakeup_ports.map { w => w.bits.speculative_mask }
+
+  when (prs1_wakeups.reduce(_||_)) {
+    next_uop.prs1_busy := false.B
+    next_uop.iw_p1_speculative_child := Mux1H(prs1_wakeups, speculative_masks)
+    next_uop.iw_p1_bypass_hint := Mux1H(prs1_wakeups, bypassables)
+  }
+  when ((prs1_rebusys.reduce(_||_) || ((io.child_rebusys & slot_uop.iw_p1_speculative_child) =/= 0.U)) &&
+    slot_uop.lrs1_rtype === RT_FIX) {
     next_uop.prs1_busy := true.B
+    squash_grant := true.B
+    rebusied_prs1 := true.B
   }
-  when (io.ldspec_miss && slot_uop.iw_p2_poisoned) {
+  when (prs2_wakeups.reduce(_||_)) {
+    next_uop.prs2_busy := false.B
+    next_uop.iw_p2_speculative_child := Mux1H(prs2_wakeups, speculative_masks)
+    next_uop.iw_p2_bypass_hint := Mux1H(prs2_wakeups, bypassables)
+  }
+  when ((prs2_rebusys.reduce(_||_) || ((io.child_rebusys & slot_uop.iw_p2_speculative_child) =/= 0.U)) &&
+    slot_uop.lrs2_rtype === RT_FIX) {
     next_uop.prs2_busy := true.B
+    squash_grant := true.B
+    rebusied_prs2 := true.B
   }
 
-  for (wakeup <- io.wakeup_ports) {
-    when (wakeup.valid) {
-      when (wakeup.bits.uop.pdst === slot_uop.prs1) {
-        next_uop.prs1_busy := false.B
-        next_uop.iw_p1_bypass_hint := wakeup.bits.uop.bypassable
-      }
-      when (wakeup.bits.uop.pdst === slot_uop.prs2) {
-        next_uop.prs2_busy := false.B
-        next_uop.iw_p2_bypass_hint := wakeup.bits.uop.bypassable
-      }
-      if (isFp)
-        when (wakeup.bits.uop.pdst === slot_uop.prs3) { next_uop.prs3_busy := false.B }
-    }
+  when (prs3_wakeups.reduce(_||_)) {
+    next_uop.prs3_busy := false.B
   }
   when (io.pred_wakeup_port.valid && io.pred_wakeup_port.bits === slot_uop.ppred) {
     next_uop.ppred_busy := false.B
   }
 
-  for (spec_wakeup <- io.spec_ld_wakeup) {
-    when (spec_wakeup.valid) {
-      when (spec_wakeup.bits === slot_uop.prs1 && slot_uop.prs1_busy) {
-        next_uop.prs1_busy := false.B
-        next_uop.iw_p1_poisoned := true.B
-        next_uop.iw_p1_bypass_hint := true.B
-        assert(!slot_uop.iw_p1_poisoned)
-      }
-      when (spec_wakeup.bits === slot_uop.prs2 && slot_uop.prs2_busy) {
-        next_uop.prs2_busy := false.B
-        next_uop.iw_p2_poisoned := true.B
-        next_uop.iw_p2_bypass_hint := true.B
-        assert(!slot_uop.iw_p2_poisoned)
-      }
-    }
-  }
+  val iss_ready  = !slot_uop.prs1_busy && !slot_uop.prs2_busy && !(slot_uop.ppred_busy && enableSFBOpt.B) && !(slot_uop.prs3_busy && isFp.B)
+  val agen_ready = (slot_uop.fu_code(FC_AGEN) && !slot_uop.prs1_busy && !(slot_uop.ppred_busy && enableSFBOpt.B) && isMem.B)
+  val dgen_ready = (slot_uop.fu_code(FC_DGEN) && !slot_uop.prs2_busy && !(slot_uop.ppred_busy && enableSFBOpt.B) && isMem.B)
 
-  val agen_ready = (slot_valid && slot_uop.fu_code(FC_AGEN) &&
-    !slot_uop.prs1_busy && !(slot_uop.ppred_busy && enableSFBOpt.B) && isMem.B)
-  val dgen_ready = (slot_valid && slot_uop.fu_code(FC_DGEN) &&
-    !slot_uop.prs2_busy && !(slot_uop.ppred_busy && enableSFBOpt.B) && isMem.B)
-
-  io.request := (
-    (slot_valid && !slot_uop.prs1_busy && !slot_uop.prs2_busy &&
-      !(slot_uop.prs3_busy && isFp.B) &&
-      !(slot_uop.ppred_busy && enableSFBOpt.B))
-    || agen_ready
-    || dgen_ready)
+  io.request := slot_valid && !slot_uop.iw_issued && (
+    iss_ready || agen_ready || dgen_ready
+  )
 
   io.iss_uop.valid := false.B
   io.iss_uop.bits  := slot_uop
 
-  val squash_grant = ((io.ldspec_miss && (slot_uop.iw_p1_poisoned || slot_uop.iw_p2_poisoned)) ||
-                      io.squash_grant)
+  // Update state for current micro-op based on grant
+
+  next_uop.iw_issued := false.B
+  next_uop.iw_issued_partial_agen := false.B
+  next_uop.iw_issued_partial_dgen := false.B
+  when (io.grant && !squash_grant) {
+    next_uop.iw_issued := true.B
+    io.iss_uop.valid := true.B
+  }
 
   if (isMem) {
     when (slot_uop.fu_code(FC_AGEN) && slot_uop.fu_code(FC_DGEN)) {
       when (agen_ready) {
         // Issue the AGEN, next slot entry is a DGEN
         when (io.grant && !squash_grant) {
-          next_uop.fu_code(FC_AGEN) := false.B
-          next_uop.fu_code(FC_DGEN) := true.B
+          next_uop.iw_issued_partial_agen := true.B
         }
         io.iss_uop.bits.fu_code(FC_AGEN) := true.B
         io.iss_uop.bits.fu_code(FC_DGEN) := false.B
       } .otherwise {
         // Issue the DGEN, next slot entry is the AGEN
         when (io.grant && !squash_grant) {
-          next_uop.fu_code(FC_AGEN) := true.B
-          next_uop.fu_code(FC_DGEN) := false.B
+          next_uop.iw_issued_partial_dgen := true.B
         }
         io.iss_uop.bits.fu_code(FC_AGEN) := false.B
         io.iss_uop.bits.fu_code(FC_DGEN) := true.B
@@ -180,11 +185,27 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
     io.iss_uop.bits.prs2       := io.iss_uop.bits.prs1 // helps with DCE
   }
 
+  when (slot_valid && slot_uop.iw_issued) {
+    next_valid := rebusied
+    if (isMem) {
+      when (slot_uop.iw_issued_partial_agen) {
+        next_valid := true.B
+        when (!rebusied_prs1) {
+          next_uop.fu_code(FC_AGEN) := false.B
+          next_uop.fu_code(FC_DGEN) := true.B
+        }
+      } .elsewhen (slot_uop.iw_issued_partial_dgen) {
+        next_valid := true.B
+        when (!rebusied_prs2) {
+          next_uop.fu_code(FC_AGEN) := true.B
+          next_uop.fu_code(FC_DGEN) := false.B
+        }
+      }
 
-  // Update state for current micro-op based on grant
-
-  when (io.grant && !squash_grant) {
-    next_valid := slot_uop.fu_code(FC_AGEN) && slot_uop.fu_code(FC_DGEN) && isMem.B
-    io.iss_uop.valid := true.B
+    }
   }
+
+
+
+
 }

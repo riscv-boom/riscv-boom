@@ -52,17 +52,16 @@ class IssueUnitIO(
   val dis_uops         = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
   val iss_uops         = Output(Vec(issueWidth, Valid(new MicroOp())))
-  val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new ExeUnitResp(xLen))))
+  val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new Wakeup)))
   val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
 
-  val spec_ld_wakeup   = Flipped(Vec(lsuWidth, Valid(UInt(width=maxPregSz.W))))
+  val child_rebusys    = Input(UInt(intWidth.W))
 
   // tell the issue unit what each execution pipeline has in terms of functional units
   val fu_types         = Input(Vec(issueWidth, Vec(FC_SZ, Bool())))
 
   val brupdate         = Input(new BrUpdateInfo())
   val flush_pipeline   = Input(Bool())
-  val ld_miss          = Input(Bool())
   val squash_grant     = Input(Bool())
 
   val tsc_reg          = Input(UInt(width=xLen.W))
@@ -89,45 +88,52 @@ abstract class IssueUnit(
   val dis_uops = Array.fill(dispatchWidth) {Wire(new MicroOp())}
   for (w <- 0 until dispatchWidth) {
     dis_uops(w) := io.dis_uops(w).bits
-
-    dis_uops(w).iw_p1_poisoned := false.B
-    dis_uops(w).iw_p2_poisoned := false.B
+    dis_uops(w).iw_issued := false.B
+    dis_uops(w).iw_issued_partial_agen := false.B
+    dis_uops(w).iw_issued_partial_dgen := false.B
     dis_uops(w).iw_p1_bypass_hint := false.B
     dis_uops(w).iw_p2_bypass_hint := false.B
 
     // Handle wakeups on dispatch
-    for (wakeup <- io.wakeup_ports) {
-      when (wakeup.valid) {
-        when (wakeup.bits.uop.pdst === io.dis_uops(w).bits.prs1) {
-          dis_uops(w).prs1_busy := false.B
-          dis_uops(w).iw_p1_bypass_hint := wakeup.bits.uop.bypassable
-        }
-        when (wakeup.bits.uop.pdst === io.dis_uops(w).bits.prs2) {
-          dis_uops(w).prs2_busy := false.B
-          dis_uops(w).iw_p2_bypass_hint := wakeup.bits.uop.bypassable
-        }
-        when (wakeup.bits.uop.pdst === io.dis_uops(w).bits.prs3) {
-          dis_uops(w).prs3_busy := false.B
-        }
-      }
+    val prs1_matches = io.wakeup_ports.map { wu => wu.bits.uop.pdst === io.dis_uops(w).bits.prs1 }
+    val prs2_matches = io.wakeup_ports.map { wu => wu.bits.uop.pdst === io.dis_uops(w).bits.prs2 }
+    val prs3_matches = io.wakeup_ports.map { wu => wu.bits.uop.pdst === io.dis_uops(w).bits.prs3 }
+    val prs1_wakeups = (io.wakeup_ports zip prs1_matches).map { case (wu,m) => wu.valid && m }
+    val prs2_wakeups = (io.wakeup_ports zip prs2_matches).map { case (wu,m) => wu.valid && m }
+    val prs3_wakeups = (io.wakeup_ports zip prs3_matches).map { case (wu,m) => wu.valid && m }
+    val prs1_rebusys = (io.wakeup_ports zip prs1_matches).map { case (wu,m) => wu.bits.rebusy && m }
+    val prs2_rebusys = (io.wakeup_ports zip prs2_matches).map { case (wu,m) => wu.bits.rebusy && m }
+    val bypassables  = io.wakeup_ports.map { wu => wu.bits.uop.bypassable }
+    val speculative_masks = io.wakeup_ports.map { wu => wu.bits.speculative_mask }
+
+
+
+    when (prs1_wakeups.reduce(_||_)) {
+      dis_uops(w).prs1_busy := false.B
+      dis_uops(w).iw_p1_speculative_child := Mux1H(prs1_wakeups, speculative_masks)
+      dis_uops(w).iw_p1_bypass_hint := Mux1H(prs1_wakeups, bypassables)
+    }
+    when (prs1_rebusys.reduce(_||_) || ((io.child_rebusys & io.dis_uops(w).bits.iw_p1_speculative_child) =/= 0.U)) {
+      dis_uops(w).prs1_busy := io.dis_uops(w).bits.lrs1_rtype === RT_FIX
+    }
+    when (prs2_wakeups.reduce(_||_)) {
+      dis_uops(w).prs2_busy := false.B
+      dis_uops(w).iw_p2_speculative_child := Mux1H(prs2_wakeups, speculative_masks)
+      dis_uops(w).iw_p2_bypass_hint := Mux1H(prs2_wakeups, bypassables)
+    }
+
+    when (prs2_rebusys.reduce(_||_) || ((io.child_rebusys & io.dis_uops(w).bits.iw_p2_speculative_child) =/= 0.U)) {
+      dis_uops(w).prs2_busy := io.dis_uops(w).bits.lrs2_rtype === RT_FIX
+    }
+
+
+    when (prs3_wakeups.reduce(_||_)) {
+      dis_uops(w).prs3_busy := false.B
     }
     when (io.pred_wakeup_port.valid && io.pred_wakeup_port.bits === io.dis_uops(w).bits.ppred) {
       dis_uops(w).ppred_busy := false.B
     }
-    for (spec_wakeup <- io.spec_ld_wakeup) {
-      when (spec_wakeup.valid) {
-        when (spec_wakeup.bits === io.dis_uops(w).bits.prs1) {
-          dis_uops(w).prs1_busy := false.B
-          dis_uops(w).iw_p1_poisoned := true.B
-          dis_uops(w).iw_p1_bypass_hint := true.B
-        }
-        when (spec_wakeup.bits === io.dis_uops(w).bits.prs2) {
-          dis_uops(w).prs2_busy := false.B
-          dis_uops(w).iw_p2_poisoned := true.B
-          dis_uops(w).iw_p2_bypass_hint := true.B
-        }
-      }
-    }
+
 
     if (iqType == IQT_INT.litValue) {
       when (io.dis_uops(w).bits.fu_code(FC_I2F)) {
@@ -169,8 +175,7 @@ abstract class IssueUnit(
   for (i <- 0 until numIssueSlots) {
     issue_slots(i).wakeup_ports     := io.wakeup_ports
     issue_slots(i).pred_wakeup_port := io.pred_wakeup_port
-    issue_slots(i).spec_ld_wakeup   := io.spec_ld_wakeup
-    issue_slots(i).ldspec_miss      := io.ld_miss
+    issue_slots(i).child_rebusys    := io.child_rebusys
     issue_slots(i).squash_grant     := io.squash_grant
     issue_slots(i).brupdate         := io.brupdate
     issue_slots(i).kill             := io.flush_pipeline
