@@ -103,6 +103,14 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val prs1_status      = UInt(operandStatusSz.W)
   val prs2_status      = UInt(operandStatusSz.W)
 
+  // Woke up last cycle?
+  val prs1_just_awoke  = Bool()
+  val prs2_just_awoke  = Bool()
+  def just_awoke       = prs1_just_awoke || prs2_just_awoke
+
+  // Issued last cycle?
+  val just_issued      = Bool()
+
   // Woken up by an alu operation
   val prs1_can_bypass_alu = Bool()
   val prs2_can_bypass_alu = Bool()
@@ -124,6 +132,10 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def prs1_bypass_mem  = VecInit(Mux(prs1_status(1), prs1_can_bypass_mem.asUInt, 0.U).asBools)
   def prs2_bypass_mem  = VecInit(Mux(prs2_status(1), prs2_can_bypass_mem.asUInt, 0.U).asBools)
 
+  // TODO Nasty awful disgusting hack so that we can still do the loadspec the same way with the new pipeline stage
+  val r_prs1_bypass_mem = Vec(memWidth, Bool())
+  val r_prs2_bypass_mem = Vec(memWidth, Bool())
+
   // Bypass the operand from the scheduled writeback crossbar
   def prs1_bypass_gen  = prs1_status(1)
   def prs2_bypass_gen  = prs2_status(1)
@@ -133,6 +145,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
   // Check if a load nack kills this uop while being issued
   def load_wakeup_nacked(load_nacks: Vec[Bool]) = ((prs1_bypass_mem.asUInt | prs2_bypass_mem.asUInt) & load_nacks.asUInt).orR
+  def delayed_load_nack(load_nacks: Vec[Bool])  = ((r_prs1_bypass_mem.asUInt | r_prs2_bypass_mem.asUInt) & load_nacks.asUInt).orR
 
   // Keep track of which irf read ports we are using
   val prs1_port = UInt(numIrfReadPorts.W)

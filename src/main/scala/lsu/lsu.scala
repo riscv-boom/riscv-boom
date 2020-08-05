@@ -1295,11 +1295,12 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   // Task 4: Speculatively wakeup loads 1 cycle before they come back
   for (w <- 0 until memWidth) {
-    io.core.spec_load_wakeups(w).valid := enableFastLoadUse.B          &&
-                                          fired_load_incoming(w)       &&
-                                          !mem_incoming_uop(w).fp_val  &&
-                                          mem_incoming_uop(w).ldst_val
-    io.core.spec_load_wakeups(w).bits  := mem_incoming_uop(w).pdst
+    io.core.spec_load_wakeups(w).valid := enableFastLoadUse.B        &&
+                                          will_fire_load_incoming(w) &&
+                                          !exe_tlb_uop(w).fp_val     &&
+                                          exe_tlb_uop(w).ldst_val    &&
+                                          dmem_req_fire(w)
+    io.core.spec_load_wakeups(w).bits  := exe_tlb_uop(w).pdst
   }
 
   //-------------------------------------------------------------
@@ -1424,7 +1425,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   }
 
   for (w <- 0 until memWidth) {
-    io.core.spec_load_nacks(w) := RegNext(io.core.spec_load_wakeups(w).valid) &&
+    io.core.spec_load_nacks(w) := RegNext(RegNext(io.core.spec_load_wakeups(w).valid)) &&
       !(io.core.exe(w).iresp.valid && io.core.exe(w).iresp.bits.uop.ldq_idx === RegNext(mem_incoming_uop(w).ldq_idx))
   }
 

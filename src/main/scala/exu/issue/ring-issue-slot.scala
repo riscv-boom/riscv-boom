@@ -40,6 +40,7 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val request_hp    = Output(Bool())
   val request_chain = Output(Bool())
   val grant         = Input(Bool())
+  val grant_chain   = Input(Bool())
 
   val fu_avail      = Input(UInt(FUC_SZ.W))
 
@@ -54,6 +55,9 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val load_nacks    = Input(Vec(memWidth, Bool()))
   val ll_wakeups    = Input(Vec(memWidth, Valid(UInt(ipregSz.W))))
   val pred_wakeup   = Input(Valid(UInt(ftqSz.W)))
+
+  val nack_issue    = Input(Bool())
+  val nack_wakeup   = Input(Bool())
 
   val in_uop        = Flipped(Valid(new MicroOp)) // Received from dispatch or another slot during compaction
   val out_uop       = Output(new MicroOp) // The updated slot uop; will be shifted upwards in a collasping queue
@@ -88,7 +92,8 @@ class RingIssueSlot(implicit p: Parameters)
              swu: Vec[Valid[UInt]],
              lwu: Vec[Valid[UInt]],
              llw: Vec[Valid[UInt]],
-             ldn: Vec[Bool]): MicroOp = {
+             ldn: Vec[Bool],
+             nwu: Bool): MicroOp = {
 
     val woke_uop = Wire(new MicroOp)
     woke_uop := uop
@@ -118,15 +123,21 @@ class RingIssueSlot(implicit p: Parameters)
                             | Mux(lwu_prs2,             2.U, 0.U)
                             | Mux(swu_prs2,             1.U, 0.U) )
 
+    woke_uop.prs1_just_awoke := fwu_prs1
+    woke_uop.prs2_just_awoke := fwu_prs2
+
     woke_uop.prs1_can_bypass_alu := uop.prs1_can_bypass_alu || fwu_prs1 && fwu.bits.alu
     woke_uop.prs2_can_bypass_alu := uop.prs2_can_bypass_alu || fwu_prs2 && fwu.bits.alu
 
     woke_uop.prs1_can_bypass_mem := (uop.prs1_can_bypass_mem.asUInt | lwu_prs1_hits.asUInt).asBools
     woke_uop.prs2_can_bypass_mem := (uop.prs2_can_bypass_mem.asUInt | lwu_prs2_hits.asUInt).asBools
 
+    woke_uop.r_prs1_bypass_mem := uop.prs1_bypass_mem
+    woke_uop.r_prs2_bypass_mem := uop.prs2_bypass_mem
+
     // Reset status to zero if woken up last cycle by a load which missed
-    when ((uop.prs1_bypass_mem.asUInt & ldn.asUInt).orR) { woke_uop.prs1_status := 0.U }
-    when ((uop.prs2_bypass_mem.asUInt & ldn.asUInt).orR) { woke_uop.prs2_status := 0.U }
+    when (uop.prs1_just_awoke && nwu || (uop.r_prs1_bypass_mem.asUInt & ldn.asUInt).orR) { woke_uop.prs1_status := 0.U }
+    when (uop.prs2_just_awoke && nwu || (uop.r_prs2_bypass_mem.asUInt & ldn.asUInt).orR) { woke_uop.prs2_status := 0.U }
 
     // Wakeup predicate
     when (pwu.bits === uop.ppred && pwu.valid) { woke_uop.ppred_busy := false.B }
@@ -154,10 +165,12 @@ class RingIssueSlot(implicit p: Parameters)
 
   val slot_uop = RegInit(NullMicroOp)
   val next_uop = Mux(io.in_uop.valid, io.in_uop.bits, io.out_uop)
-  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.chain_wakeup, io.pred_wakeup, io.slow_wakeups, io.load_wakeups, io.ll_wakeups, io.load_nacks)
+  val woke_uop = wakeup(next_uop, io.fast_wakeup, io.chain_wakeup, io.pred_wakeup, io.slow_wakeups, io.load_wakeups, io.ll_wakeups, io.load_nacks, io.nack_wakeup)
 
   val p1 = slot_uop.prs1_ready
   val p2 = slot_uop.prs2_ready
+
+  val granted = slot_uop.just_issued && !io.nack_issue
 
   //----------------------------------------------------------------------------------------------------
   // next slot state computation
@@ -187,11 +200,11 @@ class RingIssueSlot(implicit p: Parameters)
 
   when (io.kill) {
     next_state := s_invalid
-  } .elsewhen (io.grant && ((state === s_valid_1) || (state === s_valid_2) && p1 && p2 || (state === s_valid_3))) {
+  } .elsewhen (granted && ((state === s_valid_1) || (state === s_valid_2) && RegNext(next_uop.prs1_ready && next_uop.prs2_ready)) || io.grant_chain) {
     next_state := s_invalid
-  } .elsewhen (io.grant && (state === s_valid_2)) {
+  } .elsewhen (granted && (state === s_valid_2)) {
     next_state := s_valid_1
-    when (p1) {
+    when (RegNext(next_uop.prs1_ready)) {
       next_uopc := uopSTD
       next_lrs1_rtype := RT_X
     } .otherwise {
@@ -221,7 +234,7 @@ class RingIssueSlot(implicit p: Parameters)
   //----------------------------------------------------------------------------------------------------
   // Request Logic
 
-  val can_request = (io.fu_avail & slot_uop.fu_code).orR && slot_uop.ppred_ready
+  val can_request = (io.fu_avail & slot_uop.fu_code).orR && slot_uop.ppred_ready && !slot_uop.just_issued
 
   when (state === s_valid_1) {
     io.request := p1 && p2 && can_request
@@ -250,7 +263,7 @@ class RingIssueSlot(implicit p: Parameters)
   io.uop := slot_uop
 
   // micro-op will vacate due to grant.
-  val may_vacate = io.grant && ((state === s_valid_1) || (state === s_valid_2) && p1 && p2)
+  val may_vacate = granted && ((state === s_valid_1) || (state === s_valid_2) && RegNext(next_uop.prs1_ready && next_uop.prs2_ready)) || io.grant_chain
   io.will_be_valid := is_valid && !may_vacate
 
   io.out_uop            := slot_uop
@@ -259,6 +272,7 @@ class RingIssueSlot(implicit p: Parameters)
   io.out_uop.lrs1_rtype := next_lrs1_rtype
   io.out_uop.lrs2_rtype := next_lrs2_rtype
   io.out_uop.br_mask    := next_br_mask
+  io.out_uop.just_issued := io.grant
 
   when (state === s_valid_2) {
     when (p1 && p2) {

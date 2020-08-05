@@ -57,8 +57,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     for (i <- 0 until numSlotsPerColumn) {
       slots(w)(i).load_wakeups := io.load_wakeups
       slots(w)(i).ll_wakeups   := io.ll_wakeups
-      slots(w)(i).load_nacks   := io.load_nacks
       slots(w)(i).pred_wakeup  := io.pred_wakeup
+      slots(w)(i).load_nacks   := io.load_nacks
 
       slots(w)(i).brupdate := io.brupdate
       slots(w)(i).kill     := io.kill
@@ -127,9 +127,10 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   //----------------------------------------------------------------------------------------------------
   // Selection
 
-  val iss_sels = Wire(Vec(coreWidth, Vec(numSlotsPerColumn, Bool())))
-  val sel_uops = Wire(Vec(coreWidth, new MicroOp))
-  val sel_vals = Wire(Vec(coreWidth, Bool()))
+  val iss_uops   = Wire(Vec(coreWidth, new MicroOp))
+  val iss_valids = Wire(Vec(coreWidth, Bool()))
+  val iss_nacks  = Wire(Vec(coreWidth, Bool()))
+  val iss_sels   = Wire(Vec(coreWidth, Vec(numSlotsPerColumn, Bool())))
 
   for (w <- 0 until coreWidth) {
     val col_reqs    = slots(w).map(_.request)
@@ -138,12 +139,12 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
     val tmp = VecInit(PriorityEncoderOH(col_reqs_hp ++ col_reqs)).asUInt
     val n = numSlotsPerColumn
-    iss_sels(w) := (tmp(n*2-1,n) | tmp(n-1,0)).asBools
-    sel_uops(w) := Mux1H(iss_sels(w), col_uops)
-    sel_vals(w) := col_reqs.reduce(_||_)
+    iss_sels(w)   := (tmp(n*2-1,n) | tmp(n-1,0)).asBools
+    iss_uops(w)   := Mux1H(iss_sels(w), col_uops)
+    iss_valids(w) := col_reqs.reduce(_||_) && !(iss_uops(w).just_awoke && iss_nacks(w)) && !iss_uops(w).delayed_load_nack(io.load_nacks)
   }
 
-  //-------------------------
+  //----------------------------------------------------------------------------------------------------
   // Chain selection
 
   val chain_sels = Wire(Vec(coreWidth, Vec(numSlotsPerColumn, Bool())))
@@ -160,37 +161,13 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   }
 
   //----------------------------------------------------------------------------------------------------
-  // Arbitration
-
-  val rrd_arb = Module(new RegisterReadArbiter)
-  val exu_arb = Module(new ExecutionArbiter)
-  val wb_arb  = Module(new WritebackArbiter)
-
-  val arbiters = Seq(rrd_arb, exu_arb, wb_arb)
-
-  var arb_gnts = ~(0.U(coreWidth.W))
-
-  for (arb <- arbiters) {
-    arb.io.uops := sel_uops
-    arb.io.reqs := sel_vals
-    arb.io.fire := DontCare
-    arb_gnts = arb_gnts & arb.io.gnts.asUInt
-  }
-
-  wb_arb.io.fire := arb_gnts.asBools
-
-  for (w <- 0 until coreWidth) {
-    sel_uops(w).prs1_port := rrd_arb.io.prs1_port(w)
-    sel_uops(w).prs2_port := rrd_arb.io.prs2_port(w)
-  }
-
-  //-------------------------
   // Chain arbitration
 
   val chain_arb = Module(new ChainedWakeupArbiter)
   chain_arb.io.uops := chain_uops
   chain_arb.io.reqs := chain_vals
   chain_arb.io.fire := DontCare
+  chain_arb.io.fu_avail := DontCare
 
   val r_chain_uops = RegNext(chain_uops)
   val r_chain_vals = RegNext(chain_arb.io.gnts)
@@ -198,18 +175,19 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   //----------------------------------------------------------------------------------------------------
   // Grant, Fast Wakeup, and Issue
 
-  val do_issue = arb_gnts & ~VecInit(sel_uops.map(_.load_wakeup_nacked(io.load_nacks))).asUInt
-
   // Grant signals
   for (w <- 0 until coreWidth) {
     for (i <- 0 until numSlotsPerColumn) {
-      slots(w)(i).grant := iss_sels(w)(i) && do_issue(w) || chain_sels(w)(i) && chain_arb.io.gnts(w)
+      slots(w)(i).grant       := iss_sels(w)(i) && iss_valids(w)
+      slots(w)(i).grant_chain := chain_sels(w)(i) && chain_arb.io.gnts(w)
+      slots(w)(i).nack_issue  := iss_nacks((w + 1) % coreWidth)
+      slots(w)(i).nack_wakeup := iss_nacks(w)
     }
   }
 
   // Generate fast wakeups
   for (w <- 0 until coreWidth) {
-    val fast_wakeup  = sel_uops(w).fast_wakeup(do_issue(w))
+    val fast_wakeup  = iss_uops(w).fast_wakeup(iss_valids(w))
 
     // Broadcast to slots in next column
     for (slot <- slots((w + 1) % coreWidth)) {
@@ -217,10 +195,6 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
       slot.slow_wakeups(0) := io.slow_wakeups(w)
       slot.slow_wakeups(1) := io.slow_wakeups(w + coreWidth)
     }
-
-    // Send to rename (ALU only)
-    io.fast_wakeups(w).valid := RegNext(fast_wakeup.valid && fast_wakeup.bits.alu)
-    io.fast_wakeups(w).bits  := RegNext(fast_wakeup.bits.pdst)
   }
 
   // Generate chained wakeups
@@ -236,14 +210,50 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     }
   }
 
-  // Hookup issue output
-  for (w <- 0 until coreWidth) {
-    io.iss_uops(w).bits  := sel_uops(w)
-    io.iss_uops(w).valid := do_issue(w)
+  //----------------------------------------------------------------------------------------------------
+  // Arbitration
 
-    assert (PopCount(sel_uops(w).prs1_status) === 1.U || sel_uops(w).lrs1_rtype === RT_X || !do_issue(w),
+  val arb_uops   = RegNext(VecInit(iss_uops.map(u => GetNewUopAndBrMask(u, io.brupdate))))
+  val arb_valids = RegNext(VecInit(iss_uops zip iss_valids map { case (u,v) => v && !IsKilledByBranch(io.brupdate, u) && !io.kill }))
+  var arb_grants = ~(0.U(coreWidth.W))
+
+  val rrd_arb = Module(new RegisterReadArbiter)
+  val exu_arb = Module(new ExecutionArbiter)
+  val wb_arb  = Module(new WritebackArbiter)
+
+  val arbiters = Seq(rrd_arb, exu_arb, wb_arb)
+
+  for (arb <- arbiters) {
+    arb.io.uops := arb_uops
+    arb.io.reqs := arb_valids
+    arb.io.fire := DontCare
+    arb.io.fu_avail := DontCare
+    arb_grants   = arb_grants & arb.io.gnts.asUInt
+  }
+
+  wb_arb.io.fire := arb_grants.asBools
+
+  // Check for speculative memory wakeup nacks
+  val mem_nacks = VecInit(arb_uops.map(u => u.load_wakeup_nacked(io.load_nacks))).asUInt
+  arb_grants = arb_grants & ~mem_nacks
+
+  // Hookup issued uops to output
+  for (w <- 0 until coreWidth) {
+    io.iss_uops(w).bits  := arb_uops(w)
+    io.iss_uops(w).valid := arb_valids(w) && arb_grants(w)
+
+    io.iss_uops(w).bits.prs1_port := rrd_arb.io.prs1_port(w)
+    io.iss_uops(w).bits.prs2_port := rrd_arb.io.prs2_port(w)
+
+    iss_nacks((w + 1) % coreWidth) := arb_valids(w) && !arb_grants(w)
+
+    // Send fast wakeups to rename (1 cycle latency ops only)
+    io.fast_wakeups(w).valid := arb_valids(w) && arb_grants(w) && arb_uops(w).exe_wb_latency(0)
+    io.fast_wakeups(w).bits  := arb_uops(w).pdst
+
+    assert (PopCount(iss_uops(w).prs1_status) === 1.U || iss_uops(w).lrs1_rtype === RT_X || !iss_valids(w),
             "Operand status should be one-hot at issue")
-    assert (PopCount(sel_uops(w).prs2_status) === 1.U || sel_uops(w).lrs2_rtype === RT_X || !do_issue(w),
+    assert (PopCount(iss_uops(w).prs2_status) === 1.U || iss_uops(w).lrs2_rtype === RT_X || !iss_valids(w),
             "Operand status should be one-hot at issue")
   }
 
