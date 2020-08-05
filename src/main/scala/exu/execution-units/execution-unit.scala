@@ -34,6 +34,7 @@ import boom.util._
 class Wakeup(implicit p: Parameters) extends BoomBundle
   with HasBoomUOP
 {
+  val bypassable = Bool()
   val speculative_mask = UInt(intWidth.W)
   val rebusy = Bool()
 }
@@ -240,10 +241,15 @@ class IntExeUnit(
   with HasBrfReadPort
 {
   val io_fast_wakeup = IO(Output(Valid(new Wakeup)))
-  io_fast_wakeup.valid    := io_iss_uop.valid && io_iss_uop.bits.bypassable && io_iss_uop.bits.dst_rtype === RT_FIX
+  io_fast_wakeup.valid    := (
+    io_iss_uop.valid &&
+    (io_iss_uop.bits.fu_code(FC_ALU) || io_iss_uop.bits.fu_code(FC_JMP)) &&
+    (io_iss_uop.bits.dst_rtype === RT_FIX)
+  )
   io_fast_wakeup.bits.uop := io_iss_uop.bits
   io_fast_wakeup.bits.speculative_mask := (1 << id).U
   io_fast_wakeup.bits.rebusy := false.B
+  io_fast_wakeup.bits.bypassable := true.B
 
   io_arb_irf_reqs(0).valid := arb_uop.valid && arb_uop.bits.lrs1_rtype === RT_FIX && !arb_uop.bits.iw_p1_bypass_hint
   io_arb_irf_reqs(0).bits  := arb_uop.bits.prs1
@@ -294,6 +300,7 @@ class IntExeUnit(
   io_rrd_immrf_wakeup.bits.uop := rrd_uop.bits
   io_rrd_immrf_wakeup.bits.speculative_mask := false.B
   io_rrd_immrf_wakeup.bits.rebusy := false.B
+  io_rrd_immrf_wakeup.bits.bypassable := false.B
 
   io_arb_brf_req.valid := (arb_uop.valid && arb_uop.bits.is_br)
   io_arb_brf_req.bits  := arb_uop.bits.br_tag
@@ -366,6 +373,7 @@ class IntExeUnit(
     wakeup.bits.uop := rrd_uop.bits
     wakeup.bits.speculative_mask := 0.U
     wakeup.bits.rebusy := false.B
+    wakeup.bits.bypassable := false.B
 
     (Some(req), Some(resp), Some(wakeup))
   } else {
@@ -398,7 +406,7 @@ class IntExeUnit(
       alu_ready := false.B
       io_fast_wakeup.valid     := true.B
       io_fast_wakeup.bits.uop  := pipe.io.resp.last.bits.uop
-      io_fast_wakeup.bits.uop.bypassable := true.B
+      io_fast_wakeup.bits.bypassable := true.B
       io_fast_wakeup.bits.speculative_mask := 0.U
       io_fast_wakeup.bits.rebusy := false.B
     }

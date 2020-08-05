@@ -18,19 +18,6 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 import freechips.rocketchip.rocket.RVCExpander
 
-/**
- * Mixin for issue queue types
- */
-trait IQType
-{
-  val IQT_SZ  = 3
-  val IQT_INT = 1.U(IQT_SZ.W)
-  val IQT_MEM = 2.U(IQT_SZ.W)
-  val IQT_FP  = 4.U(IQT_SZ.W)
-  val IQT_MFP = 6.U(IQT_SZ.W)
-  val IQT_X   = BitPat("b???")
-}
-
 
 /**
  * Mixin for scalar operation constants
@@ -54,6 +41,7 @@ trait ScalarOpConstants
 
   //************************************
   // Control Signals
+
 
   // CFI types
   val CFI_SZ   = 3
@@ -122,6 +110,13 @@ trait ScalarOpConstants
   val RT_FLT   = 1.U(2.W)
   val RT_X     = 2.U(2.W) // not-a-register (prs1 = lrs1 special case)
   val RT_ZERO  = 3.U(2.W)
+
+
+  // IQT type
+  val IQ_SZ  = 3
+  val IQ_MEM = 0
+  val IQ_INT = 1
+  val IQ_FP  = 2
 
   // Functional unit select
   // bit mask, since a given execution pipeline may support multiple functional units
@@ -278,18 +273,11 @@ trait ScalarOpConstants
 
   val uopMOV       = 127.U(UOPC_SZ.W) // conditional mov decoded from "add rd, x0, rs2"
 
-  // The Bubble Instruction (Machine generated NOP)
-  // Insert (XOR x0,x0,x0) which is different from software compiler
-  // generated NOPs which are (ADDI x0, x0, 0).
-  // Reasoning for this is to let visualizers and stat-trackers differentiate
-  // between software NOPs and machine-generated Bubbles in the pipeline.
-  val BUBBLE  = (0x4033).U(32.W)
 
   def NullMicroOp()(implicit p: Parameters): boom.common.MicroOp = {
     val uop = Wire(new boom.common.MicroOp)
     uop            := DontCare // Overridden in the following lines
     uop.uopc       := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
-    uop.bypassable := false.B
     uop.fp_val     := false.B
     uop.uses_stq   := false.B
     uop.uses_ldq   := false.B

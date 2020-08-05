@@ -952,7 +952,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                      dmem_req_fire(w)                                &&
                                     !agen(w).bits.uop.fp_val)
     wakeupArbs(w).io.in(1).bits.uop := agen(w).bits.uop
-    wakeupArbs(w).io.in(1).bits.uop.bypassable := true.B
+    wakeupArbs(w).io.in(1).bits.bypassable := true.B
     wakeupArbs(w).io.in(1).bits.speculative_mask := 0.U
     wakeupArbs(w).io.in(1).bits.rebusy := false.B
 
@@ -1392,13 +1392,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.dmem.ll_resp.ready := false.B
   for (w <- 0 until lsuWidth) {
     wakeupArbs(w).io.in(0).valid := false.B
-    wakeupArbs(w).io.in(0).bits.rebusy := false.B
 
     when (wb_spec_wakeups(w).valid && !spec_ld_succeed(w)) {
       wakeupArbs(w).io.in(0).valid := true.B
       wakeupArbs(w).io.in(0).bits.uop := wb_spec_wakeups(w).bits
       wakeupArbs(w).io.in(0).bits.speculative_mask := 0.U
       wakeupArbs(w).io.in(0).bits.rebusy := true.B
+      wakeupArbs(w).io.in(0).bits.bypassable := false.B
     }
 
     // Handle nacks
@@ -1462,6 +1462,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         wakeupArbs(w).io.in(0).bits.uop := ldq_e.bits.uop
         wakeupArbs(w).io.in(0).bits.speculative_mask := 0.U
         wakeupArbs(w).io.in(0).bits.rebusy := false.B
+        wakeupArbs(w).io.in(0).bits.bypassable := false.B
       }
 
       when (resp.uop.uses_stq)
@@ -1476,6 +1477,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         wakeupArbs(w).io.in(0).bits.uop := stq(resp.uop.stq_idx).bits.uop
         wakeupArbs(w).io.in(0).bits.speculative_mask := 0.U
         wakeupArbs(w).io.in(0).bits.rebusy := false.B
+        wakeupArbs(w).io.in(0).bits.bypassable := false.B
 
         stq(resp.uop.stq_idx).bits.debug_wb_data := resp.data
       }
@@ -1510,6 +1512,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         wakeupArbs(w).io.in(0).bits.uop := forward_uop
         wakeupArbs(w).io.in(0).bits.speculative_mask := 0.U
         wakeupArbs(w).io.in(0).bits.rebusy := false.B
+        wakeupArbs(w).io.in(0).bits.bypassable := false.B
       }
 
       io.core.iresp(w).valid := (forward_uop.dst_rtype === RT_FIX)

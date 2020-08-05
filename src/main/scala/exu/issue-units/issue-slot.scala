@@ -100,7 +100,7 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
   val prs3_wakeups = (io.wakeup_ports zip prs3_matches).map { case (w,m) => w.valid && m }
   val prs1_rebusys = (io.wakeup_ports zip prs1_matches).map { case (w,m) => w.bits.rebusy && m }
   val prs2_rebusys = (io.wakeup_ports zip prs2_matches).map { case (w,m) => w.bits.rebusy && m }
-  val bypassables  = io.wakeup_ports.map { w => w.bits.uop.bypassable }
+  val bypassables  = io.wakeup_ports.map { w => w.bits.bypassable }
   val speculative_masks = io.wakeup_ports.map { w => w.bits.speculative_mask }
 
   when (prs1_wakeups.reduce(_||_)) {

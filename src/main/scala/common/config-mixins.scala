@@ -91,7 +91,7 @@ class WithRationalBoomTiles extends Config((site, here, up) => {
 // class WithUnifiedIntIQ extends Config((site, here, up) => {
 //   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
 //     case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
-//       issueParams = tp.tileParams.core.issueParams.filter(iqType != IQT_MEM.litValue)
+//       issueParams = tp.tileParams.core.issueParams.filter(iqType != IQ_MEM)
 //     )))
 //     case other => other
 //   }
@@ -115,9 +115,9 @@ class WithNSmallBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends 
               decodeWidth = 1,
               numRobEntries = 32,
               issueParams = Seq(
-                IssueParams(issueWidth=2, numEntries=8, iqType=IQT_MEM.litValue, dispatchWidth=1),
-                IssueParams(issueWidth=1, numEntries=8, iqType=IQT_INT.litValue, dispatchWidth=1),
-                IssueParams(issueWidth=1, numEntries=8, iqType=IQT_FP.litValue , dispatchWidth=1)),
+                IssueParams(issueWidth=2, numEntries=8, iqType=IQ_MEM, dispatchWidth=1),
+                IssueParams(issueWidth=1, numEntries=8, iqType=IQ_INT, dispatchWidth=1),
+                IssueParams(issueWidth=1, numEntries=8, iqType=IQ_FP , dispatchWidth=1)),
               numIntPhysRegisters = 52,
               numFpPhysRegisters = 48,
               numIrfReadPorts = 3,
@@ -163,9 +163,9 @@ class WithNMediumBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends
               decodeWidth = 2,
               numRobEntries = 64,
               issueParams = Seq(
-                IssueParams(issueWidth=2, numEntries=12, iqType=IQT_MEM.litValue, dispatchWidth=2),
-                IssueParams(issueWidth=2, numEntries=20, iqType=IQT_INT.litValue, dispatchWidth=2),
-                IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=2)),
+                IssueParams(issueWidth=2, numEntries=12, iqType=IQ_MEM, dispatchWidth=2),
+                IssueParams(issueWidth=2, numEntries=20, iqType=IQ_INT, dispatchWidth=2),
+                IssueParams(issueWidth=1, numEntries=16, iqType=IQ_FP , dispatchWidth=2)),
               numIntPhysRegisters = 80,
               numFpPhysRegisters = 64,
               numIrfReadPorts = 5,
@@ -212,9 +212,9 @@ class WithNLargeBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends 
               decodeWidth = 3,
               numRobEntries = 96,
               issueParams = Seq(
-                IssueParams(issueWidth=2, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=3),
-                IssueParams(issueWidth=3, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=3),
-                IssueParams(issueWidth=1, numEntries=24, iqType=IQT_FP.litValue , dispatchWidth=3)),
+                IssueParams(issueWidth=2, numEntries=16, iqType=IQ_MEM, dispatchWidth=3),
+                IssueParams(issueWidth=3, numEntries=32, iqType=IQ_INT, dispatchWidth=3),
+                IssueParams(issueWidth=1, numEntries=24, iqType=IQ_FP , dispatchWidth=3)),
               numIntPhysRegisters = 100,
               numFpPhysRegisters = 96,
               numIrfReadPorts = 6,
@@ -258,9 +258,9 @@ class WithNMegaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
               decodeWidth = 4,
               numRobEntries = 128,
               issueParams = Seq(
-                IssueParams(issueWidth=3, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4),
-                IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4),
-                IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
+                IssueParams(issueWidth=3, numEntries=32, iqType=IQ_MEM, dispatchWidth=4),
+                IssueParams(issueWidth=4, numEntries=40, iqType=IQ_INT, dispatchWidth=4),
+                IssueParams(issueWidth=2, numEntries=32, iqType=IQ_FP , dispatchWidth=4)),
               lsuWidth = 2,
               numIntPhysRegisters = 128,
               numFpPhysRegisters = 128,
@@ -306,9 +306,9 @@ class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) ex
               decodeWidth = 4,
               numRobEntries = 128,
               issueParams = Seq(
-                IssueParams(issueWidth=2, numEntries=32, iqType=IQT_MEM.litValue, dispatchWidth=4, numSlowEntries=20),
-                IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4, numSlowEntries=24, useFullIssueSel=false),
-                IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4, numSlowEntries=16)),
+                IssueParams(issueWidth=2, numEntries=32, iqType=IQ_MEM, dispatchWidth=4, numSlowEntries=20),
+                IssueParams(issueWidth=4, numEntries=40, iqType=IQ_INT, dispatchWidth=4, numSlowEntries=24, useFullIssueSel=false),
+                IssueParams(issueWidth=2, numEntries=32, iqType=IQ_FP , dispatchWidth=4, numSlowEntries=16)),
               lsuWidth = 2,
               numIntPhysRegisters = 128,
               numFpPhysRegisters = 128,
@@ -358,9 +358,9 @@ class WithNGigaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
               decodeWidth = 5,
               numRobEntries = 130,
               issueParams = Seq(
-                IssueParams(issueWidth=2, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=5),
-                IssueParams(issueWidth=5, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=5, useFullIssueSel=false),
-                IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=5)),
+                IssueParams(issueWidth=2, numEntries=24, iqType=IQ_MEM, dispatchWidth=5),
+                IssueParams(issueWidth=5, numEntries=40, iqType=IQ_INT, dispatchWidth=5, useFullIssueSel=false),
+                IssueParams(issueWidth=2, numEntries=32, iqType=IQ_FP , dispatchWidth=5)),
               lsuWidth = 2,
               numIntPhysRegisters = 128,
               numFpPhysRegisters = 128,
@@ -421,9 +421,9 @@ class WithNCS152BaselineBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) 
               numDCacheBanks = lsuWidth,
               lsuWidth = lsuWidth, 
               issueParams = Seq(
-                IssueParams(issueWidth=2,         numEntries=8,  iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
-                IssueParams(issueWidth=coreWidth, numEntries=32, iqType=IQT_INT.litValue, dispatchWidth=coreWidth),
-                IssueParams(issueWidth=1,         numEntries=4,  iqType=IQT_FP.litValue , dispatchWidth=coreWidth))
+                IssueParams(issueWidth=2,         numEntries=8,  iqType=IQ_MEM, dispatchWidth=coreWidth),
+                IssueParams(issueWidth=coreWidth, numEntries=32, iqType=IQ_INT, dispatchWidth=coreWidth),
+                IssueParams(issueWidth=1,         numEntries=4,  iqType=IQ_FP , dispatchWidth=coreWidth))
                 // DO NOT CHANGE ABOVE
             ),
             dcache = Some(DCacheParams(
@@ -472,9 +472,9 @@ class WithNCS152DefaultBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) e
               numDCacheBanks = lsuWidth,
               lsuWidth = lsuWidth,
               issueParams = Seq(
-                IssueParams(issueWidth=2,         numEntries=nIssueSlots, iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
-                IssueParams(issueWidth=coreWidth, numEntries=nIssueSlots, iqType=IQT_INT.litValue, dispatchWidth=coreWidth),
-                IssueParams(issueWidth=1,         numEntries=nIssueSlots, iqType=IQT_FP.litValue , dispatchWidth=coreWidth))
+                IssueParams(issueWidth=2,         numEntries=nIssueSlots, iqType=IQ_MEM, dispatchWidth=coreWidth),
+                IssueParams(issueWidth=coreWidth, numEntries=nIssueSlots, iqType=IQ_INT, dispatchWidth=coreWidth),
+                IssueParams(issueWidth=1,         numEntries=nIssueSlots, iqType=IQ_FP , dispatchWidth=coreWidth))
                 // DO NOT CHANGE ABOVE
             ),
             dcache = Some(DCacheParams(

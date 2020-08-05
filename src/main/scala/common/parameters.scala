@@ -28,9 +28,9 @@ case class BoomCoreParams(
   decodeWidth: Int = 1,
   numRobEntries: Int = 64,
   issueParams: Seq[IssueParams] = Seq(
-    IssueParams(issueWidth=2, numEntries=16, iqType=IQT_MEM.litValue, dispatchWidth=1),
-    IssueParams(issueWidth=2, numEntries=16, iqType=IQT_INT.litValue, dispatchWidth=1),
-    IssueParams(issueWidth=1, numEntries=16, iqType=IQT_FP.litValue , dispatchWidth=1)),
+    IssueParams(issueWidth=2, numEntries=16, iqType=IQ_MEM, dispatchWidth=1),
+    IssueParams(issueWidth=2, numEntries=16, iqType=IQ_INT, dispatchWidth=1),
+    IssueParams(issueWidth=1, numEntries=16, iqType=IQ_FP , dispatchWidth=1)),
   lsuWidth: Int = 1,
   numLdqEntries: Int = 16,
   numStqEntries: Int = 16,
@@ -202,13 +202,13 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
 
   // currently, only support one of each.
-  require (issueParams.count(_.iqType == IQT_FP.litValue) == 1 || !usingFPU)
-  require (issueParams.count(_.iqType == IQT_MEM.litValue) == 1)
-  require (issueParams.count(_.iqType == IQT_INT.litValue) == 1)
+  require (issueParams.count(_.iqType == IQ_FP ) == 1 || !usingFPU)
+  require (issueParams.count(_.iqType == IQ_MEM) == 1)
+  require (issueParams.count(_.iqType == IQ_INT) == 1)
 
-  val intIssueParam = issueParams.find(_.iqType == IQT_INT.litValue).get
-  val memIssueParam = issueParams.find(_.iqType == IQT_MEM.litValue).get
-  val fpIssueParam  = issueParams.find(_.iqType == IQT_FP.litValue).get
+  val intIssueParam = issueParams.find(_.iqType == IQ_INT).get
+  val memIssueParam = issueParams.find(_.iqType == IQ_MEM).get
+  val fpIssueParam  = issueParams.find(_.iqType == IQ_FP ).get
 
   val intWidth = intIssueParam.issueWidth
   val memWidth = memIssueParam.issueWidth

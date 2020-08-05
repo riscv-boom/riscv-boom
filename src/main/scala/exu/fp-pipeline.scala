@@ -26,7 +26,7 @@ import boom.util._
  */
 class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
 {
-  val fpIssueParams = issueParams.find(_.iqType == IQT_FP.litValue).get
+  val fpIssueParams = issueParams.find(_.iqType == IQ_FP).get
   val dispatchWidth = fpIssueParams.dispatchWidth
   val numLlPorts = lsuWidth
   val numWakeupPorts = fpIssueParams.issueWidth + numLlPorts
@@ -66,7 +66,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   val numFrfWritePorts = fpWidth + lsuWidth
 
   val issue_unit     = Module(new IssueUnitCollapsing(
-                         issueParams.find(_.iqType == IQT_FP.litValue).get,
+                         issueParams.find(_.iqType == IQ_FP).get,
                          numWakeupPorts))
   issue_unit.suggestName("fp_issue_unit")
   val fregfile       = Module(new FullyPortedRF(
@@ -114,6 +114,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     issue_wakeup.valid := writeback.valid
     issue_wakeup.bits.uop  := writeback.bits.uop
     issue_wakeup.bits.speculative_mask := 0.U
+    issue_wakeup.bits.bypassable  := false.B
     issue_wakeup.bits.rebusy      := false.B
   }
   issue_unit.io.pred_wakeup_port.valid := false.B

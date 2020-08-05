@@ -8,8 +8,7 @@ package boom
 package object common extends
   boom.common.constants.ScalarOpConstants with
   boom.common.constants.ExcCauseConstants with
-  boom.common.constants.RISCVConstants with
-  boom.common.constants.IQType
+  boom.common.constants.RISCVConstants
 {
 }
 

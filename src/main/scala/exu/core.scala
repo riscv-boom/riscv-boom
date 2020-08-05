@@ -68,7 +68,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   //**********************************
   // construct all of the modules
 
-  // Only holds integer-registerfile execution units.
   val mem_exe_units: Seq[MemExeUnit] = (0 until memWidth) map { w =>
     Module(new MemExeUnit(
       hasAGen = w >= (memWidth - lsuWidth),
@@ -88,7 +87,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       id             = w
     )).suggestName(s"int_exe_unit_${w}")
   }
-
 
   val jmp_unit_idx = int_exe_units.indexWhere(_.hasJmp)
   val jmp_unit = int_exe_units(jmp_unit_idx)
@@ -773,9 +771,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // Send dispatched uops to correct issue queues
   // Backpressure through dispatcher if necessary
   for (i <- 0 until issueParams.size) {
-    if (issueParams(i).iqType == IQT_FP.litValue) {
+    if (issueParams(i).iqType == IQ_FP) {
       fp_pipeline.io.dis_uops <> dispatcher.io.dis_uops(i)
-    } else if (issueParams(i).iqType == IQT_MEM.litValue) {
+    } else if (issueParams(i).iqType == IQ_MEM) {
       mem_iss_unit.io.dis_uops <> dispatcher.io.dis_uops(i)
     } else {
       int_iss_unit.io.dis_uops <> dispatcher.io.dis_uops(i)
@@ -893,6 +891,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       slow_wakeup.bits.uop := arb.io.out.bits.uop
       slow_wakeup.bits.speculative_mask := 0.U
       slow_wakeup.bits.rebusy := false.B
+      slow_wakeup.bits.bypassable := false.B
 
 
 
@@ -938,6 +937,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       renport.bits.uop := fpport.bits.uop
       renport.bits.speculative_mask := 0.U
       renport.bits.rebusy := false.B
+      renport.bits.bypassable := false.B
     }
   }
 

@@ -31,7 +31,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val debug_inst       = UInt(32.W)
   val is_rvc           = Bool()
   val debug_pc         = UInt(coreMaxAddrBits.W)
-  val iq_type          = UInt(IQT_SZ.W)        // which issue unit do we use?
+  val iq_type          = Vec(IQ_SZ, Bool())       // which issue unit do we use?
   val fu_code          = Vec(FC_SZ, Bool()) // which functional unit do we use?
 
   val iw_issued              = Bool() // Was this uop issued last cycle? If so, it can vacate this cycle
@@ -96,7 +96,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val stale_pdst       = UInt(maxPregSz.W)
   val exception        = Bool()
   val exc_cause        = UInt(xLen.W)          // TODO compress this down, xlen is insanity
-  val bypassable       = Bool()                      // can we bypass ALU results? (doesn't include loads, csr, etc...)
   val mem_cmd          = UInt(M_SZ.W)          // sync primitives/cache flushes
   val mem_size         = UInt(2.W)
   val mem_signed       = Bool()

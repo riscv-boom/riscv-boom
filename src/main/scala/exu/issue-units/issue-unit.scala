@@ -33,7 +33,7 @@ case class IssueParams(
   numEntries: Int = 8,
   useFullIssueSel: Boolean = true,
   numSlowEntries: Int = 0,
-  iqType: BigInt
+  iqType: Int
 )
 
 
@@ -74,7 +74,7 @@ abstract class IssueUnit(
   val numIssueSlots: Int,
   val issueWidth: Int,
   val numWakeupPorts: Int,
-  val iqType: BigInt,
+  val iqType: Int,
   val dispatchWidth: Int)
   (implicit p: Parameters)
   extends BoomModule
@@ -103,7 +103,7 @@ abstract class IssueUnit(
     val prs3_wakeups = (io.wakeup_ports zip prs3_matches).map { case (wu,m) => wu.valid && m }
     val prs1_rebusys = (io.wakeup_ports zip prs1_matches).map { case (wu,m) => wu.bits.rebusy && m }
     val prs2_rebusys = (io.wakeup_ports zip prs2_matches).map { case (wu,m) => wu.bits.rebusy && m }
-    val bypassables  = io.wakeup_ports.map { wu => wu.bits.uop.bypassable }
+    val bypassables  = io.wakeup_ports.map { wu => wu.bits.bypassable }
     val speculative_masks = io.wakeup_ports.map { wu => wu.bits.speculative_mask }
 
 
@@ -135,7 +135,7 @@ abstract class IssueUnit(
     }
 
 
-    if (iqType == IQT_INT.litValue) {
+    if (iqType == IQ_INT) {
       when (io.dis_uops(w).bits.fu_code(FC_I2F)) {
         dis_uops(w).prs2 := Cat(io.dis_uops(w).bits.fp_rm, io.dis_uops(w).bits.fp_typ)
       }
@@ -144,14 +144,14 @@ abstract class IssueUnit(
       }
     }
 
-    if (iqType == IQT_MEM.litValue || iqType == IQT_INT.litValue) {
+    if (iqType == IQ_MEM|| iqType == IQ_INT) {
       // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here
       when (io.dis_uops(w).bits.uses_stq && io.dis_uops(w).bits.lrs2_rtype === RT_FLT) {
         dis_uops(w).lrs2_rtype := RT_X
         dis_uops(w).prs2_busy  := false.B
       }
       dis_uops(w).prs3_busy := false.B
-    } else if (iqType == IQT_FP.litValue) {
+    } else if (iqType == IQ_FP) {
       // FP "StoreAddrGen" is really storeDataGen, and rs1 is the integer address register
       when (io.dis_uops(w).bits.uses_stq) {
         dis_uops(w).lrs1_rtype := RT_X
@@ -159,7 +159,7 @@ abstract class IssueUnit(
       }
     }
 
-    if (iqType != IQT_INT.litValue) {
+    if (iqType != IQ_INT) {
       assert(!(io.dis_uops(w).bits.ppred_busy && io.dis_uops(w).valid))
       dis_uops(w).ppred_busy := false.B
     }
@@ -169,7 +169,7 @@ abstract class IssueUnit(
   //-------------------------------------------------------------
   // Issue Table
 
-  val slots = for (i <- 0 until numIssueSlots) yield { val slot = Module(new IssueSlot(numWakeupPorts, iqType == IQT_MEM.litValue, iqType == IQT_FP.litValue)); slot }
+  val slots = (0 until numIssueSlots) map { w => Module(new IssueSlot(numWakeupPorts, iqType == IQ_MEM, iqType == IQ_FP)) }
   val issue_slots = VecInit(slots.map(_.io))
 
   for (i <- 0 until numIssueSlots) {
@@ -196,8 +196,8 @@ abstract class IssueUnit(
 
 
   def getType: String =
-    if (iqType == IQT_INT.litValue) "int"
-    else if (iqType == IQT_MEM.litValue) "mem"
-    else if (iqType == IQT_FP.litValue) " fp"
+    if (iqType == IQ_INT) "int"
+    else if (iqType == IQ_MEM) "mem"
+    else if (iqType == IQ_FP) " fp"
     else "unknown"
 }

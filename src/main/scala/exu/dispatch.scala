@@ -55,7 +55,7 @@ class BasicDispatcher(implicit p: Parameters) extends Dispatcher
     val issueParam = issueParams(i)
     val dis        = io.dis_uops(i)
 
-    dis(w).valid := io.ren_uops(w).valid && ((io.ren_uops(w).bits.iq_type & issueParam.iqType.U) =/= 0.U)
+    dis(w).valid := io.ren_uops(w).valid && io.ren_uops(w).bits.iq_type(issueParam.iqType)
     dis(w).bits  := io.ren_uops(w).bits
   }
 }
@@ -77,7 +77,7 @@ class CompactingDispatcher(implicit p: Parameters) extends Dispatcher
     val ren = Wire(Vec(coreWidth, Decoupled(new MicroOp)))
     ren <> io.ren_uops
 
-    val uses_iq = ren map (u => (u.bits.iq_type & ip.iqType.U).orR)
+    val uses_iq = ren map (u => u.bits.iq_type(ip.iqType))
 
     // Only request an issue slot if the uop needs to enter that queue.
     (ren zip io.ren_uops zip uses_iq) foreach {case ((u,v),q) =>
