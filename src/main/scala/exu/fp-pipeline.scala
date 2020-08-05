@@ -60,7 +60,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     Module(new FPExeUnit(
       hasFDiv = usingFDivSqrt && (w==fpWidth-1),
       hasFpiu = (w==fpWidth-1)
-    )).suggestName(s"fp_exe_unit_{w}")
+    )).suggestName(s"fp_exe_unit_${w}")
   }
   val numFrfReadPorts = fpWidth * 3
   val numFrfWritePorts = fpWidth + lsuWidth

@@ -88,8 +88,6 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
   next_uop.iw_p1_speculative_child := 0.U
   next_uop.iw_p2_speculative_child := 0.U
 
-  val squash_grant = WireInit(io.squash_grant)
-
   val rebusied_prs1 = WireInit(false.B)
   val rebusied_prs2 = WireInit(false.B)
   val rebusied = rebusied_prs1 || rebusied_prs2
@@ -113,7 +111,6 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
   when ((prs1_rebusys.reduce(_||_) || ((io.child_rebusys & slot_uop.iw_p1_speculative_child) =/= 0.U)) &&
     slot_uop.lrs1_rtype === RT_FIX) {
     next_uop.prs1_busy := true.B
-    squash_grant := true.B
     rebusied_prs1 := true.B
   }
   when (prs2_wakeups.reduce(_||_)) {
@@ -124,7 +121,6 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
   when ((prs2_rebusys.reduce(_||_) || ((io.child_rebusys & slot_uop.iw_p2_speculative_child) =/= 0.U)) &&
     slot_uop.lrs2_rtype === RT_FIX) {
     next_uop.prs2_busy := true.B
-    squash_grant := true.B
     rebusied_prs2 := true.B
   }
 
@@ -148,10 +144,11 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
 
   // Update state for current micro-op based on grant
 
+
   next_uop.iw_issued := false.B
   next_uop.iw_issued_partial_agen := false.B
   next_uop.iw_issued_partial_dgen := false.B
-  when (io.grant && !squash_grant) {
+  when (io.grant && !io.squash_grant) {
     next_uop.iw_issued := true.B
     io.iss_uop.valid := true.B
   }
@@ -160,14 +157,14 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
     when (slot_uop.fu_code(FC_AGEN) && slot_uop.fu_code(FC_DGEN)) {
       when (agen_ready) {
         // Issue the AGEN, next slot entry is a DGEN
-        when (io.grant && !squash_grant) {
+        when (io.grant && !io.squash_grant) {
           next_uop.iw_issued_partial_agen := true.B
         }
         io.iss_uop.bits.fu_code(FC_AGEN) := true.B
         io.iss_uop.bits.fu_code(FC_DGEN) := false.B
       } .otherwise {
         // Issue the DGEN, next slot entry is the AGEN
-        when (io.grant && !squash_grant) {
+        when (io.grant && !io.squash_grant) {
           next_uop.iw_issued_partial_dgen := true.B
         }
         io.iss_uop.bits.fu_code(FC_AGEN) := false.B

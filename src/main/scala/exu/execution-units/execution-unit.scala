@@ -129,7 +129,6 @@ trait HasPrfReadPort { this: ExecutionUnit =>
   val io_arb_prf_req    = IO(Decoupled(UInt(log2Ceil(ftqSz).W)))
   assert(io_arb_prf_req.ready)
   val io_rrd_prf_resp   = IO(Input(Bool()))
-  val io_rrd_prf_bypass = IO(Input(Valid(new ExeUnitResp(1))))
 }
 
 trait HasBrfReadPort { this: ExecutionUnit =>
@@ -260,7 +259,6 @@ class IntExeUnit(
   arb_write_grant := true.B
   io_squash_iss := ((io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready) ||
                     (io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready) ||
-                    rebusied ||
                     !arb_write_grant)
 
   val io_child_rebusy = IO(Output(UInt(intWidth.W)))
@@ -271,9 +269,9 @@ class IntExeUnit(
 
   // The arbiter didn't grant us a slot. Thus, we should replay the instruction in this slot,
   // But next time we read, it reads from the regfile, not the bypass paths, so disable the bypass hints
+  
 
-
-  when (io_squash_iss) {
+  when (io_squash_iss || rebusied) {
     val will_replay = arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits) && !rebusied
     arb_uop.valid := will_replay
     arb_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
@@ -318,8 +316,7 @@ class IntExeUnit(
   ))
 
   val exe_pred_data = Reg(Bool())
-  exe_pred_data := Mux(io_rrd_prf_bypass.valid && io_rrd_prf_bypass.bits.uop.pdst === rrd_uop.bits.ppred,
-    io_rrd_prf_bypass.bits.data, io_rrd_prf_resp)
+  exe_pred_data := io_rrd_prf_resp
 
   exe_uop.bits.ldq_idx   := io_rrd_brf_resp.ldq_idx
   exe_uop.bits.stq_idx   := io_rrd_brf_resp.stq_idx
@@ -365,8 +362,8 @@ class IntExeUnit(
     alu.io.get_ftq_resp := resp
 
     val wakeup = IO(Output(Valid(new Wakeup)))
-    wakeup.valid := io_iss_uop.valid && io_iss_uop.bits.is_sfb_br
-    wakeup.bits.uop := io_iss_uop.bits
+    wakeup.valid := rrd_uop.valid && rrd_uop.bits.is_sfb_br
+    wakeup.bits.uop := rrd_uop.bits
     wakeup.bits.speculative_mask := 0.U
     wakeup.bits.rebusy := false.B
 

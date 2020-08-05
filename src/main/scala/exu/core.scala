@@ -73,7 +73,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     Module(new MemExeUnit(
       hasAGen = w >= (memWidth - lsuWidth),
       hasDGen = true
-    )).suggestName(s"mem_exe_unit_{w}")
+    )).suggestName(s"mem_exe_unit_${w}")
   }
   val agen_exe_units: Seq[MemExeUnit] = mem_exe_units.filter(_.hasAGen)
   val int_exe_units: Seq[IntExeUnit] = (0 until intWidth) map { w =>
@@ -86,7 +86,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       hasDiv         = last,
       hasIfpu        = last,
       id             = w
-    )).suggestName(s"int_exe_unit_{w}")
+    )).suggestName(s"int_exe_unit_${w}")
   }
 
 
@@ -168,7 +168,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val pred_wakeup  = Wire(Valid(new Wakeup))
 
   val int_bypasses  = Wire(Vec(coreWidth + lsuWidth, Valid(new ExeUnitResp(xLen))))
-  val pred_bypass   = Wire(Valid(new ExeUnitResp(1)))
 
   //***********************************
   // Pipeline State Registers and Wires
@@ -850,8 +849,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     iregfile.io.write_ports(wb_idx).bits.data := unit.io_alu_resp.bits.data
 
     if (unit.hasJmp) {
-      pred_bypass.valid := unit.io_alu_resp.valid && unit.io_alu_resp.bits.uop.is_sfb_br
-      pred_bypass.bits  := unit.io_alu_resp.bits
       pregfile.io.write_ports(0).valid     := unit.io_alu_resp.valid && unit.io_alu_resp.bits.uop.is_sfb_br
       pregfile.io.write_ports(0).bits.addr := unit.io_alu_resp.bits.uop.pdst
       pregfile.io.write_ports(0).bits.data := unit.io_alu_resp.bits.data
@@ -963,8 +960,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   mem_iss_unit.io.brupdate := brupdate
   mem_iss_unit.io.flush_pipeline := RegNext(rob.io.flush.valid)
 
-  int_iss_unit.io.squash_grant := int_exe_units.map(_.io_squash_iss).reduce(_||_)
-  mem_iss_unit.io.squash_grant := int_exe_units.map(_.io_squash_iss).reduce(_||_)
+
+  val squash_grant = (
+    int_exe_units.map(_.io_squash_iss).reduce(_||_) ||
+    io.lsu.iwakeups.map(_.bits.rebusy).reduce(_||_)
+  )
+  int_iss_unit.io.squash_grant := squash_grant
+  mem_iss_unit.io.squash_grant := squash_grant
 
 
   // Wakeup (Issue & Writeback)
@@ -1015,7 +1017,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   require (rd_idx == numIrfLogicalReadPorts)
   for ((unit, w) <- int_exe_units.zipWithIndex) {
     unit.io_rrd_prf_resp := pregfile.io.rrd_read_resps(w)
-    unit.io_rrd_prf_bypass := pred_bypass
     unit.io_rrd_brf_resp := bregfile.io.rrd_read_resps(w)
   }
 
