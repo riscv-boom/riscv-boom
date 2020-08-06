@@ -98,9 +98,19 @@ class RenameMapTable(
   }
 
   // Create snapshots of new mappings.
-  for (i <- 0 until plWidth) {
-    when (io.ren_br_tags(i).valid) {
-      br_snapshots(io.ren_br_tags(i).bits) := remap_table(i+1)
+  if (enableSuperscalarSnapshots) {
+    for (i <- 0 until plWidth) {
+      when (io.ren_br_tags(i).valid) {
+        br_snapshots(io.ren_br_tags(i).bits) := remap_table(i+1)
+      }
+    }
+  } else {
+    assert(PopCount(io.ren_br_tags.map(_.valid)) <= 1.U)
+    val do_br_snapshot = io.ren_br_tags.map(_.valid).reduce(_||_)
+    val br_snapshot_tag   = Mux1H(io.ren_br_tags.map(_.valid), io.ren_br_tags.map(_.bits))
+    val br_snapshot_table = Mux1H(io.ren_br_tags.map(_.valid), remap_table.slice(1, plWidth+1))
+    when (do_br_snapshot) {
+      br_snapshots(br_snapshot_tag) := br_snapshot_table
     }
   }
 

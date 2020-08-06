@@ -49,6 +49,7 @@ case class BoomCoreParams(
   enableGHistStallRepair: Boolean = true,
   enableBTBFastRepair: Boolean = true,
   enableLoadToStoreForwarding: Boolean = true,
+  enableSuperscalarSnapshots: Boolean = true,
   useAtomicsOnlyForIO: Boolean = false,
   ftq: FtqParameters = FtqParameters(),
   intToFpLatency: Int = 2,
@@ -259,6 +260,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableGHistStallRepair = boomParams.enableGHistStallRepair
   val enableBTBFastRepair = boomParams.enableBTBFastRepair
   val enableLoadToStoreForwarding = boomParams.enableLoadToStoreForwarding
+  val enableSuperscalarSnapshots = boomParams.enableSuperscalarSnapshots
 
   //************************************
   // Implicitly calculated constants

@@ -690,9 +690,15 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val dis_rocc_alloc_stall = (dis_uops.map(_.is_rocc) zip block_rocc) map {case (p,r) =>
                                if (usingRoCC) p && r else false.B}
 
+  // Only 1 branch-tag allocating insruction allowed to proceed per cycle
+  // This reduces checkpointing complexity
+  val block_brtag = (dis_uops zip dis_valids).map{case (u,v) => v && u.allocate_brtag}.scanLeft(false.B)(_||_)
+  val brtag_stall = (dis_uops.map(_.allocate_brtag) zip block_brtag) map {case (p,r) =>
+    if (enableSuperscalarSnapshots) false.B else (p && r) }
   val dis_hazards = (0 until coreWidth).map(w =>
                       dis_valids(w) &&
                       (  !rob.io.ready
+                      || brtag_stall(w)
                       || ren_stalls(w)
                       || io.lsu.ldq_full(w) && dis_uops(w).uses_ldq
                       || io.lsu.stq_full(w) && dis_uops(w).uses_stq

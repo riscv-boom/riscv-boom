@@ -66,17 +66,14 @@ class RenameFreeList(
   val sel_mask = (sels zip sel_fire) map { case (s,f) => s & Fill(n,f) } reduce(_|_)
 
   val br_deallocs = br_alloc_lists(io.brupdate.b2.uop.br_tag) & Fill(n, io.brupdate.b2.mispredict)
-  val com_deallocs = io.dealloc.map(d => UIntToOH(d.bits)(numPregs-1,0) & Fill(n,d.valid)).reduce(_|_)
+  val com_deallocs = RegNext(io.dealloc).map(d => UIntToOH(d.bits)(numPregs-1,0) & Fill(n,d.valid)).reduce(_|_)
   val rollback_deallocs = spec_alloc_list & Fill(n, io.rollback)
   val dealloc_mask = com_deallocs | br_deallocs | rollback_deallocs
-
+ 
   val com_despec = io.despec.map(d => UIntToOH(d.bits)(numPregs-1,0) & Fill(n,d.valid)).reduce(_|_)
 
-  val br_slots = VecInit(io.ren_br_tags.map(tag => tag.valid)).asUInt
-  // Create branch allocation lists.
+  // Update branch snapshots
   for (i <- 0 until maxBrCount) {
-    val list_req = VecInit(io.ren_br_tags.map(tag => UIntToOH(tag.bits)(i))).asUInt & br_slots
-    val new_list = list_req.orR
     val updated_br_alloc_list = if (isImm) {
       // Immediates clear the busy table when they read, potentially before older branches resolve.
       // Thus the branch alloc lists must be updated as well
@@ -84,9 +81,29 @@ class RenameFreeList(
     } else {
       br_alloc_lists(i) & ~br_deallocs | alloc_masks(0)
     }
-    br_alloc_lists(i) := Mux(new_list, Mux1H(list_req, alloc_masks.slice(1, allocWidth+1)),
-                                       updated_br_alloc_list)
+    br_alloc_lists(i) := updated_br_alloc_list
   }
+  if (enableSuperscalarSnapshots) {
+    val br_slots = VecInit(io.ren_br_tags.map(tag => tag.valid)).asUInt
+    // Create branch allocation lists.
+    for (i <- 0 until maxBrCount) {
+      val list_req = VecInit(io.ren_br_tags.map(tag => UIntToOH(tag.bits)(i))).asUInt & br_slots
+      val new_list = list_req.orR
+      when (new_list) {
+        br_alloc_lists(i) := Mux1H(list_req, alloc_masks.slice(1, allocWidth+1))
+      }
+    }
+  } else {
+    assert(PopCount(io.ren_br_tags.map(_.valid)) <= 1.U)
+    val do_br_snapshot = io.ren_br_tags.map(_.valid).reduce(_||_)
+    val br_snapshot_tag   = Mux1H(io.ren_br_tags.map(_.valid), io.ren_br_tags.map(_.bits))
+    val br_snapshot_list  = Mux1H(io.ren_br_tags.map(_.valid), alloc_masks.slice(1, allocWidth+1))
+    when (do_br_snapshot) {
+      br_alloc_lists(br_snapshot_tag) := br_snapshot_list
+    }
+  }
+
+
   spec_alloc_list := (spec_alloc_list | alloc_masks(0)) & ~dealloc_mask & ~com_despec
 
   // Update the free list.
