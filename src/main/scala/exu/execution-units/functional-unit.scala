@@ -45,6 +45,7 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   val rs1_data = UInt(dataWidth.W)
   val rs2_data = UInt(dataWidth.W)
   val rs3_data = UInt(dataWidth.W) // only used for FMA units
+  val ftq_info = new FTQInfo
   val pred_data = Bool()
   val imm_data = UInt(xLen.W) // only used for integer ALU and AGen units
 }
@@ -97,7 +98,6 @@ class BrUpdateMasks(implicit p: Parameters) extends BoomBundle
  */
 abstract class FunctionalUnit(
   val dataWidth: Int,
-  val isJmpUnit: Boolean = false,
   val isAluUnit: Boolean = false,
   val needsFcsr: Boolean = false)
   (implicit p: Parameters) extends BoomModule
@@ -116,7 +116,6 @@ abstract class FunctionalUnit(
 
     // only used by branch unit
     val brinfo     = if (isAluUnit) Output(Valid(new BrResolutionInfo)) else null
-    val get_ftq_resp = if (isJmpUnit) Input(new GetPCFromFtq) else null
   })
   io.resp.bits.fflags.valid := false.B
   io.resp.bits.fflags.bits  := DontCare
@@ -132,11 +131,10 @@ abstract class FunctionalUnit(
  * @param dataWidth width of the data being operated on in the functional unit
  */
 @chiselName
-class ALUUnit(isJmpUnit: Boolean = false, dataWidth: Int)(implicit p: Parameters)
+class ALUUnit(dataWidth: Int)(implicit p: Parameters)
   extends FunctionalUnit(
     isAluUnit = true,
-    dataWidth = dataWidth,
-    isJmpUnit = isJmpUnit)
+    dataWidth = dataWidth)
   with boom.ifu.HasBoomFrontendParameters
   with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
@@ -147,18 +145,14 @@ class ALUUnit(isJmpUnit: Boolean = false, dataWidth: Int)(implicit p: Parameters
 
   // operand 1 select
   var op1_data: UInt = null
-  if (isJmpUnit) {
-    // Get the uop PC for jumps
-    val block_pc = AlignPCToBoundary(io.get_ftq_resp.pc, icBlockBytes)
-    val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
 
-    op1_data = Mux(uop.op1_sel === OP1_RS1 , io.req.bits.rs1_data,
-               Mux(uop.op1_sel === OP1_PC  , Sext(uop_pc, xLen),
-                                             0.U))
-  } else {
-    op1_data = Mux(uop.op1_sel === OP1_RS1 , io.req.bits.rs1_data,
-                                             0.U)
-  }
+  // Get the uop PC for jumps
+  val block_pc = AlignPCToBoundary(io.req.bits.ftq_info.pc, icBlockBytes)
+  val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
+
+  op1_data = Mux(uop.op1_sel === OP1_RS1 , io.req.bits.rs1_data,
+             Mux(uop.op1_sel === OP1_PC  , Sext(uop_pc, xLen),
+                                           0.U))
 
   // operand 2 select
   val op2_data = Mux(uop.op2_sel === OP2_IMM,  Sext(imm_xprlen, xLen),
@@ -198,6 +192,24 @@ class ALUUnit(isJmpUnit: Boolean = false, dataWidth: Int)(implicit p: Parameters
                    (uop.br_type =/= BR_N) &&
                    (pc_sel =/= PC_PLUS4)
 
+
+  // Branch/Jump Target Calculation
+  // For jumps we read the FTQ, and can calculate the target
+  // For branches we emit the offset for the core to redirect if necessary
+  val target_offset = imm_xprlen(20,0).asSInt
+
+  def encodeVirtualAddress(a0: UInt, ea: UInt) = if (vaddrBitsExtended == vaddrBits) {
+    ea
+  } else {
+    // Efficient means to compress 64-bit VA into vaddrBits+1 bits.
+    // (VA is bad if VA(vaddrBits) != VA(vaddrBits-1)).
+    val a = a0.asSInt >> vaddrBits
+    val msb = Mux(a === 0.S || a === -1.S, ea(vaddrBits), !ea(vaddrBits-1))
+    Cat(msb, ea(vaddrBits-1,0))
+  }
+
+
+
   // "mispredict" means that a branch has been resolved and it must be killed
   val mispredict = WireInit(false.B)
 
@@ -205,15 +217,26 @@ class ALUUnit(isJmpUnit: Boolean = false, dataWidth: Int)(implicit p: Parameters
   val is_jal         = io.req.valid && uop.is_jal
   val is_jalr        = io.req.valid && uop.is_jalr
 
+  val jalr_target_base = io.req.bits.rs1_data.asSInt
+  val jalr_target_xlen = Wire(UInt(xLen.W))
+  jalr_target_xlen := (jalr_target_base + target_offset).asUInt
+  val jalr_target = (encodeVirtualAddress(jalr_target_xlen, jalr_target_xlen).asSInt & -2.S).asUInt
+
+  val cfi_idx = ((uop.pc_lob ^ Mux(io.req.bits.ftq_info.entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth),1)
+
+
   when (is_br || is_jalr) {
-    if (!isJmpUnit) {
-      assert (pc_sel =/= PC_JALR)
-    }
     when (pc_sel === PC_PLUS4) {
       mispredict := uop.taken
     }
     when (pc_sel === PC_BRJMP) {
       mispredict := !uop.taken
+    }
+    when (pc_sel === PC_JALR) {
+      mispredict := (!io.req.bits.ftq_info.next_val ||
+                     (io.req.bits.ftq_info.next_pc =/= jalr_target) ||
+                     !io.req.bits.ftq_info.entry.cfi_idx.valid ||
+                     (io.req.bits.ftq_info.entry.cfi_idx.bits =/= cfi_idx))
     }
   }
 
@@ -224,45 +247,18 @@ class ALUUnit(isJmpUnit: Boolean = false, dataWidth: Int)(implicit p: Parameters
   brinfo.bits.mispredict     := mispredict
   brinfo.bits.uop            := uop
   brinfo.bits.cfi_type       := Mux(is_jalr, CFI_JALR,
-                           Mux(is_br  , CFI_BR, CFI_X))
+                                Mux(is_br  , CFI_BR, CFI_X))
   brinfo.bits.taken          := is_taken
   brinfo.bits.pc_sel         := pc_sel
 
   brinfo.bits.jalr_target    := DontCare
 
 
-  // Branch/Jump Target Calculation
-  // For jumps we read the FTQ, and can calculate the target
-  // For branches we emit the offset for the core to redirect if necessary
-  val target_offset = imm_xprlen(20,0).asSInt
-  brinfo.bits.jalr_target := DontCare
-  if (isJmpUnit) {
-    def encodeVirtualAddress(a0: UInt, ea: UInt) = if (vaddrBitsExtended == vaddrBits) {
-      ea
-    } else {
-      // Efficient means to compress 64-bit VA into vaddrBits+1 bits.
-      // (VA is bad if VA(vaddrBits) != VA(vaddrBits-1)).
-      val a = a0.asSInt >> vaddrBits
-      val msb = Mux(a === 0.S || a === -1.S, ea(vaddrBits), !ea(vaddrBits-1))
-      Cat(msb, ea(vaddrBits-1,0))
-    }
+
+  brinfo.bits.jalr_target := jalr_target
 
 
-    val jalr_target_base = io.req.bits.rs1_data.asSInt
-    val jalr_target_xlen = Wire(UInt(xLen.W))
-    jalr_target_xlen := (jalr_target_base + target_offset).asUInt
-    val jalr_target = (encodeVirtualAddress(jalr_target_xlen, jalr_target_xlen).asSInt & -2.S).asUInt
 
-    brinfo.bits.jalr_target := jalr_target
-    val cfi_idx = ((uop.pc_lob ^ Mux(io.get_ftq_resp.entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth),1)
-
-    when (pc_sel === PC_JALR) {
-      mispredict := !io.get_ftq_resp.next_val ||
-                    (io.get_ftq_resp.next_pc =/= jalr_target) ||
-                    !io.get_ftq_resp.entry.cfi_idx.valid ||
-                    (io.get_ftq_resp.entry.cfi_idx.bits =/= cfi_idx)
-    }
-  }
 
   brinfo.bits.target_offset := target_offset
 

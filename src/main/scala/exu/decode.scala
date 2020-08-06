@@ -121,9 +121,9 @@ object DecodeTables
     REMW               -> List(Y, N, uopREMW   , fc2oh(FC_DIV) , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_REM ),
     REMUW              -> List(Y, N, uopREMUW  , fc2oh(FC_DIV) , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_REMU),
 
-    AUIPC              -> List(Y, N, uopAUIPC  , fc2oh(FC_JMP) , RT_FIX, RT_X  , RT_X  , N, IS_U, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ADD ), // use BRU for the PC read
-    JAL                -> List(Y, N, uopJAL    , fc2oh(FC_JMP) , RT_FIX, RT_X  , RT_X  , N, IS_J, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ADD ),
-    JALR               -> List(Y, N, uopJALR   , fc2oh(FC_JMP) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ADD ),
+    AUIPC              -> List(Y, N, uopAUIPC  , fc2oh(FC_ALU) , RT_FIX, RT_X  , RT_X  , N, IS_U, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ADD ), // use BRU for the PC read
+    JAL                -> List(Y, N, uopJAL    , fc2oh(FC_ALU) , RT_FIX, RT_X  , RT_X  , N, IS_J, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ADD ),
+    JALR               -> List(Y, N, uopJALR   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ADD ),
     BEQ                -> List(Y, N, uopBEQ    , fc2oh(FC_ALU) , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_SUB ),
     BNE                -> List(Y, N, uopBNE    , fc2oh(FC_ALU) , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_SUB ),
     BGE                -> List(Y, N, uopBGE    , fc2oh(FC_ALU) , RT_X  , RT_FIX, RT_FIX, N, IS_B, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_SLT ),
@@ -412,9 +412,9 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
 
   uop.uopc       := cs.uopc
 
-  uop.iq_type(IQ_INT) := Seq(FC_ALU , FC_JMP, FC_MUL, FC_DIV, FC_CSR, FC_I2F).map { c => cs.fu_code(c) }.reduce(_||_)
-  uop.iq_type(IQ_MEM) := Seq(FC_AGEN, FC_DGEN                               ).map { c => cs.fu_code(c) }.reduce(_||_)
-  uop.iq_type(IQ_FP ) := Seq(FC_FPU , FC_FDV, FC_F2I                        ).map { c => cs.fu_code(c) }.reduce(_||_)
+  uop.iq_type(IQ_INT) := Seq(FC_ALU , FC_MUL, FC_DIV, FC_CSR, FC_I2F).map { c => cs.fu_code(c) }.reduce(_||_)
+  uop.iq_type(IQ_MEM) := Seq(FC_AGEN, FC_DGEN                       ).map { c => cs.fu_code(c) }.reduce(_||_)
+  uop.iq_type(IQ_FP ) := Seq(FC_FPU , FC_FDV, FC_F2I                ).map { c => cs.fu_code(c) }.reduce(_||_)
 
   uop.fu_code    := cs.fu_code.asBools
 
@@ -447,9 +447,6 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     uop.lrs1        := LDST
     uop.lrs1_rtype  := Mux(LDST === 0.U, RT_ZERO, RT_FIX)
     uop.ldst_is_rs1 := true.B
-  }
-  when (uop.is_sfb_br) {
-    uop.fu_code := (1 << FC_JMP).U(FC_SZ.W).asBools
   }
 
 

@@ -78,7 +78,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val int_exe_units: Seq[IntExeUnit] = (0 until intWidth) map { w =>
     def last = w == intWidth - 1
     Module(new IntExeUnit(
-      hasJmp         = last,
       hasCSR         = last,
       hasRocc        = last && usingRoCC,
       hasMul         = last,
@@ -88,8 +87,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     )).suggestName(s"int_exe_unit_${w}")
   }
 
-  val jmp_unit_idx = int_exe_units.indexWhere(_.hasJmp)
-  val jmp_unit = int_exe_units(jmp_unit_idx)
   val csr_exe_unit = int_exe_units.find(_.hasCSR).get
   val csr_resp = csr_exe_unit.io_csr.get
 
@@ -163,7 +160,14 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   ))
   // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
   val int_wakeups  = Wire(Vec(numIntWakeups, Valid(new Wakeup)))
+  val pred_wakeups = Wire(Vec(intWidth     , Valid(new Wakeup)))
+
+  // The arb stage guarantees only 1 pred wakeup per cycle
+  assert(PopCount(pred_wakeups.map(_.valid)) <= 1.U)
   val pred_wakeup  = Wire(Valid(new Wakeup))
+  pred_wakeup.valid         := pred_wakeups.map(_.valid).reduce(_||_)
+  pred_wakeup.bits          := DontCare
+  pred_wakeup.bits.uop.pdst := Mux1H(pred_wakeups.map(_.valid), pred_wakeups.map(_.bits.uop.pdst))
 
   val int_bypasses  = Wire(Vec(coreWidth + lsuWidth, Valid(new ExeUnitResp(xLen))))
 
@@ -215,19 +219,17 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   // Find the oldest mispredict and use it to update indices
   val live_brinfos      = brinfos.map(br => br.valid && br.bits.mispredict && !IsKilledByBranch(brupdate, br.bits.uop))
-  // TODO Mux1H is better here, but prevents lots of useful const-prop-elim
-  val oldest_mispredict = PriorityMux(live_brinfos, brinfos)//Mux1H(live_brinfos, brinfos)
   val mispredict_val    = live_brinfos.reduce(_||_)
 
   b2.mispredict  := mispredict_val
-  b2.cfi_type    := oldest_mispredict.bits.cfi_type
-  b2.taken       := oldest_mispredict.bits.taken
-  b2.pc_sel      := oldest_mispredict.bits.pc_sel
-  b2.uop         := UpdateBrMask(brupdate, oldest_mispredict.bits.uop)
-  b2.jalr_target := RegNext(jmp_unit.io_brinfo.bits.jalr_target)
-  b2.target_offset := oldest_mispredict.bits.target_offset
+  b2.cfi_type    := Mux1H(live_brinfos, brinfos.map(_.bits.cfi_type))
+  b2.taken       := Mux1H(live_brinfos, brinfos.map(_.bits.taken))
+  b2.pc_sel      := Mux1H(live_brinfos, brinfos.map(_.bits.pc_sel))
+  b2.uop         := UpdateBrMask(brupdate, PriorityMux(live_brinfos, brinfos.map(_.bits.uop)))
+  b2.jalr_target := Mux1H(live_brinfos, brinfos.map(_.bits.jalr_target))
+  b2.target_offset := Mux1H(live_brinfos, brinfos.map(_.bits.target_offset))
 
-  val oldest_mispredict_ftq_idx = oldest_mispredict.bits.uop.ftq_idx
+  val oldest_mispredict_ftq_idx = Mux1H(live_brinfos, brinfos.map(_.bits.uop.ftq_idx))
 
 
   assert (!((brupdate.b1.mispredict_mask =/= 0.U || brupdate.b2.mispredict)
@@ -516,27 +518,26 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   // FTQ GetPC Port Arbitration
 
-  val jmp_pc_req  = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
   val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
   val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
 
-  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 3))
+  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 2 + intWidth))
 
   // Order by the oldest. Flushes come from the oldest instructions in pipe
   // Decoding exceptions come from youngest
   ftq_arb.io.in(0) <> flush_pc_req
-  ftq_arb.io.in(1) <> jmp_pc_req
-  ftq_arb.io.in(2) <> xcpt_pc_req
+  // Branch Unit Requests (for JALs) (Should delay issue of JALs if this not ready)
+  for (i <- 0 until intWidth) {
+    ftq_arb.io.in(i+1) <> int_exe_units(i).io_arb_ftq_req
+    int_exe_units(i).io_rrd_ftq_resp := io.ifu.get_ftq_resp(0)
+  }
+  ftq_arb.io.in(intWidth+1) <> xcpt_pc_req
 
   // Hookup FTQ
   io.ifu.get_ftq_req(0) := ftq_arb.io.out.bits
   ftq_arb.io.out.ready  := true.B
 
-  // Branch Unit Requests (for JALs) (Should delay issue of JALs if this not ready)
-  jmp_pc_req.valid := jmp_unit.io_get_ftq_req.get.valid
-  jmp_pc_req.bits  := jmp_unit.io_get_ftq_req.get.bits
 
-  jmp_unit.io_get_ftq_resp.get := io.ifu.get_ftq_resp(0)
 
   // Frontend Exception Requests
   val xcpt_idx = PriorityEncoder(dec_xcpts)
@@ -846,13 +847,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     iregfile.io.write_ports(wb_idx).bits.addr := unit.io_alu_resp.bits.uop.pdst
     iregfile.io.write_ports(wb_idx).bits.data := unit.io_alu_resp.bits.data
 
-    if (unit.hasJmp) {
-      pregfile.io.write_ports(0).valid     := unit.io_alu_resp.valid && unit.io_alu_resp.bits.uop.is_sfb_br
-      pregfile.io.write_ports(0).bits.addr := unit.io_alu_resp.bits.uop.pdst
-      pregfile.io.write_ports(0).bits.data := unit.io_alu_resp.bits.data
-
-      pred_wakeup    := unit.io_fast_pred_wakeup.get
-    }
+    pred_wakeups(i) := unit.io_fast_pred_wakeup
 
     if (sharesF2I || sharesIDiv || sharesCSR || sharesRoCC) {
       val slow_wakeup = Wire(Valid(new Wakeup))
@@ -913,6 +908,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   }
   require (wu_idx == numIntWakeups)
   require (wb_idx == numIrfWritePorts)
+
+  // arb stage guarantees 1 preg writer per cycle
+  val pregfile_write_valids = int_exe_units.map(u => u.io_alu_resp.valid && u.io_alu_resp.bits.uop.is_sfb_br)
+  assert(PopCount(pregfile_write_valids) <= 1.U)
+  pregfile.io.write_ports(0).valid := pregfile_write_valids.reduce(_||_)
+  pregfile.io.write_ports(0).bits.addr := Mux1H(pregfile_write_valids, int_exe_units.map(_.io_alu_resp.bits.uop.pdst))
+  pregfile.io.write_ports(0).bits.data := Mux1H(pregfile_write_valids, int_exe_units.map(_.io_alu_resp.bits.data))
 
   // Connect the predicate wakeup port
   int_iss_unit.io.pred_wakeup_port.valid := pred_wakeup.valid

@@ -27,7 +27,7 @@ import freechips.rocketchip.tile
 import freechips.rocketchip.util._
 
 import boom.common._
-import boom.ifu.{GetPCFromFtq}
+import boom.ifu.FTQInfo
 import boom.util._
 
 
@@ -143,6 +143,11 @@ trait HasFrfReadPorts { this: ExecutionUnit =>
   val io_rrd_frf_resps = IO(Input (Vec(3, UInt((xLen+1).W))))
 }
 
+trait HasFtqReadPort { this: ExecutionUnit =>
+  val io_arb_ftq_req  = IO(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  val io_rrd_ftq_resp = IO(Input(new FTQInfo))
+}
+
 class MemExeUnit(
   val hasAGen          : Boolean       = false,
   val hasDGen          : Boolean       = false
@@ -228,7 +233,6 @@ class MemExeUnit(
 }
 class IntExeUnit(
   val hasCSR           : Boolean       = false,
-  val hasJmp           : Boolean       = false,
   val hasMul           : Boolean       = false,
   val hasDiv           : Boolean       = false,
   val hasIfpu          : Boolean       = false,
@@ -239,11 +243,12 @@ class IntExeUnit(
   with HasPrfReadPort
   with HasImmrfReadPort
   with HasBrfReadPort
+  with HasFtqReadPort
 {
   val io_fast_wakeup = IO(Output(Valid(new Wakeup)))
   io_fast_wakeup.valid    := (
     io_iss_uop.valid &&
-    (io_iss_uop.bits.fu_code(FC_ALU) || io_iss_uop.bits.fu_code(FC_JMP)) &&
+    io_iss_uop.bits.fu_code(FC_ALU) &&
     (io_iss_uop.bits.dst_rtype === RT_FIX)
   )
   io_fast_wakeup.bits.uop := io_iss_uop.bits
@@ -251,10 +256,21 @@ class IntExeUnit(
   io_fast_wakeup.bits.rebusy := false.B
   io_fast_wakeup.bits.bypassable := true.B
 
+  val io_fast_pred_wakeup = IO(Output(Valid(new Wakeup)))
+  io_fast_pred_wakeup.valid    := rrd_uop.valid && rrd_uop.bits.is_sfb_br
+  io_fast_pred_wakeup.bits.uop := rrd_uop.bits
+  io_fast_pred_wakeup.bits.speculative_mask := 0.U
+  io_fast_pred_wakeup.bits.rebusy := false.B
+  io_fast_pred_wakeup.bits.bypassable := false.B
+
   io_arb_irf_reqs(0).valid := arb_uop.valid && arb_uop.bits.lrs1_rtype === RT_FIX && !arb_uop.bits.iw_p1_bypass_hint
   io_arb_irf_reqs(0).bits  := arb_uop.bits.prs1
   io_arb_irf_reqs(1).valid := arb_uop.valid && arb_uop.bits.lrs2_rtype === RT_FIX && !arb_uop.bits.iw_p2_bypass_hint
   io_arb_irf_reqs(1).bits  := arb_uop.bits.prs2
+
+  // Only allow one SFB branch through multiple pipes, to avoid unnecessary predicate wakeup logic
+  io_arb_ftq_req.valid := arb_uop.valid && (arb_uop.bits.uopc.isOneOf(uopAUIPC, uopJAL, uopJALR) || arb_uop.bits.is_sfb_br)
+  io_arb_ftq_req.bits  := arb_uop.bits.ftq_idx
 
   val alu_ready = WireInit(true.B)
 
@@ -265,6 +281,7 @@ class IntExeUnit(
   arb_write_grant := true.B
   io_squash_iss := ((io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready) ||
                     (io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready) ||
+                    (io_arb_ftq_req.valid     && !io_arb_ftq_req.ready) ||
                     !arb_write_grant)
 
   val io_child_rebusy = IO(Output(UInt(intWidth.W)))
@@ -275,8 +292,6 @@ class IntExeUnit(
 
   // The arbiter didn't grant us a slot. Thus, we should replay the instruction in this slot,
   // But next time we read, it reads from the regfile, not the bypass paths, so disable the bypass hints
-  
-
   when (io_squash_iss || rebusied) {
     val will_replay = arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits) && !rebusied
     arb_uop.valid := will_replay
@@ -287,7 +302,7 @@ class IntExeUnit(
 
     // We are going to replay this op, but in doing so, will cause a write conflict
     // Actually need to replay in 2 cycles
-    when (will_replay && !alu_ready && (arb_uop.bits.fu_code(FC_ALU) || arb_uop.bits.fu_code(FC_JMP))) {
+    when (will_replay && !alu_ready && arb_uop.bits.fu_code(FC_ALU)) {
       arb_write_grant := false.B
     }
   }
@@ -329,6 +344,9 @@ class IntExeUnit(
   exe_uop.bits.stq_idx   := io_rrd_brf_resp.stq_idx
   exe_uop.bits.rxq_idx   := io_rrd_brf_resp.rxq_idx
 
+  val exe_ftq_data = Reg(new FTQInfo)
+  exe_ftq_data := io_rrd_ftq_resp
+
   val exe_int_req = Wire(new FuncUnitReq(xLen))
   exe_int_req.uop := exe_uop.bits
   exe_int_req.rs1_data := exe_rs1_data
@@ -336,13 +354,12 @@ class IntExeUnit(
   exe_int_req.rs3_data := DontCare
   exe_int_req.imm_data := exe_imm_data
   exe_int_req.pred_data := exe_pred_data
+  exe_int_req.ftq_info := exe_ftq_data
 
   fu_types += ((FC_ALU, alu_ready, "ALU"))
 
-  val alu = Module(new ALUUnit(isJmpUnit = hasJmp,
-                                 dataWidth = xLen))
+  val alu = Module(new ALUUnit(dataWidth = xLen))
   val req_valid = (exe_uop.bits.fu_code(FC_ALU) ||
-    (if (hasJmp) exe_uop.bits.fu_code(FC_JMP) else false.B) ||
     (if (hasCSR) exe_uop.bits.fu_code(FC_CSR) else false.B)
   )
   alu.io.req.valid  := exe_uop.valid && req_valid && !exe_uop.bits.is_rocc
@@ -357,28 +374,6 @@ class IntExeUnit(
 
   val io_brinfo = IO(Output(Valid(new BrResolutionInfo)))
   io_brinfo := alu.io.brinfo
-
-  val (io_get_ftq_req, io_get_ftq_resp, io_fast_pred_wakeup) = if (hasJmp) {
-    fu_types += ((FC_JMP, alu_ready, "Jmp"))
-
-    val req = IO(Output(Valid(UInt(log2Ceil(ftqSz).W))))
-    req.valid := rrd_uop.valid && rrd_uop.bits.fu_code(FC_JMP)
-    req.bits  := rrd_uop.bits.ftq_idx
-
-    val resp = IO(Input(new GetPCFromFtq))
-    alu.io.get_ftq_resp := resp
-
-    val wakeup = IO(Output(Valid(new Wakeup)))
-    wakeup.valid := rrd_uop.valid && rrd_uop.bits.is_sfb_br
-    wakeup.bits.uop := rrd_uop.bits
-    wakeup.bits.speculative_mask := 0.U
-    wakeup.bits.rebusy := false.B
-    wakeup.bits.bypassable := false.B
-
-    (Some(req), Some(resp), Some(wakeup))
-  } else {
-    (None, None, None)
-  }
 
   if (hasMul) {
     fu_types += ((FC_MUL, true.B, "IMul"))
@@ -541,6 +536,7 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
   exe_fp_req.rs3_data := exe_rs3_data
   exe_fp_req.pred_data := DontCare
   exe_fp_req.imm_data := DontCare
+  exe_fp_req.ftq_info := DontCare
 
   val fpu = Module(new FPUUnit)
   fu_types += ((FC_FPU, true.B, "FPU"))

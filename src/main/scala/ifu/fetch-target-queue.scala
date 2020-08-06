@@ -70,11 +70,7 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
   // val bpd_meta = Vec(nBanks, UInt(bpdMaxMetaLength.W))
 }
 
-/**
- * IO to provide a port for a FunctionalUnit to get the PC of an instruction.
- * And for JALRs, the PC of the next instruction.
- */
-class GetPCFromFtq(implicit p: Parameters) extends BoomBundle
+class FTQInfo(implicit p: Parameters) extends BoomBundle
 {
   val entry     = new FTQBundle
   val ghist     = new GlobalHistory
@@ -110,7 +106,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
 
     // Give PC info to BranchUnit.
     val get_ftq_req = Input(Vec(2, UInt(log2Ceil(ftqSz).W)))
-    val get_ftq_resp = Output(Vec(2, new GetPCFromFtq))
+    val get_ftq_resp = Output(Vec(2, new FTQInfo))
 
 
     // Used to regenerate PC for trace port stuff in FireSim
