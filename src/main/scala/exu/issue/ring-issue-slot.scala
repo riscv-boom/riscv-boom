@@ -42,8 +42,6 @@ class RingIssueSlotIO(implicit p: Parameters) extends BoomBundle
   val grant         = Input(Bool())
   val grant_chain   = Input(Bool())
 
-  val fu_avail      = Input(UInt(FUC_SZ.W))
-
   val brupdate      = Input(new BrUpdateInfo)
   val kill          = Input(Bool()) // pipeline flush
   val clear         = Input(Bool()) // entry being moved elsewhere (not mutually exclusive with grant)
@@ -234,7 +232,7 @@ class RingIssueSlot(implicit p: Parameters)
   //----------------------------------------------------------------------------------------------------
   // Request Logic
 
-  val can_request = (io.fu_avail & slot_uop.fu_code).orR && slot_uop.ppred_ready && !slot_uop.just_issued
+  val can_request = slot_uop.ppred_ready && !slot_uop.just_issued
 
   when (state === s_valid_1) {
     io.request := p1 && p2 && can_request

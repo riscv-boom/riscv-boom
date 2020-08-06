@@ -18,7 +18,7 @@ import freechips.rocketchip.config.Parameters
 
 import boom.common._
 import boom.util._
-
+import FUConstants._
 
 abstract class IssueArbiter(implicit p: Parameters) extends BoomModule
 {
@@ -29,6 +29,7 @@ abstract class IssueArbiter(implicit p: Parameters) extends BoomModule
     val gnts = Output(Vec(coreWidth, Bool()))
 
     val fire = Input(Vec(coreWidth, Bool()))
+    val fu_avail = Input(UInt(FUC_SZ.W))
 
     val prs1_port = Output(Vec(coreWidth, UInt(numIrfReadPorts.W)))
     val prs2_port = Output(Vec(coreWidth, UInt(numIrfReadPorts.W)))
@@ -81,8 +82,10 @@ class ExecutionArbiter(implicit p: Parameters) extends IssueArbiter
 
   val gnts = mem_gnts.reduce(_|_) | unq_gnts.reduce(_|_)
 
+  val nack_fu = io.uops.map(u => (u.fu_code & ~io.fu_avail).orR)
+
   for (w <- 0 until coreWidth) {
-    io.gnts(w) := gnts(w) || !io.uops(w).shared_eu_code.orR && io.reqs(w)
+    io.gnts(w) := (gnts(w) || !io.uops(w).shared_eu_code.orR && io.reqs(w)) && !nack_fu(w)
   }
 }
 

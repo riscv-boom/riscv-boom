@@ -62,8 +62,6 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
 
       slots(w)(i).brupdate := io.brupdate
       slots(w)(i).kill     := io.kill
-
-      slots(w)(i).fu_avail := io.fu_avail
     }
   }
 
@@ -232,6 +230,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   }
 
   wb_arb.io.fire := arb_grants.asBools
+  exu_arb.io.fu_avail := io.fu_avail
 
   // Check for speculative memory wakeup nacks
   val mem_nacks = VecInit(arb_uops.map(u => u.load_wakeup_nacked(io.load_nacks))).asUInt
