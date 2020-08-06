@@ -153,8 +153,9 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // SFB branches don't get a mask, they get a predicate bit
   def allocate_brtag   = (is_br && !is_sfb) || is_jalr
 
+  def starts_bsy       = !(is_fence || is_fencei)
   // Is it possible for this uop to misspeculate, preventing the commit of subsequent uops?
-  def unsafe           = uses_ldq || (uses_stq && !is_fence) || is_br || is_jalr
+  def starts_unsafe    = uses_ldq || (uses_stq && !is_fence) || is_br || is_jalr
 }
 
 

@@ -60,6 +60,9 @@ class RRDDecode(implicit p: Parameters) extends BoomModule {
       BitPat(uopSRA)    -> List(FN_SRA   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
       BitPat(uopSRL)    -> List(FN_SR    , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
 
+      // Special case Mov
+      BitPat(uopMOV)    -> List(FN_ADD   , DW_X  , OP1_X   , OP2_X   , CSR.N),
+
       BitPat(uopADDW)   -> List(FN_ADD   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
       BitPat(uopSUBW)   -> List(FN_SUB   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
       BitPat(uopSLLW)   -> List(FN_SL    , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),

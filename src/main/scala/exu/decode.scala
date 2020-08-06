@@ -370,6 +370,11 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   decode_table ++= (if (xLen == 64) DecodeTables.X64_table else DecodeTables.X64_table)
 
   val inst = uop.inst
+  val LDST = inst(RD_MSB,RD_LSB)
+  val LRS1 = inst(RS1_MSB,RS1_LSB)
+  val LRS2 = inst(RS2_MSB,RS2_LSB)
+  val LRS3 = inst(RS3_MSB,RS3_LSB)
+
 
   val cs = Wire(new CtrlSigs()).decode(inst, decode_table)
 
@@ -411,20 +416,16 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   uop.uopc       := cs.uopc
+  when (cs.uopc === uopADD && LRS1 === 0.U) {
+    uop.uopc     := uopMOV
+  }
+
 
   uop.iq_type(IQ_INT) := Seq(FC_ALU , FC_MUL, FC_DIV, FC_CSR, FC_I2F).map { c => cs.fu_code(c) }.reduce(_||_)
   uop.iq_type(IQ_MEM) := Seq(FC_AGEN, FC_DGEN                       ).map { c => cs.fu_code(c) }.reduce(_||_)
   uop.iq_type(IQ_FP ) := Seq(FC_FPU , FC_FDV, FC_F2I                ).map { c => cs.fu_code(c) }.reduce(_||_)
 
   uop.fu_code    := cs.fu_code.asBools
-
-  // x-registers placed in 0-31, f-registers placed in 32-63.
-  // This allows us to straight-up compare register specifiers and not need to
-  // verify the rtypes (e.g., bypassing in rename).
-  val LDST = inst(RD_MSB,RD_LSB)
-  val LRS1 = inst(RS1_MSB,RS1_LSB)
-  val LRS2 = inst(RS2_MSB,RS2_LSB)
-  val LRS3 = inst(RS3_MSB,RS3_LSB)
 
   uop.ldst       := LDST
   uop.lrs1       := LRS1
@@ -442,8 +443,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     uop.lrs2_rtype  := Mux(LDST === 0.U, RT_ZERO, RT_FIX)
     uop.lrs2        := LDST
     uop.ldst_is_rs1 := false.B
-  } .elsewhen (uop.is_sfb_shadow && cs.uopc === uopADD && LRS1 === 0.U) {
-    uop.uopc        := uopMOV
+  } .elsewhen (uop.is_sfb_shadow && uop.uopc === uopMOV) {
     uop.lrs1        := LDST
     uop.lrs1_rtype  := Mux(LDST === 0.U, RT_ZERO, RT_FIX)
     uop.ldst_is_rs1 := true.B
