@@ -391,7 +391,7 @@ class ImmRenameStage(plWidth: Int, numWbPorts: Int)(implicit p: Parameters) exte
 
     ren2_alloc_reqs(w) := ren2_uops(w).imm_sel =/= IS_N && ren2_fire(w) && !short_imm
 
-    assert(!ren2_alloc_reqs(w) || ren2_uops(w).iq_type(IQ_INT) || ren2_uops(w).iq_type(IQ_MEM))
+    assert(!ren2_alloc_reqs(w) || ren2_uops(w).iq_type(IQ_ALU) || ren2_uops(w).iq_type(IQ_MEM) || ren2_uops(w).iq_type(IQ_UNQ))
 
 
     val can_allocate = freelist.io.alloc_pregs(w).valid

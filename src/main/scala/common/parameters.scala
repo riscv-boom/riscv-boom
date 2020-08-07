@@ -24,24 +24,25 @@ import boom.lsu._
  */
 case class BoomCoreParams(
 // DOC include start: BOOM Parameters
-  fetchWidth: Int = 1,
+  fetchWidth: Int = 4,
   decodeWidth: Int = 1,
-  numRobEntries: Int = 64,
+  numRobEntries: Int = 32,
   issueParams: Seq[IssueParams] = Seq(
-    IssueParams(issueWidth=2, numEntries=16, iqType=IQ_MEM, dispatchWidth=1),
-    IssueParams(issueWidth=2, numEntries=16, iqType=IQ_INT, dispatchWidth=1),
-    IssueParams(issueWidth=1, numEntries=16, iqType=IQ_FP , dispatchWidth=1)),
+    IssueParams(issueWidth=2, numEntries=8, iqType=IQ_MEM, dispatchWidth=1),
+    IssueParams(issueWidth=1, numEntries=8, iqType=IQ_UNQ, dispatchWidth=1),
+    IssueParams(issueWidth=1, numEntries=8, iqType=IQ_ALU, dispatchWidth=1),
+    IssueParams(issueWidth=1, numEntries=8, iqType=IQ_FP , dispatchWidth=1)),
   lsuWidth: Int = 1,
-  numLdqEntries: Int = 16,
-  numStqEntries: Int = 16,
-  numIntPhysRegisters: Int = 96,
-  numFpPhysRegisters: Int = 64,
+  numLdqEntries: Int = 8,
+  numStqEntries: Int = 8,
+  numIntPhysRegisters: Int = 48,
+  numFpPhysRegisters: Int = 48,
   numImmPhysRegisters: Int = 32,
-  numIrfReadPorts: Int = 1,
+  numIrfReadPorts: Int = 3,
   numIrfBanks: Int = 1,
   maxBrCount: Int = 4,
-  numFetchBufferEntries: Int = 16,
-  enableAgePriorityIssue: Boolean = true,
+  numFetchBufferEntries: Int = 8,
+  enableColumnALUIssue: Boolean = false,
   enablePrefetching: Boolean = false,
   enableFastLoadUse: Boolean = true,
   enableFastPNR: Boolean = false,
@@ -50,11 +51,12 @@ case class BoomCoreParams(
   enableBTBFastRepair: Boolean = true,
   enableLoadToStoreForwarding: Boolean = true,
   enableSuperscalarSnapshots: Boolean = true,
+
   useAtomicsOnlyForIO: Boolean = false,
-  ftq: FtqParameters = FtqParameters(),
+  ftq: FtqParameters = FtqParameters(nEntries=16),
   intToFpLatency: Int = 2,
   imulLatency: Int = 3,
-  nPerfCounters: Int = 0,
+  nPerfCounters: Int = 2,
   numRXQEntries: Int = 4,
   numRCQEntries: Int = 8,
   numDCacheBanks: Int = 1,
@@ -76,7 +78,7 @@ case class BoomCoreParams(
   useCompressed: Boolean = true,
   useFetchMonitor: Boolean = true,
   bootFreqHz: BigInt = 0,
-  fpu: Option[FPUParams] = Some(FPUParams(sfmaLatency=4, dfmaLatency=4)),
+  fpu: Option[FPUParams] = Some(FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true)),
   usingFPU: Boolean = true,
   haveBasicCounters: Boolean = true,
   misaWritable: Boolean = false,
@@ -200,18 +202,20 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   // Issue Units
 
   val issueParams: Seq[IssueParams] = boomParams.issueParams
-  val enableAgePriorityIssue = boomParams.enableAgePriorityIssue
 
   // currently, only support one of each.
   require (issueParams.count(_.iqType == IQ_FP ) == 1 || !usingFPU)
   require (issueParams.count(_.iqType == IQ_MEM) == 1)
-  require (issueParams.count(_.iqType == IQ_INT) == 1)
+  require (issueParams.count(_.iqType == IQ_ALU) == 1)
+  require (issueParams.count(_.iqType == IQ_UNQ) == 1)
 
-  val intIssueParam = issueParams.find(_.iqType == IQ_INT).get
+  val unqIssueParam = issueParams.find(_.iqType == IQ_UNQ).get
+  val aluIssueParam = issueParams.find(_.iqType == IQ_ALU).get
   val memIssueParam = issueParams.find(_.iqType == IQ_MEM).get
   val fpIssueParam  = issueParams.find(_.iqType == IQ_FP ).get
 
-  val intWidth = intIssueParam.issueWidth
+  require(unqIssueParam.issueWidth == 1)
+  val intWidth = aluIssueParam.issueWidth
   val memWidth = memIssueParam.issueWidth
   val fpWidth  = fpIssueParam.issueWidth
 
@@ -261,6 +265,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableBTBFastRepair = boomParams.enableBTBFastRepair
   val enableLoadToStoreForwarding = boomParams.enableLoadToStoreForwarding
   val enableSuperscalarSnapshots = boomParams.enableSuperscalarSnapshots
+  val enableColumnALUIssue = boomParams.enableColumnALUIssue
 
   //************************************
   // Implicitly calculated constants

@@ -420,10 +420,10 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     uop.uopc     := uopMOV
   }
 
-
-  uop.iq_type(IQ_INT) := Seq(FC_ALU , FC_MUL, FC_DIV, FC_CSR, FC_I2F).map { c => cs.fu_code(c) }.reduce(_||_)
-  uop.iq_type(IQ_MEM) := Seq(FC_AGEN, FC_DGEN                       ).map { c => cs.fu_code(c) }.reduce(_||_)
-  uop.iq_type(IQ_FP ) := Seq(FC_FPU , FC_FDV, FC_F2I                ).map { c => cs.fu_code(c) }.reduce(_||_)
+  uop.iq_type(IQ_UNQ) := Seq(FC_MUL , FC_DIV, FC_CSR, FC_I2F).map { c => cs.fu_code(c) }.reduce(_||_)
+  uop.iq_type(IQ_ALU) := Seq(FC_ALU                         ).map { c => cs.fu_code(c) }.reduce(_||_)
+  uop.iq_type(IQ_MEM) := Seq(FC_AGEN, FC_DGEN               ).map { c => cs.fu_code(c) }.reduce(_||_)
+  uop.iq_type(IQ_FP ) := Seq(FC_FPU , FC_FDV, FC_F2I        ).map { c => cs.fu_code(c) }.reduce(_||_)
 
   uop.fu_code    := cs.fu_code.asBools
 

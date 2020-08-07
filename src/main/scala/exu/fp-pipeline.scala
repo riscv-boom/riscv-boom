@@ -65,9 +65,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   val numFrfReadPorts = fpWidth * 3
   val numFrfWritePorts = fpWidth + lsuWidth
 
-  val issue_unit     = Module(new IssueUnitCollapsing(
-                         issueParams.find(_.iqType == IQ_FP).get,
-                         numWakeupPorts))
+  val issue_unit     = IssueUnit(fpIssueParams, numWakeupPorts, false)
   issue_unit.suggestName("fp_issue_unit")
   val fregfile       = Module(new FullyPortedRF(
     UInt((fLen+1).W),

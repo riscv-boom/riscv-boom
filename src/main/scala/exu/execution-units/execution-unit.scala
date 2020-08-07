@@ -290,65 +290,25 @@ class MemExeUnit(
   }
 
   io_ready_fu_types := get_ready_fu_types()
-
-
 }
-class IntExeUnit(
+
+class UniqueExeUnit(
   val hasCSR           : Boolean       = false,
   val hasMul           : Boolean       = false,
   val hasDiv           : Boolean       = false,
   val hasIfpu          : Boolean       = false,
-  val hasRocc          : Boolean       = false,
-  val id               : Int
-)(implicit p: Parameters) extends ExecutionUnit("Int")
+  val hasRocc          : Boolean       = false
+)(implicit p: Parameters) extends ExecutionUnit("Unq")
   with HasIrfReadPorts
-  with HasPrfReadPort
   with HasImmrfReadPort
-  with HasBrfReadPort
-  with HasFtqReadPort
 {
   def nReaders = 2
   def mustReceiveReadPorts = false
 
-  val io_fast_wakeup = IO(Output(Valid(new Wakeup)))
-  io_fast_wakeup.valid    := (
-    io_iss_uop.valid &&
-    io_iss_uop.bits.fu_code(FC_ALU) &&
-    (io_iss_uop.bits.dst_rtype === RT_FIX)
-  )
-  io_fast_wakeup.bits.uop := io_iss_uop.bits
-  io_fast_wakeup.bits.speculative_mask := (1 << id).U
-  io_fast_wakeup.bits.rebusy := false.B
-  io_fast_wakeup.bits.bypassable := true.B
-
-  val io_fast_pred_wakeup = IO(Output(Valid(new Wakeup)))
-  io_fast_pred_wakeup.valid    := rrd_uop.valid && rrd_uop.bits.is_sfb_br
-  io_fast_pred_wakeup.bits.uop := rrd_uop.bits
-  io_fast_pred_wakeup.bits.speculative_mask := 0.U
-  io_fast_pred_wakeup.bits.rebusy := false.B
-  io_fast_pred_wakeup.bits.bypassable := false.B
-
-
-
-  val alu_ready = WireInit(true.B)
-
   val io_squash_iss = IO(Output(Bool()))
-  val arb_write_grant = Reg(Bool())
-
-  arb_write_grant := true.B
   io_squash_iss := ((io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready) ||
-                    (io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready) ||
-                    (io_arb_ftq_req.valid     && !io_arb_ftq_req.ready) ||
-                    !arb_write_grant)
+                    (io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready))
 
-  val io_child_rebusy = IO(Output(UInt(intWidth.W)))
-  io_child_rebusy := 0.U
-  when (arb_rebusied && arb_uop.valid) {
-    io_child_rebusy := (1 << id).U
-  }
-
-  // The arbiter didn't grant us a slot. Thus, we should replay the instruction in this slot,
-  // But next time we read, it reads from the regfile, not the bypass paths, so disable the bypass hints
   when (io_squash_iss || arb_rebusied) {
     val will_replay = arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits) && !arb_rebusied
     arb_uop.valid := will_replay
@@ -357,12 +317,6 @@ class IntExeUnit(
     arb_uop.bits.iw_p2_bypass_hint := false.B
 
     rrd_uop.valid := false.B
-
-    // We are going to replay this op, but in doing so, will cause a write conflict
-    // Actually need to replay in 2 cycles
-    when (will_replay && !alu_ready && arb_uop.bits.fu_code(FC_ALU)) {
-      arb_write_grant := false.B
-    }
   }
 
   val exe_int_req = Wire(new FuncUnitReq(xLen))
@@ -371,69 +325,35 @@ class IntExeUnit(
   exe_int_req.rs2_data  := exe_rs2_data
   exe_int_req.rs3_data  := DontCare
   exe_int_req.imm_data  := exe_imm_data
-  exe_int_req.pred_data := exe_pred_data
-  exe_int_req.ftq_info  := exe_ftq_data
+  exe_int_req.pred_data := DontCare
+  exe_int_req.ftq_info  := DontCare
 
-  fu_types += ((FC_ALU, alu_ready, "ALU"))
-
-  val alu = Module(new ALUUnit(dataWidth = xLen))
-  val req_valid = (exe_uop.bits.fu_code(FC_ALU) ||
-    (if (hasCSR) exe_uop.bits.fu_code(FC_CSR) else false.B)
-  )
-  alu.io.req.valid  := exe_uop.valid && req_valid && !exe_uop.bits.is_rocc
-  alu.io.req.bits   := exe_int_req
-  alu.io.resp.ready := true.B
-  alu.io.brupdate   := io_brupdate
-  alu.io.kill       := io_kill
-
-  val io_alu_resp = IO(Output(Valid(new ExeUnitResp(xLen))))
-  io_alu_resp.valid := alu.io.resp.valid && !alu.io.resp.bits.uop.fu_code(FC_CSR)
-  io_alu_resp.bits  := alu.io.resp.bits
-
-  val io_brinfo = IO(Output(Valid(new BrResolutionInfo)))
-  io_brinfo := alu.io.brinfo
-
-  if (hasMul) {
+  val io_mul_resp = if (hasMul) {
     fu_types += ((FC_MUL, true.B, "IMul"))
-
     val imul = Module(new PipelinedMulUnit(imulLatency, xLen))
-    require(imulLatency > 2)
     imul.io.req.valid  := exe_uop.valid && exe_uop.bits.fu_code(FC_MUL)
     imul.io.req.bits   := exe_int_req
     imul.io.brupdate   := io_brupdate
     imul.io.kill       := io_kill
     imul.io.resp.ready := true.B
 
-    // If the mul unit is going to write, block issue of a ALU op so the mul can take the write por0
-
-    require (imulLatency > 2)
-    val pipe = Module(new BranchKillablePipeline(new FuncUnitReq(xLen), imulLatency-2))
-    pipe.io.req.valid    := rrd_uop.valid && rrd_uop.bits.fu_code(FC_MUL)
-    pipe.io.req.bits     := DontCare
-    pipe.io.req.bits.uop := rrd_uop.bits
-    pipe.io.brupdate     := io_brupdate
-    pipe.io.flush        := io_kill
-
-    val imul_block_alu = pipe.io.resp.last.valid
-    when (imul_block_alu) {
-      alu_ready := false.B
-      io_fast_wakeup.valid     := true.B
-      io_fast_wakeup.bits.uop  := pipe.io.resp.last.bits.uop
-      io_fast_wakeup.bits.bypassable := true.B
-      io_fast_wakeup.bits.speculative_mask := 0.U
-      io_fast_wakeup.bits.rebusy := false.B
-    }
-
-    when (imul.io.resp.valid) {
-      io_alu_resp := imul.io.resp
-      assert(!(alu.io.resp.valid && !alu.io.resp.bits.uop.fu_code(FC_CSR)))
-    }
+    val resp = IO(Output(Valid(new ExeUnitResp(xLen))))
+    resp := imul.io.resp
+    Some(resp)
   } else {
     assert(!(exe_uop.valid && exe_uop.bits.fu_code(FC_MUL)))
+    None
   }
 
-  val (io_csr, io_sfence) = if (hasCSR) {
+  val (io_csr_resp, io_sfence) = if (hasCSR) {
     fu_types += ((FC_CSR, true.B, "CSR"))
+    val alu = Module(new ALUUnit(dataWidth = xLen))
+    alu.io.req.valid := exe_uop.valid && exe_uop.bits.fu_code(FC_CSR)
+    alu.io.req.bits  := exe_int_req
+    alu.io.resp.ready := true.B
+    alu.io.brupdate   := io_brupdate
+    alu.io.kill       := io_kill
+
     val c = IO(Output(Valid(new CSRResp)))
     c.valid     := RegNext(alu.io.resp.valid && exe_uop.bits.csr_cmd =/= CSR.N)
     c.bits.uop  := RegNext(alu.io.resp.bits.uop)
@@ -454,6 +374,7 @@ class IntExeUnit(
   }
 
   val (io_rocc_resp, io_rocc_core) = if (hasRocc) {
+    require(hasCSR)
     val rocc_core = IO(new RoCCShimCoreIO)
     val rocc_resp = IO(Decoupled(new ExeUnitResp(xLen)))
     val rocc = Module(new RoCCShim)
@@ -470,6 +391,7 @@ class IntExeUnit(
     assert(!(exe_uop.valid && exe_uop.bits.is_rocc))
     (None, None)
   }
+
 
   val (io_ifpu_resp) = if (hasIfpu) {
     val ifpu_ready = Wire(Bool())
@@ -525,6 +447,91 @@ class IntExeUnit(
     assert(!(exe_uop.valid && exe_uop.bits.fu_code(FC_DIV)))
     (None)
   }
+
+  io_ready_fu_types := get_ready_fu_types()
+
+}
+
+class ALUExeUnit(
+  val id: Int
+)(implicit p: Parameters) extends ExecutionUnit("Alu")
+  with HasIrfReadPorts
+  with HasPrfReadPort
+  with HasImmrfReadPort
+  with HasBrfReadPort
+  with HasFtqReadPort
+{
+  def nReaders = 2
+  def mustReceiveReadPorts = false
+
+  val io_fast_wakeup = IO(Output(Valid(new Wakeup)))
+  io_fast_wakeup.valid    := (
+    io_iss_uop.valid &&
+    io_iss_uop.bits.fu_code(FC_ALU) &&
+    (io_iss_uop.bits.dst_rtype === RT_FIX)
+  )
+  io_fast_wakeup.bits.uop := io_iss_uop.bits
+  io_fast_wakeup.bits.speculative_mask := (1 << id).U
+  io_fast_wakeup.bits.rebusy := false.B
+  io_fast_wakeup.bits.bypassable := true.B
+
+  val io_fast_pred_wakeup = IO(Output(Valid(new Wakeup)))
+  io_fast_pred_wakeup.valid    := rrd_uop.valid && rrd_uop.bits.is_sfb_br
+  io_fast_pred_wakeup.bits.uop := rrd_uop.bits
+  io_fast_pred_wakeup.bits.speculative_mask := 0.U
+  io_fast_pred_wakeup.bits.rebusy := false.B
+  io_fast_pred_wakeup.bits.bypassable := false.B
+
+
+  val io_squash_iss = IO(Output(Bool()))
+
+  io_squash_iss := ((io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready) ||
+                    (io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready) ||
+                    (io_arb_ftq_req.valid     && !io_arb_ftq_req.ready))
+
+  val io_child_rebusy = IO(Output(UInt(intWidth.W)))
+  io_child_rebusy := 0.U
+  when (arb_rebusied && arb_uop.valid) {
+    io_child_rebusy := (1 << id).U
+  }
+
+  // The arbiter didn't grant us a slot. Thus, we should replay the instruction in this slot,
+  // But next time we read, it reads from the regfile, not the bypass paths, so disable the bypass hints
+  when (io_squash_iss || arb_rebusied) {
+    val will_replay = arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits) && !arb_rebusied
+    arb_uop.valid := will_replay
+    arb_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
+    arb_uop.bits.iw_p1_bypass_hint := false.B
+    arb_uop.bits.iw_p2_bypass_hint := false.B
+
+    rrd_uop.valid := false.B
+
+  }
+
+  val exe_int_req = Wire(new FuncUnitReq(xLen))
+  exe_int_req.uop       := exe_uop.bits
+  exe_int_req.rs1_data  := exe_rs1_data
+  exe_int_req.rs2_data  := exe_rs2_data
+  exe_int_req.rs3_data  := DontCare
+  exe_int_req.imm_data  := exe_imm_data
+  exe_int_req.pred_data := exe_pred_data
+  exe_int_req.ftq_info  := exe_ftq_data
+
+  fu_types += ((FC_ALU, true.B, "ALU"))
+
+  val alu = Module(new ALUUnit(dataWidth = xLen))
+  alu.io.req.valid  := exe_uop.valid && exe_uop.bits.fu_code(FC_ALU)
+  alu.io.req.bits   := exe_int_req
+  alu.io.resp.ready := true.B
+  alu.io.brupdate   := io_brupdate
+  alu.io.kill       := io_kill
+
+  val io_alu_resp = IO(Output(Valid(new ExeUnitResp(xLen))))
+  io_alu_resp.valid := alu.io.resp.valid
+  io_alu_resp.bits  := alu.io.resp.bits
+
+  val io_brinfo = IO(Output(Valid(new BrResolutionInfo)))
+  io_brinfo := alu.io.brinfo
 
   io_ready_fu_types := get_ready_fu_types()
 

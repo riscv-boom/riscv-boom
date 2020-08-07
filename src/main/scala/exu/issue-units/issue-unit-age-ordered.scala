@@ -12,25 +12,134 @@
 package boom.exu
 
 import chisel3._
-import chisel3.util.{log2Ceil, PopCount}
+import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util.Str
 
 import boom.common._
 
-/**
- * Specific type of issue unit
- *
- * @param params issue queue params
- * @param numWakeupPorts number of wakeup ports for the issue queue
- */
 class IssueUnitCollapsing(
   params: IssueParams,
   numWakeupPorts: Int)
   (implicit p: Parameters)
-  extends IssueUnit(params.numEntries, params.issueWidth, numWakeupPorts, params.iqType, params.dispatchWidth)
+  extends IssueUnit(params, numWakeupPorts)
 {
+
+  //-------------------------------------------------------------
+  // Set up the dispatch uops
+  // special case "storing" 2 uops within one issue slot.
+
+  val dis_uops = Array.fill(dispatchWidth) {Wire(new MicroOp())}
+  for (w <- 0 until dispatchWidth) {
+    dis_uops(w) := io.dis_uops(w).bits
+    dis_uops(w).iw_issued := false.B
+    dis_uops(w).iw_issued_partial_agen := false.B
+    dis_uops(w).iw_issued_partial_dgen := false.B
+    dis_uops(w).iw_p1_bypass_hint := false.B
+    dis_uops(w).iw_p2_bypass_hint := false.B
+
+    // Handle wakeups on dispatch
+    val prs1_matches = io.wakeup_ports.map { wu => wu.bits.uop.pdst === io.dis_uops(w).bits.prs1 }
+    val prs2_matches = io.wakeup_ports.map { wu => wu.bits.uop.pdst === io.dis_uops(w).bits.prs2 }
+    val prs3_matches = io.wakeup_ports.map { wu => wu.bits.uop.pdst === io.dis_uops(w).bits.prs3 }
+    val prs1_wakeups = (io.wakeup_ports zip prs1_matches).map { case (wu,m) => wu.valid && m }
+    val prs2_wakeups = (io.wakeup_ports zip prs2_matches).map { case (wu,m) => wu.valid && m }
+    val prs3_wakeups = (io.wakeup_ports zip prs3_matches).map { case (wu,m) => wu.valid && m }
+    val prs1_rebusys = (io.wakeup_ports zip prs1_matches).map { case (wu,m) => wu.bits.rebusy && m }
+    val prs2_rebusys = (io.wakeup_ports zip prs2_matches).map { case (wu,m) => wu.bits.rebusy && m }
+    val bypassables  = io.wakeup_ports.map { wu => wu.bits.bypassable }
+    val speculative_masks = io.wakeup_ports.map { wu => wu.bits.speculative_mask }
+
+
+
+    when (prs1_wakeups.reduce(_||_)) {
+      dis_uops(w).prs1_busy := false.B
+      dis_uops(w).iw_p1_speculative_child := Mux1H(prs1_wakeups, speculative_masks)
+      dis_uops(w).iw_p1_bypass_hint := Mux1H(prs1_wakeups, bypassables)
+    }
+    when (prs1_rebusys.reduce(_||_) || ((io.child_rebusys & io.dis_uops(w).bits.iw_p1_speculative_child) =/= 0.U)) {
+      dis_uops(w).prs1_busy := io.dis_uops(w).bits.lrs1_rtype === RT_FIX
+    }
+    when (prs2_wakeups.reduce(_||_)) {
+      dis_uops(w).prs2_busy := false.B
+      dis_uops(w).iw_p2_speculative_child := Mux1H(prs2_wakeups, speculative_masks)
+      dis_uops(w).iw_p2_bypass_hint := Mux1H(prs2_wakeups, bypassables)
+    }
+
+    when (prs2_rebusys.reduce(_||_) || ((io.child_rebusys & io.dis_uops(w).bits.iw_p2_speculative_child) =/= 0.U)) {
+      dis_uops(w).prs2_busy := io.dis_uops(w).bits.lrs2_rtype === RT_FIX
+    }
+
+
+    when (prs3_wakeups.reduce(_||_)) {
+      dis_uops(w).prs3_busy := false.B
+    }
+    when (io.pred_wakeup_port.valid && io.pred_wakeup_port.bits === io.dis_uops(w).bits.ppred) {
+      dis_uops(w).ppred_busy := false.B
+    }
+
+
+    if (iqType == IQ_UNQ) {
+      when (io.dis_uops(w).bits.fu_code(FC_I2F)) {
+        dis_uops(w).prs2 := Cat(io.dis_uops(w).bits.fp_rm, io.dis_uops(w).bits.fp_typ)
+      }
+      when (io.dis_uops(w).bits.uopc === uopSFENCE) {
+        dis_uops(w).pimm := io.dis_uops(w).bits.mem_size
+      }
+    }
+
+    if (iqType == IQ_MEM) {
+      // For store addr gen for FP, rs2 is the FP register, and we don't wait for that here
+      when (io.dis_uops(w).bits.uses_stq && io.dis_uops(w).bits.lrs2_rtype === RT_FLT) {
+        dis_uops(w).lrs2_rtype := RT_X
+        dis_uops(w).prs2_busy  := false.B
+      }
+      dis_uops(w).prs3_busy := false.B
+    } else if (iqType == IQ_FP) {
+      // FP "StoreAddrGen" is really storeDataGen, and rs1 is the integer address register
+      when (io.dis_uops(w).bits.uses_stq) {
+        dis_uops(w).lrs1_rtype := RT_X
+        dis_uops(w).prs1_busy  := false.B
+      }
+    }
+
+    if (iqType != IQ_ALU) {
+      assert(!(io.dis_uops(w).bits.ppred_busy && io.dis_uops(w).valid))
+      dis_uops(w).ppred_busy := false.B
+    }
+
+  }
+
+
+
+  //-------------------------------------------------------------
+  // Issue Table
+
+  val slots = (0 until numIssueSlots) map { w => Module(new IssueSlot(numWakeupPorts, iqType == IQ_MEM, iqType == IQ_FP)) }
+  val issue_slots = VecInit(slots.map(_.io))
+
+  for (i <- 0 until numIssueSlots) {
+    issue_slots(i).wakeup_ports     := io.wakeup_ports
+    issue_slots(i).pred_wakeup_port := io.pred_wakeup_port
+    issue_slots(i).child_rebusys    := io.child_rebusys
+    issue_slots(i).squash_grant     := io.squash_grant
+    issue_slots(i).brupdate         := io.brupdate
+    issue_slots(i).kill             := io.flush_pipeline
+  }
+
+
+  for (w <- 0 until issueWidth) {
+    io.iss_uops(w).valid := false.B
+  }
+
+
+  //-------------------------------------------------------------
+
+  assert (PopCount(issue_slots.map(s => s.grant)) <= issueWidth.U, "[issue] window giving out too many grants.")
+
+
+
   //-------------------------------------------------------------
   // Figure out how much to shift entries by
 
@@ -58,7 +167,7 @@ class IssueUnitCollapsing(
   }
   shamts_oh(0) := 0.U
   for (i <- 1 until numIssueSlots + dispatchWidth) {
-    val shift = if (i < nSlowSlots) (dispatchWidth min 1 + (i * (dispatchWidth-1)/nSlowSlots).toInt) else dispatchWidth
+    val shift = if (i < nSlowSlots) 1 else dispatchWidth
     shamts_oh(i) := SaturatingCounterOH(shamts_oh(i-1), vacants(i-1), shift)
   }
 

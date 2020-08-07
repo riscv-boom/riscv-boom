@@ -113,10 +113,11 @@ trait ScalarOpConstants
 
 
   // IQT type
-  val IQ_SZ  = 3
+  val IQ_SZ  = 4
   val IQ_MEM = 0
-  val IQ_INT = 1
-  val IQ_FP  = 2
+  val IQ_UNQ = 1
+  val IQ_ALU = 2
+  val IQ_FP  = 3
 
   // Functional unit select
   // bit mask, since a given execution pipeline may support multiple functional units
