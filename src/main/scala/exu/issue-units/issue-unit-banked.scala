@@ -42,14 +42,22 @@ class IssueUnitBanked(
   }
 
   for (w <- 0 until params.dispatchWidth) {
-    val col_sel = RegInit((1 << (w % params.issueWidth)).U(params.issueWidth.W))
+    val col_sel = if (enableColumnALUWrites) {
+      require (params.iqType == IQ_ALU)
+      require (isPow2(params.issueWidth))
+      UIntToOH(io.dis_uops(w).bits.pdst(log2Ceil(params.issueWidth)-1,0))
+    } else {
+      val sel = RegInit((1 << (w % params.issueWidth)).U(params.issueWidth.W))
+      sel := (sel << 1) | sel(params.issueWidth-1)
+      sel
+    }
     io.dis_uops(w).ready := (VecInit(issue_units.map(_.io.dis_uops(w).ready)).asUInt & col_sel) =/= 0.U
 
     for (i <- 0 until params.issueWidth) {
       issue_units(i).io.dis_uops(w).valid := col_sel(i) && io.dis_uops(w).valid
       issue_units(i).io.dis_uops(w).bits  := io.dis_uops(w).bits
     }
-    col_sel := (col_sel << 1) | col_sel(params.issueWidth-1)
+
   }
   for (i <- 0 until params.issueWidth) {
     io.iss_uops(i) := issue_units(i).io.iss_uops(0)

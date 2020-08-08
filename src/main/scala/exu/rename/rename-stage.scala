@@ -53,7 +53,7 @@ abstract class AbstractRenameStage(
 
     // wakeup ports
     val wakeups = Flipped(Vec(numWbPorts, Valid(new Wakeup)))
-    val child_rebusys = Input(UInt(intWidth.W))
+    val child_rebusys = Input(UInt(aluWidth.W))
 
     // commit stage
     val com_valids = Input(Vec(plWidth, Bool()))
@@ -349,8 +349,10 @@ class PredRenameStage(
     val is_sfb_shadow = ren2_uops(w).is_sfb_shadow && ren2_fire(w)
 
     val ftq_idx = ren2_uops(w).ftq_idx
-    when (is_sfb_br) {
+    when (ren2_uops(w).is_sfb_br) {
       io.ren2_uops(w).pdst := ftq_idx
+    }
+    when (is_sfb_br) {
       to_busy(ftq_idx) := true.B
     }
     next_ftq_idx = Mux(is_sfb_br, ftq_idx, next_ftq_idx)

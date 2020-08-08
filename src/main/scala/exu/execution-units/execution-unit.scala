@@ -35,7 +35,7 @@ class Wakeup(implicit p: Parameters) extends BoomBundle
   with HasBoomUOP
 {
   val bypassable = Bool()
-  val speculative_mask = UInt(intWidth.W)
+  val speculative_mask = UInt(aluWidth.W)
   val rebusy = Bool()
 }
 
@@ -159,13 +159,11 @@ trait HasImmrfReadPort { this: ExecutionUnit =>
 
 
   io_arb_immrf_req.valid := (arb_uop.valid &&
-    !arb_uop.bits.fu_code(FC_DGEN) &&
     !arb_uop.bits.imm_sel.isOneOf(IS_N, IS_SH)
   )
   io_arb_immrf_req.bits  := arb_uop.bits.pimm
 
   io_rrd_immrf_wakeup.valid := (rrd_uop.valid &&
-    !rrd_uop.bits.fu_code(FC_DGEN) &&
     !rrd_uop.bits.imm_sel.isOneOf(IS_N, IS_SH)
   )
   io_rrd_immrf_wakeup.bits.speculative_mask := false.B
@@ -489,7 +487,7 @@ class ALUExeUnit(
                     (io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready) ||
                     (io_arb_ftq_req.valid     && !io_arb_ftq_req.ready))
 
-  val io_child_rebusy = IO(Output(UInt(intWidth.W)))
+  val io_child_rebusy = IO(Output(UInt(aluWidth.W)))
   io_child_rebusy := 0.U
   when (arb_rebusied && arb_uop.valid) {
     io_child_rebusy := (1 << id).U

@@ -86,7 +86,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   )
   val unq_exe_unit = unq_exe_units(0)
   val csr_resp = unq_exe_unit.io_csr_resp.get
-  val alu_exe_units: Seq[ALUExeUnit] = (0 until intWidth) map { w =>
+  val alu_exe_units: Seq[ALUExeUnit] = (0 until aluWidth) map { w =>
     Module(new ALUExeUnit(
       id             = w
     )).suggestName(s"alu_exe_unit_${w}")
@@ -103,14 +103,14 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   fp_pipeline.io.wb_pdsts  := DontCare
 
 
-  val numIrfWritePorts        = intWidth + lsuWidth + 1
+  val numIrfWritePorts        = aluWidth + lsuWidth + 1
   val numIrfLogicalReadPorts  = all_exe_units.map(_.nReaders).reduce(_+_)
   require(numIrfReadPorts >= all_exe_units.filter(_.mustReceiveReadPorts).map(_.nReaders).reduce(_+_))
 
   val numIntWakeups           = coreWidth + lsuWidth + 1
   val numFpWakeupPorts        = fp_pipeline.io.wakeups.length
 
-  val numImmReaders     = intWidth + memWidth + 1 // "Wakeup" immediates when they are read
+  val numImmReaders     = aluWidth + memWidth + 1 // "Wakeup" immediates when they are read
 
   val decode_units      = (0 until decodeWidth) map { w => Module(new DecodeUnit).suggestName(s"decode_${w}") }
   val dec_brmask_logic  = Module(new BranchMaskGenerationLogic(coreWidth))
@@ -124,6 +124,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val unq_iss_unit     = IssueUnit(unqIssueParam, numIntWakeups, false)
   val alu_iss_unit     = IssueUnit(aluIssueParam, numIntWakeups, enableColumnALUIssue)
   val dispatcher       = Module(new BasicDispatcher)
+  val iregfileBankedWriteArray = Seq.fill(lsuWidth + 1) { None } ++ ((0 until aluWidth).map { w => if (enableColumnALUWrites) Some(w) else None })
   val iregfile         = Module(new BankedRF(
     UInt(xLen.W),
     numIrfBanks,
@@ -132,12 +133,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     numIrfLogicalReadPorts,
     numIrfReadPorts,
     numIrfWritePorts,
+    iregfileBankedWriteArray,
     "Integer"
   ))
   val pregfile         = Module(new FullyPortedRF(
     Bool(),
     ftqSz,
-    intWidth,
+    aluWidth,
     1,
     "Predicate"
   ))
@@ -151,7 +153,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val bregfile         = Module(new FullyPortedRF(
     new BrInfoBundle,
     maxBrCount,
-    intWidth,
+    aluWidth,
     coreWidth,
     "Branch"
   ))
@@ -161,7 +163,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   ))
   // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
   val int_wakeups  = Wire(Vec(numIntWakeups, Valid(new Wakeup)))
-  val pred_wakeups = Wire(Vec(intWidth     , Valid(new Wakeup)))
+  val pred_wakeups = Wire(Vec(aluWidth     , Valid(new Wakeup)))
 
   // The arb stage guarantees only 1 pred wakeup per cycle
   assert(PopCount(pred_wakeups.map(_.valid)) <= 1.U)
@@ -367,7 +369,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     + "\n\n" + iregfile.toString + "\n\n"
     + BoomCoreStringPrefix(
         "Num Wakeup Ports      : " + numIntWakeups,
-        "Num Bypass Ports      : " + coreWidth) + "\n"
+        "Num Bypass Ports      : " + int_bypasses.length) + "\n"
     + BoomCoreStringPrefix(
         "DCache Ways           : " + dcacheParams.nWays,
         "DCache Sets           : " + dcacheParams.nSets,
@@ -523,17 +525,17 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
   val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
 
-  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 2 + intWidth))
+  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 2 + aluWidth))
 
   // Order by the oldest. Flushes come from the oldest instructions in pipe
   // Decoding exceptions come from youngest
   ftq_arb.io.in(0) <> flush_pc_req
   // Branch Unit Requests (for JALs) (Should delay issue of JALs if this not ready)
-  for (i <- 0 until intWidth) {
+  for (i <- 0 until aluWidth) {
     ftq_arb.io.in(i+1) <> alu_exe_units(i).io_arb_ftq_req
     alu_exe_units(i).io_rrd_ftq_resp := io.ifu.get_ftq_resp(0)
   }
-  ftq_arb.io.in(intWidth+1) <> xcpt_pc_req
+  ftq_arb.io.in(aluWidth+1) <> xcpt_pc_req
 
   // Hookup FTQ
   io.ifu.get_ftq_req(0) := ftq_arb.io.out.bits
@@ -655,7 +657,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     dis_uops(w).ppred := p_uop.ppred
     dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype  === RT_FLT, f_uop.pdst,
                         Mux(dis_uops(w).dst_rtype  === RT_FIX, i_uop.pdst,
-                                                               p_uop.pdst))
+                        Mux(dis_uops(w).is_sfb_br            , p_uop.pdst,
+                                                               random.LFSR(maxPregSz) // Random set the PDST so the ALU banked IQ is balanced
+                        )))
     dis_uops(w).imm_sel := imm_uop.imm_sel
     dis_uops(w).pimm    := imm_uop.pimm
 
@@ -881,7 +885,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
 
   // loop through each issue-port (exe_units are statically connected to an issue-port)
-  for (i <- 0 until intWidth) {
+  for (i <- 0 until aluWidth) {
     val unit = alu_exe_units(i)
     val fast_wakeup = unit.io_fast_wakeup
 

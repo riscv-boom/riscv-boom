@@ -39,7 +39,7 @@ class RenameBusyTable(
     val rebusy_reqs = Input(Vec(plWidth, Bool()))
 
     val wakeups = Input(Vec(numWbPorts, Valid(new Wakeup)))
-    val child_rebusys = Input(UInt(intWidth.W))
+    val child_rebusys = Input(UInt(aluWidth.W))
 
     val debug = new Bundle { val busytable = Output(Bits(numPregs.W)) }
   })

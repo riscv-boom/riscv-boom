@@ -215,7 +215,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val fpIssueParam  = issueParams.find(_.iqType == IQ_FP ).get
 
   require(unqIssueParam.issueWidth == 1)
-  val intWidth = aluIssueParam.issueWidth
+  val aluWidth = aluIssueParam.issueWidth
   val memWidth = memIssueParam.issueWidth
   val fpWidth  = fpIssueParam.issueWidth
 
@@ -266,6 +266,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableLoadToStoreForwarding = boomParams.enableLoadToStoreForwarding
   val enableSuperscalarSnapshots = boomParams.enableSuperscalarSnapshots
   val enableColumnALUIssue = boomParams.enableColumnALUIssue
+  val enableColumnALUWrites = boomParams.enableColumnALUIssue && isPow2(aluWidth) && aluWidth > 1
 
   //************************************
   // Implicitly calculated constants

@@ -48,7 +48,7 @@ abstract class IssueUnit(
     val wakeup_ports     = Flipped(Vec(numWakeupPorts, Valid(new Wakeup)))
     val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
 
-    val child_rebusys    = Input(UInt(intWidth.W))
+    val child_rebusys    = Input(UInt(aluWidth.W))
 
     // tell the issue unit what each execution pipeline has in terms of functional units
     val fu_types         = Input(Vec(issueWidth, Vec(FC_SZ, Bool())))
@@ -57,7 +57,7 @@ abstract class IssueUnit(
     val flush_pipeline   = Input(Bool())
     val squash_grant     = Input(Bool())
 
-    val tsc_reg          = Input(UInt(width=xLen.W))
+    val tsc_reg          = Input(UInt(xLen.W))
   })
 
 

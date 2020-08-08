@@ -43,7 +43,7 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
 
   val wakeup_ports  = Flipped(Vec(numWakeupPorts, Valid(new Wakeup)))
   val pred_wakeup_port = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
-  val child_rebusys = Input(UInt(intWidth.W))
+  val child_rebusys = Input(UInt(aluWidth.W))
 }
 
 class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(implicit p: Parameters)
@@ -169,11 +169,13 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
         }
         io.iss_uop.bits.fu_code(FC_AGEN) := false.B
         io.iss_uop.bits.fu_code(FC_DGEN) := true.B
+        io.iss_uop.bits.imm_sel    := IS_N
         io.iss_uop.bits.prs1       := slot_uop.prs2
         io.iss_uop.bits.lrs1_rtype := slot_uop.lrs2_rtype
         io.iss_uop.bits.iw_p1_bypass_hint := slot_uop.iw_p2_bypass_hint
       }
     } .elsewhen (slot_uop.fu_code(FC_DGEN)) {
+      io.iss_uop.bits.imm_sel    := IS_N
       io.iss_uop.bits.prs1       := slot_uop.prs2
       io.iss_uop.bits.lrs1_rtype := slot_uop.lrs2_rtype
       io.iss_uop.bits.iw_p1_bypass_hint := slot_uop.iw_p2_bypass_hint

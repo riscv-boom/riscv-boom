@@ -37,8 +37,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val iw_issued              = Bool() // Was this uop issued last cycle? If so, it can vacate this cycle
   val iw_issued_partial_agen = Bool()
   val iw_issued_partial_dgen = Bool()
-  val iw_p1_speculative_child = UInt(intWidth.W)
-  val iw_p2_speculative_child = UInt(intWidth.W)
+  val iw_p1_speculative_child = UInt(aluWidth.W)
+  val iw_p2_speculative_child = UInt(aluWidth.W)
 
 
   // Get the operand off the bypass network, avoid a register read port allocation

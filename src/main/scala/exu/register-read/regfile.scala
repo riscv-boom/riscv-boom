@@ -59,32 +59,55 @@ class BankedRF[T <: Data](
   numLogicalReadPorts: Int,
   numPhysicalReadPorts: Int,
   numWritePorts: Int,
+  bankedWritePortArray: Seq[Option[Int]],
   typeStr: String
 )(implicit p: Parameters)
     extends RegisterFile(dType, numRegisters, numLogicalReadPorts, numWritePorts)
 {
   require(isPow2(numBanks))
   require(numRegisters % numBanks == 0)
+  require(bankedWritePortArray.length == numWritePorts)
+  val numDedicatedWritePorts = bankedWritePortArray.flatten.length
+  val writePortsPerBank = if (numDedicatedWritePorts == 0) {
+    numWritePorts
+  } else {
+    numWritePorts - numDedicatedWritePorts + 1
+  }
+
   def bankIdx(i: UInt): UInt = i(log2Ceil(numBanks)-1,0)
   val rfs = (0 until numBanks) map { w => Module(new PartiallyPortedRF(
     dType,
     numRegisters / numBanks,
     numLogicalReadPortsPerBank,
     numPhysicalReadPorts,
-    numWritePorts,
+    writePortsPerBank,
     typeStr + s" Bank ${w}"
   )) }
   if (numBanks == 1) {
     require(numLogicalReadPortsPerBank == numLogicalReadPorts)
     io <> rfs(0).io
   } else {
+    val widxs = Array.fill(numBanks)(0)
     for (i <- 0 until numWritePorts) {
-      for (w <- 0 until numBanks) {
-        rfs(w).io.write_ports(i).valid     := io.write_ports(i).valid && bankIdx(io.write_ports(i).bits.addr) === w.U
-        rfs(w).io.write_ports(i).bits.addr := io.write_ports(i).bits.addr >> log2Ceil(numBanks)
-        rfs(w).io.write_ports(i).bits.data := io.write_ports(i).bits.data
+      if (bankedWritePortArray(i) != None) {
+        val bank = bankedWritePortArray(i).get
+        val widx = widxs(bank)
+        rfs(bank).io.write_ports(widx).valid     := io.write_ports(i).valid
+        rfs(bank).io.write_ports(widx).bits.addr := io.write_ports(i).bits.addr >> log2Ceil(numBanks)
+        rfs(bank).io.write_ports(widx).bits.data := io.write_ports(i).bits.data
+        assert(!io.write_ports(i).valid || bankIdx(io.write_ports(i).bits.addr) === bank.U)
+        widxs(bank) = widx + 1
+      } else {
+        for (w <- 0 until numBanks) {
+          val widx = widxs(w)
+          rfs(w).io.write_ports(widx).valid     := io.write_ports(i).valid && bankIdx(io.write_ports(i).bits.addr) === w.U
+          rfs(w).io.write_ports(widx).bits.addr := io.write_ports(i).bits.addr >> log2Ceil(numBanks)
+          rfs(w).io.write_ports(widx).bits.data := io.write_ports(i).bits.data
+          widxs(w) = widx + 1
+        }
       }
     }
+    require(widxs.forall(_ == writePortsPerBank), widxs.mkString(","))
     if (numLogicalReadPortsPerBank == numLogicalReadPorts) {
       for (i <- 0 until numLogicalReadPorts) {
         val bidx = bankIdx(io.arb_read_reqs(i).bits)
