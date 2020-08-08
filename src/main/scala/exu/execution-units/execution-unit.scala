@@ -258,7 +258,7 @@ class ALUExeUnit(
   var alu: ALUUnit = null
   if (hasAlu) {
     alu = Module(new ALUUnit(isJmpUnit = hasJmp,
-                             numStages = numBypassStages,
+                             numStages = 1,
                              dataWidth = xLen))
     alu.io.req.valid := (
       io.req.valid &&
