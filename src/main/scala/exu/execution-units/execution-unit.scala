@@ -205,9 +205,7 @@ class ALUExeUnit(
     writesIrf        = hasAlu || hasJmp || hasMul || hasCSR,
     writesLlIrf      = hasMem || hasDiv || hasRocc,
     writesLlFrf      = (hasIfpu || hasMem) && p(tile.TileKey).core.fpu != None,
-    numBypassStages  =
-      if (hasAlu && hasMul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
-      else if (hasAlu) 1 else 0,
+    numBypassStages  = if (hasJmp) 2 else if (hasAlu) 1 else 0,
     dataWidth        = p(tile.XLen)+1,
     bypassable       = hasAlu,
     alwaysBypassable = hasAlu && !(hasMem || hasJmp || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
@@ -258,7 +256,7 @@ class ALUExeUnit(
   var alu: ALUUnit = null
   if (hasAlu) {
     alu = Module(new ALUUnit(isJmpUnit = hasJmp,
-                             numStages = 1,
+                             numStages = if (hasJmp) 2 else 1,
                              dataWidth = xLen))
     alu.io.req.valid := (
       io.req.valid &&
@@ -279,7 +277,7 @@ class ALUExeUnit(
     iresp_fu_units += alu
 
     // Bypassing only applies to ALU
-    io.bypass := alu.io.bypass
+    if (!hasJmp) io.bypass := alu.io.bypass
 
     // branch unit is embedded inside the ALU
     io.brinfo := alu.io.brinfo

@@ -259,7 +259,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
             ).asUInt
   }
   def shared_eu_code = eu_code(3,1)
-  def exe_wb_latency = fu_code(3) << (imulLatency - 1) | (fu_code(1) | fu_code(0))  // Hard coded latency vector
+  def exe_wb_latency = fu_code(3) << (imulLatency - 1) | fu_code(1) << 1 | fu_code(0)  // Hard coded latency vector
 
   // Generate the fast wakeup signal the uop emits when issued
   def fast_wakeup(grant: Bool): Valid[FastWakeup] = {
