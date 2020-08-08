@@ -421,7 +421,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
 
   brinfo.target_offset := target_offset
 
-  io.brinfo := brinfo
+  io.brinfo := RegNext(brinfo)
 
 
 // Response
