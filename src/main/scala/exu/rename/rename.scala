@@ -189,7 +189,6 @@ class Rename(
     plWidth,
     32,
     numPhysRegs,
-    false,
     float))
   val freelist = Module(new RenameFreeList(
     plWidth,

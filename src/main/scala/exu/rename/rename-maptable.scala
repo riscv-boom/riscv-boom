@@ -43,7 +43,6 @@ class RenameMapTable(
   val plWidth: Int,
   val numLregs: Int,
   val numPregs: Int,
-  val bypass: Boolean,
   val float: Boolean)
   (implicit p: Parameters) extends BoomModule
 {
@@ -71,12 +70,15 @@ class RenameMapTable(
   val commit_map_table = RegInit(VecInit(Seq.fill(numLregs){0.U(pregSz.W)}))
   val br_snapshots     = Reg(Vec(maxBrCount, Vec(numLregs, UInt(pregSz.W))))
 
+  // Delay the write of new allocations by a cycle
+  val r_remap_reqs = RegNext(io.remap_reqs)
+
   // The intermediate states of the map table following modification by each pipeline slot.
-  val remap_table = Wire(Vec(plWidth+1, Vec(numLregs, UInt(pregSz.W))))
+  val remap_table  = Wire(Vec(plWidth+1, Vec(numLregs, UInt(pregSz.W))))
 
   // Write ports into the map tables
-  val remap_pdsts  = io.remap_reqs  map (_.bits.pdst)
-  val remap_ldsts  = io.remap_reqs  map (r => Mux(r.valid, UIntToOH(r.bits.ldst), 0.U))
+  val remap_pdsts  = r_remap_reqs map (_.bits.pdst)
+  val remap_ldsts  = r_remap_reqs map (r => Mux(r.valid, UIntToOH(r.bits.ldst), 0.U))
 
   val commit_pdsts = io.commit_reqs map (_.bits.pdst)
   val commit_ldsts = io.commit_reqs map (r => Mux(r.valid, UIntToOH(r.bits.ldst), 0.U))
@@ -101,8 +103,8 @@ class RenameMapTable(
 
   // Create snapshots of new mappings.
   for (i <- 0 until plWidth) {
-    when (io.ren_br_tags(i).valid) {
-      br_snapshots(io.ren_br_tags(i).bits) := remap_table(i+1)
+    when (RegNext(io.ren_br_tags(i).valid)) {
+      br_snapshots(RegNext(io.ren_br_tags(i).bits)) := remap_table(i+1)
     }
   }
 
@@ -116,18 +118,18 @@ class RenameMapTable(
 
   // Read out mappings.
   for (i <- 0 until plWidth) {
-    io.map_resps(i).prs1       := (0 until i).foldLeft(map_table(io.map_reqs(i).lrs1)) ((p,k) =>
-      Mux(bypass.B && io.remap_reqs(k).valid && io.remap_reqs(k).bits.ldst === io.map_reqs(i).lrs1, io.remap_reqs(k).bits.pdst, p))
-    io.map_resps(i).prs2       := (0 until i).foldLeft(map_table(io.map_reqs(i).lrs2)) ((p,k) =>
-      Mux(bypass.B && io.remap_reqs(k).valid && io.remap_reqs(k).bits.ldst === io.map_reqs(i).lrs2, io.remap_reqs(k).bits.pdst, p))
-    io.map_resps(i).prs3       := (0 until i).foldLeft(map_table(io.map_reqs(i).lrs3)) ((p,k) =>
-      Mux(bypass.B && io.remap_reqs(k).valid && io.remap_reqs(k).bits.ldst === io.map_reqs(i).lrs3, io.remap_reqs(k).bits.pdst, p))
-    io.map_resps(i).stale_pdst := (0 until i).foldLeft(map_table(io.map_reqs(i).ldst)) ((p,k) =>
-      Mux(bypass.B && io.remap_reqs(k).valid && io.remap_reqs(k).bits.ldst === io.map_reqs(i).ldst, io.remap_reqs(k).bits.pdst, p))
+    io.map_resps(i).prs1       := r_remap_reqs.foldLeft(map_table(io.map_reqs(i).lrs1)) ((p,r) =>
+                                    Mux(r.valid && r.bits.ldst === io.map_reqs(i).lrs1, r.bits.pdst, p))
+    io.map_resps(i).prs2       := r_remap_reqs.foldLeft(map_table(io.map_reqs(i).lrs2)) ((p,r) =>
+                                    Mux(r.valid && r.bits.ldst === io.map_reqs(i).lrs2, r.bits.pdst, p))
+    io.map_resps(i).prs3       := r_remap_reqs.foldLeft(map_table(io.map_reqs(i).lrs3)) ((p,r) =>
+                                    Mux(r.valid && r.bits.ldst === io.map_reqs(i).lrs3, r.bits.pdst, p))
+    io.map_resps(i).stale_pdst := r_remap_reqs.foldLeft(map_table(io.map_reqs(i).ldst)) ((p,r) =>
+                                    Mux(r.valid && r.bits.ldst === io.map_reqs(i).ldst, r.bits.pdst, p))
 
     if (!float) io.map_resps(i).prs3 := DontCare
   }
 
-  io.remap_reqs map (req => (req.bits.pdst, req.valid)) foreach { case (p,r) =>
+  r_remap_reqs map (req => (req.bits.pdst, req.valid)) foreach { case (p,r) =>
     assert (!r || !map_table.contains(p), "[maptable] Trying to write a duplicate mapping.") }
 }

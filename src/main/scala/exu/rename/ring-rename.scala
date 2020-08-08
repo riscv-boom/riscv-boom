@@ -101,7 +101,6 @@ class RingRename(implicit p: Parameters) extends BoomModule
     coreWidth,
     32,
     numIntPhysRegs,
-    false,
     false))
   val freelists = Seq.fill(coreWidth) {
     Module(new RingFreeList(
