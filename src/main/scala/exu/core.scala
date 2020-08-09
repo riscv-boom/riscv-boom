@@ -772,9 +772,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     }
   }
   if (enableSFBOpt) {
-    pred_rename.io.wakeups(0)                := DontCare
-    pred_rename.io.wakeups(0).valid          := pred_wakeup.valid
-    pred_rename.io.wakeups(0).bits.uop.pdst  := pred_wakeup.bits
+    pred_rename.io.wakeups(0)               := DontCare
+    pred_rename.io.wakeups(0).valid         := pred_wakeup.valid
+    pred_rename.io.wakeups(0).bits.uop.pdst := pred_wakeup.bits
   }
 
   var idiv_issued = false.B
@@ -811,6 +811,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   iregister_read.io.rf_read_ports <> iregfile.io.read_ports
   if (enableSFBOpt) {
     iregister_read.io.prf_read_ports <> pregfile.io.read_ports
+  } else {
+    iregister_read.io.prf_read_ports := DontCare
   }
 
   iregister_read.io.iss_valids := iss_valids
