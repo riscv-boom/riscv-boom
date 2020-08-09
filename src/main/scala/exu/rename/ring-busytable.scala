@@ -58,30 +58,39 @@ class RingBusyTable(
 
   val busy_table = RegInit(0.U(numPregs.W))
 
+  val r_rebusy_reqs = RegNext(io.rebusy_reqs)
+  val r_ren_uops    = RegNext(io.ren_uops)
+
   busy_table := ( busy_table
                 & ~(io.wb_pdsts zip io.wb_valids) .map {case (pdst, valid) =>
                      DecodePreg(pdst) & Fill(numPregs, valid)}.reduce(_|_)
-                |  (io.ren_uops zip io.rebusy_reqs) .map {case (uop, req)  =>
+                |  (r_ren_uops zip r_rebusy_reqs) .map {case (uop, req)  =>
                      DecodePreg(uop.pdst) & Fill(numPregs, req)}.reduce(_|_)
                 )
 
   val load_table = RegInit(0.U(numPregs.W))
 
   load_table:= ( load_table
-                & ~(io.ren_uops zip io.rebusy_reqs) .map {case (uop, req) =>
+                & ~(r_ren_uops zip r_rebusy_reqs) .map {case (uop, req) =>
                      DecodePreg(uop.pdst) & Fill(numPregs, req && !uop.uses_ldq)}.reduce(_|_)
-                |  (io.ren_uops zip io.rebusy_reqs) .map {case (uop, req)  =>
+                |  (r_ren_uops zip r_rebusy_reqs) .map {case (uop, req)  =>
                      DecodePreg(uop.pdst) & Fill(numPregs, req &&  uop.uses_ldq)}.reduce(_|_)
                 )
 
 
   // Read the busy table.
   for (i <- 0 until plWidth) {
-    io.busy_resps(i).prs1_busy := (busy_table & DecodePreg(io.ren_uops(i).prs1)).orR
-    io.busy_resps(i).prs2_busy := (busy_table & DecodePreg(io.ren_uops(i).prs2)).orR
+    val prs1_was_bypassed = r_ren_uops zip r_rebusy_reqs map { case (u,v) => io.ren_uops(i).lrs1 === u.ldst && v } reduce(_||_)
+    val prs2_was_bypassed = r_ren_uops zip r_rebusy_reqs map { case (u,v) => io.ren_uops(i).lrs2 === u.ldst && v } reduce(_||_)
 
-    io.busy_resps(i).prs1_load := (load_table & DecodePreg(io.ren_uops(i).prs1)).orR
-    io.busy_resps(i).prs2_load := (load_table & DecodePreg(io.ren_uops(i).prs2)).orR
+    val prs1_was_bypassed_load = r_ren_uops zip r_rebusy_reqs map { case (u,v) => u.uses_ldq && io.ren_uops(i).lrs1 === u.ldst && v } reduce(_||_)
+    val prs2_was_bypassed_load = r_ren_uops zip r_rebusy_reqs map { case (u,v) => u.uses_ldq && io.ren_uops(i).lrs2 === u.ldst && v } reduce(_||_)
+
+    io.busy_resps(i).prs1_busy := (busy_table & DecodePreg(io.ren_uops(i).prs1)).orR || prs1_was_bypassed
+    io.busy_resps(i).prs2_busy := (busy_table & DecodePreg(io.ren_uops(i).prs2)).orR || prs2_was_bypassed
+
+    io.busy_resps(i).prs1_load := (load_table & DecodePreg(io.ren_uops(i).prs1)).orR || prs1_was_bypassed_load
+    io.busy_resps(i).prs2_load := (load_table & DecodePreg(io.ren_uops(i).prs2)).orR || prs2_was_bypassed_load
   }
 
   io.debug.busytable := busy_table
