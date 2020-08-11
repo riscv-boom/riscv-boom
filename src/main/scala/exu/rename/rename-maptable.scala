@@ -60,7 +60,7 @@ class RenameMapTable(
     val com_remap_reqs = Input(Vec(plWidth, new RemapReq(lregSz, pregSz)))
 
     // Dispatching branches: need to take snapshots of table state.
-    val ren_br_tags = Input(Vec(plWidth, Valid(UInt(brTagSz.W))))
+    val ren_br_tags = Input(Vec(plWidth+1, Valid(UInt(brTagSz.W))))
 
     // Signals for restoring state following misspeculation.
     val brupdate      = Input(new BrUpdateInfo)
@@ -99,16 +99,16 @@ class RenameMapTable(
 
   // Create snapshots of new mappings.
   if (enableSuperscalarSnapshots) {
-    for (i <- 0 until plWidth) {
+    for (i <- 0 until plWidth+1) {
       when (io.ren_br_tags(i).valid) {
-        br_snapshots(io.ren_br_tags(i).bits) := remap_table(i+1)
+        br_snapshots(io.ren_br_tags(i).bits) := remap_table(i)
       }
     }
   } else {
     assert(PopCount(io.ren_br_tags.map(_.valid)) <= 1.U)
     val do_br_snapshot = io.ren_br_tags.map(_.valid).reduce(_||_)
     val br_snapshot_tag   = Mux1H(io.ren_br_tags.map(_.valid), io.ren_br_tags.map(_.bits))
-    val br_snapshot_table = Mux1H(io.ren_br_tags.map(_.valid), remap_table.slice(1, plWidth+1))
+    val br_snapshot_table = Mux1H(io.ren_br_tags.map(_.valid), remap_table)
     when (do_br_snapshot) {
       br_snapshots(br_snapshot_tag) := br_snapshot_table
     }

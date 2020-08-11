@@ -102,7 +102,6 @@ abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomM
 
 trait HasIrfReadPorts { this: ExecutionUnit =>
   def nReaders: Int
-  def mustReceiveReadPorts: Boolean
 
   val io_arb_irf_reqs = IO(Vec(nReaders, Decoupled(UInt(maxPregSz.W))))
   val io_arb_rebusys  = IO(Input (Vec(lsuWidth, Valid(new Wakeup))))
@@ -121,12 +120,10 @@ trait HasIrfReadPorts { this: ExecutionUnit =>
 
   io_arb_irf_reqs(0).valid := arb_uop.valid && arb_uop.bits.lrs1_rtype === RT_FIX && !arb_uop.bits.iw_p1_bypass_hint
   io_arb_irf_reqs(0).bits  := arb_uop.bits.prs1
-  if (mustReceiveReadPorts) assert(!(io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready))
 
   if (nReaders == 2) {
     io_arb_irf_reqs(1).valid := arb_uop.valid && arb_uop.bits.lrs2_rtype === RT_FIX && !arb_uop.bits.iw_p2_bypass_hint
     io_arb_irf_reqs(1).bits  := arb_uop.bits.prs2
-    if (mustReceiveReadPorts) assert(!(io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready))
   }
 
   val arb_rebusied_prs1 = arb_uop.bits.lrs1_rtype === RT_FIX && rebusied(arb_uop.bits.prs1)
@@ -244,9 +241,17 @@ class MemExeUnit(
   with HasImmrfReadPort
 {
   def nReaders = 1
-  def mustReceiveReadPorts = true
 
-  when (arb_rebusied) {
+  val io_squash_iss = IO(Output(Bool()))
+  io_squash_iss := (io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready)
+
+  when (io_squash_iss || arb_rebusied) {
+    val will_replay = arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits) && !arb_rebusied
+    arb_uop.valid := will_replay
+    arb_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
+    arb_uop.bits.iw_p1_bypass_hint := false.B
+    arb_uop.bits.iw_p2_bypass_hint := false.B
+
     rrd_uop.valid := false.B
   }
 
@@ -301,7 +306,6 @@ class UniqueExeUnit(
   with HasImmrfReadPort
 {
   def nReaders = 2
-  def mustReceiveReadPorts = false
 
   val io_squash_iss = IO(Output(Bool()))
   io_squash_iss := ((io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready) ||
@@ -460,12 +464,10 @@ class ALUExeUnit(
   with HasFtqReadPort
 {
   def nReaders = 2
-  def mustReceiveReadPorts = false
 
   val io_fast_wakeup = IO(Output(Valid(new Wakeup)))
   io_fast_wakeup.valid    := (
     io_iss_uop.valid &&
-    io_iss_uop.bits.fu_code(FC_ALU) &&
     (io_iss_uop.bits.dst_rtype === RT_FIX)
   )
   io_fast_wakeup.bits.uop := io_iss_uop.bits
@@ -486,7 +488,7 @@ class ALUExeUnit(
   io_squash_iss := ((io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready) ||
                     (io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready) ||
                     (io_arb_ftq_req.valid     && !io_arb_ftq_req.ready))
-
+  
   val io_child_rebusy = IO(Output(UInt(aluWidth.W)))
   io_child_rebusy := 0.U
   when (arb_rebusied && arb_uop.valid) {

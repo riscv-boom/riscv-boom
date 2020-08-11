@@ -105,7 +105,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   val numIrfWritePorts        = aluWidth + lsuWidth + 1
   val numIrfLogicalReadPorts  = all_exe_units.map(_.nReaders).reduce(_+_)
-  require(numIrfReadPorts >= all_exe_units.filter(_.mustReceiveReadPorts).map(_.nReaders).reduce(_+_))
 
   val numIntWakeups           = coreWidth + lsuWidth + 1
   val numFpWakeupPorts        = fp_pipeline.io.wakeups.length
@@ -961,20 +960,26 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     iss_unit.io.brupdate := brupdate
     iss_unit.io.flush_pipeline := RegNext(rob.io.flush.valid)
 
-    val squash_grant = (
-      unq_exe_units.map(_.io_squash_iss).reduce(_||_) ||
-      alu_exe_units.map(_.io_squash_iss).reduce(_||_) ||
-      io.lsu.iwakeups.map(_.bits.rebusy).reduce(_||_)
-    )
-
-    iss_unit.io.squash_grant := squash_grant
-
     // Rebusy children of misspeculated wakeups
     iss_unit.io.child_rebusys := alu_exe_units.map(_.io_child_rebusy).reduce(_|_)
 
     iss_unit.io.wakeup_ports := int_wakeups
   }
 
+  mem_iss_unit.io.squash_grant := (
+    mem_exe_units.map(_.io_squash_iss).reduce(_||_) ||
+    alu_exe_units.map(_.io_squash_iss).reduce(_||_) ||
+    io.lsu.iwakeups.map(_.bits.rebusy).reduce(_||_)
+  )
+  unq_iss_unit.io.squash_grant := (
+    unq_exe_units.map(_.io_squash_iss).reduce(_||_) ||
+    alu_exe_units.map(_.io_squash_iss).reduce(_||_) ||
+    io.lsu.iwakeups.map(_.bits.rebusy).reduce(_||_)
+  )
+  alu_iss_unit.io.squash_grant := (
+    alu_exe_units.map(_.io_squash_iss).reduce(_||_) ||
+    io.lsu.iwakeups.map(_.bits.rebusy).reduce(_||_)
+  )
 
   mem_iss_unit.io.iss_uops zip mem_exe_units map { case (i, u) => u.io_iss_uop := i }
   alu_iss_unit.io.iss_uops zip alu_exe_units map { case (i, u) => u.io_iss_uop := i }

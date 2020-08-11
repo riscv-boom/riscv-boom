@@ -79,7 +79,7 @@ abstract class AbstractRenameStage(
   val ren2_valids     = Wire(Vec(plWidth, Bool()))
   val ren2_uops       = Wire(Vec(plWidth, new MicroOp))
   val ren2_alloc_reqs = Wire(Vec(plWidth, Bool()))
-  val ren2_br_tags    = Wire(Vec(plWidth, Valid(UInt(brTagSz.W))))
+  val ren2_br_tags    = Wire(Vec(plWidth+1, Valid(UInt(brTagSz.W))))
 
   //-------------------------------------------------------------
   // pipeline registers
@@ -89,6 +89,8 @@ abstract class AbstractRenameStage(
     ren1_uops(w)          := io.dec_uops(w)
   }
 
+  ren2_br_tags(0).valid := false.B
+  ren2_br_tags(0).bits  := DontCare
   for (w <- 0 until plWidth) {
     val r_valid  = RegInit(false.B)
     val r_uop    = Reg(new MicroOp)
@@ -114,8 +116,8 @@ abstract class AbstractRenameStage(
     ren2_valids(w) := r_valid
     ren2_uops(w)   := r_uop
 
-    ren2_br_tags(w).valid := ren2_fire(w) && ren2_uops(w).allocate_brtag
-    ren2_br_tags(w).bits  := ren2_uops(w).br_tag
+    ren2_br_tags(w+1).valid := ren2_fire(w) && ren2_uops(w).allocate_brtag
+    ren2_br_tags(w+1).bits  := ren2_uops(w).br_tag
   }
 
   //-------------------------------------------------------------
@@ -195,13 +197,21 @@ class RenameStage(
     numPhysRegs,
     false,
     float))
-  val freelist = Module(new RenameFreeList(
-    plWidth,
-    plWidth,
-    numPhysRegs,
-    32,
-    false
-  ))
+  val freelist = Module(
+    if (enableColumnALUWrites && !float) {
+      new BankedRenameFreeList(
+        plWidth,
+        numPhysRegs
+      )
+    } else {
+      new RenameFreeList(
+        plWidth,
+        plWidth,
+        numPhysRegs,
+        false
+      )
+    }
+  )
   val busytable = Module(new RenameBusyTable(
     plWidth,
     numPhysRegs,
@@ -268,6 +278,7 @@ class RenameStage(
   // Free List
 
   // Freelist inputs.
+  freelist.io.initial_allocation := Cat(~(0.U((numPhysRegs-32).W)), 0.U(32.W))
   freelist.io.reqs := ren2_alloc_reqs
   for (w <- 0 until plWidth) {
     freelist.io.despec(w).valid       := com_valids(w)
@@ -284,6 +295,8 @@ class RenameStage(
     val preg = freelist.io.alloc_pregs(w).bits
     uop.pdst := preg
   }
+  assert (!RegNext(io.rollback) || PopCount(freelist.io.debug_freelist) === (numPhysRegs - 32).U,
+    "[freelist] Leaking physical registers.")
 
   //-------------------------------------------------------------
   // Busy Table
@@ -381,7 +394,6 @@ class ImmRenameStage(plWidth: Int, numWbPorts: Int)(implicit p: Parameters) exte
     plWidth,
     numWbPorts,
     numImmPhysRegs,
-    0,
     true
   ))
 
@@ -409,6 +421,7 @@ class ImmRenameStage(plWidth: Int, numWbPorts: Int)(implicit p: Parameters) exte
 
   }
 
+  freelist.io.initial_allocation := ~(0.U(numImmPhysRegs.W))
   freelist.io.reqs := ren2_alloc_reqs
   for (w <- 0 until numWbPorts) {
     freelist.io.despec(w).valid       := false.B
@@ -420,5 +433,6 @@ class ImmRenameStage(plWidth: Int, numWbPorts: Int)(implicit p: Parameters) exte
   freelist.io.ren_br_tags := ren2_br_tags
   freelist.io.brupdate    := io.brupdate
   freelist.io.rollback    := io.rollback
-
+  assert (!RegNext(io.rollback) || PopCount(freelist.io.debug_freelist) === (numImmPhysRegs).U,
+    "[freelist] Leaking physical registers.")
 }
