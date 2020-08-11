@@ -53,21 +53,20 @@ class RingFreeList(
   val sel_fire  = Wire(Vec(plWidth, Bool()))
 
   // Allocations seen by branches in each pipeline slot.
-  val allocs = io.alloc_pregs map (a => UIntToOH(a.bits))
-  val alloc_masks = (allocs zip io.reqs).scanRight(0.U(n.W)) { case ((a,r),m) => m | a & Fill(n,r) }
+  val allocs = RegNext(io.alloc_pregs) map (a => UIntToOH(a.bits))
+  val alloc_masks = (allocs zip RegNext(io.reqs)).scanRight(0.U(n.W)) { case ((a,r),m) => m | a & Fill(n,r) }
 
   // Masks that modify the freelist array.
   val sel_mask = (sels zip sel_fire) map { case (s,f) => s & Fill(n,f) } reduce(_|_)
   val br_deallocs = br_alloc_lists(io.brupdate.b2.uop.br_tag) & Fill(n, io.brupdate.b2.mispredict)
   val dealloc_mask = io.stale_pdsts.map(p => Mux(p.valid, UIntToOH(p.bits), 0.U)).reduce(_|_) | br_deallocs
 
-  val br_slots = VecInit(io.ren_br_tags.map(tag => tag.valid)).asUInt
+  val r_br_tags = RegNext(io.ren_br_tags)
   // Create branch allocation lists.
   for (i <- 0 until maxBrCount) {
-    val list_req = VecInit(io.ren_br_tags.map(tag => UIntToOH(tag.bits)(i))).asUInt & br_slots
-    val new_list = list_req.orR
-    br_alloc_lists(i) := Mux(new_list, Mux1H(list_req, alloc_masks.slice(1, plWidth+1)),
-                                       br_alloc_lists(i) & ~br_deallocs | alloc_masks(0))
+    val list_req = VecInit(r_br_tags.map(tag => tag.valid && UIntToOH(tag.bits)(i)))
+    br_alloc_lists(i) := Mux(list_req.reduce(_||_), Mux1H(list_req, alloc_masks.slice(1, plWidth+1)),
+                                                    br_alloc_lists(i) & ~br_deallocs | alloc_masks(0))
   }
 
   // Update the free list.
