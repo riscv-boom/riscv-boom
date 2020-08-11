@@ -265,17 +265,15 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   val numDispatchPorts   = columnDispatchWidth - numCompactionPorts
 
   for (w <- 0 until coreWidth) {
-    val valids        = slots(w).map(_.valid)         ++ dis_vals(w).takeRight(numCompactionPorts)
+    val valids        = slots(w).map(_.valid)
     val uops          = slots(w).map(_.out_uop)       ++ dis_uops(w).takeRight(numCompactionPorts)
     val will_be_valid = slots(w).map(_.will_be_valid) ++ Seq.fill(numCompactionPorts) (true.B)
 
     val max = numCompactionPorts
     def Inc(count: UInt, inc: Bool) = Mux(inc && !count(max), count << 1, count)(max,0)
 
-    val slot_counts = valids.dropRight(max).scanLeft(1.U((max+1).W)) ((c,v) => Inc(c,!v))
-    val sel_counts  = slot_counts ++ Seq.fill(max-1)(slot_counts.last)
-    val comp_sels   = (sel_counts zip valids).map{ case (c,v) => c(max,1) & Fill(max,v) }
-                        .takeRight(numSlotsPerColumn + max - 1)
+    val slot_counts = valids.scanLeft(1.U((max+1).W)) ((c,v) => Inc(c,!v))
+    val comp_sels   = (slot_counts zip valids).map{ case (c,v) => c(max,1) & Fill(max,v) } ++ Seq.fill(max-1)(slot_counts.last(max,1))
 
     // Which slots might be valid after compaction?
     var compacted_valids = Wire(Vec(numSlotsPerColumn, Bool()))
