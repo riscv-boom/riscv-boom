@@ -241,9 +241,7 @@ abstract class PipelinedFunctionalUnit(
       }
     }
 
-    // handle outgoing (branch could still kill it)
-    // consumer must also check for pipeline flushes (kills)
-    io.resp.valid    := r_valids(numStages-1) && !IsKilledByBranch(io.brupdate, r_uops(numStages-1))
+    io.resp.valid    := r_valids(numStages-1)
     io.resp.bits.predicated := false.B
     io.resp.bits.uop := r_uops(numStages-1)
     io.resp.bits.uop.br_mask := GetNewBrMask(io.brupdate, r_uops(numStages-1))
