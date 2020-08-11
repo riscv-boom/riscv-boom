@@ -301,7 +301,7 @@ class Rob(
     val rob_unsafe    = Reg(Vec(numRobRows, Bool()))
     val rob_uop       = Reg(Vec(numRobRows, new MicroOp()))
     val rob_exception = Reg(Vec(numRobRows, Bool()))
-    val rob_predicated = Reg(Vec(numRobRows, Bool())) // Was this instruction predicated out?
+    val rob_predicated= Reg(Vec(numRobRows, Bool())) // Was this instruction predicated out?
     val rob_fflags    = Mem(numRobRows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
 
     val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
@@ -319,7 +319,7 @@ class Rob(
       rob_unsafe(rob_tail)    := io.enq_uops(w).unsafe
       rob_uop(rob_tail)       := io.enq_uops(w)
       rob_exception(rob_tail) := io.enq_uops(w).exception
-      rob_predicated(rob_tail)   := false.B
+      rob_predicated(rob_tail):= false.B
       rob_fflags(rob_tail)    := 0.U
 
       assert (rob_val(rob_tail) === false.B, "[rob] overwriting a valid entry.")
@@ -336,9 +336,9 @@ class Rob(
       val wb_uop = wb_resp.bits.uop
       val row_idx = GetRowIdx(wb_uop.rob_idx)
       when (wb_resp.valid && MatchBank(GetBankIdx(wb_uop.rob_idx))) {
-        rob_bsy(row_idx)      := false.B
-        rob_unsafe(row_idx)   := false.B
-        rob_predicated(row_idx)  := wb_resp.bits.predicated
+        rob_bsy(row_idx)        := false.B
+        rob_unsafe(row_idx)     := false.B
+        rob_predicated(row_idx) := wb_resp.bits.predicated && enableSFBOpt.B
       }
       // TODO check that fflags aren't overwritten
       // TODO check that the wb is to a valid ROB entry, give it a time stamp
