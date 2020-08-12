@@ -938,23 +938,22 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
 
   //-------------------------------------------------------------
-  // Speculative wakeup
+  // Speculative wakeup if loadUseDelay == 4
   val wakeupArbs = Seq.fill(lsuWidth) { Module(new Arbiter(new Wakeup, 2)) }
   for (w <- 0 until lsuWidth) {
     wakeupArbs(w).io.out.ready := true.B
     wakeupArbs(w).io.in := DontCare
     io.core.iwakeups(w) := wakeupArbs(w).io.out
 
-
-    wakeupArbs(w).io.in(1).valid := (enableFastLoadUse.B                             &&
-                                     will_fire_load_agen_exec(w)                     &&
-                                     dmem_req_fire(w)                                &&
-                                    !agen(w).bits.uop.fp_val)
-    wakeupArbs(w).io.in(1).bits.uop := agen(w).bits.uop
-    wakeupArbs(w).io.in(1).bits.bypassable := true.B
-    wakeupArbs(w).io.in(1).bits.speculative_mask := 0.U
-    wakeupArbs(w).io.in(1).bits.rebusy := false.B
-
+    if (enableFastLoadUse) {
+      wakeupArbs(w).io.in(1).valid := (will_fire_load_agen_exec(w)                     &&
+                                       dmem_req_fire(w)                                &&
+                                      !agen(w).bits.uop.fp_val)
+      wakeupArbs(w).io.in(1).bits.uop := agen(w).bits.uop
+      wakeupArbs(w).io.in(1).bits.bypassable := true.B
+      wakeupArbs(w).io.in(1).bits.speculative_mask := 0.U
+      wakeupArbs(w).io.in(1).bits.rebusy := false.B
+    }
   }
 
 
@@ -1358,6 +1357,19 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.core.lxcpt.bits  := r_xcpt
 
   // Task 4: Speculatively wakeup loads 1 cycle before they come back
+  // if loadUseDelay == 5
+  for (w <- 0 until lsuWidth) {
+    if (!enableFastLoadUse) {
+      wakeupArbs(w).io.in(1).valid := (fired_load_agen_exec(w)      &&
+                                       RegNext(dmem_req_fire(w))    &&
+                                       !io.dmem.s1_nack_advisory(w) &&
+                                       !mem_incoming_uop(w).fp_val)
+      wakeupArbs(w).io.in(1).bits.uop := mem_incoming_uop(w)
+      wakeupArbs(w).io.in(1).bits.bypassable := true.B
+      wakeupArbs(w).io.in(1).bits.speculative_mask := 0.U
+      wakeupArbs(w).io.in(1).bits.rebusy := false.B
+    }
+  }
 
 
   //-------------------------------------------------------------
@@ -1368,55 +1380,55 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   // Handle Memory Responses and nacks
   //----------------------------------
+  val iresp = Wire(Vec(lsuWidth, Valid(new ExeUnitResp(xLen))))
+  val fresp = Wire(Vec(lsuWidth, Valid(new ExeUnitResp(xLen))))
+
   for (w <- 0 until lsuWidth) {
-    io.core.iresp(w).valid := false.B
-    io.core.fresp(w).valid := false.B
+    iresp(w).valid := false.B
+    iresp(w).bits  := DontCare
+    fresp(w).valid := false.B
+    fresp(w).bits  := DontCare
+    io.core.iresp(w) := (if (enableFastLoadUse) iresp(w) else RegNext(
+      UpdateBrMask(io.core.brupdate, io.core.exception, iresp(w))))
+    io.core.fresp(w) := fresp(w)
   }
 
   // Initially assume the speculative load wakeup failed
-  val spec_wakeups = Wire(Vec(lsuWidth, Valid(new MicroOp)))
-  for (w <- 0 until lsuWidth) {
-    val w1 = Reg(Valid(new MicroOp))
-    w1.valid := wakeupArbs(w).io.in(1).fire() && !IsKilledByBranch(io.core.brupdate, io.core.exception, wakeupArbs(w).io.in(1).bits)
-    w1.bits  := UpdateBrMask(io.core.brupdate, wakeupArbs(w).io.in(1).bits.uop)
+  val wb_spec_wakeups = Wire(Vec(lsuWidth, Valid(new Wakeup)))
+  val spec_wakeups = Wire(Vec(lsuWidth, Valid(new Wakeup)))
 
-    val w2 = Reg(Valid(new MicroOp))
+  val wb_slow_wakeups = Wire(Vec(lsuWidth, Valid(new Wakeup)))
+  val slow_wakeups = Wire(Vec(lsuWidth, Valid(new Wakeup)))
+
+  val dmem_resp_fired = WireInit(widthMap(w => false.B))
+  for (w <- 0 until lsuWidth) {
+    val w1 = Reg(Valid(new Wakeup))
+    w1.valid := wakeupArbs(w).io.in(1).fire() && !IsKilledByBranch(io.core.brupdate, io.core.exception, wakeupArbs(w).io.in(1).bits)
+    w1.bits  := UpdateBrMask(io.core.brupdate, wakeupArbs(w).io.in(1).bits)
+
+    val w2 = Reg(Valid(new Wakeup))
     w2.valid := w1.valid && !IsKilledByBranch(io.core.brupdate, io.core.exception, w1.bits)
     w2.bits  := UpdateBrMask(io.core.brupdate, w1.bits)
 
+
     spec_wakeups(w).valid := w2.valid
     spec_wakeups(w).bits  := w2.bits
+
+    wb_spec_wakeups(w) := (if (enableFastLoadUse) w2 else w1)
+
   }
-  val spec_ld_succeed = WireInit(widthMap(w => false.B))
-
-  val dmem_resp_fired = WireInit(widthMap(w => false.B))
-  io.dmem.ll_resp.ready := false.B
   for (w <- 0 until lsuWidth) {
-    wakeupArbs(w).io.in(0).valid := false.B
-
-    when (spec_wakeups(w).valid && !spec_ld_succeed(w)) {
-      wakeupArbs(w).io.in(0).valid := true.B
-      wakeupArbs(w).io.in(0).bits.uop := spec_wakeups(w).bits
-      wakeupArbs(w).io.in(0).bits.speculative_mask := 0.U
-      wakeupArbs(w).io.in(0).bits.rebusy := true.B
-      wakeupArbs(w).io.in(0).bits.bypassable := false.B
-    }
+    wb_slow_wakeups(w).valid := false.B
+    wb_slow_wakeups(w).bits  := DontCare
 
     // Handle nacks
-    when (io.dmem.nack(w).valid)
-    {
-      // We have to re-execute this!
-      when (io.dmem.nack(w).bits.is_hella)
-      {
+    when (io.dmem.nack(w).valid) {
+      when (io.dmem.nack(w).bits.is_hella) {
         assert(hella_state === h_wait || hella_state === h_dead)
-      }
-        .elsewhen (io.dmem.nack(w).bits.uop.uses_ldq)
-      {
+      } .elsewhen (io.dmem.nack(w).bits.uop.uses_ldq) {
         assert(ldq(io.dmem.nack(w).bits.uop.ldq_idx).bits.executed)
         ldq(io.dmem.nack(w).bits.uop.ldq_idx).bits.executed  := false.B
-      }
-        .otherwise
-      {
+      } .otherwise {
         assert(io.dmem.nack(w).bits.uop.uses_stq)
         when (IsOlder(io.dmem.nack(w).bits.uop.stq_idx, stq_execute_head, stq_head)) {
           stq_execute_head := io.dmem.nack(w).bits.uop.stq_idx
@@ -1427,58 +1439,52 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     val resp = Mux(!io.dmem.resp(w).valid && (w == lsuWidth-1).B,
       io.dmem.ll_resp.bits, io.dmem.resp(w).bits)
     if (w == lsuWidth-1) {
-      io.dmem.ll_resp.ready := !io.dmem.resp(w).valid && !spec_wakeups(w).valid
+      io.dmem.ll_resp.ready := !io.dmem.resp(w).valid && !wb_spec_wakeups(w).valid
     }
-    when (io.dmem.resp(w).valid || ((w == lsuWidth-1).B && io.dmem.ll_resp.fire()))
-    {
-      when (resp.uop.uses_ldq)
-      {
+    when (io.dmem.resp(w).valid || ((w == lsuWidth-1).B && io.dmem.ll_resp.fire())) {
+      when (resp.uop.uses_ldq) {
         assert(!resp.is_hella)
         val ldq_idx = resp.uop.ldq_idx
         val ldq_e = WireInit(ldq(ldq_idx))
         val send_iresp = ldq_e.bits.uop.dst_rtype === RT_FIX
         val send_fresp = ldq_e.bits.uop.dst_rtype === RT_FLT
 
-        io.core.iresp(w).bits.uop  := ldq_e.bits.uop
-        io.core.fresp(w).bits.uop  := ldq_e.bits.uop
-        io.core.iresp(w).valid     := send_iresp
-
-        when (spec_wakeups(w).valid) {
-          assert(send_iresp && ldq_idx === spec_wakeups(w).bits.ldq_idx)
-          spec_ld_succeed(w) := true.B
-        }
+        iresp(w).bits.uop  := ldq_e.bits.uop
+        fresp(w).bits.uop  := ldq_e.bits.uop
+        iresp(w).valid     := send_iresp
 
 
-        io.core.iresp(w).bits.data := resp.data
-        io.core.fresp(w).valid     := send_fresp
-        io.core.fresp(w).bits.data := resp.data
+
+        iresp(w).bits.data := resp.data
+        fresp(w).valid     := send_fresp
+        fresp(w).bits.data := resp.data
 
         assert(send_iresp ^ send_fresp)
         dmem_resp_fired(w) := true.B
 
-        ldq(ldq_idx).bits.succeeded      := io.core.iresp(w).valid || io.core.fresp(w).valid
+        ldq(ldq_idx).bits.succeeded      := iresp(w).valid || fresp(w).valid
         ldq(ldq_idx).bits.debug_wb_data  := resp.data
 
-        wakeupArbs(w).io.in(0).valid    := !spec_wakeups(w).valid && send_iresp
-        wakeupArbs(w).io.in(0).bits.uop := ldq_e.bits.uop
-        wakeupArbs(w).io.in(0).bits.speculative_mask := 0.U
-        wakeupArbs(w).io.in(0).bits.rebusy := false.B
-        wakeupArbs(w).io.in(0).bits.bypassable := false.B
+        wb_slow_wakeups(w).valid    := send_iresp
+        wb_slow_wakeups(w).bits.uop := ldq_e.bits.uop
+        wb_slow_wakeups(w).bits.speculative_mask := 0.U
+        wb_slow_wakeups(w).bits.rebusy := false.B
+        wb_slow_wakeups(w).bits.bypassable := false.B
       }
 
       when (resp.uop.uses_stq)
       {
         assert(!resp.is_hella && resp.uop.is_amo)
         dmem_resp_fired(w) := true.B
-        io.core.iresp(w).valid     := true.B
-        io.core.iresp(w).bits.uop  := stq(resp.uop.stq_idx).bits.uop
-        io.core.iresp(w).bits.data := resp.data
+        iresp(w).valid     := true.B
+        iresp(w).bits.uop  := stq(resp.uop.stq_idx).bits.uop
+        iresp(w).bits.data := resp.data
 
-        wakeupArbs(w).io.in(0).valid    := true.B
-        wakeupArbs(w).io.in(0).bits.uop := stq(resp.uop.stq_idx).bits.uop
-        wakeupArbs(w).io.in(0).bits.speculative_mask := 0.U
-        wakeupArbs(w).io.in(0).bits.rebusy := false.B
-        wakeupArbs(w).io.in(0).bits.bypassable := false.B
+        wb_slow_wakeups(w).valid    := true.B
+        wb_slow_wakeups(w).bits.uop := stq(resp.uop.stq_idx).bits.uop
+        wb_slow_wakeups(w).bits.speculative_mask := 0.U
+        wb_slow_wakeups(w).bits.rebusy := false.B
+        wb_slow_wakeups(w).bits.bypassable := false.B
 
         stq(resp.uop.stq_idx).bits.debug_wb_data := resp.data
       }
@@ -1496,7 +1502,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       .elsewhen (!dmem_resp_fired(w) && wb_ldst_forward_valid(w))
     {
       val f_idx       = wb_ldst_forward_ldq_idx(w)
-      val forward_uop = ldq(f_idx).bits.uop
+      val forward_uop = wb_ldst_forward_e(w).uop
       val stq_e       = WireInit(stq(wb_ldst_forward_stq_idx(w)))
       val storegen = new freechips.rocketchip.rocket.StoreGen(
                                 stq_e.bits.uop.mem_size, stq_e.bits.addr.bits,
@@ -1506,22 +1512,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                 wb_ldst_forward_ld_addr(w),
                                 storegen.data, false.B, coreDataBytes)
 
-      when (spec_wakeups(w).valid) {
-        spec_ld_succeed(w) := true.B
-      } .otherwise {
-        wakeupArbs(w).io.in(0).valid    := forward_uop.dst_rtype === RT_FIX
-        wakeupArbs(w).io.in(0).bits.uop := forward_uop
-        wakeupArbs(w).io.in(0).bits.speculative_mask := 0.U
-        wakeupArbs(w).io.in(0).bits.rebusy := false.B
-        wakeupArbs(w).io.in(0).bits.bypassable := false.B
-      }
+      wb_slow_wakeups(w).valid    := forward_uop.dst_rtype === RT_FIX
+      wb_slow_wakeups(w).bits.uop := forward_uop
+      wb_slow_wakeups(w).bits.speculative_mask := 0.U
+      wb_slow_wakeups(w).bits.rebusy := false.B
+      wb_slow_wakeups(w).bits.bypassable := false.B
 
-      io.core.iresp(w).valid := (forward_uop.dst_rtype === RT_FIX)
-      io.core.fresp(w).valid := (forward_uop.dst_rtype === RT_FLT)
-      io.core.iresp(w).bits.uop  := forward_uop
-      io.core.fresp(w).bits.uop  := forward_uop
-      io.core.iresp(w).bits.data := loadgen.data
-      io.core.fresp(w).bits.data := loadgen.data
+      iresp(w).valid := (forward_uop.dst_rtype === RT_FIX)
+      fresp(w).valid := (forward_uop.dst_rtype === RT_FLT)
+      iresp(w).bits.uop  := forward_uop
+      fresp(w).bits.uop  := forward_uop
+      iresp(w).bits.data := loadgen.data
+      fresp(w).bits.data := loadgen.data
 
       ldq(f_idx).bits.succeeded := true.B
       ldq(f_idx).bits.forward_std_val := true.B
@@ -1531,13 +1533,33 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
 
     // Forward loads to store-data
-    when (io.core.iresp(w).valid &&
-          io.core.iresp(w).bits.uop.uses_ldq &&
-          io.core.iresp(w).bits.uop.ldq_idx === RegNext(lcam_ldq_idx(w)) &&
+    when (iresp(w).valid &&
+          iresp(w).bits.uop.uses_ldq &&
+          iresp(w).bits.uop.ldq_idx === RegNext(lcam_ldq_idx(w)) &&
           RegNext(mem_stld_forward_valid(w))) {
       assert(!stq(RegNext(mem_stld_forward_stq_idx(w))).bits.data.valid)
       stq(RegNext(mem_stld_forward_stq_idx(w))).bits.data.valid := true.B
-      stq(RegNext(mem_stld_forward_stq_idx(w))).bits.data.bits  := io.core.iresp(w).bits.data
+      stq(RegNext(mem_stld_forward_stq_idx(w))).bits.data.bits  := iresp(w).bits.data
+    }
+
+    // Do wakeups
+    wakeupArbs(w).io.in(0).valid := false.B
+    wakeupArbs(w).io.in(0).bits  := DontCare
+    slow_wakeups(w) := (if (enableFastLoadUse) wb_slow_wakeups(w) else RegNext(UpdateBrMask(
+      io.core.brupdate, io.core.exception, wb_slow_wakeups(w))))
+    when (slow_wakeups(w).valid) {
+      when (spec_wakeups(w).valid) { // Do nothing, since the slow wakeup matches a earlier speculative wakeup
+        assert(slow_wakeups(w).bits.uop.ldq_idx === spec_wakeups(w).bits.uop.ldq_idx)
+      } .otherwise { // This wasn't speculatively woken up, so end the late slow wakeup
+        wakeupArbs(w).io.in(0).valid := slow_wakeups(w).valid
+        wakeupArbs(w).io.in(0).bits := slow_wakeups(w).bits
+      }
+    } .otherwise {
+      when (spec_wakeups(w).valid) { // This sent a speculative wakeup, now we need to undo it
+        wakeupArbs(w).io.in(0).valid := spec_wakeups(w).valid
+        wakeupArbs(w).io.in(0).bits  := spec_wakeups(w).bits
+        wakeupArbs(w).io.in(0).bits.rebusy := true.B
+      }
     }
   }
 

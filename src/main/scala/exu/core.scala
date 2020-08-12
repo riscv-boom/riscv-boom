@@ -364,6 +364,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
         "Load/Store Unit Size  : " + numLdqEntries + "/" + numStqEntries,
         "Num Int Phys Registers: " + numIntPhysRegs,
         "Num FP  Phys Registers: " + numFpPhysRegs,
+        "Load-to-use delay     : " + (if (enableFastLoadUse) 4 else 5),
         "Max Branch Count      : " + maxBrCount)
     + "\n\n" + iregfile.toString + "\n\n"
     + BoomCoreStringPrefix(

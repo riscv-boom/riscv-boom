@@ -44,7 +44,7 @@ case class BoomCoreParams(
   numFetchBufferEntries: Int = 8,
   enableColumnALUIssue: Boolean = false,
   enablePrefetching: Boolean = false,
-  enableFastLoadUse: Boolean = true,
+  enableFastLoadUse: Boolean = false,
   enableFastPNR: Boolean = false,
   enableSFBOpt: Boolean = true,
   enableGHistStallRepair: Boolean = true,
@@ -235,6 +235,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   require(icacheParams.nSets <= 64, "Handling aliases in the ICache is buggy.")
 
   val enableFastLoadUse = boomParams.enableFastLoadUse
+
   val enablePrefetching = boomParams.enablePrefetching
   val nLBEntries = dcacheParams.nMSHRs
 
