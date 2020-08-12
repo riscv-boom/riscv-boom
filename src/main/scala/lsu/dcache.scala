@@ -598,7 +598,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_store_failed = Wire(Bool())
   val s1_valid = widthMap(w =>
                  RegNext(s0_valid(w)                                     &&
-                         !IsKilledByBranch(io.lsu.brupdate, s0_req(w).uop) &&
+                         !IsKilledByBranch(io.lsu.brupdate, false.B, s0_req(w).uop) &&
                          !(io.lsu.exception && s0_req(w).uop.uses_ldq)   &&
                          !(s2_store_failed && io.lsu.req.fire() && s0_req(w).uop.uses_stq),
                          init=false.B))
@@ -633,7 +633,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_valid = widthMap(w =>
                   RegNext(s1_valid(w) &&
                          !io.lsu.s1_kill(w) &&
-                         !IsKilledByBranch(io.lsu.brupdate, s1_req(w).uop) &&
+                         !IsKilledByBranch(io.lsu.brupdate, false.B, s1_req(w).uop) &&
                          !(io.lsu.exception && s1_req(w).uop.uses_ldq) &&
                          !(s2_store_failed && (s1_type === t_lsu) && s1_req(w).uop.uses_stq)))
   for (w <- 0 until lsuWidth)

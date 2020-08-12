@@ -118,8 +118,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   }
 
   // Wait for operands
-  when (io.req.valid && !IsKilledByBranch(io.brupdate, io.req.bits.uop)
-     && !io.exception && !RegNext(io.exception)) {
+  when (io.req.valid && !IsKilledByBranch(io.brupdate, io.exception, io.req.bits.uop)) {
     val rxq_idx = io.req.bits.uop.rxq_idx
     assert(io.req.bits.uop.rob_idx === rxq_uop(rxq_idx).rob_idx,
       "Mismatch between RoCCUnit request and RoCC execute head")
@@ -181,7 +180,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   for (i <- 0 until numRxqEntries) {
     when (rxq_val(i)) {
       rxq_uop(i).br_mask := GetNewBrMask(io.brupdate, rxq_uop(i))
-      when (IsKilledByBranch(io.brupdate, rxq_uop(i))) {
+      when (IsKilledByBranch(io.brupdate, io.exception, rxq_uop(i))) {
         rxq_val(i)      := false.B
         rxq_op_val(i)   := false.B
       }

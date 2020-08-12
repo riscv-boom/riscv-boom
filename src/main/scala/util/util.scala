@@ -53,20 +53,20 @@ object Fold
  */
 object IsKilledByBranch
 {
-  def apply(brupdate: BrUpdateInfo, uop: MicroOp): Bool = {
-    return apply(brupdate, uop.br_mask)
+  def apply(brupdate: BrUpdateInfo, flush: Bool, uop: MicroOp): Bool = {
+    return apply(brupdate, flush, uop.br_mask)
   }
 
-  def apply(brupdate: BrUpdateInfo, uop_mask: UInt): Bool = {
-    return maskMatch(brupdate.b1.mispredict_mask, uop_mask)
+  def apply(brupdate: BrUpdateInfo, flush: Bool, uop_mask: UInt): Bool = {
+    return maskMatch(brupdate.b1.mispredict_mask, uop_mask) || flush
   }
 
-  def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, bundle: T): Bool = {
-    return apply(brupdate, bundle.uop)
+  def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, flush: Bool, bundle: T): Bool = {
+    return apply(brupdate, flush, bundle.uop)
   }
 
-  def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, bundle: Valid[T]): Bool = {
-    return apply(brupdate, bundle.bits)
+  def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, flush: Bool, bundle: Valid[T]): Bool = {
+    return apply(brupdate, flush, bundle.bits)
   }
 }
 
@@ -110,10 +110,10 @@ object UpdateBrMask
     out.uop.br_mask := GetNewBrMask(brupdate, bundle.uop.br_mask)
     out
   }
-  def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, bundle: Valid[T]): Valid[T] = {
+  def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, flush: Bool, bundle: Valid[T]): Valid[T] = {
     val out = WireInit(bundle)
     out.bits.uop.br_mask := GetNewBrMask(brupdate, bundle.bits.uop.br_mask)
-    out.valid := bundle.valid && !IsKilledByBranch(brupdate, bundle.bits.uop.br_mask)
+    out.valid := bundle.valid && !IsKilledByBranch(brupdate, flush, bundle.bits.uop.br_mask)
     out
   }
 }
@@ -473,13 +473,13 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flu
   val ptr_match = enq_ptr.value === deq_ptr.value
   io.empty := ptr_match && !maybe_full
   val full = ptr_match && maybe_full
-  val do_enq = WireInit(io.enq.fire() && !IsKilledByBranch(io.brupdate, io.enq.bits.uop) && !(io.flush && flush_fn(io.enq.bits.uop)))
+  val do_enq = WireInit(io.enq.fire() && !IsKilledByBranch(io.brupdate, false.B, io.enq.bits.uop) && !(io.flush && flush_fn(io.enq.bits.uop)))
   val do_deq = WireInit((io.deq.ready || !valids(deq_ptr.value)) && !io.empty)
 
   for (i <- 0 until entries) {
     val mask = uops(i).br_mask
     val uop  = uops(i)
-    valids(i)  := valids(i) && !IsKilledByBranch(io.brupdate, mask) && !(io.flush && flush_fn(uop))
+    valids(i)  := valids(i) && !IsKilledByBranch(io.brupdate, false.B, mask) && !(io.flush && flush_fn(uop))
     when (valids(i)) {
       uops(i).br_mask := GetNewBrMask(io.brupdate, mask)
     }
@@ -659,10 +659,10 @@ class BranchKillablePipeline[T <: boom.common.HasBoomUOP](gen: T, stages: Int)
   })
   require(stages > 0)
   val uops = Reg(Vec(stages, Valid(gen)))
-  uops(0).valid := io.req.valid && !IsKilledByBranch(io.brupdate, io.req.bits) && !io.flush
+  uops(0).valid := io.req.valid && !IsKilledByBranch(io.brupdate, io.flush, io.req.bits)
   uops(0).bits  := UpdateBrMask(io.brupdate, io.req.bits)
   for (i <- 1 until stages) {
-    uops(i).valid := uops(i-1).valid && !IsKilledByBranch(io.brupdate, uops(i-1).bits) && !io.flush
+    uops(i).valid := uops(i-1).valid && !IsKilledByBranch(io.brupdate, io.flush, uops(i-1).bits)
     uops(i).bits  := UpdateBrMask(io.brupdate, uops(i-1).bits)
   }
 

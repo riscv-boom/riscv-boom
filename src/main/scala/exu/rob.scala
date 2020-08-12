@@ -415,7 +415,7 @@ class Rob(
       val br_mask = rob_uop(i).br_mask
 
       //kill instruction if mispredict & br mask match
-      when (IsKilledByBranch(io.brupdate, br_mask))
+      when (IsKilledByBranch(io.brupdate, false.B, br_mask))
       {
         rob_val(i) := false.B
       } .elsewhen (rob_val(i)) {
@@ -609,7 +609,7 @@ class Rob(
 
   r_xcpt_uop         := next_xcpt_uop
   r_xcpt_uop.br_mask := GetNewBrMask(io.brupdate, next_xcpt_uop)
-  when (io.flush.valid || IsKilledByBranch(io.brupdate, next_xcpt_uop)) {
+  when (IsKilledByBranch(io.brupdate, io.flush.valid, next_xcpt_uop)) {
     r_xcpt_val := false.B
   }
 

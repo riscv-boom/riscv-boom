@@ -215,13 +215,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   for ((b, a) <- brinfos zip alu_exe_units) {
     b.bits := UpdateBrMask(brupdate, a.io_brinfo.bits)
-    b.valid := a.io_brinfo.valid && !rob.io.flush.valid && !IsKilledByBranch(brupdate, a.io_brinfo.bits)
+    b.valid := a.io_brinfo.valid && !rob.io.flush.valid && !IsKilledByBranch(brupdate, RegNext(rob.io.flush.valid), a.io_brinfo.bits)
   }
   b1.resolve_mask := brinfos.map(x => x.valid << x.bits.uop.br_tag).reduce(_|_)
   b1.mispredict_mask := brinfos.map(x => (x.valid && x.bits.mispredict) << x.bits.uop.br_tag).reduce(_|_)
 
   // Find the oldest mispredict and use it to update indices
-  val live_brinfos      = brinfos.map(br => br.valid && br.bits.mispredict && !IsKilledByBranch(brupdate, br.bits.uop))
+  val live_brinfos      = brinfos.map(br => br.valid && br.bits.mispredict && !IsKilledByBranch(brupdate, RegNext(rob.io.flush.valid), br.bits.uop))
   val mispredict_val    = live_brinfos.reduce(_||_)
 
   b2.mispredict  := mispredict_val
@@ -824,7 +824,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   var bypass_idx = 0
   for (i <- 0 until lsuWidth) {
     int_wakeups(wu_idx) := io.lsu.iwakeups(i)
-    rob.io.wb_resps(wb_idx) := RegNext(UpdateBrMask(brupdate, io.lsu.iresp(i)))
+    rob.io.wb_resps(wb_idx) := RegNext(UpdateBrMask(brupdate, RegNext(rob.io.flush.valid), io.lsu.iresp(i)))
     iregfile.io.write_ports(wb_idx).valid := RegNext(io.lsu.iresp(i).valid)
     iregfile.io.write_ports(wb_idx).bits.addr := RegNext(io.lsu.iresp(i).bits.uop.pdst)
     iregfile.io.write_ports(wb_idx).bits.data := RegNext(io.lsu.iresp(i).bits.data)
@@ -874,7 +874,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   int_wakeups(wu_idx).bits.bypassable := false.B
   wu_idx += 1
 
-  rob.io.wb_resps(wb_idx).valid  := RegNext(ll_arb.io.out.valid && !IsKilledByBranch(brupdate, ll_arb.io.out.bits))
+  rob.io.wb_resps(wb_idx).valid  := RegNext(ll_arb.io.out.valid && !IsKilledByBranch(brupdate, RegNext(rob.io.flush.valid), ll_arb.io.out.bits))
   rob.io.wb_resps(wb_idx).bits   := RegNext(ll_arb.io.out.bits)
 
   iregfile.io.write_ports(wb_idx).valid     := ll_arb.io.out.valid && ll_arb.io.out.bits.uop.dst_rtype === RT_FIX
@@ -895,7 +895,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     int_wakeups(wu_idx) := fast_wakeup
     wu_idx += 1
 
-    rob.io.wb_resps(wb_idx).valid  := RegNext(unit.io_alu_resp.valid && !IsKilledByBranch(brupdate, unit.io_alu_resp.bits))
+    rob.io.wb_resps(wb_idx).valid  := RegNext(unit.io_alu_resp.valid && !IsKilledByBranch(brupdate, RegNext(rob.io.flush.valid), unit.io_alu_resp.bits))
     rob.io.wb_resps(wb_idx).bits   := RegNext(unit.io_alu_resp.bits)
 
     iregfile.io.write_ports(wb_idx).valid     := unit.io_alu_resp.valid && unit.io_alu_resp.bits.uop.dst_rtype === RT_FIX

@@ -168,7 +168,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   // Hookup load writeback -- and recode FP values.
   ll_wbarb.io.in(0).valid := RegNext(io.ll_wports(0).valid &&
-    !io.flush_pipeline && !IsKilledByBranch(io.brupdate, io.ll_wports(0).bits))
+    !IsKilledByBranch(io.brupdate, io.flush_pipeline, io.ll_wports(0).bits))
   ll_wbarb.io.in(0).bits  := RegNext(UpdateBrMask(io.brupdate, io.ll_wports(0).bits))
   ll_wbarb.io.in(0).bits.data := recode(RegNext(io.ll_wports(0).bits.data),
                                         RegNext(io.ll_wports(0).bits.uop.mem_size =/= 2.U))

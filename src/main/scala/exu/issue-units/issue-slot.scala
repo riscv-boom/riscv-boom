@@ -58,7 +58,7 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
   val next_valid = WireInit(slot_valid)
   val next_uop   = WireInit(UpdateBrMask(io.brupdate, slot_uop))
 
-  val killed = IsKilledByBranch(io.brupdate, slot_uop)
+  val killed = IsKilledByBranch(io.brupdate, io.kill, slot_uop)
 
   io.valid         := slot_valid
   io.out_uop       := next_uop

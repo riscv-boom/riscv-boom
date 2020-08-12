@@ -90,13 +90,13 @@ abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomM
   val io_iss_uop = IO(Input(Valid(new MicroOp)))
 
   val arb_uop = Reg(Valid(new MicroOp))
-  arb_uop.valid := io_iss_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, io_iss_uop.bits)
+  arb_uop.valid := io_iss_uop.valid && !IsKilledByBranch(io_brupdate, io_kill, io_iss_uop.bits)
   arb_uop.bits  := UpdateBrMask(io_brupdate, io_iss_uop.bits)
   val rrd_uop = Reg(Valid(new MicroOp))
-  rrd_uop.valid := arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits)
+  rrd_uop.valid := arb_uop.valid && !IsKilledByBranch(io_brupdate, io_kill, arb_uop.bits)
   rrd_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
   val exe_uop = Reg(Valid(new MicroOp))
-  exe_uop.valid := rrd_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, rrd_uop.bits)
+  exe_uop.valid := rrd_uop.valid && !IsKilledByBranch(io_brupdate, io_kill, rrd_uop.bits)
   exe_uop.bits  := UpdateBrMask(io_brupdate, RRDDecode(rrd_uop.bits))
 }
 
@@ -246,7 +246,7 @@ class MemExeUnit(
   io_squash_iss := (io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready)
 
   when (io_squash_iss || arb_rebusied) {
-    val will_replay = arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits) && !arb_rebusied
+    val will_replay = arb_uop.valid && !IsKilledByBranch(io_brupdate, io_kill, arb_uop.bits) && !arb_rebusied
     arb_uop.valid := will_replay
     arb_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
     arb_uop.bits.iw_p1_bypass_hint := false.B
@@ -312,7 +312,7 @@ class UniqueExeUnit(
                     (io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready))
 
   when (io_squash_iss || arb_rebusied) {
-    val will_replay = arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits) && !arb_rebusied
+    val will_replay = arb_uop.valid && !IsKilledByBranch(io_brupdate, io_kill, arb_uop.bits) && !arb_rebusied
     arb_uop.valid := will_replay
     arb_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
     arb_uop.bits.iw_p1_bypass_hint := false.B
@@ -498,7 +498,7 @@ class ALUExeUnit(
   // The arbiter didn't grant us a slot. Thus, we should replay the instruction in this slot,
   // But next time we read, it reads from the regfile, not the bypass paths, so disable the bypass hints
   when (io_squash_iss || arb_rebusied) {
-    val will_replay = arb_uop.valid && !io_kill && !IsKilledByBranch(io_brupdate, arb_uop.bits) && !arb_rebusied
+    val will_replay = arb_uop.valid && !IsKilledByBranch(io_brupdate, io_kill, arb_uop.bits) && !arb_rebusied
     arb_uop.valid := will_replay
     arb_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
     arb_uop.bits.iw_p1_bypass_hint := false.B
@@ -611,7 +611,7 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
     fpiu_resp <> queue.io.deq
 
     val dgen = IO(Valid(new MemGen))
-    dgen.valid     := RegNext(exe_uop.valid && exe_uop.bits.uses_stq && !IsKilledByBranch(io_brupdate, exe_uop.bits))
+    dgen.valid     := RegNext(exe_uop.valid && exe_uop.bits.uses_stq && !IsKilledByBranch(io_brupdate, io_kill, exe_uop.bits))
     dgen.bits.uop  := RegNext(exe_uop.bits)
     dgen.bits.data := RegNext(ieee(exe_rs2_data))
     (Some(fpiu_resp), Some(dgen))

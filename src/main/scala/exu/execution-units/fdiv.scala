@@ -95,7 +95,7 @@ class FDivSqrtUnit(implicit p: Parameters)
   fdiv_decoder.io.uopc := io.req.bits.uop.uopc
 
   // handle branch kill on queued entry
-  r_buffer_val := !IsKilledByBranch(io.brupdate, r_buffer_req.uop) && !io.kill && r_buffer_val
+  r_buffer_val := !IsKilledByBranch(io.brupdate, io.kill, r_buffer_req.uop) && r_buffer_val
   r_buffer_req.uop.br_mask := GetNewBrMask(io.brupdate, r_buffer_req.uop)
 
   // handle incoming uop, including upconversion as needed, and push back if our input queue is already occupied
@@ -111,7 +111,7 @@ class FDivSqrtUnit(implicit p: Parameters)
   val in1_upconvert = upconvert(unbox(io.req.bits.rs1_data, false.B, Some(tile.FType.S)))
   val in2_upconvert = upconvert(unbox(io.req.bits.rs2_data, false.B, Some(tile.FType.S)))
 
-  when (io.req.valid && !IsKilledByBranch(io.brupdate, io.req.bits.uop) && !io.kill) {
+  when (io.req.valid && !IsKilledByBranch(io.brupdate, io.kill, io.req.bits.uop)) {
     r_buffer_val := true.B
     r_buffer_req := io.req.bits
     r_buffer_req.uop.br_mask := GetNewBrMask(io.brupdate, io.req.bits.uop)
@@ -157,7 +157,7 @@ class FDivSqrtUnit(implicit p: Parameters)
   divsqrt.io.roundingMode := r_buffer_fin.rm
   divsqrt.io.detectTininess := DontCare
 
-  r_divsqrt_killed := r_divsqrt_killed || IsKilledByBranch(io.brupdate, r_divsqrt_uop) || io.kill
+  r_divsqrt_killed := r_divsqrt_killed || IsKilledByBranch(io.brupdate, io.kill, r_divsqrt_uop)
   r_divsqrt_uop.br_mask := GetNewBrMask(io.brupdate, r_divsqrt_uop)
 
   when (may_fire_input && divsqrt_ready) {
@@ -167,7 +167,7 @@ class FDivSqrtUnit(implicit p: Parameters)
     r_divsqrt_val := true.B
     r_divsqrt_fin := r_buffer_fin
     r_divsqrt_uop := r_buffer_req.uop
-    r_divsqrt_killed := IsKilledByBranch(io.brupdate, r_buffer_req.uop) || io.kill
+    r_divsqrt_killed := IsKilledByBranch(io.brupdate, io.kill, r_buffer_req.uop)
     r_divsqrt_uop.br_mask := GetNewBrMask(io.brupdate, r_buffer_req.uop)
   }
 
@@ -183,13 +183,13 @@ class FDivSqrtUnit(implicit p: Parameters)
 
   r_out_uop.br_mask := GetNewBrMask(io.brupdate, r_out_uop)
 
-  when (io.resp.ready || IsKilledByBranch(io.brupdate, r_out_uop) || io.kill) {
+  when (io.resp.ready || IsKilledByBranch(io.brupdate, io.kill, r_out_uop)) {
     r_out_val := false.B
   }
   when (divsqrt.io.outValid_div || divsqrt.io.outValid_sqrt) {
     r_divsqrt_val := false.B
 
-    r_out_val := !r_divsqrt_killed && !IsKilledByBranch(io.brupdate, r_divsqrt_uop) && !io.kill
+    r_out_val := !r_divsqrt_killed && !IsKilledByBranch(io.brupdate, io.kill, r_divsqrt_uop)
     r_out_uop := r_divsqrt_uop
     r_out_uop.br_mask := GetNewBrMask(io.brupdate, r_divsqrt_uop)
     r_out_wdata_double := sanitizeNaN(divsqrt.io.out, tile.FType.D)
@@ -208,7 +208,7 @@ class FDivSqrtUnit(implicit p: Parameters)
   downvert_d2s.io.detectTininess := DontCare
   val out_flags = r_out_flags_double | Mux(r_divsqrt_fin.singleIn, downvert_d2s.io.exceptionFlags, 0.U)
 
-  io.resp.valid := r_out_val && !IsKilledByBranch(io.brupdate, r_out_uop)
+  io.resp.valid := r_out_val
   io.resp.bits.uop := r_out_uop
   io.resp.bits.data :=
     Mux(r_divsqrt_fin.singleIn,

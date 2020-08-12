@@ -12,7 +12,7 @@ import freechips.rocketchip.util._
 
 import boom.common._
 import boom.exu.{BrResolutionInfo, Exception, CommitSignals}
-import boom.util.{BoolToChar, AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, IsOlder, UpdateBrMask}
+import boom.util._
 
 class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p) {
   require(!instruction)

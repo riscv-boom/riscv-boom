@@ -53,7 +53,8 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 class BrInfoBundle(implicit p: Parameters) extends BoomBundle
 {
   val ldq_idx = UInt(ldqAddrSz.W)
-  val stq_idx = UInt(stqAddrSz.W)
+  val stq_idx = UInt(stqAddrSz
+    .W)
   val rxq_idx = UInt(log2Ceil(numRxqEntries).W)
 }
 
@@ -390,10 +391,10 @@ class DivUnit(dataWidth: Int)(implicit p: Parameters)
   val req = Reg(Valid(new MicroOp()))
 
   when (io.req.fire()) {
-    req.valid := !IsKilledByBranch(io.brupdate, io.req.bits) && !io.kill
+    req.valid := !IsKilledByBranch(io.brupdate, io.kill, io.req.bits)
     req.bits  := UpdateBrMask(io.brupdate, io.req.bits.uop)
   } .otherwise {
-    req.valid := !IsKilledByBranch(io.brupdate, req.bits) && !io.kill && req.valid
+    req.valid := !IsKilledByBranch(io.brupdate, io.kill, req.bits) && req.valid
     req.bits  := UpdateBrMask(io.brupdate, req.bits)
   }
   when (reset.asBool) {
@@ -401,7 +402,7 @@ class DivUnit(dataWidth: Int)(implicit p: Parameters)
   }
 
   // request
-  div.io.req.valid    := io.req.valid && !IsKilledByBranch(io.brupdate, io.req.bits) && !io.kill
+  div.io.req.valid    := io.req.valid && !IsKilledByBranch(io.brupdate, io.kill, io.req.bits)
   div.io.req.bits.dw  := io.req.bits.uop.fcn_dw
   div.io.req.bits.fn  := io.req.bits.uop.fcn_op
   div.io.req.bits.in1 := io.req.bits.rs1_data
@@ -410,7 +411,7 @@ class DivUnit(dataWidth: Int)(implicit p: Parameters)
   io.req.ready        := div.io.req.ready && !req.valid
 
   // handle pipeline kills and branch misspeculations
-  div.io.kill         := (req.valid && IsKilledByBranch(io.brupdate, req.bits)) || io.kill
+  div.io.kill         := (req.valid && IsKilledByBranch(io.brupdate, io.kill, req.bits))
 
   // response
   io.resp.valid       := div.io.resp.valid && req.valid
