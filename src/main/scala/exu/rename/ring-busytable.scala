@@ -80,17 +80,17 @@ class RingBusyTable(
 
   // Read the busy table.
   for (i <- 0 until plWidth) {
-    val prs1_was_bypassed = r_ren_uops zip r_rebusy_reqs map { case (u,v) => io.ren_uops(i).lrs1 === u.ldst && v } reduce(_||_)
-    val prs2_was_bypassed = r_ren_uops zip r_rebusy_reqs map { case (u,v) => io.ren_uops(i).lrs2 === u.ldst && v } reduce(_||_)
+    val prs1_bypass = r_ren_uops zip r_rebusy_reqs map { case (u,v) => io.ren_uops(i).lrs1 === u.ldst && v } reduce(_||_)
+    val prs2_bypass = r_ren_uops zip r_rebusy_reqs map { case (u,v) => io.ren_uops(i).lrs2 === u.ldst && v } reduce(_||_)
 
-    val prs1_was_bypassed_load = r_ren_uops zip r_rebusy_reqs map { case (u,v) => u.uses_ldq && io.ren_uops(i).lrs1 === u.ldst && v } reduce(_||_)
-    val prs2_was_bypassed_load = r_ren_uops zip r_rebusy_reqs map { case (u,v) => u.uses_ldq && io.ren_uops(i).lrs2 === u.ldst && v } reduce(_||_)
+    val prs1_bypass_load = r_ren_uops zip r_rebusy_reqs map { case (u,v) => u.uses_ldq && io.ren_uops(i).lrs1 === u.ldst && v } reduce(_||_)
+    val prs2_bypass_load = r_ren_uops zip r_rebusy_reqs map { case (u,v) => u.uses_ldq && io.ren_uops(i).lrs2 === u.ldst && v } reduce(_||_)
 
-    io.busy_resps(i).prs1_busy := (busy_table & DecodePreg(io.ren_uops(i).prs1)).orR || prs1_was_bypassed
-    io.busy_resps(i).prs2_busy := (busy_table & DecodePreg(io.ren_uops(i).prs2)).orR || prs2_was_bypassed
+    io.busy_resps(i).prs1_busy := (busy_table & DecodePreg(io.ren_uops(i).prs1)).orR || prs1_bypass
+    io.busy_resps(i).prs2_busy := (busy_table & DecodePreg(io.ren_uops(i).prs2)).orR || prs2_bypass
 
-    io.busy_resps(i).prs1_load := (load_table & DecodePreg(io.ren_uops(i).prs1)).orR || prs1_was_bypassed_load
-    io.busy_resps(i).prs2_load := (load_table & DecodePreg(io.ren_uops(i).prs2)).orR || prs2_was_bypassed_load
+    io.busy_resps(i).prs1_load := Mux(prs1_bypass, prs1_bypass_load, (load_table & DecodePreg(io.ren_uops(i).prs1)).orR)
+    io.busy_resps(i).prs2_load := Mux(prs2_bypass, prs2_bypass_load, (load_table & DecodePreg(io.ren_uops(i).prs2)).orR)
   }
 
   io.debug.busytable := busy_table
