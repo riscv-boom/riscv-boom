@@ -273,7 +273,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     def Inc(count: UInt, inc: Bool) = Mux(inc && !count(max), count << 1, count)(max,0)
 
     val slot_counts = valids.scanLeft(1.U((max+1).W)) ((c,v) => Inc(c,!v))
-    val comp_sels   = (slot_counts zip valids).map{ case (c,v) => c(max,1) & Fill(max,v) } ++ Seq.fill(max-1)(slot_counts.last(max,1))
+    val comp_sels   = (slot_counts zip valids).map{ case (c,v) => c(max,1) & Fill(max,v) }.takeRight(numSlotsPerColumn-1) ++ Seq.fill(max)(slot_counts.last(max,1))
 
     // Which slots might be valid after compaction?
     var compacted_valids = Wire(Vec(numSlotsPerColumn, Bool()))
