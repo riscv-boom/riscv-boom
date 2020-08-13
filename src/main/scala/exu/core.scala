@@ -569,6 +569,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   var ren_stall = WireInit(false.B)
 
+  ren_uops   := int_rename.io.ren2_uops
+  ren_valids := int_rename.io.ren2_mask
+
   for (w <- 0 until coreWidth) {
     val i_uop   = int_rename.io.ren2_uops(w)
     val f_uop   = if (usingFPU) fp_rename.io.ren2_uops(w) else NullMicroOp
@@ -599,9 +602,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     ren_fire(w) := ren_valids(w) && !ren_stall
   }
 
-  ren_uops   := int_rename.io.ren2_uops
-  ren_valids := int_rename.io.ren2_mask
-  ren_ready  := !ren_stall
+  ren_ready := !ren_stall
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
