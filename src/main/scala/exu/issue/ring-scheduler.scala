@@ -98,6 +98,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
   val dis_uops = Wire(Vec(coreWidth, Vec(columnDispatchWidth, new MicroOp)))
   val dis_vals = Wire(Vec(coreWidth, Vec(columnDispatchWidth, Bool())))
   val dis_gnts = Wire(Vec(coreWidth, UInt(coreWidth.W)))
+  val col_rdys = Wire(Vec(coreWidth, Vec(columnDispatchWidth, Bool())))
 
   for (w <- 0 until coreWidth) {
     val dis_sels = SelectFirstN(dis_reqs(w), columnDispatchWidth)
@@ -114,8 +115,8 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
       }
     }
 
-    val col_rdys = (0 until columnDispatchWidth).map(d => PopCount(slots(w).map(_.valid)) +& d.U < numSlotsPerColumn.U)
-    dis_gnts(w) := dis_sels zip col_rdys map { case (s,r) => Mux(r, s, 0.U) } reduce(_|_)
+    col_rdys(w) := (0 until columnDispatchWidth).map(d => PopCount(slots(w).map(_.valid)) +& d.U < numSlotsPerColumn.U)
+    dis_gnts(w) := dis_sels zip col_rdys(w) map { case (s,r) => Mux(r, s, 0.U) } reduce(_|_)
   }
 
   val dis_stalls = dis_reqs zip dis_gnts map { case (r,g) => r & ~g } reduce(_|_)
@@ -273,7 +274,7 @@ class RingScheduler(numSlots: Int, columnDispatchWidth: Int)
     def Inc(count: UInt, inc: Bool) = Mux(inc && !count(max), count << 1, count)(max,0)
 
     val slot_counts = valids.scanLeft(1.U((max+1).W)) ((c,v) => Inc(c,!v))
-    val comp_sels   = (slot_counts zip valids).map{ case (c,v) => c(max,1) & Fill(max,v) }.takeRight(numSlotsPerColumn-1) ++ Seq.fill(max)(slot_counts.last(max,1))
+    val comp_sels   = (slot_counts zip (valids ++ col_rdys(w).takeRight(max))).map{ case (c,v) => c(max,1) & Fill(max,v) }.takeRight(numSlotsPerColumn)
 
     // Which slots might be valid after compaction?
     var compacted_valids = Wire(Vec(numSlotsPerColumn, Bool()))
