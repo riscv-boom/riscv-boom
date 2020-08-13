@@ -307,11 +307,11 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // (only used for printf and vcd dumps - the actual counters are in the CSRFile)
   val debug_tsc_reg = RegInit(0.U(xLen.W))
   val debug_irt_reg = RegInit(0.U(xLen.W))
-  val debug_brs     = Reg(Vec(4, UInt(xLen.W)))
-  val debug_jals    = Reg(Vec(4, UInt(xLen.W)))
-  val debug_jalrs   = Reg(Vec(4, UInt(xLen.W)))
+  val debug_brs     = RegInit(VecInit(Seq.fill(5) { 0.U(xLen.W) }))
+  val debug_jals    = RegInit(VecInit(Seq.fill(5) { 0.U(xLen.W) }))
+  val debug_jalrs   = RegInit(VecInit(Seq.fill(5) { 0.U(xLen.W) }))
 
-  for (j <- 0 until 4) {
+  for (j <- 0 until 5) {
     debug_brs(j) := debug_brs(j) + PopCount(VecInit((0 until coreWidth) map {i =>
       rob.io.commit.arch_valids(i) &&
       (rob.io.commit.uops(i).debug_fsrc === j.U) &&
