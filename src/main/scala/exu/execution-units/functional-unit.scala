@@ -419,7 +419,11 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
 
   brinfo.target_offset := target_offset
 
-  io.brinfo := RegNext(brinfo)
+  if (isJmpUnit) {
+    io.brinfo := RegNext(brinfo)
+  } else {
+    io.brinfo := brinfo
+  }
 
 
 // Response
