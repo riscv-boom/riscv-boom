@@ -258,10 +258,6 @@ class RingRename(implicit p: Parameters) extends BoomModule
   assert (ren2_alloc_reqs zip ren2_uops map {case (r,u) => !r || u.pdst_spec =/= 0.U} reduce (_&&_),
            "[rename-stage] A uop is trying to allocate the zero physical register.")
 
-  assert (!io.debug_rob_empty || io.flashback ||
-          freelists.foldLeft(0.U) ((c,f) => c +& PopCount(f.io.debug_freelist)) >= (numIntPhysRegs - 31 - coreWidth).U,
-          "[freelist] Leaking physical registers.")
-
   //----------------------------------------------------------------------------------------------------
   // Outputs
 
@@ -277,7 +273,7 @@ class RingRename(implicit p: Parameters) extends BoomModule
     if (w > 0) bypassed_uop := BypassAllocations(ren2_uops(w), ren2_uops.slice(0,w), ren2_valids.slice(0,w))
     else       bypassed_uop := ren2_uops(w)
 
-    io.ren2_uops(w) := GetNewUopAndBrMask(bypassed_uop, io.brupdate)
+    io.ren2_uops(w) := bypassed_uop
 
     // Need to know which prs was used to decide on a column. A bit of a hack.
     io.ren2_uops(w).busy_operand_sel := !bypassed_uop.prs1_busy
