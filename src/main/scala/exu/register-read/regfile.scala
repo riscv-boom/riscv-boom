@@ -144,17 +144,31 @@ class PartiallyPortedRF[T <: Data](
   ))
   rf.io.write_ports := io.write_ports
 
-  val oh_reads = io.arb_read_reqs.map { r => Fill(numRegisters, r.valid) & UIntToOH(r.bits) }.reduce(_|_)
-  val port_sels = SelectFirstN(oh_reads, numPhysicalReadPorts)
-  val port_addrs = port_sels.map(x => OHToUInt(x))
-  val data_sels = VecInit(io.arb_read_reqs.map { r => VecInit(port_sels.map { s => s(r.bits) }) })
+  val port_issued = Array.fill(numPhysicalReadPorts) { false.B }
+  val port_addrs  = Array.fill(numPhysicalReadPorts) { 0.U(log2Ceil(numRegisters).W) }
+  val data_sels   = Wire(Vec(numLogicalReadPorts , UInt(numPhysicalReadPorts.W)))
+  data_sels := DontCare
 
   for (i <- 0 until numLogicalReadPorts) {
-    io.arb_read_reqs(i).ready := data_sels(i).reduce(_||_)
+    var read_issued = false.B
+    for (j <- 0 until numPhysicalReadPorts) {
+      val issue_read = WireInit(false.B)
+      val use_port = WireInit(false.B)
+      when (!read_issued && !port_issued(j) && io.arb_read_reqs(i).valid) {
+        issue_read := true.B
+        use_port := true.B
+        data_sels(i) := UIntToOH(j.U)
+      }
+      val was_port_issued_yet = port_issued(j)
+      port_issued(j) = use_port || port_issued(j)
+      port_addrs(j) = port_addrs(j) | Mux(was_port_issued_yet || !use_port, 0.U, io.arb_read_reqs(i).bits)
+      read_issued = issue_read || read_issued
+    }
+    io.arb_read_reqs(i).ready := read_issued
   }
 
   for (j <- 0 until numPhysicalReadPorts) {
-    rf.io.arb_read_reqs(j).valid := PopCount(oh_reads) > j.U
+    rf.io.arb_read_reqs(j).valid := port_issued(j)
     rf.io.arb_read_reqs(j).bits  := port_addrs(j)
     assert(rf.io.arb_read_reqs(j).ready)
   }
@@ -162,7 +176,7 @@ class PartiallyPortedRF[T <: Data](
   val rrd_data_sels = RegNext(data_sels)
 
   for (i <- 0 until numLogicalReadPorts) {
-    io.rrd_read_resps(i) := Mux1H(rrd_data_sels(i), rf.io.rrd_read_resps)
+    io.rrd_read_resps(i) := Mux1H(rrd_data_sels(i).asBools, rf.io.rrd_read_resps)
   }
   override def toString: String = rf.toString
 }
