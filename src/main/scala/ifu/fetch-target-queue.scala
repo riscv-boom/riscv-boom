@@ -76,7 +76,6 @@ class FTQInfo(implicit p: Parameters) extends BoomBundle
   val ghist     = new GlobalHistory
 
   val pc        = UInt(vaddrBitsExtended.W)
-  val com_pc    = UInt(vaddrBitsExtended.W)
 
   // the next_pc may not be valid (stalled or still being fetched)
   val next_val  = Bool()
@@ -107,6 +106,8 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     // Give PC info to BranchUnit.
     val get_ftq_req = Input(Vec(2, UInt(log2Ceil(ftqSz).W)))
     val get_ftq_resp = Output(Vec(2, new FTQInfo))
+
+    val com_pc    = Output(UInt(vaddrBitsExtended.W))
 
 
     // Used to regenerate PC for trace port stuff in FireSim
@@ -351,8 +352,9 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     io.get_ftq_resp(i).pc        := RegNext(pcs(idx))
     io.get_ftq_resp(i).next_pc   := RegNext(next_pc)
     io.get_ftq_resp(i).next_val  := RegNext(next_idx =/= enq_ptr || next_is_enq)
-    io.get_ftq_resp(i).com_pc    := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))
   }
+
+  io.com_pc := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))
 
   for (w <- 0 until coreWidth) {
     io.debug_fetch_pc(w) := RegNext(pcs(io.debug_ftq_idx(w)))
