@@ -91,7 +91,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
       id             = w
     )).suggestName(s"alu_exe_unit_${w}")
   }
-  val all_exe_units = (mem_exe_units ++ unq_exe_units ++ alu_exe_units)
+  val all_exe_units = (alu_exe_units ++ mem_exe_units ++ unq_exe_units)
 
   // Meanwhile, the FP pipeline holds the FP issue window, FP regfile, and FP arithmetic units.
   val fp_pipeline = Module(new FpPipeline)

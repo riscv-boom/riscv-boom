@@ -164,7 +164,8 @@ class PartiallyPortedRF[T <: Data](
       port_addrs(j) = port_addrs(j) | Mux(was_port_issued_yet || !use_port, 0.U, io.arb_read_reqs(i).bits)
       read_issued = issue_read || read_issued
     }
-    io.arb_read_reqs(i).ready := read_issued
+    io.arb_read_reqs(i).ready := PopCount(io.arb_read_reqs.take(i).map(_.valid)) < numPhysicalReadPorts.U
+    assert(!(io.arb_read_reqs(i).fire() && !read_issued))
   }
 
   for (j <- 0 until numPhysicalReadPorts) {
