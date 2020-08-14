@@ -41,8 +41,6 @@ case class FtqParameters(
 class FTQBundle(implicit p: Parameters) extends BoomBundle
   with HasBoomFrontendParameters
 {
-  // // TODO compress out high-order bits
-  // val fetch_pc  = UInt(vaddrBitsExtended.W)
   // IDX of instruction that was predicted taken, if any
   val cfi_idx   = Valid(UInt(log2Ceil(fetchWidth).W))
   // Was the CFI in this bundle found to be taken? or not
@@ -65,21 +63,14 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
 
   // Which bank did this start from?
   val start_bank = UInt(1.W)
-
-  // // Metadata for the branch predictor
-  // val bpd_meta = Vec(nBanks, UInt(bpdMaxMetaLength.W))
 }
 
 class FTQInfo(implicit p: Parameters) extends BoomBundle
 {
+  val valid     = Bool()
   val entry     = new FTQBundle
   val ghist     = new GlobalHistory
-
   val pc        = UInt(vaddrBitsExtended.W)
-
-  // the next_pc may not be valid (stalled or still being fetched)
-  val next_val  = Bool()
-  val next_pc   = UInt(vaddrBitsExtended.W)
 }
 
 /**
@@ -104,8 +95,8 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     val deq = Flipped(Valid(UInt(idx_sz.W)))
 
     // Give PC info to BranchUnit.
-    val get_ftq_req = Input(Vec(2, UInt(log2Ceil(ftqSz).W)))
-    val get_ftq_resp = Output(Vec(2, new FTQInfo))
+    val arb_ftq_reqs = Input(Vec(3, UInt(log2Ceil(ftqSz).W)))
+    val rrd_ftq_resps = Output(Vec(3, new FTQInfo))
 
     val com_pc    = Output(UInt(vaddrBitsExtended.W))
 
@@ -337,21 +328,19 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   // **** Core Read PCs ****
   //-------------------------------------------------------------
 
-  for (i <- 0 until 2) {
-    val idx = io.get_ftq_req(i)
-    val next_idx = WrapInc(idx, num_entries)
-    val next_is_enq = (next_idx === enq_ptr) && io.enq.fire()
-    val next_pc = Mux(next_is_enq, io.enq.bits.pc, pcs(next_idx))
+  for (i <- 0 until 3) {
+    val idx = io.arb_ftq_reqs(i)
+    val is_enq = (idx === enq_ptr) && io.enq.fire()
     val get_entry = ram(idx)
-    val next_entry = ram(next_idx)
-    io.get_ftq_resp(i).entry     := RegNext(get_entry)
-    if (i == 1)
-      io.get_ftq_resp(i).ghist   := ghist(1).read(idx, true.B)
-    else
-      io.get_ftq_resp(i).ghist   := DontCare
-    io.get_ftq_resp(i).pc        := RegNext(pcs(idx))
-    io.get_ftq_resp(i).next_pc   := RegNext(next_pc)
-    io.get_ftq_resp(i).next_val  := RegNext(next_idx =/= enq_ptr || next_is_enq)
+
+    io.rrd_ftq_resps(i).entry     := RegNext(get_entry)
+    if (i == 0) {
+      io.rrd_ftq_resps(i).ghist   := ghist(1).read(idx, true.B)
+    } else {
+      io.rrd_ftq_resps(i).ghist   := DontCare
+    }
+    io.rrd_ftq_resps(i).pc        := RegNext(pcs(idx))
+    io.rrd_ftq_resps(i).valid     := RegNext(idx =/= enq_ptr || is_enq)
   }
 
   io.com_pc := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deq_ptr)))

@@ -222,15 +222,19 @@ trait HasFrfReadPorts { this: ExecutionUnit =>
 }
 
 trait HasFtqReadPort { this: ExecutionUnit =>
-  val io_arb_ftq_req  = IO(Decoupled(UInt(log2Ceil(ftqSz).W)))
-  val io_rrd_ftq_resp = IO(Input(new FTQInfo))
+  val io_arb_ftq_reqs  = IO(Vec(2, Decoupled(UInt(log2Ceil(ftqSz).W))))
+  val io_rrd_ftq_resps = IO(Vec(2, Input(new FTQInfo)))
 
   // Only allow one SFB branch through multiple pipes, to avoid unnecessary predicate wakeup logic
-  io_arb_ftq_req.valid := arb_uop.valid && (arb_uop.bits.uopc.isOneOf(uopAUIPC, uopJAL, uopJALR) || arb_uop.bits.is_sfb_br)
-  io_arb_ftq_req.bits  := arb_uop.bits.ftq_idx
+  io_arb_ftq_reqs(0).valid := arb_uop.valid && (arb_uop.bits.uopc.isOneOf(uopAUIPC, uopJAL, uopJALR) || arb_uop.bits.is_sfb_br)
+  io_arb_ftq_reqs(0).bits  := arb_uop.bits.ftq_idx
 
-  val exe_ftq_data = Reg(new FTQInfo)
-  exe_ftq_data := io_rrd_ftq_resp
+  // Only JALR checks the next-pc
+  io_arb_ftq_reqs(1).valid := arb_uop.valid && (arb_uop.bits.uopc.isOneOf(                  uopJALR) || arb_uop.bits.is_sfb_br)
+  io_arb_ftq_reqs(1).bits  := WrapInc(arb_uop.bits.ftq_idx, ftqSz)
+
+  val exe_ftq_data = Reg(Vec(2, new FTQInfo))
+  exe_ftq_data := io_rrd_ftq_resps
 }
 
 class MemExeUnit(
@@ -487,8 +491,9 @@ class ALUExeUnit(
 
   io_squash_iss := ((io_arb_irf_reqs(0).valid && !io_arb_irf_reqs(0).ready) ||
                     (io_arb_irf_reqs(1).valid && !io_arb_irf_reqs(1).ready) ||
-                    (io_arb_ftq_req.valid     && !io_arb_ftq_req.ready))
-  
+                    (io_arb_ftq_reqs(0).valid && !io_arb_ftq_reqs(0).ready) ||
+                    (io_arb_ftq_reqs(1).valid && !io_arb_ftq_reqs(1).ready))
+
   val io_child_rebusy = IO(Output(UInt(aluWidth.W)))
   io_child_rebusy := 0.U
   when (arb_rebusied && arb_uop.valid) {

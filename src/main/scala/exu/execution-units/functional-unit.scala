@@ -45,7 +45,7 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
   val rs1_data = UInt(dataWidth.W)
   val rs2_data = UInt(dataWidth.W)
   val rs3_data = UInt(dataWidth.W) // only used for FMA units
-  val ftq_info = new FTQInfo
+  val ftq_info = Vec(2, new FTQInfo) // Need this-pc and next-pc for JALR
   val pred_data = Bool()
   val imm_data = UInt(xLen.W) // only used for integer ALU and AGen units
 }
@@ -53,8 +53,7 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 class BrInfoBundle(implicit p: Parameters) extends BoomBundle
 {
   val ldq_idx = UInt(ldqAddrSz.W)
-  val stq_idx = UInt(stqAddrSz
-    .W)
+  val stq_idx = UInt(stqAddrSz.W)
   val rxq_idx = UInt(log2Ceil(numRxqEntries).W)
 }
 
@@ -148,7 +147,7 @@ class ALUUnit(dataWidth: Int)(implicit p: Parameters)
   var op1_data: UInt = null
 
   // Get the uop PC for jumps
-  val block_pc = AlignPCToBoundary(io.req.bits.ftq_info.pc, icBlockBytes)
+  val block_pc = AlignPCToBoundary(io.req.bits.ftq_info(0).pc, icBlockBytes)
   val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
 
   op1_data = Mux(uop.op1_sel === OP1_RS1 , io.req.bits.rs1_data,
@@ -223,7 +222,7 @@ class ALUUnit(dataWidth: Int)(implicit p: Parameters)
   jalr_target_xlen := (jalr_target_base + target_offset).asUInt
   val jalr_target = (encodeVirtualAddress(jalr_target_xlen, jalr_target_xlen).asSInt & -2.S).asUInt
 
-  val cfi_idx = ((uop.pc_lob ^ Mux(io.req.bits.ftq_info.entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth),1)
+  val cfi_idx = ((uop.pc_lob ^ Mux(io.req.bits.ftq_info(0).entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth),1)
 
 
   when (is_br || is_jalr) {
@@ -234,10 +233,10 @@ class ALUUnit(dataWidth: Int)(implicit p: Parameters)
       mispredict := !uop.taken
     }
     when (pc_sel === PC_JALR) {
-      mispredict := (!io.req.bits.ftq_info.next_val ||
-                     (io.req.bits.ftq_info.next_pc =/= jalr_target) ||
-                     !io.req.bits.ftq_info.entry.cfi_idx.valid ||
-                     (io.req.bits.ftq_info.entry.cfi_idx.bits =/= cfi_idx))
+      mispredict := (!io.req.bits.ftq_info(1).valid ||
+                     (io.req.bits.ftq_info(1).pc =/= jalr_target) ||
+                     !io.req.bits.ftq_info(0).entry.cfi_idx.valid ||
+                     (io.req.bits.ftq_info(0).entry.cfi_idx.bits =/= cfi_idx))
     }
   }
 

@@ -416,14 +416,14 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
     val new_ghist = WireInit((0.U).asTypeOf(new GlobalHistory))
     new_ghist.current_saw_branch_not_taken := true.B
-    new_ghist.ras_idx := io.ifu.get_ftq_resp(0).entry.ras_idx
+    new_ghist.ras_idx := io.ifu.rrd_ftq_resps(0).entry.ras_idx
     io.ifu.redirect_ghist := new_ghist
     when (FlushTypes.useCsrEvec(flush_typ)) {
       io.ifu.redirect_pc  := Mux(flush_typ === FlushTypes.eret,
                                  ShiftRegister(csr.io.evec, 3),
                                  csr.io.evec)
     } .otherwise {
-      val flush_pc = (AlignPCToBoundary(io.ifu.get_ftq_resp(0).pc, icBlockBytes)
+      val flush_pc = (AlignPCToBoundary(io.ifu.rrd_ftq_resps(0).pc, icBlockBytes)
                       + RegNext(rob.io.flush.bits.pc_lob)
                       - Mux(RegNext(rob.io.flush.bits.edge_inst), 2.U, 0.U))
       val flush_pc_next = flush_pc + Mux(RegNext(rob.io.flush.bits.is_rvc), 2.U, 4.U)
@@ -433,7 +433,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     }
     io.ifu.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
   } .elsewhen (brupdate.b2.mispredict && !RegNext(rob.io.flush.valid)) {
-    val block_pc = AlignPCToBoundary(io.ifu.get_ftq_resp(1).pc, icBlockBytes)
+    val block_pc = AlignPCToBoundary(io.ifu.rrd_ftq_resps(0).pc, icBlockBytes)
     val uop_maybe_pc = block_pc | brupdate.b2.uop.pc_lob
     val npc = uop_maybe_pc + Mux(brupdate.b2.uop.is_rvc || brupdate.b2.uop.edge_inst, 2.U, 4.U)
     val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
@@ -448,17 +448,17 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     val use_same_ghist = (brupdate.b2.cfi_type === CFI_BR &&
                           !brupdate.b2.taken &&
                           bankAlign(block_pc) === bankAlign(npc))
-    val ftq_entry = io.ifu.get_ftq_resp(1).entry
+    val ftq_entry = io.ifu.rrd_ftq_resps(0).entry
     val cfi_idx = (brupdate.b2.uop.pc_lob ^
       Mux(ftq_entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
-    val ftq_ghist = io.ifu.get_ftq_resp(1).ghist
+    val ftq_ghist = io.ifu.rrd_ftq_resps(0).ghist
     val next_ghist = ftq_ghist.update(
       ftq_entry.br_mask.asUInt,
       brupdate.b2.taken,
       brupdate.b2.cfi_type === CFI_BR,
       cfi_idx,
       true.B,
-      io.ifu.get_ftq_resp(1).pc,
+      io.ifu.rrd_ftq_resps(0).pc,
       ftq_entry.cfi_is_call && ftq_entry.cfi_idx.bits === cfi_idx,
       ftq_entry.cfi_is_ret  && ftq_entry.cfi_idx.bits === cfi_idx)
 
@@ -521,25 +521,54 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   //-------------------------------------------------------------
   // FTQ GetPC Port Arbitration
+  // 3 ports
+  // port0 goes to flush,mispredict,xcpt
+  // port1/2 goes to jmp unit
 
   val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+  val mispredict_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
   val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
 
-  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 2 + aluWidth))
+  val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 3))
 
   // Order by the oldest. Flushes come from the oldest instructions in pipe
   // Decoding exceptions come from youngest
   ftq_arb.io.in(0) <> flush_pc_req
-  // Branch Unit Requests (for JALs) (Should delay issue of JALs if this not ready)
-  for (i <- 0 until aluWidth) {
-    ftq_arb.io.in(i+1) <> alu_exe_units(i).io_arb_ftq_req
-    alu_exe_units(i).io_rrd_ftq_resp := io.ifu.get_ftq_resp(0)
-  }
-  ftq_arb.io.in(aluWidth+1) <> xcpt_pc_req
+  ftq_arb.io.in(1) <> mispredict_pc_req
+  ftq_arb.io.in(2) <> xcpt_pc_req
 
-  // Hookup FTQ
-  io.ifu.get_ftq_req(0) := ftq_arb.io.out.bits
+  io.ifu.arb_ftq_reqs(0) := ftq_arb.io.out.bits
   ftq_arb.io.out.ready  := true.B
+
+  val ftq_port_issued = Array.fill(2) { false.B }
+  val ftq_port_addrs  = Array.fill(2) { 0.U(log2Ceil(ftqSz).W) }
+  for (i <- 0 until aluWidth) {
+    for (w <- 0 until 2) {
+      val req = alu_exe_units(i).io_arb_ftq_reqs(w)
+      var read_issued = false.B
+      val data_sel = WireInit(0.U(2.W))
+      for (j <- 0 until 2) {
+        val issue_read = WireInit(false.B)
+        val use_port = WireInit(false.B)
+        when (!read_issued && !ftq_port_issued(j) && req.valid) {
+          issue_read := true.B
+          use_port := true.B
+          data_sel := UIntToOH(j.U)
+        }
+        val was_port_issued_yet = ftq_port_issued(j)
+        ftq_port_issued(j) = use_port || ftq_port_issued(j)
+        ftq_port_addrs(j) = ftq_port_addrs(j) | Mux(was_port_issued_yet || !use_port, 0.U, req.bits)
+        read_issued = issue_read || read_issued
+      }
+      req.ready := read_issued
+      alu_exe_units(i).io_rrd_ftq_resps(w) := Mux(RegNext(data_sel(0)),
+        io.ifu.rrd_ftq_resps(1), io.ifu.rrd_ftq_resps(2))
+
+    }
+  }
+  for (j <- 0 until 2) {
+    io.ifu.arb_ftq_reqs(j+1)  := ftq_port_addrs(j)
+  }
 
 
 
@@ -547,14 +576,14 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val xcpt_idx = PriorityEncoder(dec_xcpts)
   xcpt_pc_req.valid    := dec_xcpts.reduce(_||_)
   xcpt_pc_req.bits     := dec_uops(xcpt_idx).ftq_idx
-  //rob.io.xcpt_fetch_pc := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
-  rob.io.xcpt_fetch_pc := io.ifu.get_ftq_resp(0).pc
+  rob.io.xcpt_fetch_pc := io.ifu.rrd_ftq_resps(0).pc
 
   flush_pc_req.valid   := rob.io.flush.valid
   flush_pc_req.bits    := rob.io.flush.bits.ftq_idx
 
   // Mispredict requests (to get the correct target)
-  io.ifu.get_ftq_req(1) := oldest_mispredict_ftq_idx
+  mispredict_pc_req.valid := mispredict_val
+  mispredict_pc_req.bits  := oldest_mispredict_ftq_idx
 
 
   //-------------------------------------------------------------
