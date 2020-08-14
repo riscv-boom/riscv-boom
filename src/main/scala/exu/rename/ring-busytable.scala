@@ -80,11 +80,17 @@ class RingBusyTable(
 
   // Read the busy table.
   for (i <- 0 until plWidth) {
-    val prs1_bypass = r_ren_uops zip r_rebusy_reqs map { case (u,v) => io.ren_uops(i).lrs1 === u.ldst && v } reduce(_||_)
-    val prs2_bypass = r_ren_uops zip r_rebusy_reqs map { case (u,v) => io.ren_uops(i).lrs2 === u.ldst && v } reduce(_||_)
+    val prs1_bypass_hits = r_ren_uops zip r_rebusy_reqs map { case (u,v) => io.ren_uops(i).lrs1 === u.ldst && v }
+    val prs2_bypass_hits = r_ren_uops zip r_rebusy_reqs map { case (u,v) => io.ren_uops(i).lrs2 === u.ldst && v }
 
-    val prs1_bypass_load = r_ren_uops zip r_rebusy_reqs map { case (u,v) => u.uses_ldq && io.ren_uops(i).lrs1 === u.ldst && v } reduce(_||_)
-    val prs2_bypass_load = r_ren_uops zip r_rebusy_reqs map { case (u,v) => u.uses_ldq && io.ren_uops(i).lrs2 === u.ldst && v } reduce(_||_)
+    val prs1_bypass_sel = PriorityEncoderOH(prs1_bypass_hits.reverse).reverse
+    val prs2_bypass_sel = PriorityEncoderOH(prs2_bypass_hits.reverse).reverse
+
+    val prs1_bypass_load = Mux1H(prs1_bypass_sel, r_ren_uops.map(_.uses_ldq))
+    val prs2_bypass_load = Mux1H(prs2_bypass_sel, r_ren_uops.map(_.uses_ldq))
+
+    val prs1_bypass = prs1_bypass_hits.reduce(_||_)
+    val prs2_bypass = prs2_bypass_hits.reduce(_||_)
 
     io.busy_resps(i).prs1_busy := (busy_table & DecodePreg(io.ren_uops(i).prs1)).orR || prs1_bypass
     io.busy_resps(i).prs2_busy := (busy_table & DecodePreg(io.ren_uops(i).prs2)).orR || prs2_bypass

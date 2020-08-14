@@ -651,9 +651,8 @@ class Rob(
   }
 
   val finished_committing_row =
-    (io.commit.valids.asUInt =/= 0.U) &&
     ((will_commit.asUInt ^ rob_head_vals.asUInt) === 0.U) &&
-    !(r_partial_row && rob_head === rob_tail && !maybe_full)
+    (rob_head =/= rob_tail || maybe_full)
 
   when (finished_committing_row) {
     rob_head     := WrapInc(rob_head, numRobRows)

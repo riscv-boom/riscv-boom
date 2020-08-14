@@ -420,7 +420,9 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   brinfo.target_offset := target_offset
 
   if (isJmpUnit) {
-    io.brinfo := RegNext(brinfo)
+    val r_brinfo = RegNext(brinfo)
+    io.brinfo       := r_brinfo
+    io.brinfo.valid := r_brinfo.valid && !io.kill && !IsKilledByBranch(io.brupdate, r_brinfo.uop)
   } else {
     io.brinfo := brinfo
   }

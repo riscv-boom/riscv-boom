@@ -58,7 +58,7 @@ class RingFreeList(
 
   // Masks that modify the freelist array.
   val sel_mask = (sels zip sel_fire) map { case (s,f) => s & Fill(n,f) } reduce(_|_)
-  val br_deallocs = br_alloc_lists(io.brupdate.b2.uop.br_tag) & Fill(n, io.brupdate.b2.mispredict)
+  val br_deallocs = br_alloc_lists(RegNext(io.brupdate.b2.uop.br_tag)) & Fill(n, RegNext(io.brupdate.b2.mispredict))
   val dealloc_mask = io.stale_pdsts.map(p => Mux(p.valid, UIntToOH(p.bits), 0.U)).reduce(_|_) | br_deallocs
 
   val r_br_tags = RegNext(io.ren_br_tags)

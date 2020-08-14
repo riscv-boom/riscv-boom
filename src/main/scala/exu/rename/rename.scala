@@ -136,19 +136,24 @@ abstract class AbstractRename(
     ren1_uops(w)          := io.dec_uops(w)
   }
 
-  for (w <- 0 until plWidth) {
+  for (w <- 0 until coreWidth) {
     val r_valid  = RegInit(false.B)
     val r_uop    = Reg(new MicroOp)
+    val next_uop = Wire(new MicroOp)
+
+    next_uop := r_uop
 
     when (io.kill) {
       r_valid := false.B
     } .elsewhen (ren2_ready) {
-      r_valid := ren1_fire(w)
-      r_uop   := GetNewUopAndBrMask(BypassAllocations(ren1_uops(w), ren2_uops, ren2_valids), io.brupdate)
+      r_valid  := ren1_fire(w)
+      next_uop := ren1_uops(w)
     } .otherwise {
-      r_valid := r_valid && !ren2_fire(w) // clear bit if uop gets dispatched
-      r_uop   := io.ren2_uops(w)
+      r_valid  := r_valid && !ren2_fire(w)
+      next_uop := r_uop
     }
+
+    r_uop := GetNewUopAndBrMask(BypassAllocations(next_uop, ren2_uops, ren2_fire), io.brupdate)
 
     ren2_valids(w) := r_valid
     ren2_uops(w)   := r_uop

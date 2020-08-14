@@ -141,19 +141,22 @@ class MicroOpPipelineRegister(implicit p: Parameters) extends BoomModule
                   paddedValid(i+1) || enq_fire && ((i == 0).B || paddedValid(i)),
                   enq_fire && paddedValid(i-1) && !paddedValid(i))
 
-    val sel_valids  = if (i == entries-1) Mux(wen, io.enq.valids, valids(i))
-                      else                Mux(wen, Mux(paddedValid(i+1), valids(i+1), io.enq.valids), valids(i))
+    val sel_valids  = if (i == entries-1) Mux(wen, io.enq.valids,
+                                                   Mux(deq_ready, VecInit((0.U(coreWidth.W)).asBools), valids(i)))
+                      else if (i == 0)    Mux(wen, Mux(paddedValid(i+1), valids(i+1), io.enq.valids),
+                                                   VecInit((valids(i).asUInt & io.deq.stalls.asUInt).asBools))
+                      else                Mux(wen, Mux(paddedValid(i+1), valids(i+1), io.enq.valids),
+                                                   Mux(deq_ready, VecInit((0.U(coreWidth.W)).asBools), valids(i)))
     val sel_uops    = if (i == entries-1) Mux(wen, io.enq.uops, uops(i))
                       else                Mux(wen, Mux(paddedValid(i+1), uops(i+1), io.enq.uops), uops(i))
     val next_uops   = sel_uops.map(u => GetNewUopAndBrMask(DoWakeup(u, io.wakeups), io.brupdate))
     var next_valids = Mux(io.kill, VecInit((0.U(coreWidth.W)).asBools), sel_valids)
 
-    uops(i) := next_uops
-    if (i == 0) valids(i) := Mux(wen, next_valids, VecInit((next_valids.asUInt & io.deq.stalls.asUInt).asBools))
-    else        valids(i) := next_valids
+    uops(i)   := next_uops
+    valids(i) := next_valids
   }
 
   io.enq.ready  := !paddedValid(entries-1)
   io.deq.valids := valids(0)
-  io.deq.uops   :=   uops(0)
+  io.deq.uops   := uops(0).map(u => GetNewUopAndBrMask(u, io.brupdate))
 }
