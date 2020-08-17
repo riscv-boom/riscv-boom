@@ -29,7 +29,7 @@ class IssueSlotIO(val numWakeupPorts: Int)(implicit p: Parameters) extends BoomB
   val will_be_valid = Output(Bool()) // TODO code review, do we need this signal so explicitely?
   val request       = Output(Bool())
   val grant         = Input(Bool())
-  val iss_uop       = Output(Valid(new MicroOp()))
+  val iss_uop       = Output(new MicroOp())
 
   val in_uop        = Input(Valid(new MicroOp())) // if valid, this WILL overwrite an entry!
   val out_uop       = Output(new MicroOp())
@@ -139,8 +139,7 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
     iss_ready || agen_ready || dgen_ready
   )
 
-  io.iss_uop.valid := false.B
-  io.iss_uop.bits  := slot_uop
+  io.iss_uop  := slot_uop
 
   // Update state for current micro-op based on grant
 
@@ -150,7 +149,6 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
   next_uop.iw_issued_partial_dgen := false.B
   when (io.grant && !io.squash_grant) {
     next_uop.iw_issued := true.B
-    io.iss_uop.valid := true.B
   }
 
   if (isMem) {
@@ -160,28 +158,28 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
         when (io.grant && !io.squash_grant) {
           next_uop.iw_issued_partial_agen := true.B
         }
-        io.iss_uop.bits.fu_code(FC_AGEN) := true.B
-        io.iss_uop.bits.fu_code(FC_DGEN) := false.B
+        io.iss_uop.fu_code(FC_AGEN) := true.B
+        io.iss_uop.fu_code(FC_DGEN) := false.B
       } .otherwise {
         // Issue the DGEN, next slot entry is the AGEN
         when (io.grant && !io.squash_grant) {
           next_uop.iw_issued_partial_dgen := true.B
         }
-        io.iss_uop.bits.fu_code(FC_AGEN) := false.B
-        io.iss_uop.bits.fu_code(FC_DGEN) := true.B
-        io.iss_uop.bits.imm_sel    := IS_N
-        io.iss_uop.bits.prs1       := slot_uop.prs2
-        io.iss_uop.bits.lrs1_rtype := slot_uop.lrs2_rtype
-        io.iss_uop.bits.iw_p1_bypass_hint := slot_uop.iw_p2_bypass_hint
+        io.iss_uop.fu_code(FC_AGEN) := false.B
+        io.iss_uop.fu_code(FC_DGEN) := true.B
+        io.iss_uop.imm_sel    := IS_N
+        io.iss_uop.prs1       := slot_uop.prs2
+        io.iss_uop.lrs1_rtype := slot_uop.lrs2_rtype
+        io.iss_uop.iw_p1_bypass_hint := slot_uop.iw_p2_bypass_hint
       }
     } .elsewhen (slot_uop.fu_code(FC_DGEN)) {
-      io.iss_uop.bits.imm_sel    := IS_N
-      io.iss_uop.bits.prs1       := slot_uop.prs2
-      io.iss_uop.bits.lrs1_rtype := slot_uop.lrs2_rtype
-      io.iss_uop.bits.iw_p1_bypass_hint := slot_uop.iw_p2_bypass_hint
+      io.iss_uop.imm_sel    := IS_N
+      io.iss_uop.prs1       := slot_uop.prs2
+      io.iss_uop.lrs1_rtype := slot_uop.lrs2_rtype
+      io.iss_uop.iw_p1_bypass_hint := slot_uop.iw_p2_bypass_hint
     }
-    io.iss_uop.bits.lrs2_rtype := RT_X
-    io.iss_uop.bits.prs2       := io.iss_uop.bits.prs1 // helps with DCE
+    io.iss_uop.lrs2_rtype := RT_X
+    io.iss_uop.prs2       := io.iss_uop.prs1 // helps with DCE
   }
 
   when (slot_valid && slot_uop.iw_issued) {

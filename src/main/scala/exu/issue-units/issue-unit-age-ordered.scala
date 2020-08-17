@@ -232,12 +232,18 @@ class IssueUnitCollapsing(
     }
   }
 
+  val iss_uops = Wire(Vec(issueWidth, Valid(new MicroOp)))
+  for (w <- 0 until issueWidth) {
+    iss_uops(w).valid := false.B
+    iss_uops(w).bits  := DontCare
+  }
+
   for (i <- 0 until numIssueSlots) {
     issue_slots(i).grant := false.B
     var uop_issued = false.B
 
     for (w <- 0 until issueWidth) {
-      val fu_code_match = (issue_slots(i).iss_uop.bits.fu_code zip io.fu_types(w)).map {
+      val fu_code_match = (issue_slots(i).iss_uop.fu_code zip io.fu_types(w)).map {
         case (r,c) => r && c
       } .reduce(_||_)
 
@@ -245,11 +251,16 @@ class IssueUnitCollapsing(
 
       when (requests(i) && !uop_issued && can_allocate && !port_issued(w)) {
         issue_slots(i).grant := true.B
-        io.iss_uops(w) := issue_slots(i).iss_uop
+        iss_uops(w).valid := true.B
+        iss_uops(w).bits  := issue_slots(i).iss_uop
       }
       val was_port_issued_yet = port_issued(w)
       port_issued(w) = (requests(i) && !uop_issued && can_allocate) | port_issued(w)
       uop_issued = (requests(i) && can_allocate && !was_port_issued_yet) | uop_issued
     }
+  }
+  io.iss_uops := iss_uops
+  when (io.squash_grant) {
+    io.iss_uops.map { u => u.valid := false.B }
   }
 }
