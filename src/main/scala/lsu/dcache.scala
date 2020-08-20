@@ -155,6 +155,8 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
     val mshr_wb_rdy = Output(Bool()) // Should we block MSHR writebacks while we finish our own?
     val block_state = Input(new ClientMetadata())
     val lsu_release = Decoupled(new TLBundleC(edge.bundle))
+
+    val state = Output(Valid(UInt(coreMaxAddrBits.W)))
   }
 
   val (s_invalid :: s_meta_read :: s_meta_resp :: s_mshr_req ::
@@ -172,6 +174,9 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
   val miss_coh = ClientMetadata.onReset
   val reply_coh = Mux(tag_matches, old_coh, miss_coh)
   val (is_dirty, report_param, new_coh) = reply_coh.onProbe(req.param)
+
+  io.state.valid := state =/= s_invalid
+  io.state.bits  := req.address
 
   io.req.ready := state === s_invalid
   io.rep.valid := state === s_release
@@ -777,7 +782,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   metaWriteArb.io.in(1) <> prober.io.meta_write
   prober.io.mshr_rdy    := mshrs.io.probe_rdy
   prober.io.wb_rdy      := (prober.io.meta_write.bits.idx =/= wb.io.idx.bits) || !wb.io.idx.valid
-  mshrs.io.prober_idle  := prober.io.req.ready && !lrsc_valid
+  mshrs.io.prober_state := prober.io.state
 
   // refills
   when (tl_out.d.bits.source === cfg.nMSHRs.U) {
