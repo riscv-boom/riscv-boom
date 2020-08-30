@@ -378,7 +378,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   io.ifu.flush_icache := (0 until coreWidth).map { i =>
     (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei) ||
-    (dec_uops(i).is_jalr && csr.io.status.debug)
+    (RegNext(dec_valids(i) && dec_uops(i).is_jalr && csr.io.status.debug))
   }.reduce(_||_)
 
   // TODO FIX THIS HACK
