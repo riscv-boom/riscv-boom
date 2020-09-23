@@ -339,7 +339,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     } else {
       io.rrd_ftq_resps(i).ghist   := DontCare
     }
-    io.rrd_ftq_resps(i).pc        := RegNext(pcs(idx))
+    io.rrd_ftq_resps(i).pc        := RegNext(Mux(is_enq, io.enq.bits.pc, pcs(idx)))
     io.rrd_ftq_resps(i).valid     := RegNext(idx =/= enq_ptr || is_enq)
   }
 
