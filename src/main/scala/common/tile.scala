@@ -109,29 +109,34 @@ class BoomTile private(
   }
 
   ResourceBinding {
-    Resource(cpuDevice, "reg").bind(ResourceAddress(hartId))
+    Resource(cpuDevice, "reg").bind(ResourceAddress(staticIdForMetadataUseOnly))
   }
 
-  override def makeMasterBoundaryBuffers(implicit p: Parameters) = {
-    if (!boomParams.boundaryBuffers) super.makeMasterBoundaryBuffers
-    else TLBuffer(BufferParams.none, BufferParams.flow, BufferParams.none, BufferParams.flow, BufferParams(1))
+  override def makeMasterBoundaryBuffers(crossing: ClockCrossingType)(implicit p: Parameters) = crossing match {
+    case _: RationalCrossing =>
+      if (!boomParams.boundaryBuffers) TLBuffer(BufferParams.none)
+      else TLBuffer(BufferParams.none, BufferParams.flow, BufferParams.none, BufferParams.flow, BufferParams(1))
+    case _ => TLBuffer(BufferParams.none)
   }
 
-  override def makeSlaveBoundaryBuffers(implicit p: Parameters) = {
-    if (!boomParams.boundaryBuffers) super.makeSlaveBoundaryBuffers
-    else TLBuffer(BufferParams.flow, BufferParams.none, BufferParams.none, BufferParams.none, BufferParams.none)
+  override def makeSlaveBoundaryBuffers(crossing: ClockCrossingType)(implicit p: Parameters) = crossing match {
+    case _: RationalCrossing =>
+      if (!boomParams.boundaryBuffers) TLBuffer(BufferParams.none)
+      else TLBuffer(BufferParams.flow, BufferParams.none, BufferParams.none, BufferParams.none, BufferParams.none)
+    case _ => TLBuffer(BufferParams.none)
   }
 
   override lazy val module = new BoomTileModuleImp(this)
 
   // DCache
-  lazy val dcache: BoomNonBlockingDCache = LazyModule(new BoomNonBlockingDCache(hartId))
+  lazy val dcache: BoomNonBlockingDCache = LazyModule(new BoomNonBlockingDCache(staticIdForMetadataUseOnly))
   val dCacheTap = TLIdentityNode()
   tlMasterXbar.node := dCacheTap := dcache.node
 
 
   // Frontend/ICache
-  val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, hartId))
+  val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, staticIdForMetadataUseOnly))
+  frontend.resetVectorSinkNode := resetVectorNexusNode
   tlMasterXbar.node := frontend.masterNode
 
   // ROCC
@@ -164,10 +169,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   outer.extTraceSourceNode.bundle <> core.io.trace
   outer.traceSourceNode.bundle <> DontCare
   outer.bpwatchSourceNode.bundle <> DontCare // core.io.bpwatch
-  core.io.hartid := constants.hartid
-  outer.dcache.module.io.hartid := constants.hartid
-  outer.frontend.module.io.hartid := constants.hartid
-  outer.frontend.module.io.reset_vector := constants.reset_vector
+  core.io.hartid := outer.hartIdSinkNode.bundle
 
   // Connect the core pipeline to other intra-tile modules
   outer.frontend.module.io.cpu <> core.io.ifu
@@ -175,7 +177,6 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
 
   //fpuOpt foreach { fpu => core.io.fpu <> fpu.io } RocketFpu - not needed in boom
   core.io.rocc := DontCare
-  core.io.reset_vector := DontCare
 
   if (outer.roccs.size > 0) {
     val (respArb, cmdRouter) = {
@@ -239,7 +240,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   val frontendStr = outer.frontend.module.toString
   val coreStr = core.toString
   val boomTileStr =
-    (BoomCoreStringPrefix(s"======BOOM Tile ${p(TileKey).hartId} Params======") + "\n"
+    (BoomCoreStringPrefix(s"======BOOM Tile ${staticIdForMetadataUseOnly} Params======") + "\n"
     + frontendStr
     + coreStr + "\n")
 

@@ -40,13 +40,13 @@ import boom.util.{BoomCoreStringPrefix}
  */
 class ICache(
   val icacheParams: ICacheParams,
-  val hartId: Int)(implicit p: Parameters)
+  val staticIdForMetadataUseOnly: Int)(implicit p: Parameters)
   extends LazyModule
 {
   lazy val module = new ICacheModule(this)
   val masterNode = TLClientNode(Seq(TLClientPortParameters(Seq(TLClientParameters(
     sourceId = IdRange(0, 1 + icacheParams.prefetch.toInt), // 0=refill, 1=hint
-    name = s"Core ${hartId} ICache")))))
+    name = s"Core ${staticIdForMetadataUseOnly} ICache")))))
 
   val size = icacheParams.nSets * icacheParams.nWays * icacheParams.blockBytes
   private val wordBytes = icacheParams.fetchBytes
@@ -91,8 +91,6 @@ class ICacheResp(val outer: ICache) extends Bundle
 class ICacheBundle(val outer: ICache) extends BoomBundle()(outer.p)
   with HasBoomFrontendParameters
 {
-  val hartid = Input(UInt(hartIdLen.W))
-
   val req = Flipped(Decoupled(new ICacheReq))
   val s1_paddr = Input(UInt(paddrBits.W)) // delayed one cycle w.r.t. req
 

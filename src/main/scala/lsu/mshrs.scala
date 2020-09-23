@@ -63,7 +63,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     val mem_grant   = Flipped(Decoupled(new TLBundleD(edge.bundle)))
     val mem_finish  = Decoupled(new TLBundleE(edge.bundle))
 
-    val prober_idle = Input(Bool())
+    val prober_state = Input(Valid(UInt(coreMaxAddrBits.W)))
 
     val refill      = Decoupled(new L1DataWriteReq)
 
@@ -278,7 +278,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       state := s_meta_read
     }
   } .elsewhen (state === s_meta_read) {
-    io.meta_read.valid := io.prober_idle || !grantack.valid
+    io.meta_read.valid := !io.prober_state.valid || !grantack.valid || (io.prober_state.bits(untagBits-1,blockOffBits) =/= req_idx)
     io.meta_read.bits.idx := req_idx
     io.meta_read.bits.tag := req_tag
     io.meta_read.bits.way_en := req.way_en
@@ -518,7 +518,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     val prefetch   = Decoupled(new BoomDCacheReq)
     val wb_req     = Decoupled(new WritebackReq(edge.bundle))
 
-    val prober_idle = Input(Bool())
+    val prober_state = Input(Valid(UInt(coreMaxAddrBits.W)))
 
     val clear_all = Input(Bool()) // Clears all uncommitted MSHRs to prepare for fence
 
@@ -628,7 +628,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     mshr.io.rob_pnr_idx  := io.rob_pnr_idx
     mshr.io.rob_head_idx := io.rob_head_idx
 
-    mshr.io.prober_idle  := io.prober_idle
+    mshr.io.prober_state := io.prober_state
 
     mshr.io.wb_resp      := io.wb_resp
 
