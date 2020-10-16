@@ -372,7 +372,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
     dis_uops(w).valid := dis_ld_val || dis_st_val
     dis_uops(w).bits  := io.core.dis_uops(w).bits
-    dis_uops(w).bits.debug_last_unique_id.valid := false.B
 
     when (dis_ld_val) {
       dis_ldq_oh(ld_enq_idx) := true.B
@@ -1696,10 +1695,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       stq_committed  (temp_stq_commit_head) := true.B
       stq_can_execute(temp_stq_commit_head) := true.B
 
-      val id = Wire(Valid(UInt(64.W)))
-      id.valid := true.B
-      id.bits := io.core.commit.uops(w).debug_unique_id
-      stq_uop(WrapInc(temp_stq_commit_head, numStqEntries)).debug_last_unique_id := id
     } .elsewhen (commit_load) {
       assert (ldq_valid(temp_ldq_head), "[lsu] trying to commit an un-allocated load entry.")
       assert ((ldq_executed(temp_ldq_head) || ldq_forward_std_val(temp_ldq_head)) && ldq_succeeded(temp_ldq_head),
