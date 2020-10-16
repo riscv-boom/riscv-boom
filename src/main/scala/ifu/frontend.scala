@@ -570,10 +570,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   s0_replay_resp := s2_tlb_resp
   s0_replay_ppc  := s2_ppc
 
-  when (f2_clear) {
-    f2_prev_is_half := false.B
-  }
-
   // --------------------------------------------------------
   // **** F3 ****
   // --------------------------------------------------------
@@ -968,6 +964,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f4_clear    := true.B
     f3_clear    := true.B
     f2_clear    := true.B
+    f2_prev_is_half := false.B
     f1_clear    := true.B
 
     s0_valid     := false.B
@@ -980,6 +977,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     f4_clear    := true.B
     f3_clear    := true.B
     f2_clear    := true.B
+    f2_prev_is_half := false.B
     f1_clear    := true.B
 
     s0_valid     := io.cpu.redirect_val
@@ -999,13 +997,14 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   when (jump_to_reset) {
     s0_valid := true.B
-    s0_vpc   := io.reset_vector
+    s0_vpc   := io_reset_vector
     s0_ghist := (0.U).asTypeOf(new GlobalHistory)
     s0_tsrc  := BSRC_C
     fb.io.clear := true.B
     f4_clear    := true.B
     f3_clear    := true.B
     f2_clear    := true.B
+    f2_prev_is_half := false.B
     f1_clear    := true.B
     jump_to_reset := false.B
   }
