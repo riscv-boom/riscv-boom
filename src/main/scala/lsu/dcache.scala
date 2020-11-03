@@ -320,7 +320,10 @@ class BoomBankedDataArray(implicit p: Parameters) extends AbstractBoomDataArray 
   val s0_widx   = (io.write.bits.addr >> bidxOffBits)(bidxBits-1,0)
 
   val s0_read_valids    = VecInit(io.read.map(_.valid))
-  val s0_bank_conflicts = pipeMap(w => (0 until w).foldLeft(false.B)((c,i) => c || io.read(i).valid && s0_rbanks(i) === s0_rbanks(w)))
+  val s0_bank_conflicts = pipeMap(w => {
+    ((s0_rbanks(w) === s0_wbank) && io.write.valid && dcacheSinglePorted.B) ||
+    (0 until w).foldLeft(false.B)((c,i) => c || io.read(i).valid && s0_rbanks(i) === s0_rbanks(w))
+  })
   val s0_do_bank_read   = s0_read_valids zip s0_bank_conflicts map {case (v,c) => v && !c}
   val s0_bank_read_gnts = Transpose(VecInit(s0_rbanks zip s0_do_bank_read map {case (b,d) => VecInit((UIntToOH(b) & Fill(nBanks,d)).asBools)}))
   val s0_bank_write_gnt = (UIntToOH(s0_wbank) & Fill(nBanks, io.write.valid)).asBools
@@ -335,7 +338,9 @@ class BoomBankedDataArray(implicit p: Parameters) extends AbstractBoomDataArray 
                             else if (j == i) true.B else false.B))))
   val s1_ridx_match     = pipeMap(i => pipeMap(j => if (j < i) s1_ridxs(j) === s1_ridxs(i)
                                                     else if (j == i) true.B else false.B))
-  val s1_nacks          = pipeMap(w => s1_read_valids(w) && (s1_pipe_selection(w).asUInt & ~s1_ridx_match(w).asUInt).orR)
+  val s1_nacks          = pipeMap(w => s1_read_valids(w)
+    && (!RegNext(s0_do_bank_read(w)) || (s1_pipe_selection(w).asUInt & ~s1_ridx_match(w).asUInt).orR)
+  )
   val s1_bank_selection = pipeMap(w => Mux1H(s1_pipe_selection(w), s1_rbanks))
 
   //----------------------------------------------------------------------------------------------------
@@ -355,9 +360,12 @@ class BoomBankedDataArray(implicit p: Parameters) extends AbstractBoomDataArray 
       )
       val ridx = Mux1H(s0_bank_read_gnts(b), s0_ridxs)
       val way_en = Mux1H(s0_bank_read_gnts(b), io.read.map(_.bits.way_en))
-      s2_bank_reads(b) := array.read(ridx, way_en(w) && s0_bank_read_gnts(b).reduce(_||_)).asUInt
+      val write_en = io.write.bits.way_en(w) && s0_bank_write_gnt(b)
+      val read_en = way_en(w) && s0_bank_read_gnts(b).reduce(_||_)
+      if (dcacheSinglePorted) assert(!(read_en && write_en))
+      s2_bank_reads(b) := array.read(ridx, !(write_en && dcacheSinglePorted.B) && read_en).asUInt
 
-      when (io.write.bits.way_en(w) && s0_bank_write_gnt(b)) {
+      when (write_en) {
         val data = VecInit((0 until rowWords) map (i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i)))
         array.write(s0_widx, data, io.write.bits.wmask.asBools)
       }
@@ -470,6 +478,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   data.io.write.valid := dataWriteArb.io.out.fire()
   data.io.write.bits  := dataWriteArb.io.out.bits
   dataWriteArb.io.out.ready := true.B
+  val singlePortedDCacheWrite = data.io.write.valid && dcacheSinglePorted.B
 
   // ------------
   // New requests
@@ -499,15 +508,16 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   replay_req(0).addr       := mshrs.io.replay.bits.addr
   replay_req(0).data       := mshrs.io.replay.bits.data
   replay_req(0).is_hella   := mshrs.io.replay.bits.is_hella
-  mshrs.io.replay.ready    := metaReadArb.io.in(0).ready && dataReadArb.io.in(0).ready
+  // Don't let replays get nacked due to conflict with dcache write
+  mshrs.io.replay.ready    := metaReadArb.io.in(0).ready && dataReadArb.io.in(0).ready && !singlePortedDCacheWrite
   // Tag read for MSHR replays
   // We don't actually need to read the metadata, for replays we already know our way
-  metaReadArb.io.in(0).valid              := mshrs.io.replay.valid
+  metaReadArb.io.in(0).valid              := mshrs.io.replay.valid && !singlePortedDCacheWrite
   metaReadArb.io.in(0).bits.req(0).idx    := mshrs.io.replay.bits.addr >> blockOffBits
   metaReadArb.io.in(0).bits.req(0).way_en := DontCare
   metaReadArb.io.in(0).bits.req(0).tag    := DontCare
   // Data read for MSHR replays
-  dataReadArb.io.in(0).valid              := mshrs.io.replay.valid
+  dataReadArb.io.in(0).valid              := mshrs.io.replay.valid && !singlePortedDCacheWrite
   dataReadArb.io.in(0).bits.req(0).addr   := mshrs.io.replay.bits.addr
   dataReadArb.io.in(0).bits.req(0).way_en := mshrs.io.replay.bits.way_en
   dataReadArb.io.in(0).bits.valid         := widthMap(w => (w == 0).B)
@@ -536,15 +546,16 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   wb_req(0).data     := DontCare
   wb_req(0).is_hella := false.B
   // Couple the two decoupled interfaces of the WBUnit's meta_read and data_read
+  // Can't launch data read if possibility of conflict w. write
   // Tag read for write-back
-  metaReadArb.io.in(2).valid        := wb.io.meta_read.valid
+  metaReadArb.io.in(2).valid        := wb.io.meta_read.valid && !singlePortedDCacheWrite
   metaReadArb.io.in(2).bits.req(0)  := wb.io.meta_read.bits
-  wb.io.meta_read.ready := metaReadArb.io.in(2).ready && dataReadArb.io.in(1).ready
+  wb.io.meta_read.ready := metaReadArb.io.in(2).ready && dataReadArb.io.in(1).ready && !singlePortedDCacheWrite
   // Data read for write-back
-  dataReadArb.io.in(1).valid        := wb.io.data_req.valid
+  dataReadArb.io.in(1).valid        := wb.io.data_req.valid && !singlePortedDCacheWrite
   dataReadArb.io.in(1).bits.req(0)  := wb.io.data_req.bits
   dataReadArb.io.in(1).bits.valid   := widthMap(w => (w == 0).B)
-  wb.io.data_req.ready  := metaReadArb.io.in(2).ready && dataReadArb.io.in(1).ready
+  wb.io.data_req.ready  := metaReadArb.io.in(2).ready && dataReadArb.io.in(1).ready && !singlePortedDCacheWrite
   assert(!(wb.io.meta_read.fire() ^ wb.io.data_req.fire()))
 
   // -------
@@ -734,6 +745,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_nack_wb     = widthMap(w => s2_valid(w) && !s2_hit(w) && s2_wb_idx_matches(w))
 
   s2_nack           := widthMap(w => (s2_nack_miss(w) || s2_nack_hit(w) || s2_nack_victim(w) || s2_nack_data(w) || s2_nack_wb(w)) && s2_type =/= t_replay)
+  assert(!(s2_nack_data.reduce(_||_) && s2_type.isOneOf(t_replay, t_wb)))
   val s2_send_resp = widthMap(w => (
     RegNext(s1_send_resp_or_nack(w)) &&
       (!(s2_nack_hit(w) || s2_nack_victim(w) || s2_nack_data(w)) || s2_type === t_replay) &&

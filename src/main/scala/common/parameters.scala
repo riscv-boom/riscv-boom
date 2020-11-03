@@ -60,6 +60,7 @@ case class BoomCoreParams(
   numRXQEntries: Int = 4,
   numRCQEntries: Int = 8,
   numDCacheBanks: Int = 1,
+  dcacheSinglePorted: Boolean = false,
 
   nPMPs: Int = 8,
   enableICacheDelay: Boolean = false,
@@ -268,6 +269,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableSuperscalarSnapshots = boomParams.enableSuperscalarSnapshots
   val enableColumnALUIssue = boomParams.enableColumnALUIssue
   val enableColumnALUWrites = boomParams.enableColumnALUIssue && isPow2(aluWidth) && aluWidth > 1
+  val dcacheSinglePorted = boomParams.dcacheSinglePorted
 
   //************************************
   // Implicitly calculated constants

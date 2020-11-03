@@ -322,6 +322,7 @@ class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) ex
               enableSuperscalarSnapshots = false,
               enableColumnALUIssue = true,
               numDCacheBanks = 4,
+              dcacheSinglePorted = true,
               ftq = FtqParameters(nEntries=40),
               fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
             ),
