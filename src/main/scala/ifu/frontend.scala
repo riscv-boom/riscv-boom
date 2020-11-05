@@ -272,6 +272,8 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
 
   val flush_icache = Output(Bool())
 
+  val enable_bpd = Output(Bool())
+
   val perf = Input(new FrontendPerfEvents)
 }
 
@@ -320,6 +322,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
   val bpd = Module(new BranchPredictor)
+  bpd.io.enable := io.cpu.enable_bpd
   bpd.io.f3_fire := false.B
   val ras = Module(new BoomRAS)
 

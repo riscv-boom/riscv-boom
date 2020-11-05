@@ -130,7 +130,7 @@ class BoomCustomCSRs(implicit p: Parameters) extends freechips.rocketchip.tile.C
       tileParams.dcache.get.clockGate.toInt << 0 |
       params.clockGate.toInt << 1 |
       params.clockGate.toInt << 2 |
-      1 << 3 // Disable OOO when this bit is high
+      1 << 3 // Disable OOO when this bit is high. LEGACY, use the enableOOOCSR instead
     )
     val init = BigInt(
       tileParams.dcache.get.clockGate.toInt << 0 |
@@ -140,7 +140,17 @@ class BoomCustomCSRs(implicit p: Parameters) extends freechips.rocketchip.tile.C
     )
     Some(CustomCSR(chickenCSRId, mask, Some(init)))
   }
-  def disableOOO = getOrElse(chickenCSR, _.value(3), true.B)
+
+  val enableOOOCSRId = 0x800
+  def enableOOOCSR = Some(CustomCSR(enableOOOCSRId, BigInt(1), Some(BigInt(1))))
+
+  val enableBPDCSRId = 0x808
+  def enableBPDCSR = Some(CustomCSR(enableBPDCSRId, BigInt(1), Some(BigInt(1))))
+
+  override def decls = enableOOOCSR.toSeq ++ enableBPDCSR.toSeq ++ bpmCSR.toSeq ++ chickenCSR
+  def enableOOO = getOrElse(enableOOOCSR, _.value(0), true.B) && !getOrElse(chickenCSR, _.value(3), false.B)
+  def enableBPD = getOrElse(enableBPDCSR, _.value(0), true.B)
+
 }
 
 /**

@@ -210,6 +210,8 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
 
     // Update
     val update = Input(Valid(new BranchPredictionUpdate))
+
+    val enable = Input(Bool())
   })
 
   var total_memsize = 0
@@ -468,6 +470,12 @@ class BranchPredictor(implicit p: Parameters) extends BoomModule()(p)
     when (io.update.bits.cfi_is_br && io.update.bits.cfi_idx.valid) {
       assert(io.update.bits.br_mask(io.update.bits.cfi_idx.bits))
     }
+  }
+
+  when (!io.enable) {
+    io.resp.f1 := 0.U.asTypeOf(new BranchPredictionBundle)
+    io.resp.f2 := 0.U.asTypeOf(new BranchPredictionBundle)
+    io.resp.f3 := 0.U.asTypeOf(new BranchPredictionBundle)
   }
 }
 
