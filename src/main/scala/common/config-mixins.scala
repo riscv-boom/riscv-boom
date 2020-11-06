@@ -310,6 +310,7 @@ class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) ex
                 IssueParams(issueWidth=4, numEntries=20, iqType=IQ_ALU, dispatchWidth=4, numSlowEntries=12),
                 IssueParams(issueWidth=2, numEntries=32, iqType=IQ_FP , dispatchWidth=4, numSlowEntries=20)),
               lsuWidth = 2,
+              imulLatency = 4,
               numIntPhysRegisters = 144,
               numFpPhysRegisters = 128,
               numIrfReadPorts = 4,
