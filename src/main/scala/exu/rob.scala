@@ -290,6 +290,15 @@ class Rob(
     rob_debug_inst_rdata := DontCare
   }
 
+  // Branch resolution
+  val brupdate_b2_rob_row = GetRowIdx(io.brupdate.b2.uop.rob_idx)
+  val brupdate_b2_rob_row_oh = UIntToOH(brupdate_b2_rob_row)
+  val hi_mask = ~MaskLower(brupdate_b2_rob_row_oh)
+  val lo_mask = ~MaskUpper(UIntToOH(rob_head))
+  val brupdate_b2_rob_clr_oh = Mux(brupdate_b2_rob_row < rob_head, hi_mask & lo_mask, hi_mask | lo_mask)
+  val brupdate_b2_rob_bank_idx = GetBankIdx(io.brupdate.b2.uop.rob_idx)
+  val brupdate_b2_rob_bank_clr_oh = ~MaskLower(UIntToOH(brupdate_b2_rob_bank_idx))
+
   for (w <- 0 until coreWidth) {
     def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
 
@@ -383,7 +392,8 @@ class Rob(
     // Commit
 
     // Can this instruction commit? (the check for exceptions/rob_state happens later).
-    can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
+    // Block commit if there is mispredict
+    can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall && !io.brupdate.b2.mispredict
 
 
     // use the same "com_uop" for both rollback AND commit
@@ -414,14 +424,21 @@ class Rob(
     for (i <- 0 until numRobRows) {
       val br_mask = rob_uop(i).br_mask
 
-      //kill instruction if mispredict & br mask match
-      when (IsKilledByBranch(io.brupdate, false.B, br_mask))
-      {
+      when (io.brupdate.b2.mispredict && (
+        brupdate_b2_rob_clr_oh(i) ||
+        (brupdate_b2_rob_row_oh(i) && brupdate_b2_rob_bank_clr_oh(w))
+      )) {
         rob_val(i) := false.B
-      } .elsewhen (rob_val(i)) {
-        // clear speculation bit even on correct speculation
-        rob_uop(i).br_mask := GetNewBrMask(io.brupdate, br_mask)
       }
+
+      // //kill instruction if mispredict & br mask match
+      // when (IsKilledByBranch(io.brupdate, false.B, br_mask))
+      // {
+      //   rob_val(i) := false.B
+      // } .elsewhen (rob_val(i)) {
+      //   // clear speculation bit even on correct speculation
+      //   rob_uop(i).br_mask := GetNewBrMask(io.brupdate, br_mask)
+      // }
     }
 
 
