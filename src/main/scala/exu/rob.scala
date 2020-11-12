@@ -220,6 +220,8 @@ class Rob(
   val rob_pnr_lsb  = RegInit(0.U((1 max log2Ceil(coreWidth)).W))
   val rob_pnr_idx  = if (coreWidth == 1) rob_pnr  else Cat(rob_pnr , rob_pnr_lsb)
 
+  val next_rob_head = WireInit(rob_head)
+  rob_head := next_rob_head
 
 
   val full         = Wire(Bool())
@@ -298,6 +300,46 @@ class Rob(
   val brupdate_b2_rob_clr_oh = Mux(brupdate_b2_rob_row < rob_head, hi_mask & lo_mask, hi_mask | lo_mask)
   val brupdate_b2_rob_bank_idx = GetBankIdx(io.brupdate.b2.uop.rob_idx)
   val brupdate_b2_rob_bank_clr_oh = ~MaskLower(UIntToOH(brupdate_b2_rob_bank_idx))
+
+  class RobCompactUop extends Bundle {
+    val is_fencei = Bool()
+    val ftq_idx = UInt(log2Ceil(ftqSz).W)
+    val uses_ldq = Bool()
+    val uses_stq = Bool()
+    val dst_rtype = UInt(2.W)
+    val ldst = UInt(lregSz.W)
+    val pdst = UInt(maxPregSz.W)
+    val stale_pdst = UInt(maxPregSz.W)
+  }
+  val compactUopWidth = 1 + log2Ceil(ftqSz) + 1 + 1 + 2 + lregSz + maxPregSz + maxPregSz
+  def compact_to_uop(compact: RobCompactUop, uop: MicroOp): MicroOp = {
+    val out = WireInit(uop)
+    out.is_fencei := compact.is_fencei
+    out.ftq_idx   := compact.ftq_idx
+    out.uses_ldq  := compact.uses_ldq
+    out.uses_stq  := compact.uses_stq
+    out.dst_rtype := compact.dst_rtype
+    out.ldst      := compact.ldst
+    out.pdst      := compact.pdst
+    out.stale_pdst := compact.stale_pdst
+    out
+  }
+  def uop_to_compact(uop: MicroOp): RobCompactUop = {
+    val out = Wire(new RobCompactUop)
+    out.is_fencei := uop.is_fencei
+    out.ftq_idx   := uop.ftq_idx
+    out.uses_ldq  := uop.uses_ldq
+    out.uses_stq  := uop.uses_stq
+    out.dst_rtype := uop.dst_rtype
+    out.ldst      := uop.ldst
+    out.pdst      := uop.pdst
+    out.stale_pdst := uop.stale_pdst
+    out
+  }
+  // More efficient rob uop storage in 1R1W masked SRAM
+  val rob_compact_uop_mem = SyncReadMem(numRobRows, Vec(coreWidth, UInt(compactUopWidth.W)))
+  rob_compact_uop_mem.write(rob_tail, VecInit(io.enq_uops.map(u => uop_to_compact(u).asUInt)), io.enq_valids)
+  val rob_compact_uop_rdata = rob_compact_uop_mem.read(next_rob_head).map(u => u.asTypeOf(new RobCompactUop))
 
   for (w <- 0 until coreWidth) {
     def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
@@ -400,7 +442,7 @@ class Rob(
     // Perform Commit
     io.commit.valids(w)      := will_commit(w)
     io.commit.arch_valids(w) := will_commit(w) && !rob_predicated(rob_head)
-    io.commit.uops(w)        := rob_uop(rob_head)
+    io.commit.uops(w)        := compact_to_uop(rob_compact_uop_rdata(w), rob_uop(rob_head))
     io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
 
     // We unbusy branches in b1, but its easier to mark the taken/provider src in b2,
@@ -461,8 +503,8 @@ class Rob(
     rob_head_vals(w)     := rob_val(rob_head)
     rob_tail_vals(w)     := rob_val(rob_tail)
     rob_head_fflags(w)   := rob_fflags(rob_head)
-    rob_head_uses_stq(w) := rob_uop(rob_head).uses_stq
-    rob_head_uses_ldq(w) := rob_uop(rob_head).uses_ldq
+    rob_head_uses_stq(w) := io.commit.uops(w).uses_stq
+    rob_head_uses_ldq(w) := io.commit.uops(w).uses_ldq
 
     //------------------------------------------------
     // Invalid entries are safe; thrown exceptions are unsafe.
@@ -656,7 +698,7 @@ class Rob(
     !(r_partial_row && rob_head === rob_tail && !io.brupdate.b2.mispredict)
 
   when (finished_committing_row) {
-    rob_head     := WrapInc(rob_head, numRobRows)
+    next_rob_head     := WrapInc(rob_head, numRobRows)
     rob_head_lsb := 0.U
   } .elsewhen (rob_state === s_rollback) {
     rob_head_lsb := 0.U
