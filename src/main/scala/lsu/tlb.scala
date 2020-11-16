@@ -119,7 +119,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   def widthMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
 
   val pageGranularityPMPs = pmpGranularity >= (1 << pgIdxBits)
-  val sectored_entries = Reg(Vec(cfg.nEntries / cfg.nSectors, new Entry(cfg.nSectors, false, false)))
+  val sectored_entries = Reg(Vec((cfg.nSets * cfg.nWays) / cfg.nSectors, new Entry(cfg.nSectors, false, false)))
   val superpage_entries = Reg(Vec(cfg.nSuperpageEntries, new Entry(1, true, true)))
   val special_entry = (!pageGranularityPMPs).option(Reg(new Entry(1, true, false)))
   def ordinary_entries = sectored_entries ++ superpage_entries

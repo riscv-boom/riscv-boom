@@ -390,7 +390,7 @@ object MaskUpper
  */
 object Transpose
 {
-  def apply[T <: chisel3.core.Data](in: Vec[Vec[T]]) = {
+  def apply[T <: chisel3.Data](in: Vec[Vec[T]]) = {
     val n = in(0).size
     VecInit((0 until n).map(i => VecInit(in.map(row => row(i)))))
   }
@@ -417,7 +417,7 @@ object SelectFirstN
 /**
  * Connect the first k of n valid input interfaces to k output interfaces.
  */
-class Compactor[T <: chisel3.core.Data](n: Int, k: Int, gen: T) extends Module
+class Compactor[T <: chisel3.Data](n: Int, k: Int, gen: T) extends Module
 {
   require(n >= k)
 

@@ -13,7 +13,6 @@ package boom.ifu
 
 import chisel3._
 import chisel3.util._
-import chisel3.core.{withReset}
 import chisel3.internal.sourceinfo.{SourceInfo}
 
 import freechips.rocketchip.config._
@@ -335,7 +334,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val icache = outer.icache.module
   icache.io.invalidate := io.cpu.flush_icache
-  val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBEntries)))
+  val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBSets, nTLBWays)))
   io.ptw <> tlb.io.ptw
   io.cpu.perf.tlbMiss := io.ptw.req.fire()
   io.cpu.perf.acquire := icache.io.perf.acquire
