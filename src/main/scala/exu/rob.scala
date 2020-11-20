@@ -338,8 +338,16 @@ class Rob(
   }
   // More efficient rob uop storage in 1R1W masked SRAM
   val rob_compact_uop_mem = SyncReadMem(numRobRows, Vec(coreWidth, UInt(compactUopWidth.W)))
-  rob_compact_uop_mem.write(rob_tail, VecInit(io.enq_uops.map(u => uop_to_compact(u).asUInt)), io.enq_valids)
-  val rob_compact_uop_rdata = rob_compact_uop_mem.read(next_rob_head).map(u => u.asTypeOf(new RobCompactUop))
+  val rob_compact_uop_wdata = VecInit(io.enq_uops.map(u => uop_to_compact(u).asUInt))
+  rob_compact_uop_mem.write(rob_tail, rob_compact_uop_wdata, io.enq_valids)
+  val rob_compact_uop_rdata = rob_compact_uop_mem.read(next_rob_head)
+  val rob_compact_uop_might_bypass = rob_head === RegNext(rob_tail)
+  val rob_compact_uop_bypassed = (0 until coreWidth) map { w =>
+    Mux(rob_compact_uop_might_bypass && RegNext(io.enq_valids(w)),
+      RegNext(rob_compact_uop_wdata(w)),
+      rob_compact_uop_rdata(w)
+    ).asTypeOf(new RobCompactUop)
+  }
 
   for (w <- 0 until coreWidth) {
     def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
@@ -442,7 +450,7 @@ class Rob(
     // Perform Commit
     io.commit.valids(w)      := will_commit(w)
     io.commit.arch_valids(w) := will_commit(w) && !rob_predicated(rob_head)
-    io.commit.uops(w)        := compact_to_uop(rob_compact_uop_rdata(w), rob_uop(rob_head))
+    io.commit.uops(w)        := compact_to_uop(rob_compact_uop_bypassed(w), rob_uop(rob_head))
     io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
 
     // We unbusy branches in b1, but its easier to mark the taken/provider src in b2,
