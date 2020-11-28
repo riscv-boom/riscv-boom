@@ -131,6 +131,8 @@ abstract class ExecutionUnit(
     // only used by the mem unit
     val lsu_io = if (hasMem) Flipped(new boom.lsu.LSUExeIO) else null
     val bp = if (hasMem) Input(Vec(nBreakpoints, new BP)) else null
+    val mcontext = if (hasMem) Input(UInt(coreParams.mcontextWidth.W)) else null
+    val scontext = if (hasMem) Input(UInt(coreParams.scontextWidth.W)) else null
 
     // TODO move this out of ExecutionUnit
     val com_exception = if (hasMem || hasRocc) Input(Bool()) else null
@@ -380,6 +382,8 @@ class ALUExeUnit(
     maddrcalc.io.brupdate     <> io.brupdate
     maddrcalc.io.status     := io.status
     maddrcalc.io.bp         := io.bp
+    maddrcalc.io.mcontext   := io.mcontext
+    maddrcalc.io.scontext   := io.scontext
     maddrcalc.io.resp.ready := DontCare
     require(numBypassStages == 0)
 

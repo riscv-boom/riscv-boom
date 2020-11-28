@@ -375,6 +375,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // Breakpoint info
   io.ifu.status  := csr.io.status
   io.ifu.bp      := csr.io.bp
+  io.ifu.mcontext := csr.io.mcontext
+  io.ifu.scontext := csr.io.scontext
 
   io.ifu.flush_icache := (0 until coreWidth).map { i =>
     (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei) ||
@@ -1266,8 +1268,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   // Connect breakpoint info to memaddrcalcunit
   for (i <- 0 until memWidth) {
-    mem_units(i).io.status := csr.io.status
-    mem_units(i).io.bp     := csr.io.bp
+    mem_units(i).io.status   := csr.io.status
+    mem_units(i).io.bp       := csr.io.bp
+    mem_units(i).io.mcontext := csr.io.mcontext
+    mem_units(i).io.scontext := csr.io.scontext
   }
 
   // LSU <> ROB

@@ -267,6 +267,8 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   // Breakpoint info
   val status            = Output(new MStatus)
   val bp                = Output(Vec(nBreakpoints, new BP))
+  val mcontext          = Output(UInt(coreParams.mcontextWidth.W))
+  val scontext          = Output(UInt(coreParams.scontextWidth.W))
 
   val sfence = Valid(new SFenceReq)
 
@@ -602,9 +604,11 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
       val valid = Wire(Bool())
       val bpu = Module(new BreakpointUnit(nBreakpoints))
-      bpu.io.status := io.cpu.status
-      bpu.io.bp     := io.cpu.bp
-      bpu.io.ea     := DontCare
+      bpu.io.status   := io.cpu.status
+      bpu.io.bp       := io.cpu.bp
+      bpu.io.ea       := DontCare
+      bpu.io.mcontext := io.cpu.mcontext
+      bpu.io.scontext := io.cpu.scontext
 
       val brsigs = Wire(new BranchDecodeSignals)
       if (w == 0) {
