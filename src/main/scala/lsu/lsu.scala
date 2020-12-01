@@ -877,7 +877,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       dmem_req(w).bits.addr  := exe_tlb_paddr(w)
       dmem_req(w).bits.uop   := exe_tlb_uop(w)
 
-      s0_kills(w)            := exe_tlb_miss(w) || exe_tlb_uncacheable(w)
+      s0_kills(w)            := exe_tlb_miss(w) || exe_tlb_uncacheable(w) || ma_ld(w) || ae_ld(w) || pf_ld(w)
       s0_executing_loads(ldq_incoming_idx(w)) := dmem_req_fire(w) && !s0_kills(w)
 
       assert(!ldq_incoming_e(w).bits.executed)
@@ -886,7 +886,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       dmem_req(w).bits.addr  := exe_tlb_paddr(w)
       dmem_req(w).bits.uop   := exe_tlb_uop(w)
 
-      s0_kills(w) := exe_tlb_miss(w) || exe_tlb_uncacheable(w)
+      s0_kills(w) := exe_tlb_miss(w) || exe_tlb_uncacheable(w) || ma_ld(w) || ae_ld(w) || pf_ld(w)
       s0_executing_loads(ldq_retry_idx) := dmem_req_fire(w) && !s0_kills(w)
     } .elsewhen (will_fire_store_commit_slow(w) || will_fire_store_commit_fast(w)) {
       dmem_req(w).valid         := true.B
