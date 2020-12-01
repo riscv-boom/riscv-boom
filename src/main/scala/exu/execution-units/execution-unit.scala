@@ -575,7 +575,7 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
     val fdivsqrt_ready = Wire(Bool())
     fu_types += ((FC_FDV, fdivsqrt_ready, "FDiv"))
 
-    val fdivsqrt = Module(new FDivSqrtUnit)
+    val fdivsqrt = Module(new FDivSqrtUnit2)
     assert(!(fdivsqrt.io.req.valid && !fdivsqrt.io.req.ready))
     fdivsqrt.io.req.valid := exe_uop.valid && exe_uop.bits.fu_code(FC_FDV)
     fdivsqrt.io.req.bits := exe_fp_req
