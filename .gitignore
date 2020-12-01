@@ -5,5 +5,4 @@ target
 lib
 *#
 *~
-project/build.properties
 .nfs*
