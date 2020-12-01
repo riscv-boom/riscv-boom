@@ -1238,7 +1238,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       // A younger load might find a older nacking load
       val nack_dword_addr_matches = (lcam_addr(w) >> 3) === (io.dmem.nack(wi).bits.addr >> 3)
       val nack_mask = GenByteMask(io.dmem.nack(wi).bits.addr, io.dmem.nack(wi).bits.uop.mem_size)
-      val nack_mask_overlap = (nack_mask & lcam_mask(w)) === nack_mask
+      val nack_mask_overlap = (nack_mask & lcam_mask(w)) =/= 0.U
       when (do_ld_search(w)                    &&
             io.dmem.nack(wi).valid             &&
             io.dmem.nack(wi).bits.uop.uses_ldq &&
@@ -1255,7 +1255,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       // A older load might find a younger forwarding load
       val forward_dword_addr_matches = (lcam_addr(w) >> 3 === wb_ldst_forward_ld_addr(wi) >> 3)
       val forward_mask = GenByteMask(wb_ldst_forward_ld_addr(wi), wb_ldst_forward_e(wi).uop.mem_size)
-      val forward_mask_overlap = (forward_mask & lcam_mask(w)) === forward_mask
+      val forward_mask_overlap = (forward_mask & lcam_mask(w)) =/= 0.U
       when (do_ld_search(w)                   &&
             wb_ldst_forward_valid(wi)         &&
             forward_dword_addr_matches        &&
