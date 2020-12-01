@@ -684,6 +684,9 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
       lrsc_count := 0.U
     }
   }
+  when (io.lsu.exception) {
+    lrsc_count := 0.U
+  }
 
   when (s2_valid(0)) {
     when (s2_req(0).addr === debug_sc_fail_addr) {
