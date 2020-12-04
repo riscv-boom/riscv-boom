@@ -593,7 +593,13 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // Decode/Rename1 pipeline logic
 
   dec_xcpts := dec_uops zip dec_valids map {case (u,v) => u.exception && v}
-  val dec_xcpt_stall = dec_xcpts.reduce(_||_) && !xcpt_pc_req.ready
+  // Frontend exceptions need to shoot straight past dec/dis without stall, to match
+  // the timing of the FTQ resp which provides badaddr.
+  // Wait for pipeline to empty before letting an exception past dec
+  val dec_prior_slot_valid = dec_valids.scanLeft(false.B) ((s,v) => s || v)
+  val dec_xcpt_stall = (0 until coreWidth).map(w => dec_xcpts(w) &&
+    (!rob.io.empty || !io.lsu.fencei_rdy || dec_prior_slot_valid(w) || dis_valids.reduce(_||_) || !xcpt_pc_req.ready)
+  )
   // stall fetch/dcode because we ran out of branch tags
   val branch_mask_full = Wire(Vec(coreWidth, Bool()))
 
@@ -601,7 +607,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
                       dec_valids(w) &&
                       (  !dis_ready
                       || rob.io.rollback
-                      || dec_xcpt_stall
+                      || dec_xcpt_stall(w)
                       || branch_mask_full(w)
                       || brupdate.b1.mispredict_mask =/= 0.U
                       || brupdate.b2.mispredict
