@@ -247,7 +247,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
 
   val dtlb = Module(new NBDTLB(
-    instruction = false, lgMaxSize = log2Ceil(coreDataBytes), rocket.TLBConfig(dcacheParams.nTLBEntries)))
+    instruction = false, lgMaxSize = log2Ceil(coreDataBytes), rocket.TLBConfig(dcacheParams.nTLBSets, dcacheParams.nTLBWays)))
 
   io.ptw <> dtlb.io.ptw
   io.core.perf.tlbMiss := io.ptw.req.fire()

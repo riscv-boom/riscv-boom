@@ -13,7 +13,6 @@ package boom.ifu
 
 import chisel3._
 import chisel3.util._
-import chisel3.core.{withReset}
 import chisel3.internal.sourceinfo.{SourceInfo}
 
 import freechips.rocketchip.config._
@@ -268,6 +267,8 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   // Breakpoint info
   val status            = Output(new MStatus)
   val bp                = Output(Vec(nBreakpoints, new BP))
+  val mcontext          = Output(UInt(coreParams.mcontextWidth.W))
+  val scontext          = Output(UInt(coreParams.scontextWidth.W))
 
   val sfence = Valid(new SFenceReq)
 
@@ -335,7 +336,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val icache = outer.icache.module
   icache.io.invalidate := io.cpu.flush_icache
-  val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBEntries)))
+  val tlb = Module(new TLB(true, log2Ceil(fetchBytes), TLBConfig(nTLBSets, nTLBWays)))
   io.ptw <> tlb.io.ptw
   io.cpu.perf.tlbMiss := io.ptw.req.fire()
   io.cpu.perf.acquire := icache.io.perf.acquire
@@ -603,9 +604,11 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
       val valid = Wire(Bool())
       val bpu = Module(new BreakpointUnit(nBreakpoints))
-      bpu.io.status := io.cpu.status
-      bpu.io.bp     := io.cpu.bp
-      bpu.io.ea     := DontCare
+      bpu.io.status   := io.cpu.status
+      bpu.io.bp       := io.cpu.bp
+      bpu.io.ea       := DontCare
+      bpu.io.mcontext := io.cpu.mcontext
+      bpu.io.scontext := io.cpu.scontext
 
       val brsigs = Wire(new BranchDecodeSignals)
       if (w == 0) {

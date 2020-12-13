@@ -90,6 +90,8 @@ case class BoomCoreParams(
   useRVE: Boolean = false,
   useBPWatch: Boolean = false,
   clockGate: Boolean = false,
+  mcontextWidth: Int = 0,
+  scontextWidth: Int = 0,
 
   /* debug stuff */
   enableCommitLogPrintf: Boolean = false,
@@ -105,7 +107,6 @@ case class BoomCoreParams(
   val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
   val retireWidth = decodeWidth
   val jumpInFrontend: Boolean = false // unused in boom
-
 
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
 }

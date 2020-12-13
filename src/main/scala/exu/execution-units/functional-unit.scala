@@ -184,6 +184,8 @@ abstract class FunctionalUnit(
 
     // only used by memaddr calc unit
     val bp = if (isMemAddrCalcUnit) Input(Vec(nBreakpoints, new BP)) else null
+    val mcontext = if (isMemAddrCalcUnit) Input(UInt(coreParams.mcontextWidth.W)) else null
+    val scontext = if (isMemAddrCalcUnit) Input(UInt(coreParams.scontextWidth.W)) else null
 
   })
 }
@@ -511,10 +513,12 @@ class MemAddrCalcUnit(implicit p: Parameters)
     (size === 3.U && (effective_address(2,0) =/= 0.U))
 
   val bkptu = Module(new BreakpointUnit(nBreakpoints))
-  bkptu.io.status := io.status
-  bkptu.io.bp     := io.bp
-  bkptu.io.pc     := DontCare
-  bkptu.io.ea     := effective_address
+  bkptu.io.status   := io.status
+  bkptu.io.bp       := io.bp
+  bkptu.io.pc       := DontCare
+  bkptu.io.ea       := effective_address
+  bkptu.io.mcontext := io.mcontext
+  bkptu.io.scontext := io.scontext
 
   val ma_ld  = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
   val ma_st  = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned

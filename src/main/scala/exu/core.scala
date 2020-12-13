@@ -355,8 +355,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
         "DCache nMSHRs         : " + dcacheParams.nMSHRs,
         "ICache Ways           : " + icacheParams.nWays,
         "ICache Sets           : " + icacheParams.nSets,
-        "D-TLB Entries         : " + dcacheParams.nTLBEntries,
-        "I-TLB Entries         : " + icacheParams.nTLBEntries,
+        "D-TLB Ways            : " + dcacheParams.nTLBWays,
+        "I-TLB Ways            : " + icacheParams.nTLBWays,
         "Paddr Bits            : " + paddrBits,
         "Vaddr Bits            : " + vaddrBits) + "\n"
     + BoomCoreStringPrefix(
@@ -375,6 +375,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // Breakpoint info
   io.ifu.status  := csr.io.status
   io.ifu.bp      := csr.io.bp
+  io.ifu.mcontext := csr.io.mcontext
+  io.ifu.scontext := csr.io.scontext
 
   io.ifu.flush_icache := (0 until coreWidth).map { i =>
     (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei) ||
@@ -1266,8 +1268,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
 
   // Connect breakpoint info to memaddrcalcunit
   for (i <- 0 until memWidth) {
-    mem_units(i).io.status := csr.io.status
-    mem_units(i).io.bp     := csr.io.bp
+    mem_units(i).io.status   := csr.io.status
+    mem_units(i).io.bp       := csr.io.bp
+    mem_units(i).io.mcontext := csr.io.mcontext
+    mem_units(i).io.scontext := csr.io.scontext
   }
 
   // LSU <> ROB
@@ -1383,7 +1387,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   }
 
   // TODO: Does anyone want this debugging functionality?
-  val coreMonitorBundle = Wire(new CoreMonitorBundle(xLen))
+  val coreMonitorBundle = Wire(new CoreMonitorBundle(xLen, fLen))
   coreMonitorBundle := DontCare
   coreMonitorBundle.clock  := clock
   coreMonitorBundle.reset  := reset

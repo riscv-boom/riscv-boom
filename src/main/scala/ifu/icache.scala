@@ -13,6 +13,7 @@ package boom.ifu
 
 import chisel3._
 import chisel3.util._
+import chisel3.util.random._
 import chisel3.internal.sourceinfo.{SourceInfo}
 import chisel3.experimental.{chiselName}
 
@@ -44,7 +45,7 @@ class ICache(
   extends LazyModule
 {
   lazy val module = new ICacheModule(this)
-  val masterNode = TLClientNode(Seq(TLClientPortParameters(Seq(TLClientParameters(
+  val masterNode = TLClientNode(Seq(TLMasterPortParameters.v1(Seq(TLMasterParameters.v1(
     sourceId = IdRange(0, 1 + icacheParams.prefetch.toInt), // 0=refill, 1=hint
     name = s"Core ${staticIdForMetadataUseOnly} ICache")))))
 
@@ -63,7 +64,9 @@ class BoomICacheLogicalTreeNode(icache: ICache, deviceOpt: Option[SimpleDevice],
         dataMemorySizeBytes = params.nSets * params.nWays * params.blockBytes,
         dataECC = params.dataECC.map(OMECC.fromString),
         tagECC = params.tagECC.map(OMECC.fromString),
-        nTLBEntries = params.nTLBEntries,
+        nTLBEntries = params.nTLBSets * params.nTLBWays,
+        nTLBSets = params.nTLBSets,
+        nTLBWays = params.nTLBWays,
         maxTimSize = params.nSets * (params.nWays-1) * params.blockBytes,
         memories = icache.module.asInstanceOf[ICacheModule].dataArrays.map(_._2)
       )
@@ -172,7 +175,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   tl_out.d.ready := true.B
   require (edge_out.manager.minLatency > 0)
 
-  val repl_way = if (isDM) 0.U else LFSR16(refill_fire)(log2Ceil(nWays)-1,0)
+  val repl_way = if (isDM) 0.U else LFSR(16, refill_fire)(log2Ceil(nWays)-1,0)
 
   val tag_array = SyncReadMem(nSets, Vec(nWays, UInt(tagBits.W)))
   val tag_rdata = tag_array.read(s0_vaddr(untagBits-1, blockOffBits), !refill_done && s0_valid)
@@ -371,7 +374,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     "Refill cycles : " + refillCycles,
     "RAMs          : (" +  wordBits/nBanks + " x " + nSets*refillCycles + ") using " + nBanks + " banks",
     "" + (if (nBanks == 2) "Dual-banked" else "Single-banked"),
-    "I-TLB entries : " + cacheParams.nTLBEntries + "\n")
+    "I-TLB ways    : " + cacheParams.nTLBWays + "\n")
 }
 
 
