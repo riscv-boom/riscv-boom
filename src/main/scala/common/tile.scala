@@ -28,6 +28,7 @@ import boom.exu._
 import boom.ifu._
 import boom.lsu._
 import boom.util.{BoomCoreStringPrefix}
+import freechips.rocketchip.prci.ClockSinkParameters
 
 
 case class BoomTileAttachParams(
@@ -61,6 +62,7 @@ case class BoomTileParams(
   val beuAddr: Option[BigInt] = None
   val blockerCtrlAddr: Option[BigInt] = None
   val boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
+  val clockSinkParams: ClockSinkParameters = ClockSinkParameters()
 }
 
 /**

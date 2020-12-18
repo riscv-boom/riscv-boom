@@ -23,7 +23,7 @@ import boom.util.{ImmGenRm, ImmGenTyp}
  * most of these signals are already created, just need to be translated
  * to the Rocket FPU-speak
  */
-class UOPCodeFPUDecoder extends Module with HasFPUParameters
+class UOPCodeFPUDecoder(implicit p: Parameters) extends BoomModule with HasFPUParameters
 {
   val io = IO(new Bundle {
     val uopc = Input(Bits(UOPC_SZ.W))

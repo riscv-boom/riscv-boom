@@ -19,11 +19,13 @@ import freechips.rocketchip.tile
 import boom.common._
 import boom.util._
 import freechips.rocketchip.tile.HasFPUParameters
+import freechips.rocketchip.util.uintToBitPat
 
 /**
  * Decoder for FPU divide and square root signals
  */
-class UOPCodeFDivDecoder extends Module with HasFPUParameters
+class UOPCodeFDivDecoder(implicit p: Parameters) extends BoomModule
+  with HasFPUParameters
 {
   val io = IO(new Bundle {
     val uopc = Input(Bits(UOPC_SZ.W))
@@ -52,7 +54,7 @@ class UOPCodeFDivDecoder extends Module with HasFPUParameters
       BitPat(uopFDIV_D)  -> List(X,X,Y,Y,X, X,X,D,D,X,X,X, X,Y,N,Y),
       BitPat(uopFSQRT_S) -> List(X,X,Y,N,X, X,X,S,S,X,X,X, X,N,Y,Y),
       BitPat(uopFSQRT_D) -> List(X,X,Y,N,X, X,X,D,D,X,X,X, X,N,Y,Y)
-    ))
+    ): Array[(BitPat, List[BitPat])])
 
   val s = io.sigs
   val sigs = Seq(s.ldst, s.wen, s.ren1, s.ren2, s.ren3, s.swap12,
