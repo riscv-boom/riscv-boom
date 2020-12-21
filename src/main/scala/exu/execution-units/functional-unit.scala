@@ -605,6 +605,7 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
   req.in2 := unbox(io_req.rs2_data, tag, None)
   req.in3 := DontCare
   req.typ := ImmGenTyp(io_req.uop.imm_packed)
+  req.fmt := DontCare // FIXME: this may not be the right thing to do here
   req.fmaCmd := DontCare
 
   assert (!(io.req.valid && fp_ctrl.fromint && req.in1(xLen).asBool),
