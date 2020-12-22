@@ -191,7 +191,10 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
     req.in3 := unbox(io_req.rs3_data, tag, minT)
     when (fp_ctrl.swap23) { req.in3 := req.in2 }
     req.typ := ImmGenTyp(io_req.uop.imm_packed)
-    req.fmt := DontCare //FIXME: this probably should be a new ImmGenFmt() utility?
+    req.fmt := Mux(tag === S, 0.U, 1.U) // TODO support Zfh and avoid special-case below
+    when (io_req.uop.uopc === uopFMV_X_S) {
+      req.fmt := 0.U
+    }
 
     val fma_decoder = Module(new FMADecoder)
     fma_decoder.io.uopc := io_req.uop.uopc
