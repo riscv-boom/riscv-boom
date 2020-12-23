@@ -80,7 +80,9 @@ case class BoomCoreParams(
   mulDiv: Option[freechips.rocketchip.rocket.MulDivParams] = Some(MulDivParams(divEarlyOut=true)),
   nBreakpoints: Int = 0, // TODO Fix with better frontend breakpoint unit
   nL2TLBEntries: Int = 512,
+  nL2TLBWays: Int = 1,
   nLocalInterrupts: Int = 0,
+  useNMI: Boolean = false,
   useAtomics: Boolean = true,
   useDebug: Boolean = true,
   useUser: Boolean = true,
