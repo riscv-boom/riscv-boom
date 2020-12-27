@@ -10,7 +10,6 @@ The current version of the BOOM microarchitecture ([SonicBOOM, or BOOMv3](https:
 
 ![](docs/figures/uarch.png)
 
-
 Feature | BOOM
 --- | ---
 ISA | RISC-V (RV64GC)
