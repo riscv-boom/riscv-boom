@@ -666,13 +666,8 @@ workflows:
     push-fork-upstream-workload:
         jobs:
             - push-approval:
-                filters: &only_fork
-                    branches:
-                        only: /pull\/[0-9]+/
                 type: approval
 
             - push-fork-upstream:
-                filters:
-                    <<: *only_fork
                 requires:
                     - push-approval
