@@ -14,16 +14,16 @@ The current version of the BOOM microarchitecture ([SonicBOOM, or BOOMv3](https:
 Feature | BOOM
 --- | ---
 ISA | RISC-V (RV64GC)
-Synthesizable |√
-FPGA |√
-Parameterized |√
-IEEE 754 Floating Point |√
-Atomics |√
-Caches |√
-Virtual Memory |√
-Boots Linux |√
-Runs SPEC |√
-CoreMark/MHz |6.2
+Synthesizable | √
+FPGA | √
+Parameterized | √
+IEEE 754 Floating Point | √
+Atomics | √
+Caches | √
+Virtual Memory | √
+Boots Linux | √
+Runs SPEC | √
+CoreMark/MHz | 6.2
 
 
 ## IMPORTANT: Using BOOM
