@@ -172,28 +172,6 @@ commands:
 
 # set of jobs to run
 jobs:
-    push-fork-upstream:
-        executor: main-env
-        steps:
-            - run:
-                name: Install Git Push Script
-                command: |
-                    curl -sL https://raw.githubusercontent.com/jklukas/git-push-fork-to-upstream-branch/master/git-push-fork-to-upstream-branch > /usr/local/bin/git-push-fork-to-upstream-branch
-                    chmod 755 /usr/local/bin/git-push-fork-to-upstream-branch
-
-            - ssh-checkout
-
-            - run:
-                name: Checkout upstream
-                command: |
-                    git remote add upstream https://github.com/riscv-boom/riscv-boom.git
-                    git fetch --all
-
-            - run:
-                name: Configure and push fork branch
-                command: |
-                    git-push-fork-to-upstream-branch upstream $CIRCLE_PR_USERNAME:$(curl -s https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/pulls/${CIRCLE_PR_NUMBER} | jq -r '.head.ref')
-
     install-riscv-toolchain:
         executor: main-env
         steps:
@@ -505,24 +483,56 @@ jobs:
                             .circleci/firesim-run-finished.sh largefireboom spec17-intspeed-test-600 << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
                         no_output_timeout: 30m
 
+    ###########################################################################################
+
+    push-fork-upstream:
+        executor: main-env
+        steps:
+            - run:
+                name: Install Git Push Script
+                command: |
+                    curl -sL https://raw.githubusercontent.com/jklukas/git-push-fork-to-upstream-branch/master/git-push-fork-to-upstream-branch > /usr/local/bin/git-push-fork-to-upstream-branch
+                    chmod 755 /usr/local/bin/git-push-fork-to-upstream-branch
+
+            - ssh-checkout
+
+            - run:
+                name: Checkout upstream
+                command: |
+                    git remote add upstream https://github.com/riscv-boom/riscv-boom.git
+                    git fetch --all
+
+            - run:
+                name: Configure and push fork branch
+                command: |
+                    git-push-fork-to-upstream-branch upstream $CIRCLE_PR_USERNAME:$(curl -s https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/pulls/${CIRCLE_PR_NUMBER} | jq -r '.head.ref')
+
 # Order and dependencies of jobs to run
 workflows:
     version: 2
-    build-and-test-boom-configs:
+    checkstyle-workflow:
         when: << pipeline.parameters.build-and-test-boom-configs-run >>
-        filters:
-            branches:
-                ignore: /pull\/[0-9]+/
         jobs:
-            # Make the toolchains
-            - install-riscv-toolchain
-            - install-esp-toolchain
-
-            # Setup build environment
-            - prepare-build-environment
-
             # Run generic syntax checking
             - run-scala-checkstyle
+
+    build-and-test-boom-configs:
+        when: << pipeline.parameters.build-and-test-boom-configs-run >>
+        jobs:
+            # Make the toolchains
+            - install-riscv-toolchain:
+                filters: &ignore_fork
+                    branches:
+                        ignore: /pull\/[0-9]+/
+
+            - install-esp-toolchain:
+                filters:
+                    <<: *ignore_fork
+
+            # Setup build environment
+            - prepare-build-environment:
+                filters:
+                    <<: *ignore_fork
 
             # Prepare the verilator builds
             - prepare-smallboomconfig:
@@ -601,13 +611,11 @@ workflows:
                     branches:
                         only:
                             - master
-
         when: << pipeline.parameters.init-firesim-run >>
-        filters:
-            branches:
-                ignore: /pull\/[0-9]+/
         jobs:
             - aws-approval:
+                filters:
+                    <<: *ignore_fork
                 type: approval
 
             - initialize-manager:
@@ -642,38 +650,30 @@ workflows:
 
     finish-firesim-afi:
         when: << pipeline.parameters.finish-firesim-afi-run >>
-        filters:
-            branches:
-                ignore: /pull\/[0-9]+/
         jobs:
             - largefireboom-afi-failed
 
     launch-firesim-workloads:
         when: << pipeline.parameters.launch-firesim-workloads-run >>
-        filters:
-            branches:
-                ignore: /pull\/[0-9]+/
         jobs:
             - launch-largefireboom-workloads
 
     finish-firesim-workload:
         when: << pipeline.parameters.finish-firesim-workload-run >>
-        filters:
-            branches:
-                ignore: /pull\/[0-9]+/
         jobs:
             - largefireboom-workload-finished
 
     push-fork-upstream-workload:
-        filters:
-            branches:
-                only: /pull\/[0-9]+/
         jobs:
+            # comment
             - push-approval:
+                filters: &only_fork
+                    branches:
+                        only: /pull\/[0-9]+/
                 type: approval
 
             - push-fork-upstream:
+                filters:
+                    <<: *only_fork
                 requires:
                     - push-approval
-
-
