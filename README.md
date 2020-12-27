@@ -1,6 +1,5 @@
 ![](docs/figures/evolution.png)
 
-
 The Berkeley Out-of-Order RISC-V Processor [![CircleCI](https://circleci.com/gh/riscv-boom/riscv-boom.svg?style=svg)](https://circleci.com/gh/riscv-boom/riscv-boom)
 ====================================================================================================================================================================
 
