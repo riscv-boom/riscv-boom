@@ -483,39 +483,9 @@ jobs:
                             .circleci/firesim-run-finished.sh largefireboom spec17-intspeed-test-600 << pipeline.parameters.launchrunfarm_passed >> << pipeline.parameters.infrasetup_passed >> << pipeline.parameters.runworkload_passed >>
                         no_output_timeout: 30m
 
-    ###########################################################################################
-
-    push-fork-upstream:
-        executor: main-env
-        steps:
-            - run:
-                name: Install Git Push Script
-                command: |
-                    curl -sL https://raw.githubusercontent.com/jklukas/git-push-fork-to-upstream-branch/master/git-push-fork-to-upstream-branch > /usr/local/bin/git-push-fork-to-upstream-branch
-                    chmod 755 /usr/local/bin/git-push-fork-to-upstream-branch
-
-            - ssh-checkout
-
-            - run:
-                name: Checkout upstream
-                command: |
-                    git remote add upstream https://github.com/riscv-boom/riscv-boom.git
-                    git fetch --all
-
-            - run:
-                name: Configure and push fork branch
-                command: |
-                    git-push-fork-to-upstream-branch upstream $CIRCLE_PR_USERNAME:$(curl -s https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/pulls/${CIRCLE_PR_NUMBER} | jq -r '.head.ref')
-
 # Order and dependencies of jobs to run
 workflows:
     version: 2
-    checkstyle-workflow:
-        when: << pipeline.parameters.build-and-test-boom-configs-run >>
-        jobs:
-            # Run generic syntax checking
-            - run-scala-checkstyle
-
     build-and-test-boom-configs:
         when: << pipeline.parameters.build-and-test-boom-configs-run >>
         jobs:
@@ -531,6 +501,11 @@ workflows:
 
             # Setup build environment
             - prepare-build-environment:
+                filters:
+                    <<: *ignore_fork
+
+            # Run generic syntax checking
+            - run-scala-checkstyle:
                 filters:
                     <<: *ignore_fork
 
@@ -662,18 +637,3 @@ workflows:
         when: << pipeline.parameters.finish-firesim-workload-run >>
         jobs:
             - largefireboom-workload-finished
-
-    push-fork-upstream-workload:
-        jobs:
-            # comment
-            - push-approval:
-                filters: &only_fork
-                    branches:
-                        only: /pull\/[0-9]+/
-                type: approval
-
-            - push-fork-upstream:
-                filters:
-                    <<: *only_fork
-                requires:
-                    - push-approval
