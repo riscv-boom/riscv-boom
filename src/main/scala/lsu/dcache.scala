@@ -387,17 +387,17 @@ class BoomNonBlockingDCache(staticIdForMetadataUseOnly: Int)(implicit p: Paramet
   private val tileParams = p(TileKey)
   protected val cfg = tileParams.dcache.get
 
-  protected def cacheClientParameters = cfg.scratch.map(x => Seq()).getOrElse(Seq(TLClientParameters(
+  protected def cacheClientParameters = cfg.scratch.map(x => Seq()).getOrElse(Seq(TLMasterParameters.v1(
     name          = s"Core ${staticIdForMetadataUseOnly} DCache",
     sourceId      = IdRange(0, 1 max (cfg.nMSHRs + 1)),
     supportsProbe = TransferSizes(cfg.blockBytes, cfg.blockBytes))))
 
-  protected def mmioClientParameters = Seq(TLClientParameters(
+  protected def mmioClientParameters = Seq(TLMasterParameters.v1(
     name          = s"Core ${staticIdForMetadataUseOnly} DCache MMIO",
     sourceId      = IdRange(cfg.nMSHRs + 1, cfg.nMSHRs + 1 + cfg.nMMIOs),
     requestFifo   = true))
 
-  val node = TLClientNode(Seq(TLClientPortParameters(
+  val node = TLClientNode(Seq(TLMasterPortParameters.v1(
     cacheClientParameters ++ mmioClientParameters,
     minLatency = 1)))
 

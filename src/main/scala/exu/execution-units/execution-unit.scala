@@ -125,7 +125,6 @@ trait HasIrfReadPorts { this: ExecutionUnit =>
     io_arb_irf_reqs(1).valid := arb_uop.valid && arb_uop.bits.lrs2_rtype === RT_FIX && !arb_uop.bits.iw_p2_bypass_hint
     io_arb_irf_reqs(1).bits  := arb_uop.bits.prs2
   }
-
   val arb_rebusied_prs1 = arb_uop.bits.lrs1_rtype === RT_FIX && rebusied(arb_uop.bits.prs1)
   val arb_rebusied_prs2 = arb_uop.bits.lrs2_rtype === RT_FIX && rebusied(arb_uop.bits.prs2) && (nReaders == 2).B
   val arb_rebusied      = arb_rebusied_prs1 || arb_rebusied_prs2
@@ -397,7 +396,6 @@ class UniqueExeUnit(
     assert(!(exe_uop.valid && exe_uop.bits.is_rocc))
     (None, None)
   }
-
 
   val (io_ifpu_resp) = if (hasIfpu) {
     val ifpu_ready = Wire(Bool())

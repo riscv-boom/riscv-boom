@@ -153,6 +153,8 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
 
   val status = Input(new rocket.MStatus)
   val bp     = Input(Vec(nBreakpoints, new rocket.BP))
+  val mcontext = Input(UInt())
+  val scontext = Input(UInt())
 
   val perf        = Output(new Bundle {
     val acquire = Bool()
@@ -305,7 +307,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
 
   val dtlb = Module(new NBDTLB(
-    instruction = false, lgMaxSize = log2Ceil(coreDataBytes), rocket.TLBConfig(dcacheParams.nTLBEntries)))
+    instruction = false, lgMaxSize = log2Ceil(coreDataBytes), rocket.TLBConfig(dcacheParams.nTLBSets, dcacheParams.nTLBWays)))
 
   io.ptw <> dtlb.io.ptw
   io.core.perf.tlbMiss := io.ptw.req.fire()
@@ -753,7 +755,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     bkptu(w).io.bp     := io.core.bp
     bkptu(w).io.pc     := DontCare
     bkptu(w).io.ea     := exe_tlb_vaddr(w)
-
+    bkptu(w).io.mcontext := io.core.mcontext
+    bkptu(w).io.scontext := io.core.scontext
   }
   dtlb.io.kill                      := exe_kill.reduce(_||_)
   dtlb.io.sfence                    := exe_sfence

@@ -14,16 +14,18 @@ package boom.exu
 import chisel3._
 import chisel3.util._
 import freechips.rocketchip.config.Parameters
-
 import freechips.rocketchip.tile.FPConstants._
 import freechips.rocketchip.tile
 import boom.common._
 import boom.util._
+import freechips.rocketchip.tile.HasFPUParameters
+import freechips.rocketchip.util.uintToBitPat
 
 /**
  * Decoder for FPU divide and square root signals
  */
-class UOPCodeFDivDecoder(implicit p: Parameters) extends Module
+class UOPCodeFDivDecoder(implicit p: Parameters) extends BoomModule
+  with HasFPUParameters
 {
   val io = IO(new Bundle {
     val uopc = Input(Bits(UOPC_SZ.W))
@@ -37,27 +39,27 @@ class UOPCodeFDivDecoder(implicit p: Parameters) extends Module
   val decoder = freechips.rocketchip.rocket.DecodeLogic(io.uopc,
     // Note: not all of these signals are used or necessary, but we're
     // constrained by the need to fit the rocket.FPU units' ctrl signals.
-    //                                       swap12         fma
-    //                                       | swap32       | div
-    //                                       | | singleIn   | | sqrt
-    //                            ldst       | | | singleOut| | | wflags
-    //                            | wen      | | | | from_int | | |
-    //                            | | ren1   | | | | | to_int | | |
-    //                            | | | ren2 | | | | | | fast | | |
-    //                            | | | | ren3 | | | | | |  | | | |
-    //                            | | | | |  | | | | | | |  | | | |
-    /* Default */            List(X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    //                                      swap12         fma
+    //                                      | swap32       | div
+    //                                      | | typeTagIn  | | sqrt
+    //                           ldst       | | | typeTagOut | | wflags
+    //                           | wen      | | | | from_int | | |
+    //                           | | ren1   | | | | | to_int | | |
+    //                           | | | ren2 | | | | | | fast | | |
+    //                           | | | | ren3 | | | | | |  | | | |
+    //                           | | | | |  | | | | | | |  | | | |
+    /* Default */           List(X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
     Array(
-      BitPat(uopFDIV_S)   -> List(X,X,Y,Y,X, X,X,Y,Y,X,X,X, X,Y,N,Y),
-      BitPat(uopFDIV_D)   -> List(X,X,Y,Y,X, X,X,N,N,X,X,X, X,Y,N,Y),
-      BitPat(uopFSQRT_S)  -> List(X,X,Y,N,X, X,X,Y,Y,X,X,X, X,N,Y,Y),
-      BitPat(uopFSQRT_D)  -> List(X,X,Y,N,X, X,X,N,N,X,X,X, X,N,Y,Y)
-    ))
+      BitPat(uopFDIV_S)  -> List(X,X,Y,Y,X, X,X,S,S,X,X,X, X,Y,N,Y),
+      BitPat(uopFDIV_D)  -> List(X,X,Y,Y,X, X,X,D,D,X,X,X, X,Y,N,Y),
+      BitPat(uopFSQRT_S) -> List(X,X,Y,N,X, X,X,S,S,X,X,X, X,N,Y,Y),
+      BitPat(uopFSQRT_D) -> List(X,X,Y,N,X, X,X,D,D,X,X,X, X,N,Y,Y)
+    ): Array[(BitPat, List[BitPat])])
 
   val s = io.sigs
   io.sigs := DontCare
   val sigs = Seq(s.ldst, s.wen, s.ren1, s.ren2, s.ren3, s.swap12,
-                 s.swap23, s.singleIn, s.singleOut, s.fromint, s.toint, s.fastpipe, s.fma,
+                 s.swap23, s.typeTagIn, s.typeTagOut, s.fromint, s.toint, s.fastpipe, s.fma,
                  s.div, s.sqrt, s.wflags)
   sigs zip decoder map {case(s,d) => s := d}
 }
@@ -93,8 +95,8 @@ class FDivSqrtUnit2(implicit p: Parameters)
   fpiu.io.in.valid := io.req.valid
   fpiu.io.in.bits  := fdiv_decoder.io.sigs
   fpiu.io.in.bits.rm := io.fcsr_rm
-  fpiu.io.in.bits.in1 := unbox(io.req.bits.rs1_data, !fdiv_decoder.io.sigs.singleIn, None)
-  fpiu.io.in.bits.in2 := unbox(io.req.bits.rs2_data, !fdiv_decoder.io.sigs.singleIn, None)
+  fpiu.io.in.bits.in1 := unbox(io.req.bits.rs1_data, fdiv_decoder.io.sigs.typeTagIn, None)
+  fpiu.io.in.bits.in2 := unbox(io.req.bits.rs2_data, fdiv_decoder.io.sigs.typeTagIn, None)
   fpiu.io.in.bits.in3 := DontCare
   fpiu.io.in.bits.typ := io.req.bits.uop.fp_typ
   fpiu.io.in.bits.fmaCmd := 0.U
@@ -106,7 +108,7 @@ class FDivSqrtUnit2(implicit p: Parameters)
     r_rm := io.fcsr_rm
   }
   for (t <- floatTypes) {
-    val tag = !r_sigs.singleOut
+    val tag = r_sigs.typeTagOut
     val divSqrt = Module(new hardfloat.DivSqrtRecFN_small(t.exp, t.sig, 0))
     divSqrt.io.inValid := r_req.valid && (tag === typeTag(t).U) && (r_sigs.div || r_sigs.sqrt) && !divSqrt_inFlight
     divSqrt.io.sqrtOp := r_sigs.sqrt
@@ -190,10 +192,10 @@ class FDivSqrtUnit(implicit p: Parameters)
 
     r_buffer_fin.rm := io.fcsr_rm
     r_buffer_fin.typ := 0.U // unused for fdivsqrt
-    val tag = !fdiv_decoder.io.sigs.singleIn
+    val tag = fdiv_decoder.io.sigs.typeTagIn
     r_buffer_fin.in1 := unbox(io.req.bits.rs1_data, tag, Some(tile.FType.D))
     r_buffer_fin.in2 := unbox(io.req.bits.rs2_data, tag, Some(tile.FType.D))
-    when (fdiv_decoder.io.sigs.singleIn) {
+    when (tag === S) {
       r_buffer_fin.in1 := in1_upconvert
       r_buffer_fin.in2 := in2_upconvert
     }
@@ -279,12 +281,12 @@ class FDivSqrtUnit(implicit p: Parameters)
   downvert_d2s.io.in := r_out_wdata_double
   downvert_d2s.io.roundingMode := r_divsqrt_fin.rm
   downvert_d2s.io.detectTininess := DontCare
-  val out_flags = r_out_flags_double | Mux(r_divsqrt_fin.singleIn, downvert_d2s.io.exceptionFlags, 0.U)
+  val out_flags = r_out_flags_double | Mux(r_divsqrt_fin.typeTagIn === S, downvert_d2s.io.exceptionFlags, 0.U)
 
   io.resp.valid := r_out_val
   io.resp.bits.uop := r_out_uop
   io.resp.bits.data :=
-    Mux(r_divsqrt_fin.singleIn,
+    Mux(r_divsqrt_fin.typeTagIn === S,
       box(downvert_d2s.io.out, false.B),
       box(r_out_wdata_double, true.B))
 

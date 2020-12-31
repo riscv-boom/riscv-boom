@@ -344,7 +344,7 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
   val fp_rm = Mux(io_req.uop.fp_rm === 7.U, io.fcsr_rm, io_req.uop.fp_rm)
 
   val req = Wire(new tile.FPInput)
-  val tag = !fp_ctrl.singleIn
+  val tag = fp_ctrl.typeTagIn
 
   req <> fp_ctrl
 
@@ -353,6 +353,7 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
   req.in2 := unbox(io_req.rs2_data, tag, None)
   req.in3 := DontCare
   req.typ := io_req.uop.fp_typ
+  req.fmt := DontCare // FIXME: this may not be the right thing to do here
   req.fmaCmd := DontCare
 
   assert (!(io.req.valid && fp_ctrl.fromint && req.in1(xLen).asBool),
@@ -365,7 +366,7 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
   ifpu.io.in.valid := io.req.valid
   ifpu.io.in.bits := req
   ifpu.io.in.bits.in1 := io_req.rs1_data
-  val out_double = Pipe(io.req.valid, !fp_ctrl.singleOut, intToFpLatency).bits
+  val out_double = Pipe(io.req.valid, fp_ctrl.typeTagOut === D, intToFpLatency).bits
 
   io.resp.valid        := pipe.io.resp(latency-1).valid
   io.resp.bits.uop     := pipe.io.resp(latency-1).bits.uop

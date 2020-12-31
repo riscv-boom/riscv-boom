@@ -89,7 +89,9 @@ case class BoomCoreParams(
   mulDiv: Option[freechips.rocketchip.rocket.MulDivParams] = Some(MulDivParams(divEarlyOut=true)),
   nBreakpoints: Int = 0, // TODO Fix with better frontend breakpoint unit
   nL2TLBEntries: Int = 512,
+  nL2TLBWays: Int = 1,
   nLocalInterrupts: Int = 0,
+  useNMI: Boolean = false,
   useAtomics: Boolean = true,
   useDebug: Boolean = true,
   useUser: Boolean = true,
@@ -99,6 +101,8 @@ case class BoomCoreParams(
   useRVE: Boolean = false,
   useBPWatch: Boolean = false,
   clockGate: Boolean = false,
+  mcontextWidth: Int = 0,
+  scontextWidth: Int = 0,
 
   /* debug stuff */
   enableCommitLogPrintf: Boolean = false,
@@ -114,7 +118,6 @@ case class BoomCoreParams(
   val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
   val retireWidth = decodeWidth
   val jumpInFrontend: Boolean = false // unused in boom
-
 
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
 }

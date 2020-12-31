@@ -7,14 +7,12 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
-
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.tile.FPConstants._
-import freechips.rocketchip.tile.FPUCtrlSigs
+import freechips.rocketchip.tile.{FPUCtrlSigs, HasFPUParameters}
 import freechips.rocketchip.tile
 import freechips.rocketchip.rocket
 import freechips.rocketchip.util.uintToBitPat
-
 import boom.common._
 
 /**
@@ -24,7 +22,7 @@ import boom.common._
  * most of these signals are already created, just need to be translated
  * to the Rocket FPU-speak
  */
-class UOPCodeFPUDecoder extends Module
+class UOPCodeFPUDecoder(implicit p: Parameters) extends BoomModule with HasFPUParameters
 {
   val io = IO(new Bundle {
     val uopc = Input(Bits(UOPC_SZ.W))
@@ -43,63 +41,63 @@ class UOPCodeFPUDecoder extends Module
     // constrained by the need to fit the rocket.FPU units' ctrl signals.
     //                                     swap12         fma
     //                                     | swap32       | div
-    //                                     | | singleIn   | | sqrt
-    //                          ldst       | | | singleOut| | | wflags
+    //                                     | | typeTagIn  | | sqrt
+    //                          ldst       | | | typeTagOut | | wflags
     //                          | wen      | | | | from_int | | |
     //                          | | ren1   | | | | | to_int | | |
     //                          | | | ren2 | | | | | | fastpipe |
     //                          | | | | ren3 | | | | | |  | | | |
     //                          | | | | |  | | | | | | |  | | | |
     Array(
-    BitPat(uopFCLASS_S) -> List(X,X,Y,N,N, N,X,Y,Y,N,Y,N, N,N,N,N),
-    BitPat(uopFMV_S_X)  -> List(X,X,N,N,N, X,X,Y,N,Y,N,N, N,N,N,N),
-    BitPat(uopFMV_X_S)  -> List(X,X,Y,N,N, N,X,N,Y,N,Y,N, N,N,N,N),
+    BitPat(uopFCLASS_S) -> List(X,X,Y,N,N, N,X,S,S,N,Y,N, N,N,N,N),
+    BitPat(uopFMV_S_X)  -> List(X,X,N,N,N, X,X,S,D,Y,N,N, N,N,N,N),
+    BitPat(uopFMV_X_S)  -> List(X,X,Y,N,N, N,X,D,S,N,Y,N, N,N,N,N),
 
-    BitPat(uopFCVT_S_X) -> List(X,X,N,N,N, X,X,Y,Y,Y,N,N, N,N,N,Y),
+    BitPat(uopFCVT_S_X) -> List(X,X,N,N,N, X,X,S,S,Y,N,N, N,N,N,Y),
 
-    BitPat(uopFCVT_X_S) -> List(X,X,Y,N,N, N,X,Y,Y,N,Y,N, N,N,N,Y),
+    BitPat(uopFCVT_X_S) -> List(X,X,Y,N,N, N,X,S,S,N,Y,N, N,N,N,Y),
 
-    BitPat(uopCMPR_S)   -> List(X,X,Y,Y,N, N,N,Y,Y,N,Y,N, N,N,N,Y),
+    BitPat(uopCMPR_S)   -> List(X,X,Y,Y,N, N,N,S,S,N,Y,N, N,N,N,Y),
 
-    BitPat(uopFSGNJ_S)  -> List(X,X,Y,Y,N, N,N,Y,Y,N,N,Y, N,N,N,N),
+    BitPat(uopFSGNJ_S)  -> List(X,X,Y,Y,N, N,N,S,S,N,N,Y, N,N,N,N),
 
-    BitPat(uopFMINMAX_S)-> List(X,X,Y,Y,N, N,N,Y,Y,N,N,Y, N,N,N,Y),
+    BitPat(uopFMINMAX_S)-> List(X,X,Y,Y,N, N,N,S,S,N,N,Y, N,N,N,Y),
 
-    BitPat(uopFADD_S)   -> List(X,X,Y,Y,N, N,Y,Y,Y,N,N,N, Y,N,N,Y),
-    BitPat(uopFSUB_S)   -> List(X,X,Y,Y,N, N,Y,Y,Y,N,N,N, Y,N,N,Y),
-    BitPat(uopFMUL_S)   -> List(X,X,Y,Y,N, N,N,Y,Y,N,N,N, Y,N,N,Y),
-    BitPat(uopFMADD_S)  -> List(X,X,Y,Y,Y, N,N,Y,Y,N,N,N, Y,N,N,Y),
-    BitPat(uopFMSUB_S)  -> List(X,X,Y,Y,Y, N,N,Y,Y,N,N,N, Y,N,N,Y),
-    BitPat(uopFNMADD_S) -> List(X,X,Y,Y,Y, N,N,Y,Y,N,N,N, Y,N,N,Y),
-    BitPat(uopFNMSUB_S) -> List(X,X,Y,Y,Y, N,N,Y,Y,N,N,N, Y,N,N,Y)
+    BitPat(uopFADD_S)   -> List(X,X,Y,Y,N, N,Y,S,S,N,N,N, Y,N,N,Y),
+    BitPat(uopFSUB_S)   -> List(X,X,Y,Y,N, N,Y,S,S,N,N,N, Y,N,N,Y),
+    BitPat(uopFMUL_S)   -> List(X,X,Y,Y,N, N,N,S,S,N,N,N, Y,N,N,Y),
+    BitPat(uopFMADD_S)  -> List(X,X,Y,Y,Y, N,N,S,S,N,N,N, Y,N,N,Y),
+    BitPat(uopFMSUB_S)  -> List(X,X,Y,Y,Y, N,N,S,S,N,N,N, Y,N,N,Y),
+    BitPat(uopFNMADD_S) -> List(X,X,Y,Y,Y, N,N,S,S,N,N,N, Y,N,N,Y),
+    BitPat(uopFNMSUB_S) -> List(X,X,Y,Y,Y, N,N,S,S,N,N,N, Y,N,N,Y)
     )
 
   val d_table: Array[(BitPat, List[BitPat])] =
     Array(
-    BitPat(uopFCLASS_D) -> List(X,X,Y,N,N, N,X,N,N,N,Y,N, N,N,N,N),
-    BitPat(uopFMV_D_X)  -> List(X,X,N,N,N, X,X,N,N,Y,N,N, N,N,N,N),
-    BitPat(uopFMV_X_D)  -> List(X,X,Y,N,N, N,X,N,N,N,Y,N, N,N,N,N),
-    BitPat(uopFCVT_S_D) -> List(X,X,Y,N,N, N,X,N,Y,N,N,Y, N,N,N,Y),
-    BitPat(uopFCVT_D_S) -> List(X,X,Y,N,N, N,X,Y,N,N,N,Y, N,N,N,Y),
+    BitPat(uopFCLASS_D) -> List(X,X,Y,N,N, N,X,D,D,N,Y,N, N,N,N,N),
+    BitPat(uopFMV_D_X)  -> List(X,X,N,N,N, X,X,D,D,Y,N,N, N,N,N,N),
+    BitPat(uopFMV_X_D)  -> List(X,X,Y,N,N, N,X,D,D,N,Y,N, N,N,N,N),
+    BitPat(uopFCVT_S_D) -> List(X,X,Y,N,N, N,X,D,S,N,N,Y, N,N,N,Y),
+    BitPat(uopFCVT_D_S) -> List(X,X,Y,N,N, N,X,S,D,N,N,Y, N,N,N,Y),
 
-    BitPat(uopFCVT_D_X) -> List(X,X,N,N,N, X,X,N,N,Y,N,N, N,N,N,Y),
+    BitPat(uopFCVT_D_X) -> List(X,X,N,N,N, X,X,D,D,Y,N,N, N,N,N,Y),
 
-    BitPat(uopFCVT_X_D) -> List(X,X,Y,N,N, N,X,N,N,N,Y,N, N,N,N,Y),
+    BitPat(uopFCVT_X_D) -> List(X,X,Y,N,N, N,X,D,D,N,Y,N, N,N,N,Y),
 
-    BitPat(uopCMPR_D)   -> List(X,X,Y,Y,N, N,N,N,N,N,Y,N, N,N,N,Y),
+    BitPat(uopCMPR_D)   -> List(X,X,Y,Y,N, N,N,D,D,N,Y,N, N,N,N,Y),
 
-    BitPat(uopFSGNJ_D)  -> List(X,X,Y,Y,N, N,N,N,N,N,N,Y, N,N,N,N),
+    BitPat(uopFSGNJ_D)  -> List(X,X,Y,Y,N, N,N,D,D,N,N,Y, N,N,N,N),
 
-    BitPat(uopFMINMAX_D)-> List(X,X,Y,Y,N, N,N,N,N,N,N,Y, N,N,N,Y),
+    BitPat(uopFMINMAX_D)-> List(X,X,Y,Y,N, N,N,D,D,N,N,Y, N,N,N,Y),
 
-    BitPat(uopFADD_D)   -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y),
-    BitPat(uopFSUB_D)   -> List(X,X,Y,Y,N, N,Y,N,N,N,N,N, Y,N,N,Y),
-    BitPat(uopFMUL_D)   -> List(X,X,Y,Y,N, N,N,N,N,N,N,N, Y,N,N,Y),
+    BitPat(uopFADD_D)   -> List(X,X,Y,Y,N, N,Y,D,D,N,N,N, Y,N,N,Y),
+    BitPat(uopFSUB_D)   -> List(X,X,Y,Y,N, N,Y,D,D,N,N,N, Y,N,N,Y),
+    BitPat(uopFMUL_D)   -> List(X,X,Y,Y,N, N,N,D,D,N,N,N, Y,N,N,Y),
 
-    BitPat(uopFMADD_D)  -> List(X,X,Y,Y,Y, N,N,N,N,N,N,N, Y,N,N,Y),
-    BitPat(uopFMSUB_D)  -> List(X,X,Y,Y,Y, N,N,N,N,N,N,N, Y,N,N,Y),
-    BitPat(uopFNMADD_D) -> List(X,X,Y,Y,Y, N,N,N,N,N,N,N, Y,N,N,Y),
-    BitPat(uopFNMSUB_D) -> List(X,X,Y,Y,Y, N,N,N,N,N,N,N, Y,N,N,Y)
+    BitPat(uopFMADD_D)  -> List(X,X,Y,Y,Y, N,N,D,D,N,N,N, Y,N,N,Y),
+    BitPat(uopFMSUB_D)  -> List(X,X,Y,Y,Y, N,N,D,D,N,N,N, Y,N,N,Y),
+    BitPat(uopFNMADD_D) -> List(X,X,Y,Y,Y, N,N,D,D,N,N,N, Y,N,N,Y),
+    BitPat(uopFNMSUB_D) -> List(X,X,Y,Y,Y, N,N,D,D,N,N,N, Y,N,N,Y)
     )
 
 //   val insns = fLen match {
@@ -111,7 +109,7 @@ class UOPCodeFPUDecoder extends Module
 
   val s = io.sigs
   val sigs = Seq(s.ldst, s.wen, s.ren1, s.ren2, s.ren3, s.swap12,
-                 s.swap23, s.singleIn, s.singleOut, s.fromint, s.toint, s.fastpipe, s.fma,
+                 s.swap23, s.typeTagIn, s.typeTagOut, s.fromint, s.toint, s.fastpipe, s.fma,
                  s.div, s.sqrt, s.wflags)
   sigs zip decoder map {case(s,d) => s := d}
 }
@@ -184,7 +182,7 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
 
   def fuInput(minT: Option[tile.FType]): tile.FPInput = {
     val req = Wire(new tile.FPInput)
-    val tag = !fp_ctrl.singleIn
+    val tag = fp_ctrl.typeTagIn
     req <> fp_ctrl
     req.rm := fp_rm
     req.in1 := unbox(io_req.rs1_data, tag, minT)
@@ -192,6 +190,10 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
     req.in3 := unbox(io_req.rs3_data, tag, minT)
     when (fp_ctrl.swap23) { req.in3 := req.in2 }
     req.typ := io_req.uop.fp_typ
+    req.fmt := Mux(tag === S, 0.U, 1.U) // TODO support Zfh and avoid special-case below
+    when (io_req.uop.uopc === uopFMV_X_S) {
+      req.fmt := 0.U
+    }
 
     val fma_decoder = Module(new FMADecoder)
     fma_decoder.io.uopc := io_req.uop.uopc
@@ -200,11 +202,11 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
   }
 
   val dfma = Module(new tile.FPUFMAPipe(latency = fpu_latency, t = tile.FType.D))
-  dfma.io.in.valid := io.req.valid && fp_ctrl.fma && !fp_ctrl.singleOut
+  dfma.io.in.valid := io.req.valid && fp_ctrl.fma && (fp_ctrl.typeTagOut === D)
   dfma.io.in.bits := fuInput(Some(dfma.t))
 
   val sfma = Module(new tile.FPUFMAPipe(latency = fpu_latency, t = tile.FType.S))
-  sfma.io.in.valid := io.req.valid && fp_ctrl.fma && fp_ctrl.singleOut
+  sfma.io.in.valid := io.req.valid && fp_ctrl.fma && (fp_ctrl.typeTagOut === S)
   sfma.io.in.bits := fuInput(Some(sfma.t))
 
   val fpiu = Module(new tile.FPToInt)
@@ -220,7 +222,7 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
   fpmu.io.in.valid := io.req.valid && fp_ctrl.fastpipe
   fpmu.io.in.bits := fpiu.io.in.bits
   fpmu.io.lt := fpiu.io.out.bits.lt
-  val fpmu_double = Pipe(io.req.valid && fp_ctrl.fastpipe, !fp_ctrl.singleOut, fpu_latency).bits
+  val fpmu_double = Pipe(io.req.valid && fp_ctrl.fastpipe, fp_ctrl.typeTagOut === D, fpu_latency).bits
 
   // Response (all FP units have been padded out to the same latency)
   io.resp.valid := fpiu_out.valid ||
