@@ -516,7 +516,16 @@ class WithFastTAGEBPD extends Config((site, here, up) => {
       localHistoryNSets = 0,
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val tage = Module(new TageBranchPredictorBank(
-          BoomTageParams(singlePorted = true))(p))
+          BoomTageParams(
+            tableInfo = Seq((  128,       2,     8),
+                            (  128,       4,     8),
+                            (  128,       8,     8),
+                            (  128,      16,     8),
+                            (  128,      32,     8),
+                            (  128,      64,     8)),
+            singlePorted = true
+          )
+        )(p))
         val slowbtb = Module(new SlowBTBBranchPredictorBank(
           BoomSlowBTBParams(singlePorted = true))(p))
         val fastbtb = Module(new BTBBranchPredictorBank(
