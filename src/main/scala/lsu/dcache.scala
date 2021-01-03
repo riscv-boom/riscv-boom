@@ -361,9 +361,13 @@ class BoomBankedDataArray(implicit p: Parameters) extends AbstractBoomDataArray 
       val ridx = Mux1H(s0_bank_read_gnts(b), s0_ridxs)
       val way_en = Mux1H(s0_bank_read_gnts(b), io.read.map(_.bits.way_en))
       val write_en = io.write.bits.way_en(w) && s0_bank_write_gnt(b)
-      val read_en = way_en(w) && s0_bank_read_gnts(b).reduce(_||_)
-      if (dcacheSinglePorted) assert(!(read_en && write_en))
-      s2_bank_reads(b) := array.read(ridx, !(write_en && dcacheSinglePorted.B) && read_en).asUInt
+      val read_en = WireInit(way_en(w) && s0_bank_read_gnts(b).reduce(_||_))
+      s2_bank_reads(b) := (if (dcacheSinglePorted) {
+        assert(!(read_en && write_en))
+        array.read(ridx, !write_en && read_en)
+      } else {
+        array.read(ridx, read_en)
+      }).asUInt
 
       when (write_en) {
         val data = VecInit((0 until rowWords) map (i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i)))
