@@ -328,7 +328,7 @@ class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) ex
               fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
             ),
             dcache = Some(
-              DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=8, nTLBWays=32)
+              DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=128, nWays=4, nMSHRs=8, nTLBWays=32)
             ),
             icache = Some(
               ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, fetchBytes=4*4)
@@ -531,7 +531,7 @@ class WithFastTAGEBPD extends Config((site, here, up) => {
         val fastbtb = Module(new BTBBranchPredictorBank(
           BoomBTBParams(nSets = 32, nWays = 2, offsetSz = 13, extendedNSets = 32, useFlops = true))(p))
         val slowbim = Module(new BIMBranchPredictorBank(
-          BoomBIMParams(nSets = 4096, singlePorted = true, slow = true))(p))
+          BoomBIMParams(nSets = 4096, singlePorted = true, slow = true, nCols = 2))(p))
         val fastbim = Module(new BIMBranchPredictorBank(
           BoomBIMParams(useFlops = true, nSets = 128, singlePorted = false))(p))
         val ubtb = Module(new FA2MicroBTBBranchPredictorBank()(p))
