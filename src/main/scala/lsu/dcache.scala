@@ -348,35 +348,46 @@ class BoomBankedDataArray(implicit p: Parameters) extends AbstractBoomDataArray 
   val s2_bank_selection = RegNext(s1_bank_selection)
   io.s1_nacks          := s1_nacks
 
-  for (w <- 0 until nWays) {
-    val s2_bank_reads = Reg(Vec(nBanks, Bits(encRowBits.W)))
+  val data_arrays = Seq.tabulate(nBanks) {
+    b => DescribedSRAM(
+      name = s"array_${b}",
+      desc = "Boom DCache data array",
+      size = bankSize,
+      data = Vec(nWays * rowWords, Bits(encDataBits.W))
+    )
+  }
+  val s2_bank_reads = Reg(Vec(nBanks, Vec(nWays, Bits(encRowBits.W))))
+  for (b <- 0 until nBanks) {
+    val array = data_arrays(b)._1
 
-    for (b <- 0 until nBanks) {
-      val (array, omSRAM) = DescribedSRAM(
-        name = s"array_${w}_${b}",
-        desc = "Non-blocking DCache Data Array",
-        size = bankSize,
-        data = Vec(rowWords, Bits(encDataBits.W))
-      )
-      val ridx = Mux1H(s0_bank_read_gnts(b), s0_ridxs)
-      val way_en = Mux1H(s0_bank_read_gnts(b), io.read.map(_.bits.way_en))
-      val write_en = io.write.bits.way_en(w) && s0_bank_write_gnt(b)
-      val read_en = WireInit(way_en(w) && s0_bank_read_gnts(b).reduce(_||_))
-      s2_bank_reads(b) := (if (dcacheSinglePorted) {
-        assert(!(read_en && write_en))
-        array.read(ridx, !write_en && read_en)
-      } else {
-        array.read(ridx, read_en)
-      }).asUInt
+    val ridx = Mux1H(s0_bank_read_gnts(b), s0_ridxs)
+    val way_en = Mux1H(s0_bank_read_gnts(b), io.read.map(_.bits.way_en))
+    val write_en = s0_bank_write_gnt(b)
+    val write_mask = Cat(Seq.tabulate(nWays) { w =>
+      Mux(io.write.bits.way_en(w), io.write.bits.wmask, 0.U(rowWords.W))
+    }.reverse).asBools
+    val read_en = WireInit(s0_bank_read_gnts(b).reduce(_||_))
 
-      when (write_en) {
-        val data = VecInit((0 until rowWords) map (i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i)))
-        array.write(s0_widx, data, io.write.bits.wmask.asBools)
+    s2_bank_reads(b) := (if (dcacheSinglePorted) {
+      assert(!(read_en && write_en))
+      array.read(ridx, !write_en && read_en)
+    } else {
+      array.read(ridx, read_en)
+    }).asTypeOf(Vec(nWays, Bits(encRowBits.W)))
+
+    when (write_en) {
+      val data = Wire(Vec(nWays * rowWords, Bits(encDataBits.W)))
+      for (w <- 0 until nWays) {
+        for (i <- 0 until rowWords) {
+          data(w*rowWords+i) := io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i)
+        }
       }
+      array.write(s0_widx, data, write_mask)
     }
-
+  }
+  for (w <- 0 until nWays) {
     for (i <- 0 until lsuWidth) {
-      io.resp(i)(w) := s2_bank_reads(s2_bank_selection(i))
+      io.resp(i)(w) := s2_bank_reads(s2_bank_selection(i))(w)
     }
   }
 }
