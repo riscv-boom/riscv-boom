@@ -211,56 +211,36 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     nSets * refillCycles
   }
 
-  val dataArrays = if (nBanks == 1) {
-    // Use unbanked icache for narrow accesses.
-    (0 until nWays).map { x =>
-      DescribedSRAM(
-        name = s"dataArrayWay_${x}",
-        desc = "ICache Data Array",
-        size = nSets * refillCycles,
-        data = UInt((wordBits).W)
-      )
-    }
-  } else {
-    // Use two banks, interleaved.
-    (0 until nWays).map { x =>
-      DescribedSRAM(
-        name = s"dataArrayB0Way_${x}",
-        desc = "ICache Data Array",
-        size = nSets * refillCycles,
-        data = UInt((wordBits/nBanks).W)
-      )} ++
-    (0 until nWays).map { x =>
-      DescribedSRAM(
-        name = s"dataArrayB1Way_${x}",
-        desc = "ICache Data Array",
-        size = nSets * refillCycles,
-        data = UInt((wordBits/nBanks).W)
-      )}
+  val dataArrays = Seq.tabulate(nBanks) { b =>
+    DescribedSRAM(
+      name = s"dataArrayB${b}",
+      desc = "ICache Data Array",
+      size = nSets * refillCycles,
+      data = Vec(nWays, UInt((wordBits/nBanks).W))
+    )
   }
   if (nBanks == 1) {
     // Use unbanked icache for narrow accesses.
     s1_bankid := 0.U
-    for ((dataArray, i) <- dataArrays.map(_._1) zipWithIndex) {
-      def row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
-      val s0_ren = s0_valid
+    val array = dataArrays(0)._1
+    def row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
+    val s0_ren = s0_valid
+    val wen = refill_one_beat && !invalidated
 
-      val wen = (refill_one_beat && !invalidated) && repl_way === i.U
-
-      val mem_idx = Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
-                    row(s0_vaddr))
-      when (wen) {
-        dataArray.write(mem_idx, tl_out.d.bits.data)
-      }
-      if (enableICacheDelay)
-        s2_dout(i) := dataArray.read(RegNext(mem_idx), RegNext(!wen && s0_ren))
-      else
-        s2_dout(i) := RegNext(dataArray.read(mem_idx, !wen && s0_ren))
+    val mem_idx = Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
+                      row(s0_vaddr))
+    val wmask = UIntToOH(repl_way)(nWays-1,0).asBools
+    when (wen) {
+      array.write(mem_idx, VecInit(Seq.fill(nWays) { tl_out.d.bits.data }), wmask)
     }
+    if (enableICacheDelay)
+      s2_dout := array.read(RegNext(mem_idx), RegNext(!wen && s0_ren))
+    else
+      s2_dout := RegNext(array.read(mem_idx, !wen && s0_ren))
   } else {
     // Use two banks, interleaved.
-    val dataArraysB0 = dataArrays.map(_._1).take(nWays)
-    val dataArraysB1 = dataArrays.map(_._1).drop(nWays)
+    val array_0 = dataArrays(0)._1
+    val array_1 = dataArrays(1)._1
     require (nBanks == 2)
 
     // Bank0 row's id wraps around if Bank1 is the starting bank.
@@ -280,50 +260,60 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
 
     s1_bankid := RegNext(bank(s0_vaddr))
 
-    for (i <- 0 until nWays) {
-      val s0_ren = s0_valid
-      val wen = (refill_one_beat && !invalidated)&& repl_way === i.U
+    val s0_ren = s0_valid
+    val wen = (refill_one_beat && !invalidated)
+    val wmask = UIntToOH(repl_way)(nWays-1,0).asBools
 
-      var mem_idx0: UInt = null
-      var mem_idx1: UInt = null
 
-      if (refillsToOneBank) {
-        // write a refill beat across only one beat.
-        mem_idx0 =
-          Mux(refill_one_beat, (refill_idx << (log2Ceil(refillCycles)-1)) | (refill_cnt >> 1.U),
-          b0Row(s0_vaddr))
-        mem_idx1 =
-          Mux(refill_one_beat, (refill_idx << (log2Ceil(refillCycles)-1)) | (refill_cnt >> 1.U),
-          b1Row(s0_vaddr))
+    var mem_idx0: UInt = null
+    var mem_idx1: UInt = null
 
-        when (wen && refill_cnt(0) === 0.U) {
-          dataArraysB0(i).write(mem_idx0, tl_out.d.bits.data)
-        }
-        when (wen && refill_cnt(0) === 1.U) {
-          dataArraysB1(i).write(mem_idx1, tl_out.d.bits.data)
-        }
-      } else {
-        // write a refill beat across both banks.
-        mem_idx0 =
-          Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
-          b0Row(s0_vaddr))
-        mem_idx1 =
-          Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
-          b1Row(s0_vaddr))
+    if (refillsToOneBank) {
+      // write a refill beat across only one beat.
+      mem_idx0 =
+        Mux(refill_one_beat, (refill_idx << (log2Ceil(refillCycles)-1)) | (refill_cnt >> 1.U),
+            b0Row(s0_vaddr))
+      mem_idx1 =
+        Mux(refill_one_beat, (refill_idx << (log2Ceil(refillCycles)-1)) | (refill_cnt >> 1.U),
+            b1Row(s0_vaddr))
 
-        when (wen) {
-          val data = tl_out.d.bits.data
-          dataArraysB0(i).write(mem_idx0, data(wordBits/2-1, 0))
-          dataArraysB1(i).write(mem_idx1, data(wordBits-1, wordBits/2))
-        }
+      val wdata = VecInit(Seq.fill(nWays) { tl_out.d.bits.data })
+      when (wen && refill_cnt(0) === 0.U) {
+        array_0.write(mem_idx0, wdata, wmask)
       }
-      if (enableICacheDelay) {
-        s2_dout(i) := Cat(dataArraysB1(i).read(RegNext(mem_idx1), RegNext(!wen && s0_ren)),
-                          dataArraysB0(i).read(RegNext(mem_idx0), RegNext(!wen && s0_ren)))
-      } else {
-        s2_dout(i) := RegNext(Cat(dataArraysB1(i).read(mem_idx1, !wen && s0_ren),
-                                  dataArraysB0(i).read(mem_idx0, !wen && s0_ren)))
+      when (wen && refill_cnt(0) === 1.U) {
+        array_1.write(mem_idx1, wdata, wmask)
       }
+    } else {
+      // write a refill beat across both banks.
+      mem_idx0 =
+        Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
+            b0Row(s0_vaddr))
+      mem_idx1 =
+        Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
+            b1Row(s0_vaddr))
+
+      when (wen) {
+        val data = tl_out.d.bits.data
+        val wdata_0 = VecInit(Seq.fill(nWays) { data(wordBits/2-1, 0) })
+        val wdata_1 = VecInit(Seq.fill(nWays) { data(wordBits-1, wordBits/2) })
+        array_0.write(mem_idx0, wdata_0, wmask)
+        array_1.write(mem_idx1, wdata_1, wmask)
+      }
+    }
+    val rdata_0 = Wire(Vec(nWays, UInt((wordBits/nBanks).W)))
+    val rdata_1 = Wire(Vec(nWays, UInt((wordBits/nBanks).W)))
+
+    if (enableICacheDelay) {
+      rdata_0 := array_0.read(RegNext(mem_idx0), RegNext(!wen && s0_ren))
+      rdata_1 := array_1.read(RegNext(mem_idx1), RegNext(!wen && s0_ren))
+    } else {
+      rdata_0 := RegNext(array_0.read(mem_idx0, !wen && s0_ren))
+      rdata_1 := RegNext(array_1.read(mem_idx1, !wen && s0_ren))
+    }
+
+    for (w <- 0 until nWays) {
+      s2_dout(w) := Cat(rdata_1(w), rdata_0(w))
     }
   }
   val s2_tag_hit = RegNext(s1_tag_hit)
