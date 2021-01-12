@@ -204,7 +204,6 @@ trait HasBrfReadPort { this: ExecutionUnit =>
 
 trait HasFrfReadPorts { this: ExecutionUnit =>
   val io_arb_frf_reqs  = IO(Vec(3, Decoupled(UInt(maxPregSz.W))))
-  io_arb_frf_reqs.map { r => assert(r.ready) }
   val io_rrd_frf_resps = IO(Input (Vec(3, UInt((xLen+1).W))))
 
 
@@ -545,6 +544,20 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
   with tile.HasFPUParameters
   with HasFrfReadPorts
 {
+  val io_squash_iss = IO(Output(Bool()))
+  io_squash_iss := (
+    (io_arb_frf_reqs(0).valid && !io_arb_frf_reqs(0).ready) ||
+    (io_arb_frf_reqs(1).valid && !io_arb_frf_reqs(1).ready) ||
+    (io_arb_frf_reqs(2).valid && !io_arb_frf_reqs(2).ready)
+  )
+
+  when (io_squash_iss) {
+    val will_replay = arb_uop.valid && !IsKilledByBranch(io_brupdate, io_kill, arb_uop.bits)
+    arb_uop.valid := will_replay
+    arb_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
+    rrd_uop.valid := false.B
+  }
+
   val exe_fp_req = Wire(new FuncUnitReq(xLen+1))
   exe_fp_req.uop := exe_uop.bits
   exe_fp_req.rs1_data := exe_rs1_data

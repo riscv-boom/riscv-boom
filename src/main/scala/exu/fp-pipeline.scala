@@ -62,16 +62,22 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
       hasFpiu = (w==fpWidth-1)
     )).suggestName(s"fp_exe_unit_${w}")
   }
-  val numFrfReadPorts = fpWidth * 3
+  require (numFrfReadPorts >= 3)
+  val numFrfLogicalReadPorts = fpWidth * 3
   val numFrfWritePorts = fpWidth + lsuWidth
 
   val issue_unit     = IssueUnit(fpIssueParams, numWakeupPorts, false)
   issue_unit.suggestName("fp_issue_unit")
-  val fregfile       = Module(new FullyPortedRF(
+  val fregfileBankedWriteArray = Seq.fill(numFrfWritePorts) { None }
+  val fregfile       = Module(new BankedRF(
     UInt((fLen+1).W),
+    numFrfBanks,
+    numFrfLogicalReadPorts,
     numFpPhysRegs,
+    numFrfLogicalReadPorts,
     numFrfReadPorts,
     numFrfWritePorts,
+    fregfileBankedWriteArray,
     "Floating Point"
   ))
 
@@ -83,7 +89,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   issue_unit.io.tsc_reg := io.debug_tsc_reg
   issue_unit.io.brupdate := io.brupdate
   issue_unit.io.flush_pipeline := io.flush_pipeline
-  issue_unit.io.squash_grant := false.B
+  issue_unit.io.squash_grant := exe_units.map(_.io_squash_iss).reduce(_||_)
 
 
   //-------------------------------------------------------------
@@ -132,7 +138,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
       rd_idx += 1
     }
   }
-  require(rd_idx == numFrfReadPorts)
+  require(rd_idx == numFrfLogicalReadPorts)
 
   //-------------------------------------------------------------
   // **** Register Read Stage ****
@@ -145,7 +151,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
       rd_idx += 1
     }
   }
-  require(rd_idx == numFrfReadPorts)
+  require(rd_idx == numFrfLogicalReadPorts)
 
 
   //-------------------------------------------------------------

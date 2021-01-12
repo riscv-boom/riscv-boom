@@ -39,7 +39,9 @@ case class BoomCoreParams(
   numFpPhysRegisters: Int = 48,
   numImmPhysRegisters: Int = 32,
   numIrfReadPorts: Int = 3,
+  numFrfReadPorts: Int = 3,
   numIrfBanks: Int = 1,
+  numFrfBanks: Int = 1,
   maxBrCount: Int = 4,
   numFetchBufferEntries: Int = 8,
   enableColumnALUIssue: Boolean = false,
@@ -192,6 +194,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   val numIrfReadPorts = boomParams.numIrfReadPorts
   val numIrfBanks = boomParams.numIrfBanks
+  val numFrfReadPorts = boomParams.numFrfReadPorts
+  val numFrfBanks = boomParams.numFrfBanks
 
   //************************************
   // Functional Units
