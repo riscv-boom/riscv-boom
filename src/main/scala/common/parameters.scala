@@ -53,6 +53,7 @@ case class BoomCoreParams(
   enableBTBFastRepair: Boolean = true,
   enableLoadToStoreForwarding: Boolean = true,
   enableSuperscalarSnapshots: Boolean = true,
+  enableSlowBTBRedirect: Boolean = false,
 
   useAtomicsOnlyForIO: Boolean = false,
   ftq: FtqParameters = FtqParameters(nEntries=16),
@@ -273,6 +274,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableRasTopRepair = boomParams.enableRasTopRepair
 
   val useBPD = boomParams.enableBranchPrediction
+  val useSlowBTBRedirect = boomParams.enableSlowBTBRedirect
 
   val useLHist = localHistoryNSets > 1 && localHistoryLength > 1
 

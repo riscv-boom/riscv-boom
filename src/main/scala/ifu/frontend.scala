@@ -316,8 +316,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   with HasBoomCoreParameters
   with HasBoomFrontendParameters
 {
-  val useSlowF3Redirect = false
-
   val io = IO(new BoomFrontendBundle(outer))
   val io_reset_vector = outer.resetVectorSinkNode.bundle
   implicit val edge = outer.masterNode.edges.out(0)
@@ -449,7 +447,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f2_targs = f2_bpd_resp.preds.map(_.predicted_pc.bits)
   val f2_do_redirect = f2_redirects.reduce(_||_) && useBPD.B
   val f2_predicted_target = Mux(f2_do_redirect,
-                                PriorityMux(f2_redirects, f2_targs),
+                                if (useSlowBTBRedirect) RegNext(f1_targ) else PriorityMux(f2_redirects, f2_targs),
                                 nextFetch(s2_vpc))
   val f2_predicted_ghist = s2_ghist.update(
     f2_bpd_resp.preds.map(p => p.is_br && p.predicted_pc.valid).asUInt & f2_fetch_mask,
@@ -474,6 +472,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f2_fetch_bundle = Wire(new FetchBundle)
   f2_fetch_bundle            := DontCare
   f2_fetch_bundle.pc         := s2_vpc
+  f2_fetch_bundle.next_pc    := Mux(f2_do_redirect, PriorityMux(f2_redirects, f2_targs), nextFetch(s2_vpc))
   f2_fetch_bundle.xcpt_pf_if := s2_tlb_resp.pf.inst
   f2_fetch_bundle.xcpt_ae_if := s2_tlb_resp.ae.inst
   f2_fetch_bundle.fsrc       := s2_fsrc
@@ -730,14 +729,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3_predicted_targs = f3_bpd_resp.preds.map(_.predicted_pc.bits)
 
 
-  val (f3_predicted_redirects, f3_redirect_target) = if (useSlowF3Redirect) {
-    val redirects = (UIntToOH(f3.io.deq.bits.cfi_idx.bits) & Fill(fetchWidth, f3.io.deq.bits.cfi_idx.valid)).toBools
-    (redirects, f3_predicted_targs(f3.io.deq.bits.cfi_idx.bits))
-  } else {
+  val (f3_predicted_redirects, f3_redirect_target) = {
     val redirects = VecInit((0 until fetchWidth) map { i =>
       f3.io.deq.bits.mask(i) && f3_bpd_resp.preds(i).predicted_pc.valid && f3_bpd_resp.preds(i).taken
     })
-    (redirects, PriorityMux(redirects, f3_predicted_targs))
+    val target = if (useSlowBTBRedirect) f3.io.deq.bits.next_pc else PriorityMux(redirects, f3_predicted_targs)
+    (redirects, target)
   }
   val f3_predicted_do_redirect = f3_predicted_redirects.reduce(_||_) && useBPD.B
 

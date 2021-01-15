@@ -329,6 +329,7 @@ class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) ex
               numStqEntries = 32,
               maxBrCount = 20,
               numFetchBufferEntries = 32,
+              enableSlowBTBRedirect = true,
               enablePrefetching = true,
               enableSuperscalarSnapshots = false,
               enableColumnALUIssue = true,
