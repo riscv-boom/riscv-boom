@@ -65,6 +65,7 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
   }
   def =/=(other: GlobalHistory): Bool = !(this === other)
 
+
   def update(branches: UInt, cfi_taken: Bool, cfi_is_br: Bool, cfi_idx: UInt,
     cfi_valid: Bool, addr: UInt,
     cfi_is_call: Bool, cfi_is_ret: Bool): GlobalHistory = {
@@ -322,7 +323,6 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   require(fetchWidth*coreInstBytes == outer.icacheParams.fetchBytes)
 
   val bpd = Module(new BranchPredictor)
-  bpd.io.enable := io.cpu.enable_bpd
   bpd.io.f3_fire := false.B
   val ras = Module(new BoomRAS)
 
@@ -352,7 +352,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   icache.io.req.valid     := s0_valid
   icache.io.req.bits.addr := s0_vpc
 
-  bpd.io.f0_req.valid      := s0_valid
+  bpd.io.f0_req.valid      := s0_valid && io.cpu.enable_bpd
   bpd.io.f0_req.bits.pc    := s0_vpc
   bpd.io.f0_req.bits.ghist := s0_ghist
 
