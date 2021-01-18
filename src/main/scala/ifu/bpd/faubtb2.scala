@@ -14,7 +14,8 @@ import scala.math.min
 
 case class BoomFA2MicroBTBParams(
   nWays: Int = 24,
-  tagSz: Int = 12
+  tagSz: Int = 12,
+  useDualEntries: Boolean = true
 )
 
 
@@ -24,6 +25,7 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
   val tagSz         = params.tagSz
   require(tagSz <= vaddrBitsExtended - log2Ceil(fetchWidth) - 1)
   val nWrBypassEntries = 2
+  val useDualEntries = params.useDualEntries
 
   def bimWrite(v: UInt, taken: Bool): UInt = {
     val old_bim_sat_taken  = v === 3.U
@@ -53,7 +55,7 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
 
   val valids   = RegInit(VecInit(0.U(nWays.W).toBools))
   val meta     = Reg(Vec(nWays, new MicroBTBMeta))
-  val btb      = Reg(Vec(nWays, Vec(2, UInt(vaddrBitsExtended.W))))
+  val btb      = Reg(Vec(nWays, Vec(if (useDualEntries) 2 else 1, UInt(vaddrBitsExtended.W))))
 
   val mems = Nil
 
@@ -73,7 +75,7 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
   for (w <- 0 until bankWidth) {
     val is_cfi = s1_hit_meta.cfi_idx === w.U
     s1_resp(w).valid := s1_hit && ((is_cfi && s1_hit_meta.br_mask(w)) || s1_hit_meta.jal_mask(w))
-    s1_resp(w).bits  := s1_hit_btb(s1_hit_meta.br_mask(w))
+    s1_resp(w).bits  := (if (useDualEntries) s1_hit_btb(s1_hit_meta.br_mask(w)) else s1_hit_btb(0))
     s1_is_br(w)      := s1_hit && s1_hit_meta.br_mask(w)
     s1_is_jal(w)     := s1_hit && s1_hit_meta.jal_mask(w)
     s1_taken(w)      := s1_hit && (s1_is_jal(w) || s1_hit_meta.ctr(1))
@@ -132,7 +134,10 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
 
   when (s1_update.valid && s1_update.bits.is_commit_update) {
     when (s1_update.bits.cfi_idx.valid) {
-      btb(s1_update_write_way)(s1_update.bits.cfi_is_br) := s1_update.bits.target
+      if (useDualEntries)
+        btb(s1_update_write_way)(s1_update.bits.cfi_is_br)  := s1_update.bits.target
+      else
+        btb(s1_update_write_way)(0) := s1_update.bits.target
       valids(s1_update_write_way) := true.B
     }
     val rmeta = meta(s1_update_write_way)
@@ -156,7 +161,6 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
     when (s1_update.bits.cfi_idx.valid || s1_update.bits.br_mask =/= 0.U) {
       meta(s1_update_write_way) := wmeta
     }
-    
   }
 
 
