@@ -353,8 +353,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   icache.io.req.bits.addr := s0_vpc
 
   bpd.io.f0_req.valid      := s0_valid && io.cpu.enable_bpd
-  bpd.io.f0_req.bits.pc    := s0_vpc
-  bpd.io.f0_req.bits.ghist := s0_ghist
+  bpd.io.f0_req.bits.pc    := Mux(io.cpu.enable_bpd, s0_vpc, 0.U)
+  bpd.io.f0_req.bits.ghist := Mux(io.cpu.enable_bpd, s0_ghist, 0.U.asTypeOf(new GlobalHistory))
 
   // --------------------------------------------------------
   // **** ICache Access (F1) ****
