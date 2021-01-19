@@ -59,8 +59,8 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
 
   def ===(other: GlobalHistory): Bool = {
     ((old_history === other.old_history) &&
-     (new_saw_branch_not_taken === other.new_saw_branch_not_taken) &&
-     (new_saw_branch_taken === other.new_saw_branch_taken)
+     (new_saw_branch_taken === other.new_saw_branch_taken) &&
+     (new_saw_branch_taken || (new_saw_branch_not_taken === other.new_saw_branch_not_taken))
     )
   }
   def =/=(other: GlobalHistory): Bool = !(this === other)

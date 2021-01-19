@@ -547,7 +547,8 @@ class WithFastTAGEBPD extends Config((site, here, up) => {
           BoomBIMParams(nSets = 4096, singlePorted = true, slow = true, nCols = 2))(p))
         val fastbim = Module(new BIMBranchPredictorBank(
           BoomBIMParams(useFlops = true, nSets = 128, singlePorted = false))(p))
-        val ubtb = Module(new FA2MicroBTBBranchPredictorBank()(p))
+        val ubtb = Module(new GMicroBTBBranchPredictorBank(
+          BoomGMicroBTBParams())(p))
         val preds = Seq(tage, slowbtb, fastbtb, slowbim, fastbim, ubtb)
         preds.map(_.io := DontCare)
 
