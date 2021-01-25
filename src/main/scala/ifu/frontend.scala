@@ -190,6 +190,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
 {
   val pc            = UInt(vaddrBitsExtended.W)
   val next_pc       = UInt(vaddrBitsExtended.W)
+  val next_fetch    = UInt(vaddrBitsExtended.W)
   val edge_inst     = Vec(nBanks, Bool()) // True if 1st instruction in this bundle is pc - 2
   val insts         = Vec(fetchWidth, Bits(32.W))
   val exp_insts     = Vec(fetchWidth, Bits(32.W))
@@ -396,9 +397,10 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     Mux(f1_redirects.take(bankWidth).reduce(_||_), Mux1H(f1_redirects.take(bankWidth), f1_targs.take(bankWidth)),
       Mux1H(f1_redirects.drop(bankWidth), f1_targs.drop(bankWidth)))
   }
+  val f1_next_fetch = nextFetch(s1_vpc)
   val f1_predicted_target = Mux(f1_do_redirect,
                                 f1_targ,
-                                nextFetch(s1_vpc))
+                                f1_next_fetch)
 
   val f1_predicted_ghist = s1_ghist.update(
     s1_bpd_resp.preds.map(p => p.is_br).asUInt & f1_mask,
@@ -446,9 +448,10 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   }
   val f2_targs = f2_bpd_resp.preds.map(_.predicted_pc.bits)
   val f2_do_redirect = f2_redirects.reduce(_||_) && useBPD.B
+  val f2_next_fetch = RegNext(f1_next_fetch)
   val f2_predicted_target = Mux(f2_do_redirect,
                                 if (useSlowBTBRedirect) RegNext(f1_targ) else PriorityMux(f2_redirects, f2_targs),
-                                nextFetch(s2_vpc))
+                                f2_next_fetch)
   val f2_predicted_ghist = s2_ghist.update(
     f2_bpd_resp.preds.map(p => p.is_br && p.predicted_pc.valid).asUInt & f2_fetch_mask,
     PriorityMux(f2_redirects, f2_bpd_resp.preds).taken && f2_do_redirect,
@@ -472,7 +475,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f2_fetch_bundle = Wire(new FetchBundle)
   f2_fetch_bundle            := DontCare
   f2_fetch_bundle.pc         := s2_vpc
-  f2_fetch_bundle.next_pc    := Mux(f2_do_redirect, PriorityMux(f2_redirects, f2_targs), nextFetch(s2_vpc))
+  f2_fetch_bundle.next_pc    := Mux(f2_do_redirect, PriorityMux(f2_redirects, f2_targs), f2_next_fetch)
+  f2_fetch_bundle.next_fetch := f2_next_fetch
   f2_fetch_bundle.xcpt_pf_if := s2_tlb_resp.pf.inst
   f2_fetch_bundle.xcpt_ae_if := s2_tlb_resp.ae.inst
   f2_fetch_bundle.fsrc       := s2_fsrc
@@ -740,7 +744,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val f3_predicted_target = Mux(f3_predicted_do_redirect,
                                 f3_redirect_target,
-                                nextFetch(f3.io.deq.bits.pc))
+                                f3.io.deq.bits.next_fetch)
   val f3_predicted_ghist = f3_fetch_bundle.ghist.update(
     f3_bpd_resp.preds.map(p => p.is_br && p.predicted_pc.valid).asUInt & f3.io.deq.bits.mask,
     PriorityMux(f3_predicted_redirects, f3_bpd_resp.preds).taken && f3_predicted_do_redirect,
@@ -753,7 +757,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   )
   val f3_decoded_target = Mux(f3_redirects.reduce(_||_),
     PriorityMux(f3_redirects, f3_targs),
-    nextFetch(f3_fetch_bundle.pc)
+    f3.io.deq.bits.next_fetch
   )
 
   f3_fetch_bundle.next_pc       := f3_decoded_target
