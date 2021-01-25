@@ -571,7 +571,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       s0_vpc       := f2_predicted_target
       s0_is_replay := false.B
       s0_ghist     := f2_predicted_ghist
-      s2_fsrc      := BSRC_2
+      when (!s1_valid) {
+        s2_fsrc      := BSRC_2
+      }
       s0_tsrc      := BSRC_2
     }
   }
