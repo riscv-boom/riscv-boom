@@ -14,6 +14,7 @@ import freechips.rocketchip.devices.tilelink.{BootROMParams}
 import freechips.rocketchip.diplomacy.{SynchronousCrossing, AsynchronousCrossing, RationalCrossing}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
+import freechips.rocketchip.util.{RationalDirection, FastToSlow}
 
 import boom.ifu._
 import boom.exu._
@@ -70,10 +71,10 @@ class WithAsynchronousBoomTiles extends Config((site, here, up) => {
   }
 })
 
-class WithRationalBoomTiles extends Config((site, here, up) => {
+class WithRationalBoomTiles(direction: RationalDirection = FastToSlow) extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: BoomTileAttachParams => tp.copy(crossingParams = tp.crossingParams.copy(
-      crossingType = RationalCrossing()
+      crossingType = RationalCrossing(direction)
     ))
     case other => other
   }
