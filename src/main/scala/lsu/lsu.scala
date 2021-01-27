@@ -498,17 +498,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val stq_incoming_idx = widthMap(i => agen(i).bits.uop.stq_idx)
   val stq_incoming_e   = widthMap(i => WireInit(stq_read(stq_incoming_idx(i))))
 
-
-  val stq_commit_e  = WireInit(stq_read(stq_execute_head))
-
-  when ( stq_commit_e.valid &&
-         stq_commit_e.bits.uop.is_amo &&
-         stq_commit_e.bits.addr.valid &&
-        !stq_commit_e.bits.addr_is_virtual &&
-         stq_commit_e.bits.data.valid) {
-    stq_can_execute(stq_execute_head) := true.B
-  }
-
   val ldq_wakeup_idx = RegNext(AgePriorityEncoder((0 until numLdqEntries).map(i=> {
     val block = block_load_mask(i) || p1_block_load_mask(i)
     ldq_addr(i).valid && !ldq_executed(i) && !ldq_succeeded(i) && !ldq_addr_is_virtual(i) && !block
@@ -546,7 +535,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   retry_queue.io.enq.bits.uop  := Mux(can_enq_store_retry, stq_enq_retry_e.bits.uop      , ldq_enq_retry_e.bits.uop)
   retry_queue.io.enq.bits.uop.uses_ldq := can_enq_load_retry && !can_enq_store_retry
   retry_queue.io.enq.bits.uop.ldq_idx  := ldq_enq_retry_idx
-  retry_queue.io.enq.bits.uop.stq_idx  := can_enq_store_retry
+  retry_queue.io.enq.bits.uop.uses_stq := can_enq_store_retry
   retry_queue.io.enq.bits.uop.stq_idx  := stq_enq_retry_idx
 
   when (can_enq_store_retry && retry_queue.io.enq.fire()) {
@@ -558,6 +547,32 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val ldq_retry_idx = retry_queue.io.deq.bits.uop.ldq_idx
   val stq_retry_idx = retry_queue.io.deq.bits.uop.stq_idx
   retry_queue.io.deq.ready := will_fire_load_retry.reduce(_||_) || will_fire_store_retry.reduce(_||_)
+
+  val stq_execute_queue_flush = WireInit(false.B)
+  val stq_execute_queue = withReset(reset.toBool || stq_execute_queue_flush) {
+    Module(new Queue(new STQEntry, 4))
+  }
+  val stq_commit_e = stq_execute_queue.io.deq
+  val stq_enq_e = WireInit(stq_read(stq_execute_head))
+
+  stq_execute_queue.io.enq.bits := stq_enq_e.bits
+  stq_execute_queue.io.enq.bits.uop.stq_idx := stq_execute_head
+  stq_execute_queue.io.deq.ready := will_fire_store_commit_fast.reduce(_||_) || will_fire_store_commit_slow.reduce(_||_)
+
+  val can_enq_store_execute = (
+    stq_enq_e.valid &&
+    stq_enq_e.bits.addr.valid &&
+    stq_enq_e.bits.data.valid &&
+   !stq_enq_e.bits.addr_is_virtual &&
+   !stq_enq_e.bits.uop.exception &&
+   !stq_enq_e.bits.uop.is_fence &&
+   (stq_enq_e.bits.committed || stq_enq_e.bits.uop.is_amo)
+  )
+  stq_execute_queue.io.enq.valid := can_enq_store_execute
+
+  when (can_enq_store_execute && stq_execute_queue.io.enq.fire()) {
+    stq_execute_head := WrapInc(stq_execute_head, numStqEntries)
+  }
 
   // -----------------------
   // Determine what can fire
@@ -594,12 +609,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // Can we commit a store
   val can_fire_store_commit_slow  = widthMap(w =>
                                     ( stq_commit_e.valid                           &&
-                                     !stq_commit_e.bits.uop.is_fence               &&
                                      !mem_xcpt_valid                               &&
-                                     !stq_commit_e.bits.uop.exception              &&
-                                      (w == 0).B                                   &&
-                                      stq_commit_e.bits.data.valid                 &&
-                                      stq_commit_e.bits.can_execute))
+                                      (w == 0).B))
 
   val can_fire_store_commit_fast = widthMap(w => can_fire_store_commit_slow(w) && stq_almost_full)
 
@@ -900,11 +911,12 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                     coreDataBytes)).data
       dmem_req(w).bits.uop      := stq_commit_e.bits.uop
 
-      stq_execute_head                     := Mux(dmem_req_fire(w),
-                                                WrapInc(stq_execute_head, numStqEntries),
-                                                stq_execute_head)
+      when (!dmem_req_fire(w)) {
+        stq_execute_queue_flush := true.B
+        stq_execute_head := stq_commit_e.bits.uop.stq_idx
+      }
 
-      stq_succeeded(stq_execute_head) := false.B
+      stq_succeeded(stq_commit_e.bits.uop.stq_idx) := false.B
     } .elsewhen (will_fire_load_wakeup(w)) {
       dmem_req(w).valid      := true.B
       dmem_req(w).bits.addr  := ldq_wakeup_e.bits.addr.bits
@@ -1494,6 +1506,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       } .otherwise {
         assert(io.dmem.nack(w).bits.uop.uses_stq)
         when (IsOlder(io.dmem.nack(w).bits.uop.stq_idx, stq_execute_head, stq_head)) {
+          stq_execute_queue_flush := true.B
           stq_execute_head := io.dmem.nack(w).bits.uop.stq_idx
         }
       }
