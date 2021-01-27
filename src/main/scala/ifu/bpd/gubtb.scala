@@ -8,7 +8,7 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 
 import boom.common._
-import boom.util.{BoomCoreStringPrefix, WrapInc}
+import boom.util.{BoomCoreStringPrefix, WrapInc, MaskLower}
 
 import scala.math.min
 
@@ -59,16 +59,22 @@ class GMicroBTBBranchPredictorBank(params: BoomGMicroBTBParams = BoomGMicroBTBPa
   val s1_hit_btb = Mux1H(s1_hit_oh, btb)
   s1_meta.hit := s1_hit
 
-  for (w <- 0 until bankWidth) {
-    io.resp.f1(w).predicted_pc.valid := s1_hit
-    io.resp.f1(w).predicted_pc.bits  := s1_hit_btb
+  for (w <- 0 until bankWidth-1) {
+    io.resp.f1(w).predicted_pc.valid := false.B
+    io.resp.f1(w).predicted_pc.bits  := 0.U
     io.resp.f1(w).is_br              := s1_hit_meta.is_br
-    io.resp.f1(w).is_jal             := s1_hit_meta.is_jal
-    io.resp.f1(w).taken              := s1_hit && (s1_hit_meta.is_jal || s1_hit_meta.ctr(1))
-
-    //io.resp.f2(w) := RegNext(io.resp.f1(w))
-    //io.resp.f3(w) := RegNext(io.resp.f2(w))
+    io.resp.f1(w).is_jal             := false.B
+    io.resp.f1(w).taken              := false.B
   }
+
+
+  io.resp.f1(bankWidth-1).predicted_pc.valid := s1_hit
+  io.resp.f1(bankWidth-1).predicted_pc.bits  := s1_hit_btb
+  io.resp.f1(bankWidth-1).is_br              := s1_hit_meta.is_br && !s1_hit_meta.is_jal
+  io.resp.f1(bankWidth-1).is_jal             := s1_hit_meta.is_jal
+  io.resp.f1(bankWidth-1).taken              := s1_hit && (s1_hit_meta.is_jal || s1_hit_meta.ctr(1))
+
+
   io.f3_meta := RegNext(RegNext(s1_meta.asUInt))
 
   val s1_update_pc = RegNext(io.update.bits.pc)
@@ -87,8 +93,10 @@ class GMicroBTBBranchPredictorBank(params: BoomGMicroBTBParams = BoomGMicroBTBPa
       btb(s1_update_write_way) := s1_update.bits.target
       valids(s1_update_write_way) := true.B
 
-      wmeta.is_br := s1_update.bits.br_mask(s1_update.bits.cfi_idx.bits)
-      wmeta.is_jal := s1_update.bits.cfi_is_jal || s1_update.bits.cfi_is_jalr
+      val is_jal = s1_update.bits.cfi_is_jal || s1_update.bits.cfi_is_jalr
+
+      wmeta.is_br := (s1_update.bits.br_mask & MaskLower(UIntToOH(s1_update.bits.cfi_idx.bits))) =/= 0.U || !is_jal
+      wmeta.is_jal := is_jal
       when (s1_update_hit) {
         wmeta.ctr := bimWrite(rmeta.ctr, s1_update.bits.cfi_taken)
       } .otherwise {
