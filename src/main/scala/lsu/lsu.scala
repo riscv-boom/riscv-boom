@@ -484,9 +484,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val p1_block_load_mask = RegNext(block_load_mask)
   val p2_block_load_mask = RegNext(p1_block_load_mask)
 
- // Prioritize emptying the store queue when it is almost full
+  // Prioritize emptying the store queue when it is almost full
   val stq_tail_plus   = WrapAdd(stq_tail, (2*coreWidth).U, numStqEntries)
-  val stq_almost_full = IsOlder(stq_head, stq_tail_plus, stq_tail)
+  val stq_almost_full = RegNext(IsOlder(stq_head, stq_tail_plus, stq_tail))
 
   // The store at the commit head needs the DCache to appear ordered
   // Delay firing load wakeups and retries now
