@@ -1611,13 +1611,15 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
 
     // Forward loads to store-data
-    when (iresp(w).valid &&
-          iresp(w).bits.uop.uses_ldq &&
-          iresp(w).bits.uop.ldq_idx === RegNext(lcam_ldq_idx(w)) &&
-          RegNext(mem_stld_forward_valid(w))) {
-      assert(!stq_data(RegNext(mem_stld_forward_stq_idx(w))).valid)
-      stq_data(RegNext(mem_stld_forward_stq_idx(w))).valid := true.B
-      stq_data(RegNext(mem_stld_forward_stq_idx(w))).bits  := iresp(w).bits.data
+    if (enableStLdForwarding) {
+      when (iresp(w).valid &&
+            iresp(w).bits.uop.uses_ldq &&
+            iresp(w).bits.uop.ldq_idx === RegNext(lcam_ldq_idx(w)) &&
+            RegNext(mem_stld_forward_valid(w))) {
+        assert(!stq_data(RegNext(mem_stld_forward_stq_idx(w))).valid)
+        stq_data(RegNext(mem_stld_forward_stq_idx(w))).valid := true.B
+        stq_data(RegNext(mem_stld_forward_stq_idx(w))).bits  := iresp(w).bits.data
+      }
     }
 
     // Do wakeups

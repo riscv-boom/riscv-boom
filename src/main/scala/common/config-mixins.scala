@@ -333,6 +333,7 @@ class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) ex
               enablePrefetching = true,
               enableSuperscalarSnapshots = false,
               enableCompactingLSUDuringDispatch = false,
+              enableStLdForwarding = false,
               enableColumnALUIssue = true,
               numDCacheBanks = 4,
               dcacheSinglePorted = true,
