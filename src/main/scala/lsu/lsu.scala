@@ -420,9 +420,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
     assert(!(dis_ld_val && dis_st_val), "A UOP is trying to go into both the LDQ and the STQ")
 
-    ldq_tail_oh = Mux((io.core.dis_uops(w).bits.uses_ldq && !io.core.dis_uops(w).bits.exception) || enableCompactingLSUDuringDispatch.B,
+    ldq_tail_oh = Mux((io.core.dis_uops(w).bits.uses_ldq && !io.core.dis_uops(w).bits.exception) || !enableCompactingLSUDuringDispatch.B,
       RotateL1(ldq_tail_oh), ldq_tail_oh)
-    stq_tail_oh = Mux((io.core.dis_uops(w).bits.uses_stq && !io.core.dis_uops(w).bits.exception) || enableCompactingLSUDuringDispatch.B,
+    stq_tail_oh = Mux((io.core.dis_uops(w).bits.uses_stq && !io.core.dis_uops(w).bits.exception) || !enableCompactingLSUDuringDispatch.B,
       RotateL1(stq_tail_oh), stq_tail_oh)
   }
 
@@ -597,7 +597,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val can_fire_load_retry    = widthMap(w =>
                                ( retry_queue.io.deq.valid                     &&
                                  retry_queue.io.deq.bits.uop.uses_ldq         &&
-                                !store_needs_order                            &&
+                                !RegNext(store_needs_order)                   &&
                                 (w == lsuWidth-1).B))
 
   // Can we retry a store addrgen that missed in the TLB
@@ -625,7 +625,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                               !ldq_wakeup_e.bits.order_fail                            &&
                               !p1_block_load_mask(ldq_wakeup_idx)                      &&
                               !p2_block_load_mask(ldq_wakeup_idx)                      &&
-                              !store_needs_order                                       &&
+                              !RegNext(store_needs_order)                              &&
                               !block_load_wakeup                                       &&
                               (w == lsuWidth-1).B                                      &&
                               (!ldq_wakeup_e.bits.addr_is_uncacheable || (io.core.commit_load_at_rob_head &&
