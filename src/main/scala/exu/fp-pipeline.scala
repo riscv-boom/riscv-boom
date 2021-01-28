@@ -228,9 +228,11 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   w_cnt = 1
   for (i <- 1 until lsuWidth) {
-    io.wakeups(w_cnt) := io.ll_wports(i)
-    io.wakeups(w_cnt).bits.data := recode(io.ll_wports(i).bits.data,
-      io.ll_wports(i).bits.uop.mem_size =/= 2.U)
+    io.wakeups(w_cnt) := RegNext(UpdateBrMask(io.brupdate, io.flush_pipeline, io.ll_wports(i)))
+    io.wakeups(w_cnt).bits.data := recode(
+      RegNext(io.ll_wports(i).bits.data),
+      RegNext(io.ll_wports(i).bits.uop.mem_size =/= 2.U)
+    )
     w_cnt += 1
   }
   for (eu <- exe_units) {
