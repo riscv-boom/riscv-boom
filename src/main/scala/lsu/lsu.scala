@@ -420,9 +420,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
     assert(!(dis_ld_val && dis_st_val), "A UOP is trying to go into both the LDQ and the STQ")
 
-    ldq_tail_oh = Mux(io.core.dis_uops(w).bits.uses_ldq && !io.core.dis_uops(w).bits.exception,
+    ldq_tail_oh = Mux((io.core.dis_uops(w).bits.uses_ldq && !io.core.dis_uops(w).bits.exception) || enableCompactingLSUDuringDispatch.B,
       RotateL1(ldq_tail_oh), ldq_tail_oh)
-    stq_tail_oh = Mux(io.core.dis_uops(w).bits.uses_stq && !io.core.dis_uops(w).bits.exception,
+    stq_tail_oh = Mux((io.core.dis_uops(w).bits.uses_stq && !io.core.dis_uops(w).bits.exception) || enableCompactingLSUDuringDispatch.B,
       RotateL1(stq_tail_oh), stq_tail_oh)
   }
 
