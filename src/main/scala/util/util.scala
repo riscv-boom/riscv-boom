@@ -364,6 +364,15 @@ object IsOlder
   def apply(i0: UInt, i1: UInt, head: UInt) = ((i0 < i1) ^ (i0 < head) ^ (i1 < head))
 }
 
+object IsYoungerMask
+{
+  def apply(i: UInt, head: UInt, n: Integer): UInt = {
+    val hi_mask = ~MaskLower(UIntToOH(i)(n-1,0))
+    val lo_mask = ~MaskUpper(UIntToOH(head)(n-1,0))
+    Mux(i < head, hi_mask & lo_mask, hi_mask | lo_mask)(n-1,0)
+  }
+}
+
 /**
  * Set all bits at or below the highest order '1'.
  */

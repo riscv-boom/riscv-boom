@@ -1142,6 +1142,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val lcam_stq_idx  = widthMap(w =>
                       Mux(fired_store_agen (w), mem_incoming_uop(w).stq_idx,
                       Mux(fired_store_retry(w), RegNext(stq_retry_idx), 0.U)))
+  val lcam_younger_load_mask = widthMap(w => IsYoungerMask(lcam_ldq_idx(w), ldq_head, numLdqEntries))
+
 
   val can_forward = widthMap(w => Mux(fired_load_agen(w) || fired_load_agen_exec(w) || fired_load_retry(w),
     !mem_tlb_uncacheable(w),
@@ -1224,7 +1226,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                    !l_addr_is_virtual    &&
                    dword_addr_matches(w) &&
                    mask_overlap(w)) {
-        val searcher_is_older = IsOlder(lcam_ldq_idx(w), i.U, ldq_head)
+
+        val searcher_is_older = lcam_younger_load_mask(w)(i)
+        assert(IsOlder(lcam_ldq_idx(w), i.U, ldq_head) === searcher_is_older)
         when (searcher_is_older) {
           when ((l_executed || l_succeeded) &&
                 !s1_executing_loads(i) && // If the load is proceeding in parallel we don't need to kill it

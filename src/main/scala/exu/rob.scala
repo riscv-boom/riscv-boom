@@ -295,9 +295,7 @@ class Rob(
   // Branch resolution
   val brupdate_b2_rob_row = GetRowIdx(io.brupdate.b2.uop.rob_idx)
   val brupdate_b2_rob_row_oh = UIntToOH(brupdate_b2_rob_row)
-  val hi_mask = ~MaskLower(brupdate_b2_rob_row_oh)
-  val lo_mask = ~MaskUpper(UIntToOH(rob_head))
-  val brupdate_b2_rob_clr_oh = Mux(brupdate_b2_rob_row < rob_head, hi_mask & lo_mask, hi_mask | lo_mask)
+  val brupdate_b2_rob_clr_oh = IsYoungerMask(brupdate_b2_rob_row, rob_head, numRobRows)
   val brupdate_b2_rob_bank_idx = GetBankIdx(io.brupdate.b2.uop.rob_idx)
   val brupdate_b2_rob_bank_clr_oh = ~MaskLower(UIntToOH(brupdate_b2_rob_bank_idx))
 
