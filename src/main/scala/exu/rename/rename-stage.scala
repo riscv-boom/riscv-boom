@@ -79,6 +79,7 @@ abstract class AbstractRenameStage(
   val ren2_valids     = Wire(Vec(plWidth, Bool()))
   val ren2_uops       = Wire(Vec(plWidth, new MicroOp))
   val ren2_alloc_reqs = Wire(Vec(plWidth, Bool()))
+  val ren2_alloc_fire = (ren2_fire zip ren2_alloc_reqs).map({case (f, r) => f && r})
   val ren2_br_tags    = Wire(Vec(plWidth+1, Valid(UInt(brTagSz.W))))
 
   //-------------------------------------------------------------
@@ -111,7 +112,7 @@ abstract class AbstractRenameStage(
     assert(!(r_valid && r_uop.lrs1_rtype === RT_FIX && r_uop.lrs1 === 0.U))
     assert(!(r_valid && r_uop.lrs2_rtype === RT_FIX && r_uop.lrs2 === 0.U))
 
-    r_uop := GetNewUopAndBrMask(BypassAllocations(next_uop, ren2_uops, ren2_alloc_reqs), io.brupdate)
+    r_uop := GetNewUopAndBrMask(BypassAllocations(next_uop, ren2_uops, ren2_alloc_fire), io.brupdate)
 
     ren2_valids(w) := r_valid
     ren2_uops(w)   := r_uop
@@ -152,41 +153,45 @@ class RenameStage(
   // Helper Functions
 
   override def BypassAllocations(uop: MicroOp, older_uops: Seq[MicroOp], alloc_reqs: Seq[Bool]): MicroOp = {
-    val bypassed_uop = Wire(new MicroOp)
-    bypassed_uop := uop
+    if (older_uops.size == 0) {
+      uop
+    } else {
+      val bypassed_uop = Wire(new MicroOp)
+      bypassed_uop := uop
 
-    val bypass_hits_rs1 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs1 }
-    val bypass_hits_rs2 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs2 }
-    val bypass_hits_rs3 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs3 }
-    val bypass_hits_dst = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.ldst }
+      val bypass_hits_rs1 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs1 }
+      val bypass_hits_rs2 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs2 }
+      val bypass_hits_rs3 = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.lrs3 }
+      val bypass_hits_dst = (older_uops zip alloc_reqs) map { case (r,a) => a && r.ldst === uop.ldst }
 
-    val bypass_sel_rs1 = PriorityEncoderOH(bypass_hits_rs1.reverse).reverse
-    val bypass_sel_rs2 = PriorityEncoderOH(bypass_hits_rs2.reverse).reverse
-    val bypass_sel_rs3 = PriorityEncoderOH(bypass_hits_rs3.reverse).reverse
-    val bypass_sel_dst = PriorityEncoderOH(bypass_hits_dst.reverse).reverse
+      val bypass_sel_rs1 = PriorityEncoderOH(bypass_hits_rs1.reverse).reverse
+      val bypass_sel_rs2 = PriorityEncoderOH(bypass_hits_rs2.reverse).reverse
+      val bypass_sel_rs3 = PriorityEncoderOH(bypass_hits_rs3.reverse).reverse
+      val bypass_sel_dst = PriorityEncoderOH(bypass_hits_dst.reverse).reverse
 
-    val do_bypass_rs1 = bypass_hits_rs1.reduce(_||_)
-    val do_bypass_rs2 = bypass_hits_rs2.reduce(_||_)
-    val do_bypass_rs3 = bypass_hits_rs3.reduce(_||_)
-    val do_bypass_dst = bypass_hits_dst.reduce(_||_)
+      val do_bypass_rs1 = bypass_hits_rs1.reduce(_||_)
+      val do_bypass_rs2 = bypass_hits_rs2.reduce(_||_)
+      val do_bypass_rs3 = bypass_hits_rs3.reduce(_||_)
+      val do_bypass_dst = bypass_hits_dst.reduce(_||_)
 
-    val bypass_pdsts = older_uops.map(_.pdst)
+      val bypass_pdsts = older_uops.map(_.pdst)
 
-    when (do_bypass_rs1) { bypassed_uop.prs1       := Mux1H(bypass_sel_rs1, bypass_pdsts) }
-    when (do_bypass_rs2) { bypassed_uop.prs2       := Mux1H(bypass_sel_rs2, bypass_pdsts) }
-    when (do_bypass_rs3) { bypassed_uop.prs3       := Mux1H(bypass_sel_rs3, bypass_pdsts) }
-    when (do_bypass_dst) { bypassed_uop.stale_pdst := Mux1H(bypass_sel_dst, bypass_pdsts) }
+      when (do_bypass_rs1) { bypassed_uop.prs1       := Mux1H(bypass_sel_rs1, bypass_pdsts) }
+      when (do_bypass_rs2) { bypassed_uop.prs2       := Mux1H(bypass_sel_rs2, bypass_pdsts) }
+      when (do_bypass_rs3) { bypassed_uop.prs3       := Mux1H(bypass_sel_rs3, bypass_pdsts) }
+      when (do_bypass_dst) { bypassed_uop.stale_pdst := Mux1H(bypass_sel_dst, bypass_pdsts) }
 
-    bypassed_uop.prs1_busy := uop.prs1_busy || do_bypass_rs1
-    bypassed_uop.prs2_busy := uop.prs2_busy || do_bypass_rs2
-    bypassed_uop.prs3_busy := uop.prs3_busy || do_bypass_rs3
+      bypassed_uop.prs1_busy := uop.prs1_busy || do_bypass_rs1
+      bypassed_uop.prs2_busy := uop.prs2_busy || do_bypass_rs2
+      bypassed_uop.prs3_busy := uop.prs3_busy || do_bypass_rs3
 
-    if (int) {
-      bypassed_uop.prs3      := DontCare
-      bypassed_uop.prs3_busy := false.B
+      if (int) {
+        bypassed_uop.prs3      := DontCare
+        bypassed_uop.prs3_busy := false.B
+      }
+
+      bypassed_uop
     }
-
-    bypassed_uop
   }
 
   //-------------------------------------------------------------
@@ -230,7 +235,7 @@ class RenameStage(
   val com_valids      = Wire(Vec(plWidth, Bool()))
 
   for (w <- 0 until plWidth) {
-    ren2_alloc_reqs(w)    := ren2_uops(w).dst_rtype === rtype && ren2_fire(w)
+    ren2_alloc_reqs(w)    := ren2_uops(w).dst_rtype === rtype && ren2_valids(w)
 
     com_valids(w)         := io.com_uops(w).dst_rtype === rtype && io.com_valids(w)
   }
@@ -249,7 +254,7 @@ class RenameStage(
     map_reqs(w).lrs3 := ren1.lrs3
     map_reqs(w).ldst := ren1.ldst
 
-    remap_reqs(w).valid := ren2_alloc_reqs(w)
+    remap_reqs(w).valid := ren2_alloc_fire(w)
     remap_reqs(w).ldst := ren2.ldst
     remap_reqs(w).pdst := ren2.pdst
 
@@ -283,7 +288,7 @@ class RenameStage(
 
   // Freelist inputs.
   freelist.io.initial_allocation := Cat(~(0.U((numPhysRegs-32).W)), 0.U(32.W))
-  freelist.io.reqs := ren2_alloc_reqs
+  freelist.io.reqs := ren2_alloc_fire
   for (w <- 0 until plWidth) {
     freelist.io.despec(w).valid       := com_valids(w)
     freelist.io.despec(w).bits        := io.com_uops(w).pdst
@@ -306,7 +311,7 @@ class RenameStage(
   // Busy Table
 
   busytable.io.ren_uops := ren2_uops  // expects pdst to be set up.
-  busytable.io.rebusy_reqs := ren2_alloc_reqs
+  busytable.io.rebusy_reqs := ren2_alloc_fire
   busytable.io.wakeups := io.wakeups
   busytable.io.child_rebusys := io.child_rebusys
 
@@ -336,8 +341,7 @@ class RenameStage(
     io.ren_stalls(w) := (ren2_uops(w).dst_rtype === rtype) && !can_allocate
 
     val bypassed_uop = Wire(new MicroOp)
-    if (w > 0) bypassed_uop := BypassAllocations(ren2_uops(w), ren2_uops.slice(0,w), ren2_alloc_reqs.slice(0,w))
-    else       bypassed_uop := ren2_uops(w)
+    bypassed_uop := BypassAllocations(ren2_uops(w), ren2_uops.take(w), ren2_alloc_reqs.take(w))
 
     io.ren2_uops(w) := GetNewUopAndBrMask(bypassed_uop, io.brupdate)
   }
@@ -362,21 +366,21 @@ class PredRenameStage(
   for (w <- 0 until plWidth) {
     io.ren2_uops(w) := ren2_uops(w)
 
-    val is_sfb_br = ren2_uops(w).is_sfb_br && ren2_fire(w)
-    val is_sfb_shadow = ren2_uops(w).is_sfb_shadow && ren2_fire(w)
+    val is_sfb_br = ren2_uops(w).is_sfb_br
+    val is_sfb_shadow = ren2_uops(w).is_sfb_shadow
 
     val ftq_idx = ren2_uops(w).ftq_idx
     when (ren2_uops(w).is_sfb_br) {
       io.ren2_uops(w).pdst := ftq_idx
     }
     when (is_sfb_br) {
-      to_busy(ftq_idx) := true.B
+      to_busy(ftq_idx) := ren2_fire(w)
     }
     next_ftq_idx = Mux(is_sfb_br, ftq_idx, next_ftq_idx)
 
     when (is_sfb_shadow) {
       io.ren2_uops(w).ppred := next_ftq_idx
-      io.ren2_uops(w).ppred_busy := (busy_table(next_ftq_idx) || to_busy(next_ftq_idx)) && !unbusy(next_ftq_idx)
+      io.ren2_uops(w).ppred_busy := (busy_table(next_ftq_idx) || is_sfb_br) && !unbusy(next_ftq_idx)
     }
   }
 
@@ -407,9 +411,9 @@ class ImmRenameStage(plWidth: Int, numWbPorts: Int)(implicit p: Parameters) exte
     val imm_lo = imm(immPregSz-1, 0)
     val short_imm = imm_hi === 0.U || ~imm_hi === 0.U
 
-    ren2_alloc_reqs(w) := ren2_uops(w).imm_sel =/= IS_N && ren2_fire(w) && !short_imm
+    ren2_alloc_reqs(w) := ren2_uops(w).imm_sel =/= IS_N && !short_imm
 
-    assert(!ren2_alloc_reqs(w) || ren2_uops(w).iq_type(IQ_ALU) || ren2_uops(w).iq_type(IQ_MEM) || ren2_uops(w).iq_type(IQ_UNQ))
+    assert(!ren2_alloc_fire(w) || ren2_uops(w).iq_type(IQ_ALU) || ren2_uops(w).iq_type(IQ_MEM) || ren2_uops(w).iq_type(IQ_UNQ))
 
 
     val can_allocate = freelist.io.alloc_pregs(w).valid
@@ -426,7 +430,7 @@ class ImmRenameStage(plWidth: Int, numWbPorts: Int)(implicit p: Parameters) exte
   }
 
   freelist.io.initial_allocation := ~(0.U(numImmPhysRegs.W))
-  freelist.io.reqs := ren2_alloc_reqs
+  freelist.io.reqs := ren2_alloc_fire
   for (w <- 0 until numWbPorts) {
     freelist.io.despec(w).valid       := false.B
     freelist.io.despec(w).bits        := DontCare
