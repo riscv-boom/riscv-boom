@@ -144,6 +144,7 @@ class RenameStage(
   float: Boolean)
 (implicit p: Parameters) extends AbstractRenameStage(plWidth, numWbPorts)(p)
 {
+  val int = !float
   val pregSz = log2Ceil(numPhysRegs)
   val rtype = if (float) RT_FLT else RT_FIX
 
@@ -180,7 +181,7 @@ class RenameStage(
     bypassed_uop.prs2_busy := uop.prs2_busy || do_bypass_rs2
     bypassed_uop.prs3_busy := uop.prs3_busy || do_bypass_rs3
 
-    if (!float) {
+    if (int) {
       bypassed_uop.prs3      := DontCare
       bypassed_uop.prs3_busy := false.B
     }
@@ -198,7 +199,10 @@ class RenameStage(
     false,
     float))
   val freelist = Module(
-    if (enableColumnALUWrites && !float) {
+    if (
+      (enableColumnALUWrites && int) ||
+      (enableBankedFPFreelist && float)
+    ) {
       new BankedRenameFreeList(
         plWidth,
         numPhysRegs

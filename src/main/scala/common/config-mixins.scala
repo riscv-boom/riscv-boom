@@ -335,6 +335,7 @@ class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) ex
               enableCompactingLSUDuringDispatch = false,
               enableStLdForwarding = false,
               enableColumnALUIssue = true,
+              enableBankedFPFreelist = true,
               numDCacheBanks = 4,
               dcacheSinglePorted = true,
               ftq = FtqParameters(nEntries=40),
