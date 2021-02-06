@@ -273,9 +273,22 @@ class MemExeUnit(
     val effective_address = Cat(ea_sign, sum(vaddrBits-1,0)).asUInt
 
     val agen = IO(Output(Valid(new MemGen)))
-    agen.valid     := exe_uop.valid && exe_uop.bits.fu_code(FC_AGEN)
-    agen.bits.uop  := exe_uop.bits
-    agen.bits.data := Sext(effective_address, xLen)
+    if (enableAgenStage) {
+      val agen_reg = Reg(Valid(new MemGen))
+      agen_reg.valid    := (
+        exe_uop.valid &&
+        exe_uop.bits.fu_code(FC_AGEN) &&
+        !IsKilledByBranch(io_brupdate, io_kill, exe_uop.bits)
+      )
+      agen_reg.bits.uop  := UpdateBrMask(io_brupdate, exe_uop.bits)
+      agen_reg.bits.data := Sext(effective_address, xLen)
+
+      agen := agen_reg
+    } else {
+      agen.valid     := exe_uop.valid && exe_uop.bits.fu_code(FC_AGEN)
+      agen.bits.uop  := exe_uop.bits
+      agen.bits.data := Sext(effective_address, xLen)
+    }
     Some(agen)
   } else {
     assert(!(exe_uop.valid && exe_uop.bits.fu_code(FC_AGEN)))

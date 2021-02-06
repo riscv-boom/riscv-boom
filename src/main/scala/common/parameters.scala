@@ -49,6 +49,7 @@ case class BoomCoreParams(
   enablePrefetching: Boolean = false,
   enableFastLoadUse: Boolean = false,
   enableCompactingLSUDuringDispatch: Boolean = true,
+  enableAgenStage: Boolean = false,
   enableStLdForwarding: Boolean = true,
   enableFastPNR: Boolean = false,
   enableSFBOpt: Boolean = true,
@@ -259,6 +260,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableFastLoadUse = boomParams.enableFastLoadUse
   val enableCompactingLSUDuringDispatch = boomParams.enableCompactingLSUDuringDispatch
   val enableStLdForwarding = boomParams.enableStLdForwarding
+  val enableAgenStage = boomParams.enableAgenStage
 
   val enablePrefetching = boomParams.enablePrefetching
   val nLBEntries = dcacheParams.nMSHRs
