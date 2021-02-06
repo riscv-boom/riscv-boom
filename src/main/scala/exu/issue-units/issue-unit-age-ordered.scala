@@ -167,8 +167,12 @@ class IssueUnitCollapsing(
   }
   shamts_oh(0) := 0.U
   for (i <- 1 until numIssueSlots + dispatchWidth) {
-    val shift = if (i < nSlowSlots) (dispatchWidth min 1 + (i * (dispatchWidth-1)/nSlowSlots).toInt) else dispatchWidth
-    shamts_oh(i) := SaturatingCounterOH(shamts_oh(i-1), vacants(i-1), shift)
+    if (dispatchWidth == 1) {
+      shamts_oh(i) := vacants.take(i).reduce(_||_)
+    } else {
+      val shift = if (i < nSlowSlots) (dispatchWidth min 1 + (i * (dispatchWidth-1)/nSlowSlots).toInt) else dispatchWidth
+      shamts_oh(i) := SaturatingCounterOH(shamts_oh(i-1), vacants(i-1), shift)
+    }
   }
 
   //-------------------------------------------------------------
