@@ -354,34 +354,52 @@ class PredRenameStage(
   (implicit p: Parameters) extends AbstractRenameStage(plWidth, numWbPorts)(p)
 {
 
-  ren2_alloc_reqs := DontCare
+  override def BypassAllocations(uop: MicroOp, older_uops: Seq[MicroOp], alloc_reqs: Seq[Bool]): MicroOp = {
+    if (older_uops.size == 0) {
+      uop
+    } else {
+      val bypassed_uop = Wire(new MicroOp)
+      bypassed_uop := uop
+
+
+      val bypass_sel = PriorityEncoderOH(alloc_reqs.reverse).reverse
+
+      val do_bypass = alloc_reqs.reduce(_||_)
+
+      val bypass_pdsts = older_uops.map(_.ftq_idx)
+
+      when (do_bypass) { bypassed_uop.ppred       := Mux1H(bypass_sel, bypass_pdsts) }
+
+      bypassed_uop.ppred_busy := (uop.ppred_busy || do_bypass) && uop.is_sfb_shadow
+
+      bypassed_uop
+    }
+  }
+
+  val ren1_current_ftq_idx = Reg(UInt(log2Ceil(ftqSz).W))
+  var next_ftq_idx = ren1_current_ftq_idx
+  for (w <- 0 until plWidth) {
+    ren1_uops(w).old_ftq_idx := next_ftq_idx
+    when (ren1_uops(w).is_sfb_br) {
+      ren1_uops(w).pdst := ren1_uops(w).ftq_idx
+    }
+    next_ftq_idx = Mux(ren1_uops(w).is_sfb_br && ren1_fire(w), ren1_uops(w).ftq_idx, next_ftq_idx)
+  }
+  ren1_current_ftq_idx := next_ftq_idx
 
   val busy_table = RegInit(VecInit(0.U(ftqSz.W).asBools))
   val to_busy = WireInit(VecInit(0.U(ftqSz.W).asBools))
   val unbusy = WireInit(VecInit(0.U(ftqSz.W).asBools))
 
-  val current_ftq_idx = Reg(UInt(log2Ceil(ftqSz).W))
-  var next_ftq_idx = current_ftq_idx
-
   for (w <- 0 until plWidth) {
-    io.ren2_uops(w) := ren2_uops(w)
+    ren2_alloc_reqs(w) := ren2_uops(w).is_sfb_br && ren2_valids(w)
 
-    val is_sfb_br = ren2_uops(w).is_sfb_br
-    val is_sfb_shadow = ren2_uops(w).is_sfb_shadow
+    io.ren2_uops(w) := BypassAllocations(ren2_uops(w), ren2_uops.take(w), ren2_alloc_reqs.take(w))
 
-    val ftq_idx = ren2_uops(w).ftq_idx
-    when (ren2_uops(w).is_sfb_br) {
-      io.ren2_uops(w).pdst := ftq_idx
+    when (ren2_alloc_reqs(w) && ren2_fire(w)) {
+      to_busy(ren2_uops(w).ftq_idx) := true.B
     }
-    when (is_sfb_br) {
-      to_busy(ftq_idx) := ren2_fire(w)
-    }
-    next_ftq_idx = Mux(is_sfb_br, ftq_idx, next_ftq_idx)
-
-    when (is_sfb_shadow) {
-      io.ren2_uops(w).ppred := next_ftq_idx
-      io.ren2_uops(w).ppred_busy := (busy_table(next_ftq_idx) || is_sfb_br) && !unbusy(next_ftq_idx)
-    }
+    ren2_uops(w).ppred_busy := ren2_uops(w).is_sfb_shadow && busy_table(ren2_uops(w).old_ftq_idx) && !unbusy(ren2_uops(w).old_ftq_idx)
   }
 
   for (w <- 0 until numWbPorts) {
@@ -390,7 +408,6 @@ class PredRenameStage(
     }
   }
 
-  current_ftq_idx := next_ftq_idx
 
   busy_table := ((busy_table.asUInt | to_busy.asUInt) & ~unbusy.asUInt).asBools
 }
