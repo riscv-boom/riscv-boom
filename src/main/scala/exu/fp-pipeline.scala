@@ -46,9 +46,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     val dgen             = Valid(new MemGen)           // to Load/Store Unit
     val to_int           = Decoupled(new ExeUnitResp(xLen))           // to integer RF
 
-    val wakeups          = Vec(numWakeupPorts, Valid(new ExeUnitResp(fLen+1)))
-    val wb_valids        = Input(Vec(numWakeupPorts, Bool()))
-    val wb_pdsts         = Input(Vec(numWakeupPorts, UInt(width=fpPregSz.W)))
+    val wakeups          = Vec(numWakeupPorts, Valid(new Wakeup))
+    val wb               = Vec(numWakeupPorts, Valid(new ExeUnitResp(fLen+1)))
 
     val debug_tsc_reg    = Input(UInt(width=xLen.W))
   })
@@ -80,6 +79,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     fregfileBankedWriteArray,
     "Floating Point"
   ))
+  val fp_bypasses = Wire(Vec(fpWidth, Valid(new ExeUnitResp(xLen+1))))
+  val fp_wakeups = Wire(Vec(numWakeupPorts, Valid(new Wakeup)))
+  io.wakeups := fp_wakeups
 
   //*************************************************************
   // Issue window logic
@@ -114,13 +116,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   }
 
   // Wakeup
-  for ((writeback, issue_wakeup) <- io.wakeups zip issue_unit.io.wakeup_ports) {
-    issue_wakeup.valid := writeback.valid
-    issue_wakeup.bits.uop  := writeback.bits.uop
-    issue_wakeup.bits.speculative_mask := 0.U
-    issue_wakeup.bits.bypassable  := false.B
-    issue_wakeup.bits.rebusy      := false.B
-  }
+  issue_unit.io.wakeup_ports := fp_wakeups
+
   issue_unit.io.pred_wakeup_port.valid := false.B
   issue_unit.io.pred_wakeup_port.bits := DontCare
   issue_unit.io.child_rebusys := 0.U
@@ -146,6 +143,7 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   rd_idx = 0
   for (unit <- exe_units) {
+    unit.io_rrd_frf_bypasses := fp_bypasses
     for (i <- 0 until 3) {
       unit.io_rrd_frf_resps(i) := fregfile.io.rrd_read_resps(rd_idx)
       rd_idx += 1
@@ -209,6 +207,12 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
     fregfile.io.write_ports(w_cnt).bits.data := eu.io_fpu_resp.bits.data
     w_cnt += 1
   }
+  for (w <- 0 until fpWidth) {
+    fp_bypasses(w).valid := exe_units(w).io_fpu_resp.valid && exe_units(w).io_fpu_resp.bits.uop.dst_rtype === RT_FLT
+    fp_bypasses(w).bits  := exe_units(w).io_fpu_resp.bits
+  }
+
+
   require (w_cnt == fregfile.io.write_ports.length)
 
   val fpiu_unit = exe_units.find(_.hasFpiu).get
@@ -222,29 +226,41 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  io.wakeups(0).valid := ll_wbarb.io.out.valid
-  io.wakeups(0).bits := ll_wbarb.io.out.bits
-  ll_wbarb.io.out.ready := true.B
+  var idx = 0
+  for (w <- 0 until fpWidth) {
+    fp_wakeups(idx)  := exe_units(w).io_wakeup
+    io.wb(idx) := exe_units(w).io_fpu_resp
+    idx += 1
+  }
 
-  w_cnt = 1
+
+  fp_wakeups(idx).valid    := ll_wbarb.io.out.valid
+  fp_wakeups(idx).bits.uop := ll_wbarb.io.out.bits.uop
+  fp_wakeups(idx).bits.speculative_mask := 0.U
+  fp_wakeups(idx).bits.bypassable := false.B
+  fp_wakeups(idx).bits.rebusy := false.B
+
+  io.wb(idx) := ll_wbarb.io.out
+  ll_wbarb.io.out.ready := true.B
+  idx += 1
+
   for (i <- 1 until lsuWidth) {
-    io.wakeups(w_cnt) := RegNext(UpdateBrMask(io.brupdate, io.flush_pipeline, io.ll_wports(i)))
-    io.wakeups(w_cnt).bits.data := recode(
+    val wb = RegNext(UpdateBrMask(io.brupdate, io.flush_pipeline, io.ll_wports(i)))
+    fp_wakeups(idx).valid := wb.valid && wb.bits.uop.dst_rtype === RT_FLT
+    fp_wakeups(idx).bits.uop := wb.bits.uop
+    fp_wakeups(idx).bits.speculative_mask := 0.U
+    fp_wakeups(idx).bits.bypassable := false.B
+    fp_wakeups(idx).bits.rebusy := false.B
+
+
+    io.wb(idx) := wb
+    io.wb(idx).bits.data := recode(
       RegNext(io.ll_wports(i).bits.data),
       RegNext(io.ll_wports(i).bits.uop.mem_size =/= 2.U)
     )
-    w_cnt += 1
+    idx += 1
   }
-  for (eu <- exe_units) {
-    val exe_resp = eu.io_fpu_resp
-    val wb_uop = eu.io_fpu_resp.bits.uop
-    val wport = io.wakeups(w_cnt)
-    wport.valid := exe_resp.valid && wb_uop.dst_rtype === RT_FLT
-    wport.bits := exe_resp.bits
-
-    w_cnt += 1
-  }
-
+  require (idx == numWakeupPorts)
   exe_units.map(_.io_fcsr_rm := io.fcsr_rm)
   exe_units.map(_.io_status := io.status)
 

@@ -85,6 +85,7 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
   // Wakeups
   next_uop.iw_p1_bypass_hint := false.B
   next_uop.iw_p2_bypass_hint := false.B
+  next_uop.iw_p3_bypass_hint := false.B
   next_uop.iw_p1_speculative_child := 0.U
   next_uop.iw_p2_speculative_child := 0.U
 
@@ -126,6 +127,7 @@ class IssueSlot(val numWakeupPorts: Int, val isMem: Boolean, val isFp: Boolean)(
 
   when (prs3_wakeups.reduce(_||_)) {
     next_uop.prs3_busy := false.B
+    next_uop.iw_p3_bypass_hint := Mux1H(prs3_wakeups, bypassables)
   }
   when (io.pred_wakeup_port.valid && io.pred_wakeup_port.bits === slot_uop.ppred) {
     next_uop.ppred_busy := false.B

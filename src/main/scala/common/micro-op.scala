@@ -44,6 +44,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   // Get the operand off the bypass network, avoid a register read port allocation
   val iw_p1_bypass_hint = Bool()
   val iw_p2_bypass_hint = Bool()
+  val iw_p3_bypass_hint = Bool()
 
   val br_mask          = UInt(maxBrCount.W)  // which branches are we being speculated under?
   val br_tag           = UInt(brTagSz.W)

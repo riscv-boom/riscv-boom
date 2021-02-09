@@ -205,18 +205,35 @@ trait HasBrfReadPort { this: ExecutionUnit =>
 trait HasFrfReadPorts { this: ExecutionUnit =>
   val io_arb_frf_reqs  = IO(Vec(3, Decoupled(UInt(maxPregSz.W))))
   val io_rrd_frf_resps = IO(Input (Vec(3, UInt((xLen+1).W))))
+  val io_rrd_frf_bypasses = IO(Input(Vec(fpWidth, Valid(new ExeUnitResp(fLen+1)))))
 
+  def rrd_bypass_hit(prs: UInt, rdata: UInt): (Bool, UInt) = {
+    val hits = io_rrd_frf_bypasses map { b => b.valid && prs === b.bits.uop.pdst }
+    (hits.reduce(_||_), Mux(hits.reduce(_||_), Mux1H(hits, io_rrd_frf_bypasses.map(_.bits.data)), rdata))
+  }
 
-  io_arb_frf_reqs(0).valid := arb_uop.valid && arb_uop.bits.lrs1_rtype === RT_FLT
+  io_arb_frf_reqs(0).valid := arb_uop.valid && arb_uop.bits.lrs1_rtype === RT_FLT && !arb_uop.bits.iw_p1_bypass_hint
   io_arb_frf_reqs(0).bits  := arb_uop.bits.prs1
-  io_arb_frf_reqs(1).valid := arb_uop.valid && arb_uop.bits.lrs2_rtype === RT_FLT
+  io_arb_frf_reqs(1).valid := arb_uop.valid && arb_uop.bits.lrs2_rtype === RT_FLT && !arb_uop.bits.iw_p2_bypass_hint
   io_arb_frf_reqs(1).bits  := arb_uop.bits.prs2
-  io_arb_frf_reqs(2).valid := arb_uop.valid && arb_uop.bits.frs3_en
+  io_arb_frf_reqs(2).valid := arb_uop.valid && arb_uop.bits.frs3_en && !arb_uop.bits.iw_p3_bypass_hint
   io_arb_frf_reqs(2).bits  := arb_uop.bits.prs3
 
-  val exe_rs1_data = RegNext(io_rrd_frf_resps(0))
-  val exe_rs2_data = RegNext(io_rrd_frf_resps(1))
-  val exe_rs3_data = RegNext(io_rrd_frf_resps(2))
+  val exe_rs1_data = Reg(UInt((fLen+1).W))
+  val exe_rs2_data = Reg(UInt((fLen+1).W))
+  val exe_rs3_data = Reg(UInt((fLen+1).W))
+
+  val (rs1_hit, rs1_data) = rrd_bypass_hit(rrd_uop.bits.prs1, io_rrd_frf_resps(0))
+  assert(!(rrd_uop.valid && rrd_uop.bits.lrs1_rtype === RT_FLT && rrd_uop.bits.iw_p1_bypass_hint && !rs1_hit))
+  exe_rs1_data := rs1_data
+
+  val (rs2_hit, rs2_data) = rrd_bypass_hit(rrd_uop.bits.prs2, io_rrd_frf_resps(1))
+  assert(!(rrd_uop.valid && rrd_uop.bits.lrs2_rtype === RT_FLT && rrd_uop.bits.iw_p2_bypass_hint && !rs2_hit))
+  exe_rs2_data := rs2_data
+
+  val (rs3_hit, rs3_data) = rrd_bypass_hit(rrd_uop.bits.prs3, io_rrd_frf_resps(2))
+  assert(!(rrd_uop.valid && rrd_uop.bits.iw_p3_bypass_hint && !rs3_hit))
+  exe_rs3_data := rs3_data
 }
 
 trait HasFtqReadPort { this: ExecutionUnit =>
@@ -568,6 +585,9 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
     val will_replay = arb_uop.valid && !IsKilledByBranch(io_brupdate, io_kill, arb_uop.bits)
     arb_uop.valid := will_replay
     arb_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
+    arb_uop.bits.iw_p1_bypass_hint := false.B
+    arb_uop.bits.iw_p2_bypass_hint := false.B
+    arb_uop.bits.iw_p3_bypass_hint := false.B
     rrd_uop.valid := false.B
   }
 
@@ -590,6 +610,20 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
   fpu.io.brupdate := io_brupdate
   fpu.io.kill     := io_kill
   fpu.io.resp.ready := true.B
+
+  val io_wakeup = IO(Output(Valid(new Wakeup)))
+  val fastWakeupLatency = dfmaLatency - 3 // Three stages WAKE-ISS-ARB
+  require (fastWakeupLatency >= 0)
+  val fast_wakeups = Wire(Vec(fastWakeupLatency + 1, Valid(new Wakeup)))
+  fast_wakeups(0).valid    := exe_uop.valid && exe_uop.bits.fu_code(FC_FPU)
+  fast_wakeups(0).bits.uop := exe_uop.bits
+  fast_wakeups(0).bits.speculative_mask := 0.U
+  fast_wakeups(0).bits.rebusy           := false.B
+  fast_wakeups(0).bits.bypassable       := true.B
+  for (i <- 0 until fastWakeupLatency) {
+    fast_wakeups(i+1) := RegNext(UpdateBrMask(io_brupdate, io_kill, fast_wakeups(i)))
+  }
+  io_wakeup := fast_wakeups(fastWakeupLatency)
 
   val io_fpu_resp = IO(Output(Valid(new ExeUnitResp(xLen+1))))
   io_fpu_resp.valid := fpu.io.resp.valid && !fpu.io.resp.bits.uop.fu_code(FC_F2I)

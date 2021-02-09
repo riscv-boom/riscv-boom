@@ -99,8 +99,6 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   // ********************************************************
   // Clear fp_pipeline before use
   fp_pipeline.io.ll_wports := DontCare
-  fp_pipeline.io.wb_valids := DontCare
-  fp_pipeline.io.wb_pdsts  := DontCare
 
 
   val numIrfWritePorts        = aluWidth + lsuWidth + 1
@@ -975,13 +973,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     renport <> intport
   }
   if (usingFPU) {
-    for ((renport, fpport) <- fp_rename_stage.io.wakeups zip fp_pipeline.io.wakeups) {
-      renport.valid := fpport.valid
-      renport.bits.uop := fpport.bits.uop
-      renport.bits.speculative_mask := 0.U
-      renport.bits.rebusy := false.B
-      renport.bits.bypassable := false.B
-    }
+    fp_rename_stage.io.wakeups := fp_pipeline.io.wakeups
   }
 
   pred_rename_stage.io.wakeups(0) := pred_wakeup
@@ -1185,9 +1177,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   var cnt = numIrfWritePorts
-  for (wakeup <- fp_pipeline.io.wakeups) {
-    rob.io.wb_resps(cnt) := wakeup
-    rob.io.wb_resps(cnt).bits.data := ieee(wakeup.bits.data)
+  for (wb <- fp_pipeline.io.wb) {
+    rob.io.wb_resps(cnt) := wb
+    rob.io.wb_resps(cnt).bits.data := ieee(wb.bits.data)
     cnt += 1
   }
 

@@ -38,6 +38,7 @@ class IssueUnitCollapsing(
     dis_uops(w).iw_issued_partial_dgen := false.B
     dis_uops(w).iw_p1_bypass_hint := false.B
     dis_uops(w).iw_p2_bypass_hint := false.B
+    dis_uops(w).iw_p3_bypass_hint := false.B
 
     // Handle wakeups on dispatch
     val prs1_matches = io.wakeup_ports.map { wu => wu.bits.uop.pdst === io.dis_uops(w).bits.prs1 }
@@ -74,6 +75,7 @@ class IssueUnitCollapsing(
 
     when (prs3_wakeups.reduce(_||_)) {
       dis_uops(w).prs3_busy := false.B
+      dis_uops(w).iw_p3_bypass_hint := Mux1H(prs3_wakeups, bypassables)
     }
     when (io.pred_wakeup_port.valid && io.pred_wakeup_port.bits === io.dis_uops(w).bits.ppred) {
       dis_uops(w).ppred_busy := false.B
