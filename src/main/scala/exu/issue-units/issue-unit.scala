@@ -74,9 +74,9 @@ abstract class IssueUnit(
 
 object IssueUnit
 {
-  def apply(params: IssueParams, numWakeupPorts: Int, useColumnIssueUnit: Boolean)(implicit p: Parameters): IssueUnit = {
+  def apply(params: IssueParams, numWakeupPorts: Int, useColumnIssueUnit: Boolean, useSingleWideDispatch: Boolean)(implicit p: Parameters): IssueUnit = {
     if (useColumnIssueUnit)
-      Module(new IssueUnitBanked(params, numWakeupPorts))
+      Module(new IssueUnitBanked(params, numWakeupPorts, useSingleWideDispatch))
     else
       Module(new IssueUnitCollapsing(params, numWakeupPorts))
   }

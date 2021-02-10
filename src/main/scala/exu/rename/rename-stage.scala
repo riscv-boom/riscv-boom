@@ -303,6 +303,7 @@ class RenameStage(
   for ((uop, w) <- ren2_uops.zipWithIndex) {
     val preg = freelist.io.alloc_pregs(w).bits
     uop.pdst := preg
+    uop.dis_col_sel := UIntToOH(preg(log2Ceil(coreWidth)-1,0))
   }
   assert (!RegNext(io.rollback) || PopCount(freelist.io.debug_freelist) === (numPhysRegs - 32).U,
     "[freelist] Leaking physical registers.")

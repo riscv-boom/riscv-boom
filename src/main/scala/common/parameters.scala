@@ -45,6 +45,7 @@ case class BoomCoreParams(
   maxBrCount: Int = 4,
   numFetchBufferEntries: Int = 8,
   enableColumnALUIssue: Boolean = false,
+  enableALUSingleWideDispatch: Boolean = false,
   enableBankedFPFreelist: Boolean = false,
   enablePrefetching: Boolean = false,
   enableFastLoadUse: Boolean = false,
@@ -294,6 +295,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableLoadToStoreForwarding = boomParams.enableLoadToStoreForwarding
   val enableSuperscalarSnapshots = boomParams.enableSuperscalarSnapshots
   val enableColumnALUIssue = boomParams.enableColumnALUIssue
+  val enableALUSingleWideDispatch = boomParams.enableALUSingleWideDispatch
+  require(!enableALUSingleWideDispatch || enableColumnALUIssue)
   val enableColumnALUWrites = boomParams.enableColumnALUIssue && isPow2(aluWidth) && aluWidth > 1
   val dcacheSinglePorted = boomParams.dcacheSinglePorted
   val enableBankedFPFreelist = boomParams.enableBankedFPFreelist

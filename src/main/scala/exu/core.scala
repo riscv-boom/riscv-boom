@@ -117,9 +117,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   val imm_rename_stage  = Module(new ImmRenameStage(coreWidth, numImmReaders)) // wakeup ports used when insts read imm
   val rename_stages     = Seq(rename_stage, pred_rename_stage, imm_rename_stage) ++ (if (usingFPU) Seq(fp_rename_stage) else Nil)
 
-  val mem_iss_unit     = IssueUnit(memIssueParam, numIntWakeups, false)
-  val unq_iss_unit     = IssueUnit(unqIssueParam, numIntWakeups, false)
-  val alu_iss_unit     = IssueUnit(aluIssueParam, numIntWakeups, enableColumnALUIssue)
+  val mem_iss_unit     = IssueUnit(memIssueParam, numIntWakeups, false, false)
+  val unq_iss_unit     = IssueUnit(unqIssueParam, numIntWakeups, false, false)
+  val alu_iss_unit     = IssueUnit(aluIssueParam, numIntWakeups, enableColumnALUIssue, enableALUSingleWideDispatch)
   val dispatcher       = Module(new BasicDispatcher)
   val iregfileBankedWriteArray = Seq.fill(lsuWidth + 1) { None } ++ ((0 until aluWidth).map { w => if (enableColumnALUWrites) Some(w) else None })
   val iregfile         = Module(new BankedRF(

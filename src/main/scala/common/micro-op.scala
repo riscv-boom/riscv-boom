@@ -46,6 +46,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val iw_p2_bypass_hint = Bool()
   val iw_p3_bypass_hint = Bool()
 
+  val dis_col_sel      = UInt(coreWidth.W) // If using column-issue ALUs with 1-wide dispatch, which column to issue to?
+
   val br_mask          = UInt(maxBrCount.W)  // which branches are we being speculated under?
   val br_tag           = UInt(brTagSz.W)
 

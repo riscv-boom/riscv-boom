@@ -21,11 +21,12 @@ import boom.common._
 
 class IssueUnitBanked(
   params: IssueParams,
-  numWakeupPorts: Int
+  numWakeupPorts: Int,
+  singleWideDispatch: Boolean
 )(implicit p: Parameters)
   extends IssueUnit(params, numWakeupPorts)
 {
-  val innerParams = params.copy(issueWidth = 1)
+  val innerParams = params.copy(issueWidth = 1, dispatchWidth = if (singleWideDispatch) 1 else params.dispatchWidth)
 
   val issue_units = (0 until params.issueWidth).map { w =>
     val u = Module(new IssueUnitCollapsing(innerParams, numWakeupPorts)).suggestName(s"col_${w}")
@@ -41,24 +42,50 @@ class IssueUnitBanked(
     u
   }
 
-  for (w <- 0 until params.dispatchWidth) {
-    val col_sel = if (enableColumnALUWrites) {
-      require (params.iqType == IQ_ALU)
-      require (isPow2(params.issueWidth))
-      UIntToOH(io.dis_uops(w).bits.pdst(log2Ceil(params.issueWidth)-1,0))
-    } else {
-      val sel = RegInit((1 << (w % params.issueWidth)).U(params.issueWidth.W))
-      sel := (sel << 1) | sel(params.issueWidth-1)
-      sel
-    }
-    io.dis_uops(w).ready := (VecInit(issue_units.map(_.io.dis_uops(w).ready)).asUInt & col_sel) =/= 0.U
 
+
+  if (singleWideDispatch) {
+    require (params.dispatchWidth == params.issueWidth)
+    require (enableColumnALUWrites)
+    require (params.iqType == IQ_ALU)
+    require (isPow2(params.issueWidth))
+    val col_sels = (0 until params.dispatchWidth).map { w => io.dis_uops(w).bits.dis_col_sel }
+
+
+    val col_sels_t = (0 until params.issueWidth).map { i => VecInit(col_sels.map(_(i))) }
+    for (w <- 0 until params.dispatchWidth) {
+      io.dis_uops(w).ready := (VecInit(issue_units.map(_.io.dis_uops(0).ready)).asUInt & col_sels(w)) =/= 0.U
+    }
     for (i <- 0 until params.issueWidth) {
-      issue_units(i).io.dis_uops(w).valid := col_sel(i) && io.dis_uops(w).valid
-      issue_units(i).io.dis_uops(w).bits  := io.dis_uops(w).bits
+      val u_sel = (col_sels_t(i) zip io.dis_uops).map({case (s,u) => s && u.valid})
+
+      issue_units(i).io.dis_uops(0).valid := u_sel.reduce(_||_)
+      issue_units(i).io.dis_uops(0).bits  := Mux1H(u_sel, io.dis_uops).bits
+      assert(PopCount(u_sel) <= 1.U)
+    }
+  } else {
+    val col_sels = (0 until params.dispatchWidth).map { w =>
+      if (enableColumnALUWrites) {
+        require (params.iqType == IQ_ALU)
+        require (isPow2(params.issueWidth))
+        UIntToOH(io.dis_uops(w).bits.pdst(log2Ceil(params.issueWidth)-1,0))
+      } else {
+        val sel = RegInit((1 << (w % params.issueWidth)).U(params.issueWidth.W))
+        sel := (sel << 1) | sel(params.issueWidth-1)
+        sel
+      }
     }
 
+    for (w <- 0 until params.dispatchWidth) {
+      io.dis_uops(w).ready := (VecInit(issue_units.map(_.io.dis_uops(w).ready)).asUInt & col_sels(w)) =/= 0.U
+      for (i <- 0 until params.issueWidth) {
+        issue_units(i).io.dis_uops(w).valid := col_sels(w)(i) && io.dis_uops(w).valid
+        issue_units(i).io.dis_uops(w).bits  := io.dis_uops(w).bits
+      }
+    }
   }
+
+
   for (i <- 0 until params.issueWidth) {
     io.iss_uops(i) := issue_units(i).io.iss_uops(0)
   }
