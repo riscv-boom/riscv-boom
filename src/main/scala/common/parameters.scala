@@ -72,6 +72,7 @@ case class BoomCoreParams(
 
   nPMPs: Int = 8,
   enableICacheDelay: Boolean = false,
+  icacheSinglePorted: Boolean = true,
 
   /* branch prediction */
   enableBranchPrediction: Boolean = true,

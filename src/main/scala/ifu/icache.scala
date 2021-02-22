@@ -130,6 +130,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   with HasBoomFrontendParameters
 {
   val enableICacheDelay = tileParams.core.asInstanceOf[BoomCoreParams].enableICacheDelay
+  val icacheSinglePorted = tileParams.core.asInstanceOf[BoomCoreParams].icacheSinglePorted
   val io = IO(new ICacheBundle(outer))
 
   val (tl_out, edge_out) = outer.masterNode.out(0)
@@ -178,7 +179,12 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   val repl_way = if (isDM) 0.U else LFSR(16, refill_fire)(log2Ceil(nWays)-1,0)
 
   val tag_array = SyncReadMem(nSets, Vec(nWays, UInt(tagBits.W)))
-  val tag_rdata = tag_array.read(s0_vaddr(untagBits-1, blockOffBits), !refill_done && s0_valid)
+  val tag_rdata = if (icacheSinglePorted) {
+    tag_array.read(s0_vaddr(untagBits-1, blockOffBits), !refill_done && s0_valid)
+  } else {
+    tag_array.read(s0_vaddr(untagBits-1, blockOffBits), io.req.valid)
+  }
+
   when (refill_done) {
     tag_array.write(refill_idx, VecInit(Seq.fill(nWays)(refill_tag)), Seq.tabulate(nWays)(repl_way === _.U))
   }
@@ -233,10 +239,17 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     when (wen) {
       array.write(mem_idx, VecInit(Seq.fill(nWays) { tl_out.d.bits.data }), wmask)
     }
-    if (enableICacheDelay)
-      s2_dout := array.read(RegNext(mem_idx), RegNext(!wen && s0_ren))
-    else
-      s2_dout := RegNext(array.read(mem_idx, !wen && s0_ren))
+    if (enableICacheDelay) {
+      if (icacheSinglePorted)
+        s2_dout := array.read(RegNext(mem_idx), RegNext(!wen && s0_ren))
+      else
+        s2_dout := array.read(RegNext(mem_idx), RegNext(s0_ren))
+    } else {
+      if (icacheSinglePorted)
+        s2_dout := RegNext(array.read(mem_idx, !wen && s0_ren))
+      else
+        s2_dout := RegNext(array.read(mem_idx, io.req.valid))
+    }
   } else {
     // Use two banks, interleaved.
     val array_0 = dataArrays(0)._1
@@ -305,11 +318,21 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     val rdata_1 = Wire(Vec(nWays, UInt((wordBits/nBanks).W)))
 
     if (enableICacheDelay) {
-      rdata_0 := array_0.read(RegNext(mem_idx0), RegNext(!wen && s0_ren))
-      rdata_1 := array_1.read(RegNext(mem_idx1), RegNext(!wen && s0_ren))
+      if (icacheSinglePorted) {
+        rdata_0 := array_0.read(RegNext(mem_idx0), RegNext(!wen && s0_ren))
+        rdata_1 := array_1.read(RegNext(mem_idx1), RegNext(!wen && s0_ren))
+      } else {
+        rdata_0 := array_0.read(RegNext(mem_idx0), RegNext(s0_ren))
+        rdata_1 := array_1.read(RegNext(mem_idx1), RegNext(s0_ren))
+      }
     } else {
-      rdata_0 := RegNext(array_0.read(mem_idx0, !wen && s0_ren))
-      rdata_1 := RegNext(array_1.read(mem_idx1, !wen && s0_ren))
+      if (icacheSinglePorted) {
+        rdata_0 := RegNext(array_0.read(mem_idx0, !wen && s0_ren))
+        rdata_1 := RegNext(array_1.read(mem_idx1, !wen && s0_ren))
+      } else {
+        rdata_0 := RegNext(array_0.read(mem_idx0, io.req.valid))
+        rdata_1 := RegNext(array_1.read(mem_idx1, io.req.valid))
+      }
     }
 
     for (w <- 0 until nWays) {

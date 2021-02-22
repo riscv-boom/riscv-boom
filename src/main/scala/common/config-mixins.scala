@@ -299,8 +299,8 @@ class WithNMegaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
   })
 )
 
-class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
-  new WithFastTAGEBPD ++
+class WithNMegaTapeoutBooms(n: Int = 1, singlePorted: Boolean = true, overrideIdOffset: Option[Int] = None) extends Config(
+  new WithFastTAGEBPD(singlePorted) ++
   new Config((site, here, up) => {
     case TilesLocated(InSubsystem) => {
       val prev = up(TilesLocated(InSubsystem), site)
@@ -339,7 +339,8 @@ class WithNMegaTapeoutBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) ex
               enableALUSingleWideDispatch = true,
               enableBankedFPFreelist = true,
               numDCacheBanks = 4,
-              dcacheSinglePorted = true,
+              dcacheSinglePorted = singlePorted,
+              icacheSinglePorted = singlePorted,
               ftq = FtqParameters(nEntries=40),
               fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
             ),
@@ -525,7 +526,7 @@ class WithNCS152DefaultBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) e
   *  Branch prediction configs below
   */
 
-class WithFastTAGEBPD extends Config((site, here, up) => {
+class WithFastTAGEBPD(singlePorted: Boolean = true) extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
       bpdMaxMetaLength = 120,
@@ -541,11 +542,11 @@ class WithFastTAGEBPD extends Config((site, here, up) => {
                             (  128,      16,     8),
                             (  128,      32,     8),
                             (  128,      64,     8)),
-            singlePorted = true
+            singlePorted = singlePorted
           )
         )(p))
         val slowbtb = Module(new SlowBTBBranchPredictorBank(
-          BoomSlowBTBParams(singlePorted = true))(p))
+          BoomSlowBTBParams(singlePorted = singlePorted))(p))
         val fastbtb = Module(new BTBBranchPredictorBank(
           BoomBTBParams(nSets = 32, nWays = 2, offsetSz = 13, extendedNSets = 32, useFlops = true))(p))
         val slowbim = Module(new BIMBranchPredictorBank(

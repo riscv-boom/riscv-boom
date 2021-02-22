@@ -294,7 +294,10 @@ class BoomDuplicatedDataArray(implicit p: Parameters) extends AbstractBoomDataAr
         val data = VecInit((0 until rowWords) map (i => io.write.bits.data(encDataBits*(i+1)-1,encDataBits*i)))
         array.write(waddr, data, io.write.bits.wmask.asBools)
       }
-      io.resp(j)(w) := RegNext(array.read(raddr, io.read(j).bits.way_en(w) && io.read(j).valid).asUInt)
+      if (dcacheSinglePorted)
+        io.resp(j)(w) := RegNext(array.read(raddr, io.read(j).bits.way_en(w) && io.read(j).valid).asUInt)
+      else
+        io.resp(j)(w) := RegNext(array.read(raddr, io.read(j).valid).asUInt)
     }
     io.s1_nacks(j) := false.B
   }

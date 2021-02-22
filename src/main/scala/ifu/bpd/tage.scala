@@ -134,7 +134,11 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
 
   val update_u_mask = VecInit((0 until bankWidth*2) map {i => io.update_u_mask(i / 2)})
   val update_u_wen = WireInit(doing_reset || doing_clear_u || update_u_mask.reduce(_||_))
-  val u_rdata = us.read(s1_hashed_idx, (!update_u_wen && singlePorted.B) && io.f1_req_valid)
+  val u_rdata = if (singlePorted) {
+    us.read(s1_hashed_idx, !update_u_wen && io.f1_req_valid)
+  } else {
+    us.read(s1_hashed_idx, io.f1_req_valid)
+  }
   s2_req_rus := u_rdata
   when (update_u_wen) {
     val widx = Mux(doing_reset, reset_idx, Mux(doing_clear_u, clear_u_idx, update_idx))
