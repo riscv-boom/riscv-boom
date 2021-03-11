@@ -337,7 +337,7 @@ class WithNCS152BaselineBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) 
               numStqEntries = 8,                // CS152: Change me (2+)
               maxBrCount = 8,                   // CS152: Change me (2+)
               enableBranchPrediction = false,   // CS152: Change me
-              numRasEntries = 0,                // CS152: Change me
+              numRasEntries = 8,                // CS152: Change me
 
               // DO NOT CHANGE BELOW
               enableBranchPrintf = true,
