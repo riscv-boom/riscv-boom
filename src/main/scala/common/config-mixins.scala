@@ -330,7 +330,7 @@ class WithNCS152BaselineBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) 
         BoomTileAttachParams(
           tileParams = BoomTileParams(
             core = BoomCoreParams(
-              fetchWidth = 4,                   // CS152: Change me (4 or 8)
+              fetchWidth = 4,
               numRobEntries = 4,                // CS152: Change me (2+)
               numIntPhysRegisters = 33,         // CS152: Change me (33+)
               numLdqEntries = 8,                // CS152: Change me (2+)
@@ -356,6 +356,9 @@ class WithNCS152BaselineBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) 
               nWays=4,  // CS152: Change me (1-8)
               nMSHRs=2  // CS152: Change me (1+)
             )),
+            icache = Some(
+              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, fetchBytes=2*4)
+            ),
             hartId = i + idOffset
           ),
           crossingParams = RocketCrossingParams()
@@ -380,7 +383,7 @@ class WithNCS152DefaultBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) e
         BoomTileAttachParams(
           tileParams = BoomTileParams(
             core = BoomCoreParams(
-              fetchWidth = 4,                   // CS152: Change me (4 or 8)
+              fetchWidth = 4,
               numRobEntries = 96,               // CS152: Change me (2+)
               numIntPhysRegisters = 96,         // CS152: Change me (33+)
               numLdqEntries = 16,               // CS152: Change me (2+)
@@ -406,6 +409,66 @@ class WithNCS152DefaultBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) e
               nWays=4,  // CS152: Change me (1-8)
               nMSHRs=2  // CS152: Change me (1+)
             )),
+            icache = Some(
+              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, fetchBytes=2*4)
+            ),
+            hartId = i + idOffset
+          ),
+          crossingParams = RocketCrossingParams()
+        )
+      } ++ prev
+    }
+    case SystemBusKey => up(SystemBusKey, site).copy(beatBytes = 8)
+    case XLen => 64
+  })
+)
+
+class WithNCS152SmallBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
+  new WithTAGELBPD ++
+  new Config((site, here, up) => {
+    case TilesLocated(InSubsystem) => {
+      val prev = up(TilesLocated(InSubsystem), site)
+      val idOffset = overrideIdOffset.getOrElse(prev.size)
+      (0 until n).map { i =>
+        val coreWidth = 1                    // CS152: Change me (1 to 4)
+        val memWidth = 1                     // CS152: Change me (1 or 2)
+        val nIssueSlots = 8                  // CS152: Change me (2+)
+        BoomTileAttachParams(
+          tileParams = BoomTileParams(
+            core = BoomCoreParams(
+              fetchWidth = 4,
+              numRobEntries = 32,              // CS152: Change me (2+)
+              numIntPhysRegisters = 52,        // CS152: Change me (33+)
+              numFpPhysRegisters = 48,         // CS152: Change me (33+)
+              numLdqEntries = 8,               // CS152: Change me (2+)
+              numStqEntries = 8,               // CS152: Change me (2+)
+              maxBrCount = 8,                  // CS152: Change me (2+)
+              enableBranchPrediction = true,   // CS152: Change me
+              numRasEntries = 16,              // CS152: Change me
+
+              enableDispatchPrintf = false,    // CS152: Change me
+
+              // DO NOT CHANGE BELOW
+              enableBranchPrintf = true,
+              decodeWidth = coreWidth,
+              numFetchBufferEntries = coreWidth * 8,
+              numDCacheBanks = memWidth,
+              issueParams = Seq(
+                IssueParams(issueWidth=memWidth,  numEntries=nIssueSlots, iqType=IQT_MEM.litValue, dispatchWidth=coreWidth),
+                IssueParams(issueWidth=coreWidth, numEntries=nIssueSlots, iqType=IQT_INT.litValue, dispatchWidth=coreWidth),
+                IssueParams(issueWidth=1,         numEntries=nIssueSlots, iqType=IQT_FP.litValue , dispatchWidth=coreWidth)),
+              // DO NOT CHANGE ABOVE
+            ),
+            dcache = Some(DCacheParams(
+              rowBits=site(SystemBusKey).beatBytes*8,
+              nSets=64, // CS152: Change me (must be pow2, 2-64)
+              nWays=4,  // CS152: Change me (1-8)
+              nMSHRs=2, // CS152: Change me (1+)
+            )),
+            icache = Some(
+              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, fetchBytes=2*4)
+            ),
+
             hartId = i + idOffset
           ),
           crossingParams = RocketCrossingParams()
