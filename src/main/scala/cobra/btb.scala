@@ -1,4 +1,4 @@
-package boom.ifu
+package boom.cobra
 
 import chisel3._
 import chisel3.util._
@@ -7,12 +7,13 @@ import freechips.rocketchip.config.{Field, Parameters}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 
+import boom.ifu._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
 
 import scala.math.min
 
-case class BoomBTBParams(
+case class CobraBTBParams(
   nSets: Int = 128,
   nWays: Int = 2,
   offsetSz: Int = 13,
@@ -20,7 +21,7 @@ case class BoomBTBParams(
 )
 
 
-class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
+class BTBBranchPredictorBank(params: CobraBTBParams = CobraBTBParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   override val nSets         = params.nSets
   override val nWays         = params.nWays

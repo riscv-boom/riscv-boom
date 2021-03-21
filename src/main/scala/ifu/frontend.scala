@@ -24,6 +24,7 @@ import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
 import freechips.rocketchip.util.property._
 
+import boom.cobra._
 import boom.common._
 import boom.exu.{CommitExceptionSignals, BranchDecode, BrUpdateInfo, BranchDecodeSignals}
 import boom.util._

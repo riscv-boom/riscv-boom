@@ -15,6 +15,7 @@ import freechips.rocketchip.subsystem.{MemoryPortParams}
 import freechips.rocketchip.config.{Parameters, Field}
 import freechips.rocketchip.devices.tilelink.{BootROMParams, CLINTParams, PLICParams}
 
+import boom.cobra._
 import boom.ifu._
 import boom.exu._
 import boom.lsu._

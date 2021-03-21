@@ -1,4 +1,4 @@
-package boom.ifu
+package boom.cobra
 
 import chisel3._
 import chisel3.util._
@@ -7,6 +7,7 @@ import freechips.rocketchip.config.{Field, Parameters}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 
+import boom.ifu._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix, MaskLower, WrapInc}
 
@@ -183,7 +184,7 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
 }
 
 
-case class BoomTageParams(
+case class CobraTageParams(
   //                                           nSets, histLen, tagSz
   tableInfo: Seq[Tuple3[Int, Int, Int]] = Seq((  128,       2,     7),
                                               (  128,       4,     7),
@@ -195,7 +196,7 @@ case class BoomTageParams(
 )
 
 
-class TageBranchPredictorBank(params: BoomTageParams = BoomTageParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
+class TageBranchPredictorBank(params: CobraTageParams = CobraTageParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   val tageUBitPeriod = params.uBitPeriod
   val tageNTables    = params.tableInfo.size

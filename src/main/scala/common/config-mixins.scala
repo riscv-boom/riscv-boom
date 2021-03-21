@@ -15,6 +15,7 @@ import freechips.rocketchip.diplomacy.{SynchronousCrossing, AsynchronousCrossing
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 
+import boom.cobra._
 import boom.ifu._
 import boom.exu._
 import boom.lsu._
@@ -460,7 +461,7 @@ class WithBoom2BPD extends Config((site, here, up) => {
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         // gshare is just variant of TAGE with 1 table
         val gshare = Module(new TageBranchPredictorBank(
-          BoomTageParams(tableInfo = Seq((256, 16, 7)))
+          CobraTageParams(tableInfo = Seq((256, 16, 7)))
         )(p))
         val btb = Module(new BTBBranchPredictorBank()(p))
         val bim = Module(new BIMBranchPredictorBank()(p))
@@ -487,7 +488,7 @@ class WithAlpha21264BPD extends Config((site, here, up) => {
       branchPredictor = ((resp_in: BranchPredictionBankResponse, p: Parameters) => {
         val btb = Module(new BTBBranchPredictorBank()(p))
         val gbim = Module(new HBIMBranchPredictorBank()(p))
-        val lbim = Module(new HBIMBranchPredictorBank(BoomHBIMParams(useLocal=true))(p))
+        val lbim = Module(new HBIMBranchPredictorBank(CobraHBIMParams(useLocal=true))(p))
         val tourney = Module(new TourneyBranchPredictorBank()(p))
         val preds = Seq(lbim, btb, gbim, tourney)
         preds.map(_.io := DontCare)

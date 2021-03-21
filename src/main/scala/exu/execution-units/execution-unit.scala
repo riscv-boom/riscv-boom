@@ -27,7 +27,7 @@ import freechips.rocketchip.tile
 
 import FUConstants._
 import boom.common._
-import boom.ifu.{GetPCFromFtqIO}
+import boom.cobra.{GetPCFromFtqIO}
 import boom.util.{ImmGen, IsKilledByBranch, BranchKillableQueue, BoomCoreStringPrefix}
 
 /**

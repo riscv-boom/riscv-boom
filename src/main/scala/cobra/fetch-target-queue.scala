@@ -1,20 +1,5 @@
-//******************************************************************************
-// Copyright (c) 2015 - 2019, The Regents of the University of California (Regents).
-// All Rights Reserved. See LICENSE and LICENSE.SiFive for license details.
-//------------------------------------------------------------------------------
 
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-// Fetch Target Queue (FTQ)
-//------------------------------------------------------------------------------
-//------------------------------------------------------------------------------
-//
-// Each entry in the FTQ holds the fetch address and branch prediction snapshot state.
-//
-// TODO:
-// * reduce port counts.
-
-package boom.ifu
+package boom.cobra
 
 import chisel3._
 import chisel3.util._
@@ -25,6 +10,7 @@ import freechips.rocketchip.util.{Str}
 import boom.common._
 import boom.exu._
 import boom.util._
+import boom.ifu._
 
 /**
  * FTQ Parameters used in configurations

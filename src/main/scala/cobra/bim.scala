@@ -1,4 +1,4 @@
-package boom.ifu
+package boom.cobra
 
 import chisel3._
 import chisel3.util._
@@ -7,6 +7,7 @@ import freechips.rocketchip.config.{Field, Parameters}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 
+import boom.ifu._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix, WrapInc}
 import scala.math.min
@@ -19,11 +20,11 @@ class BIMMeta(implicit p: Parameters) extends BoomBundle()(p)
   val bims  = Vec(bankWidth, UInt(2.W))
 }
 
-case class BoomBIMParams(
+case class CobraBIMParams(
   nSets: Int = 2048
 )
 
-class BIMBranchPredictorBank(params: BoomBIMParams = BoomBIMParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
+class BIMBranchPredictorBank(params: CobraBIMParams = CobraBIMParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   override val nSets = params.nSets
 

@@ -28,6 +28,7 @@ import freechips.rocketchip.rocket.{PipelinedMultiplier,BP,BreakpointUnit,Causes
 
 import boom.common._
 import boom.ifu._
+import boom.cobra._
 import boom.util._
 
 /**t

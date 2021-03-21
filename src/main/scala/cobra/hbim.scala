@@ -1,4 +1,4 @@
-package boom.ifu
+package boom.cobra
 
 import chisel3._
 import chisel3.util._
@@ -7,18 +7,19 @@ import freechips.rocketchip.config.{Field, Parameters}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 
+import boom.ifu._
 import boom.common._
 import boom.util.{BoomCoreStringPrefix, WrapInc}
 import scala.math.min
 
 
-case class BoomHBIMParams(
+case class CobraHBIMParams(
   nSets: Int = 2048,
   useLocal: Boolean = false,
   histLength: Int = 32
 )
 
-class HBIMBranchPredictorBank(params: BoomHBIMParams = BoomHBIMParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
+class HBIMBranchPredictorBank(params: CobraHBIMParams = CobraHBIMParams())(implicit p: Parameters) extends BranchPredictorBank()(p)
 {
   override val nSets = params.nSets
 
