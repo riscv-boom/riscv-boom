@@ -515,8 +515,8 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     decode_units(w).io.enq.uop         := dec_fbundle.uops(w).bits
     decode_units(w).io.status          := csr.io.status
     decode_units(w).io.csr_decode      <> csr.io.decode(w)
-    decode_units(w).io.interrupt       := csr.io.interrupt
-    decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
+    decode_units(w).io.interrupt       := RegNext(csr.io.interrupt)
+    decode_units(w).io.interrupt_cause := RegNext(csr.io.interrupt_cause)
     decode_units(w).io.fcsr_rm         := csr.io.fcsr_rm
 
     dec_uops(w) := decode_units(w).io.deq.uop
