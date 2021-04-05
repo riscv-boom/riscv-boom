@@ -341,9 +341,12 @@ class Rob(
   val rob_compact_uop_rdata = rob_compact_uop_mem.read(next_rob_head)
   val rob_compact_uop_might_bypass = rob_head === RegNext(rob_tail)
   val rob_compact_uop_bypassed = (0 until coreWidth) map { w =>
-    Mux(rob_compact_uop_might_bypass && RegNext(io.enq_valids(w)),
+    Mux(rob_head === RegNext(rob_tail) && RegNext(io.enq_valids(w)),
       RegNext(rob_compact_uop_wdata(w)),
-      rob_compact_uop_rdata(w)
+      Mux(rob_head === ShiftRegister(rob_tail, 2) && ShiftRegister(io.enq_valids(w), 2),
+        ShiftRegister(rob_compact_uop_wdata(w), 2),
+        rob_compact_uop_rdata(w)
+      )
     ).asTypeOf(new RobCompactUop)
   }
 
