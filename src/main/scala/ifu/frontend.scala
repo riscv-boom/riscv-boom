@@ -512,12 +512,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // **** F3 ****
   // --------------------------------------------------------
   val f3_clear = WireInit(false.B)
-  val f3 = withReset(reset.toBool || f3_clear) {
+  val f3 = withReset(reset.asBool || f3_clear) {
     Module(new Queue(new FrontendResp, 1, pipe=true, flow=false)) }
 
   // Queue up the bpd resp as well, incase f4 backpressures f3
   // This is "flow" because the response (enq) arrives in f3, not f2
-  val f3_bpd_resp = withReset(reset.toBool || f3_clear) {
+  val f3_bpd_resp = withReset(reset.asBool || f3_clear) {
     Module(new Queue(new BranchPredictionBundle, 1, pipe=true, flow=true)) }
 
 
@@ -855,7 +855,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // **** F4 ****
   // -------------------------------------------------------
   val f4_clear = WireInit(false.B)
-  val f4 = withReset(reset.toBool || f4_clear) {
+  val f4 = withReset(reset.asBool || f4_clear) {
     Module(new Queue(new FetchBundle, 1, pipe=true, flow=false))}
 
   val fb  = Module(new FetchBuffer)

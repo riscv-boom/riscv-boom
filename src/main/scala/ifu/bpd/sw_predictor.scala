@@ -20,10 +20,10 @@ class SwBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank(
     val pred_harness = Module(new BranchPredictorHarness)
 
     btb_harness.io.clock := clock
-    btb_harness.io.reset := reset.toBool
+    btb_harness.io.reset := reset.asBool
 
     pred_harness.io.clock := clock
-    pred_harness.io.reset := reset.toBool
+    pred_harness.io.reset := reset.asBool
 
 
     btb_harness.io.req_valid := s1_valid
