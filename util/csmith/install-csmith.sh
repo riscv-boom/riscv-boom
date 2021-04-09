@@ -1,6 +1,4 @@
 git clone https://github.com/csmith-project/csmith.git
 cd csmith
-mkdir build
-cd build
-../configure --prefix=$RISCV
-make install
+cmake -DCMAKE_INSTALL_PREFIX=$RISCV .
+make && make install
