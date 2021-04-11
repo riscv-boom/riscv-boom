@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Script to run the csmith random test generator multiple times
 
 TEST_NAME=test
