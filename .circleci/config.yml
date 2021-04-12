@@ -275,6 +275,7 @@ jobs:
             - run:
                 name: Run MediumBoomConfig riscv tests
                 command: .circleci/run-tests.sh mediumboom
+                no_output_timeout: 30m
     largeboomconfig-run-csmith-tests:
         executor: main-env
         steps:
@@ -336,6 +337,7 @@ jobs:
             - run:
                 name: Run HwachaBoomConfig riscv tests
                 command: .circleci/run-tests.sh hwachaboom
+                no_output_timeout: 30m
 
     ###########################################################################################
 
