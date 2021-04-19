@@ -35,7 +35,7 @@ import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
-import freechips.rocketchip.rocket.{Causes, PRV, CSR}
+import freechips.rocketchip.rocket.{Causes, PRV, CSR, CSRs}
 import freechips.rocketchip.tile.{HasFPUParameters}
 import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle, PlusArg}
 import freechips.rocketchip.devices.tilelink.{PLICConsts, CLINTConsts}
@@ -894,7 +894,29 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   if (unq_exe_unit.hasCSR) {
     ll_arb.io.in(arb_idx).valid     := csr_resp.valid
     ll_arb.io.in(arb_idx).bits.uop  := csr_resp.bits.uop
-    ll_arb.io.in(arb_idx).bits.data := csr.io.rw.rdata
+    val rdata = WireInit(csr.io.rw.rdata)
+    if (enableBPDHPMs) {
+      var hpmcounter = CSRs.hpmcounter16
+      var mhpmcounter = CSRs.mhpmcounter16
+      for (i <- 0 until 5) {
+        when (csr.io.rw.addr === hpmcounter.U || csr.io.rw.addr === mhpmcounter.U) {
+          rdata := debug_brs(i)
+        }
+        hpmcounter = hpmcounter + 1
+        mhpmcounter = mhpmcounter + 1
+        when (csr.io.rw.addr === hpmcounter.U || csr.io.rw.addr === mhpmcounter.U) {
+          rdata := debug_jals(i)
+        }
+        hpmcounter = hpmcounter + 1
+        mhpmcounter = mhpmcounter + 1
+        when (csr.io.rw.addr === hpmcounter.U || csr.io.rw.addr === mhpmcounter.U) {
+          rdata := debug_jalrs(i)
+        }
+        hpmcounter = hpmcounter + 1
+        mhpmcounter = mhpmcounter + 1
+      }
+    }
+    ll_arb.io.in(arb_idx).bits.data := rdata
     ll_arb.io.in(arb_idx).bits.predicated   := false.B
     ll_arb.io.in(arb_idx).bits.fflags.valid := false.B
     ll_arb.io.in(arb_idx).bits.fflags.bits  := false.B

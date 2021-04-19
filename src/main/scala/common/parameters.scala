@@ -59,6 +59,7 @@ case class BoomCoreParams(
   enableLoadToStoreForwarding: Boolean = true,
   enableSuperscalarSnapshots: Boolean = true,
   enableSlowBTBRedirect: Boolean = false,
+  enableBPDHPMs: Boolean = false,
 
   useAtomicsOnlyForIO: Boolean = false,
   ftq: FtqParameters = FtqParameters(nEntries=16),
@@ -301,6 +302,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableColumnALUWrites = boomParams.enableColumnALUIssue && isPow2(aluWidth) && aluWidth > 1
   val dcacheSinglePorted = boomParams.dcacheSinglePorted
   val enableBankedFPFreelist = boomParams.enableBankedFPFreelist
+  val enableBPDHPMs = boomParams.enableBPDHPMs
 
   //************************************
   // Implicitly calculated constants
