@@ -156,6 +156,12 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
     val release = Bool()
     val tlbMiss = Bool()
   })
+
+  val debug_stcom = Vec(coreWidth, new Bundle {
+    val idx  = Input(UInt(stqAddrSz.W))
+    val addr = Output(UInt(xLen.W))
+    val data = Output(UInt(xLen.W))
+  })
 }
 
 class LSUIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
@@ -469,7 +475,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                 !p2_block_load_mask(ldq_retry_idx)            &&
                                 RegNext(dtlb.io.miss_rdy)                     &&
                                 !store_needs_order                            &&
-                                (w == memWidth-1).B                           && // TODO: Is this best scheduling?
+                                (w == 1 || memWidth == 1).B                           && // TODO: Is this best scheduling?
                                 !ldq_retry_e.bits.order_fail))
 
   // Can we retry a store addrgen that missed in the TLB
@@ -478,7 +484,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                ( stq_retry_e.valid                            &&
                                  stq_retry_e.bits.addr.valid                  &&
                                  stq_retry_e.bits.addr_is_virtual             &&
-                                 (w == memWidth-1).B                          &&
+                                 (w == 1 || memWidth == 1).B                          &&
                                  RegNext(dtlb.io.miss_rdy)                    &&
                                  !(widthMap(i => (i != w).B               &&
                                                  can_fire_std_incoming(i) &&
@@ -490,7 +496,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                 !stq_commit_e.bits.uop.is_fence               &&
                                 !mem_xcpt_valid                               &&
                                 !stq_commit_e.bits.uop.exception              &&
-                                (w == 0).B                                    &&
+                                (w == memWidth-1).B                                    &&
                                 (stq_commit_e.bits.committed || ( stq_commit_e.bits.uop.is_amo      &&
                                                                   stq_commit_e.bits.addr.valid      &&
                                                                  !stq_commit_e.bits.addr_is_virtual &&
@@ -509,7 +515,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                               !p2_block_load_mask(ldq_wakeup_idx)                      &&
                               !store_needs_order                                       &&
                               !block_load_wakeup                                       &&
-                              (w == memWidth-1).B                                      &&
+                              (w == memWidth-2 || memWidth == 1).B                                      &&
                               (!ldq_wakeup_e.bits.addr_is_uncacheable || (io.core.commit_load_at_rob_head &&
                                                                           ldq_head === ldq_wakeup_idx &&
                                                                           ldq_wakeup_e.bits.st_dep_mask.asUInt === 0.U))))
@@ -584,8 +590,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
      !will_fire_store_commit.reduce(_&&_)   &&
      !will_fire_load_wakeup.reduce(_&&_)),
     "Some operations is proceeding down multiple pipes")
-
-  require(memWidth <= 2)
 
   //--------------------------------------------
   // TLB Access
@@ -1647,7 +1651,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                     ~(st_brkilled_mask.asUInt) &
                     ~(st_exc_killed_mask.asUInt)
 
+  //----------------------------------------------------------------------------------------------------
+  // Debug store commit ports for commit log
 
+  for (w <- 0 until coreWidth) {
+    if (COMMIT_LOG_PRINTF) {
+      io.core.debug_stcom(w).addr := stq(io.core.debug_stcom(w).idx).bits.addr.bits
+      io.core.debug_stcom(w).data := stq(io.core.debug_stcom(w).idx).bits.data.bits
+    } else {
+      io.core.debug_stcom(w).addr := DontCare
+      io.core.debug_stcom(w).data := DontCare
+    }
+  }
 }
 
 /**
