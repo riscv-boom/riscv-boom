@@ -455,7 +455,7 @@ class Compactor[T <: chisel3.Data](n: Int, k: Int, gen: T) extends Module
  * Create a queue that can be killed with a branch kill signal.
  * Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
  */
-class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flush_fn: boom.common.MicroOp => Bool = u => true.B)
+class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flush_fn: boom.common.MicroOp => Bool = u => true.B, fastDeq: Boolean = false)
   (implicit p: freechips.rocketchip.config.Parameters)
   extends boom.common.BoomModule()(p)
   with boom.common.HasBoomCoreParameters
@@ -471,64 +471,94 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flu
     val count   = Output(UInt(log2Ceil(entries).W))
   })
 
-  val ram     = Mem(entries, gen)
-  val valids  = RegInit(VecInit(Seq.fill(entries) {false.B}))
-  val uops    = Reg(Vec(entries, new MicroOp))
+  if (fastDeq && entries > 1) {
+    // Pipeline dequeue selection so the mux gets an entire cycle
+    val main = Module(new BranchKillableQueue(gen, entries-1, flush_fn, false))
+    val out_reg = Reg(gen)
+    val out_valid = RegInit(false.B)
+    val out_uop = Reg(new MicroOp)
 
-  val enq_ptr = Counter(entries)
-  val deq_ptr = Counter(entries)
-  val maybe_full = RegInit(false.B)
+    main.io.enq <> io.enq
+    main.io.brupdate := io.brupdate
+    main.io.flush := io.flush
+    io.empty := main.io.empty && !out_valid
+    io.count := main.io.count + out_valid
 
-  val ptr_match = enq_ptr.value === deq_ptr.value
-  io.empty := ptr_match && !maybe_full
-  val full = ptr_match && maybe_full
-  val do_enq = WireInit(io.enq.fire() && !IsKilledByBranch(io.brupdate, false.B, io.enq.bits.uop) && !(io.flush && flush_fn(io.enq.bits.uop)))
-  val do_deq = WireInit((io.deq.ready || !valids(deq_ptr.value)) && !io.empty)
+    io.deq.valid := out_valid
+    io.deq.bits := out_reg
+    io.deq.bits.uop := out_uop
 
-  for (i <- 0 until entries) {
-    val mask = uops(i).br_mask
-    val uop  = uops(i)
-    valids(i)  := valids(i) && !IsKilledByBranch(io.brupdate, false.B, mask) && !(io.flush && flush_fn(uop))
-    when (valids(i)) {
-      uops(i).br_mask := GetNewBrMask(io.brupdate, mask)
+    out_uop := UpdateBrMask(io.brupdate, out_uop)
+    out_valid := out_valid && !IsKilledByBranch(io.brupdate, false.B, out_uop) && !(io.flush && flush_fn(out_uop))
+
+    main.io.deq.ready := false.B
+    when (io.deq.fire() || !out_valid) {
+      out_valid := main.io.deq.valid && !IsKilledByBranch(io.brupdate, false.B, main.io.deq.bits.uop) && !(io.flush && flush_fn(main.io.deq.bits.uop))
+      out_reg := main.io.deq.bits
+      out_uop := UpdateBrMask(io.brupdate, main.io.deq.bits.uop)
+      main.io.deq.ready := true.B
     }
-  }
 
-  when (do_enq) {
-    ram(enq_ptr.value)          := io.enq.bits
-    valids(enq_ptr.value)       := true.B
-    uops(enq_ptr.value)         := io.enq.bits.uop
-    uops(enq_ptr.value).br_mask := GetNewBrMask(io.brupdate, io.enq.bits.uop)
-    enq_ptr.inc()
-  }
+  } else {
+    val ram     = Mem(entries, gen)
+    val valids  = RegInit(VecInit(Seq.fill(entries) {false.B}))
+    val uops    = Reg(Vec(entries, new MicroOp))
 
-  when (do_deq) {
-    valids(deq_ptr.value) := false.B
-    deq_ptr.inc()
-  }
+    val enq_ptr = Counter(entries)
+    val deq_ptr = Counter(entries)
+    val maybe_full = RegInit(false.B)
 
-  when (do_enq =/= do_deq) {
-    maybe_full := do_enq
-  }
+    val ptr_match = enq_ptr.value === deq_ptr.value
+    io.empty := ptr_match && !maybe_full
+    val full = ptr_match && maybe_full
+    val do_enq = WireInit(io.enq.fire() && !IsKilledByBranch(io.brupdate, false.B, io.enq.bits.uop) && !(io.flush && flush_fn(io.enq.bits.uop)))
+    val do_deq = WireInit((io.deq.ready || !valids(deq_ptr.value)) && !io.empty)
 
-  io.enq.ready := !full
+    for (i <- 0 until entries) {
+      val mask = uops(i).br_mask
+      val uop  = uops(i)
+      valids(i)  := valids(i) && !IsKilledByBranch(io.brupdate, false.B, mask) && !(io.flush && flush_fn(uop))
+      when (valids(i)) {
+        uops(i).br_mask := GetNewBrMask(io.brupdate, mask)
+      }
+    }
 
-  val out = Wire(gen)
-  out             := ram(deq_ptr.value)
-  out.uop         := uops(deq_ptr.value)
-  io.deq.valid            := !io.empty && valids(deq_ptr.value)
-  io.deq.bits             := out
+    when (do_enq) {
+      ram(enq_ptr.value)          := io.enq.bits
+      valids(enq_ptr.value)       := true.B
+      uops(enq_ptr.value)         := io.enq.bits.uop
+      uops(enq_ptr.value).br_mask := GetNewBrMask(io.brupdate, io.enq.bits.uop)
+      enq_ptr.inc()
+    }
 
-  private val ptr_diff = enq_ptr.value - deq_ptr.value
-  if (isPow2(entries)) {
-    io.count := Cat(maybe_full && ptr_match, ptr_diff)
-  }
-  else {
-    io.count := Mux(ptr_match,
-                    Mux(maybe_full,
-                        entries.asUInt, 0.U),
-                    Mux(deq_ptr.value > enq_ptr.value,
-                        entries.asUInt + ptr_diff, ptr_diff))
+    when (do_deq) {
+      valids(deq_ptr.value) := false.B
+      deq_ptr.inc()
+    }
+
+    when (do_enq =/= do_deq) {
+      maybe_full := do_enq
+                      }
+
+    io.enq.ready := !full
+
+    val out = Wire(gen)
+    out             := ram(deq_ptr.value)
+    out.uop         := uops(deq_ptr.value)
+    io.deq.valid            := !io.empty && valids(deq_ptr.value)
+    io.deq.bits             := out
+
+    val ptr_diff = enq_ptr.value - deq_ptr.value
+    if (isPow2(entries)) {
+      io.count := Cat(maybe_full && ptr_match, ptr_diff)
+    }
+    else {
+      io.count := Mux(ptr_match,
+        Mux(maybe_full,
+          entries.asUInt, 0.U),
+        Mux(deq_ptr.value > enq_ptr.value,
+          entries.asUInt + ptr_diff, ptr_diff))
+    }
   }
 }
 
