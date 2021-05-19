@@ -380,7 +380,7 @@ class PredRenameStage(
   val ren1_current_ftq_idx = Reg(UInt(log2Ceil(ftqSz).W))
   var next_ftq_idx = ren1_current_ftq_idx
   for (w <- 0 until plWidth) {
-    ren1_uops(w).old_ftq_idx := next_ftq_idx
+    ren1_uops(w).ppred := next_ftq_idx
     when (ren1_uops(w).is_sfb_br) {
       ren1_uops(w).pdst := ren1_uops(w).ftq_idx
     }
@@ -400,7 +400,7 @@ class PredRenameStage(
     when (ren2_alloc_reqs(w) && ren2_fire(w)) {
       to_busy(ren2_uops(w).ftq_idx) := true.B
     }
-    ren2_uops(w).ppred_busy := ren2_uops(w).is_sfb_shadow && busy_table(ren2_uops(w).old_ftq_idx) && !unbusy(ren2_uops(w).old_ftq_idx)
+    ren2_uops(w).ppred_busy := ren2_uops(w).is_sfb_shadow && busy_table(ren2_uops(w).ppred) && !unbusy(ren2_uops(w).ppred)
   }
 
   for (w <- 0 until numWbPorts) {

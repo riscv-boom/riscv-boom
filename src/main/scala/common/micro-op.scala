@@ -64,8 +64,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
   // Index into FTQ to figure out our fetch PC.
   val ftq_idx          = UInt(log2Ceil(ftqSz).W)
-  // If this instruction is in a SFB shadow, we need to know the ftq_idx of the shadowing branch
-  val old_ftq_idx      = UInt(log2Ceil(ftqSz).W)
   // This inst straddles two fetch packets
   val edge_inst        = Bool()
   // Low-order bits of our own PC. Combine with ftq[ftq_idx] to get PC.
