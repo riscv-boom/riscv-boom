@@ -51,7 +51,7 @@ case class BoomCoreParams(
   enableFastLoadUse: Boolean = false,
   enableCompactingLSUDuringDispatch: Boolean = true,
   enableAgenStage: Boolean = false,
-  enableStLdForwarding: Boolean = true,
+  enableStLdForwarding: Boolean = false,
   enableFastPNR: Boolean = false,
   enableSFBOpt: Boolean = true,
   enableGHistStallRepair: Boolean = true,
