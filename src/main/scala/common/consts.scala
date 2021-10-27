@@ -136,7 +136,7 @@ trait ScalarOpConstants
 
   // Micro-op opcodes
   // TODO change micro-op opcodes into using enum
-  val UOPC_SZ = 7
+  val UOPC_SZ = 8
   val uopX    = BitPat.dontCare(UOPC_SZ)
   val uopNOP  =  0.U(UOPC_SZ.W)
   val uopLD   =  1.U(UOPC_SZ.W)
@@ -272,6 +272,38 @@ trait ScalarOpConstants
   val uopROCC      = 126.U(UOPC_SZ.W)
 
   val uopMOV       = 127.U(UOPC_SZ.W) // conditional mov decoded from "add rd, x0, rs2"
+
+  val uopANDN      = 128.U(UOPC_SZ.W) //zbb extension start
+  val uopORN       = 129.U(UOPC_SZ.W)
+  val uopXNOR      = 130.U(UOPC_SZ.W)
+
+  val uopCLZ       = 131.U(UOPC_SZ.W)
+  val uopCLZW      = 132.U(UOPC_SZ.W)
+  val uopCTZ       = 133.U(UOPC_SZ.W)
+  val uopCTZW      = 134.U(UOPC_SZ.W)
+
+  val uopPCNT      = 135.U(UOPC_SZ.W)
+  val uopPCNTW     = 136.U(UOPC_SZ.W)
+
+  val uopMAX       = 137.U(UOPC_SZ.W)
+  val uopMAXU      = 138.U(UOPC_SZ.W)
+  val uopMIN       = 139.U(UOPC_SZ.W)
+  val uopMINU      = 140.U(UOPC_SZ.W)
+
+  val uopSEXTB     = 141.U(UOPC_SZ.W)
+  val uopSEXTH     = 142.U(UOPC_SZ.W)
+  val uopZEXTH     = 143.U(UOPC_SZ.W)
+
+  val uopROL       = 144.U(UOPC_SZ.W)
+  val uopROLW      = 145.U(UOPC_SZ.W)
+  val uopROR       = 146.U(UOPC_SZ.W)
+  val uopRORI      = 147.U(UOPC_SZ.W)
+  val uopRORIW     = 148.U(UOPC_SZ.W)
+  val uopRORW      = 149.U(UOPC_SZ.W)
+
+  val uopORCB      = 150.U(UOPC_SZ.W)
+
+  val uopREV8      = 151.U(UOPC_SZ.W)
 
 
   def NullMicroOp()(implicit p: Parameters): boom.common.MicroOp = {
