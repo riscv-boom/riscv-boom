@@ -131,7 +131,9 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val frs3_en          = Bool()
 
   val fcn_dw           = Bool()
-  val fcn_op           = UInt(freechips.rocketchip.rocket.ALU.SZ_ALU_FN.W)
+  val fcn_op           = UInt(5.W) //for now
+  //val fcn_op           = UInt(freechips.rocketchip.rocket.ALU.SZ_ALU_FN.W)
+  // val fnc_bit_op = UInt(freechips.rocketchip.rocket.ALU.SZ_BITMANIP_FN.W) or decode in another stage?
   val is_bitmanip      = Bool()
 
   // floating point information

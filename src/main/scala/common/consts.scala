@@ -304,6 +304,7 @@ trait ScalarOpConstants
   val uopORCB      = 150.U(UOPC_SZ.W)
 
   val uopREV8      = 151.U(UOPC_SZ.W)
+  // pack
 
 
   def NullMicroOp()(implicit p: Parameters): boom.common.MicroOp = {

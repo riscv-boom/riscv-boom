@@ -139,7 +139,7 @@ class ALUUnit(dataWidth: Int)(implicit p: Parameters)
   with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
   val uop = io.req.bits.uop
-
+  dontTouch(uop) // force show all signals
   // immediate generation
   val imm_xprlen = io.req.bits.imm_data //ImmGen(uop.imm_packed, uop.imm_sel)
 
@@ -165,7 +165,7 @@ class ALUUnit(dataWidth: Int)(implicit p: Parameters)
 
   alu.io.in1 := op1_data.asUInt
   alu.io.in2 := op2_data.asUInt
-  alu.io.fn  := uop.fcn_op
+  alu.io.fn  := uop.fcn_op //HERE!!
   alu.io.dw  := uop.fcn_dw
 
 

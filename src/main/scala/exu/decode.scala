@@ -190,7 +190,7 @@ object DecodeTables
               //               |  |  |           |               regtype |       |       |  |     |  |  |  cmd       |  |  |      |       |      is_bitmanip
               //               |  |  |           |               |       |       |       |  |     |  |  |  |         |  |  |      |       |      |
               //               |  |  |           |               |       |       |       |  |     |  |  |  |         |  |  |      |       |      |
-    ANDN               -> List(Y, N, uopANDN   , fc2oh(FC_ALU)  ,RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_X  , FN_X , Y),
+    ANDN               -> List(Y, N, uopANDN   , fc2oh(FC_ALU)  ,RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_X  , FN_X , Y), // where decode actual bitmanip instruction
     ORN                -> List(Y, N, uopORN    , fc2oh(FC_ALU)  ,RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_X  , FN_X , Y),
     XNOR               -> List(Y, N, uopXNOR   , fc2oh(FC_ALU)  ,RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_X  , FN_X , Y),
 
