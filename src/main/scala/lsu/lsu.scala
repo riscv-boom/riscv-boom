@@ -85,7 +85,7 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
   // In our response stage, if we get a nack, we need to reexecute
   val nack        = Flipped(Vec(lsuWidth, new ValidIO(new BoomDCacheReq)))
 
-  val ll_resp     = Flipped(new DecoupledIO(new BoomDCacheResp))
+  val ll_resp     = Flipped(new DecoupledIO(new BoomDCacheResp))m
 
   val brupdate       = Output(new BrUpdateInfo)
   val exception    = Output(Bool())
@@ -123,7 +123,7 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
   val dis_ldq_idx = Output(Vec(coreWidth, UInt(ldqAddrSz.W)))
   val dis_stq_idx = Output(Vec(coreWidth, UInt(stqAddrSz.W)))
 
-  val ldq_full    = Output(Vec(coreWidth, Bool()))
+  val ldq_full    = Output(Vec(coreWidth, Bool()))w
   val stq_full    = Output(Vec(coreWidth, Bool()))
 
   val commit      = Input(new CommitSignals)
@@ -285,7 +285,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
 
 
- 
+
 
   val h_ready :: h_s1 :: h_s2 :: h_s2_nack :: h_wait :: h_replay :: h_dead :: Nil = Enum(7)
   // s1 : do TLB, if success and not killed, fire request go to h_s2

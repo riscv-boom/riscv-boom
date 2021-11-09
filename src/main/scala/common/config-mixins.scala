@@ -439,7 +439,7 @@ class WithNCS152BaselineBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) 
               decodeWidth = coreWidth,
               numFetchBufferEntries = coreWidth * 8,
               numDCacheBanks = lsuWidth,
-              lsuWidth = lsuWidth, 
+              lsuWidth = lsuWidth,
               issueParams = Seq(
                 IssueParams(issueWidth=2,         numEntries=8,  iqType=IQ_MEM, dispatchWidth=coreWidth),
                 IssueParams(issueWidth=1,         numEntries=8,  iqType=IQ_UNQ, dispatchWidth=coreWidth),

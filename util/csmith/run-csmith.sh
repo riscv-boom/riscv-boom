@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Script to run the csmith random test generator multiple times
 
 TEST_NAME=test
@@ -53,7 +55,7 @@ run_once () {
     # Build both a RISCV binary and normal binary
 
     # Test x86-64 first
-    gcc -I$RISCV/include/csmith-2.4.0 -w $BASE_NAME.c -o $BASE_NAME.bin
+    gcc -I$RISCV/include -w $BASE_NAME.c -o $BASE_NAME.bin
     timeout 1s ./$BASE_NAME.bin | awk '{print tolower($0)}' > $BASE_NAME.host.out
     RV=$?
     if [ $RV -ne 0 ]; then
@@ -64,10 +66,10 @@ run_once () {
 
     # Test RISCV spike version
     if [ $PK == false ]; then
-        riscv64-unknown-elf-gcc -w -I./$SRC_DIR -DPREALLOCATE=1 -mcmodel=medany -static -std=gnu99 -O2 -ffast-math -fno-common -o $BASE_NAME.riscv $BASE_NAME.c $SRC_DIR/syscalls.c $SRC_DIR/crt.S -static -nostdlib -nostartfiles -lm -lgcc -T $SRC_DIR/link.ld -I$RISCV/include/csmith-2.4.0
+        riscv64-unknown-elf-gcc -w -I./$SRC_DIR -DPREALLOCATE=1 -mcmodel=medany -static -std=gnu99 -O2 -ffast-math -fno-common -o $BASE_NAME.riscv $BASE_NAME.c $SRC_DIR/syscalls.c $SRC_DIR/crt.S -static -nostdlib -nostartfiles -lm -lgcc -T $SRC_DIR/link.ld -I$RISCV/include
         timeout --foreground 10s spike $BASE_NAME.riscv 1> $BASE_NAME.spike.out 2> $BASE_NAME.spike.log
     else
-        riscv64-unknown-elf-gcc $BASE_NAME.c -I$RISCV/include/csmith-2.4.0 -o $BASE_NAME.riscv -w
+        riscv64-unknown-elf-gcc $BASE_NAME.c -I$RISCV/include -o $BASE_NAME.riscv -w
         timeout --foreground 1m spike pk $BASE_NAME.riscv 1> $BASE_NAME.spike.out 2> $BASE_NAME.spike.log
     fi
     RV=$?

@@ -433,7 +433,7 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
   } else {
     // If no managers support atomics, assert fail if processor asks for them
     assert(state === s_idle || !isAMO(req.uop.mem_cmd))
-    Wire(new TLBundleA(edge.bundle))
+    (0.U).asTypeOf(new TLBundleA(edge.bundle))
   }
   assert(state === s_idle || req.uop.mem_cmd =/= M_XSC)
 
