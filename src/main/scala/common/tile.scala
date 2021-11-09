@@ -139,7 +139,7 @@ class BoomTile private(
   // Frontend/ICache
   val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, staticIdForMetadataUseOnly))
   frontend.resetVectorSinkNode := resetVectorNexusNode
-  tlMasterXbar.node := TLBuffer() := frontend.masterNode
+  tlMasterXbar.node := TLBuffer() := TLWidthWidget(tileParams.icache.get.fetchBytes) := frontend.masterNode
 
   // ROCC
   val roccs = p(BuildRoCC).map(_(p))

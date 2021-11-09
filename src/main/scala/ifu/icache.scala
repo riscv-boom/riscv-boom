@@ -129,6 +129,8 @@ object GetPropertyByHartId
 class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   with HasBoomFrontendParameters
 {
+  override def tlBundleParams = outer.masterNode.out.head._2.bundle
+
   val enableICacheDelay = tileParams.core.asInstanceOf[BoomCoreParams].enableICacheDelay
   val icacheSinglePorted = tileParams.core.asInstanceOf[BoomCoreParams].icacheSinglePorted
   val io = IO(new ICacheBundle(outer))
@@ -142,13 +144,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   // How many bits do we intend to fetch at most every cycle?
   val wordBits = outer.icacheParams.fetchBytes*8
   // Each of these cases require some special-case handling.
-  require (tl_out.d.bits.data.getWidth == wordBits || (2*tl_out.d.bits.data.getWidth == wordBits && nBanks == 2))
-  // If TL refill is half the wordBits size and we have two banks, then the
-  // refill writes to only one bank per cycle (instead of across two banks every
-  // cycle).
-  val refillsToOneBank = (2*tl_out.d.bits.data.getWidth == wordBits)
-
-
+  require (tl_out.d.bits.data.getWidth == wordBits)
 
   val s0_valid = io.req.fire()
   val s0_vaddr = io.req.bits.addr
@@ -211,11 +207,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   }
   assert(PopCount(s1_tag_hit) <= 1.U || !s1_valid)
 
-  val ramDepth = if (refillsToOneBank && nBanks == 2) {
-    nSets * refillCycles / 2
-  } else {
-    nSets * refillCycles
-  }
+  val ramDepth = nSets * refillCycles
 
   val dataArrays = Seq.tabulate(nBanks) { b =>
     DescribedSRAM(
@@ -258,18 +250,10 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
 
     // Bank0 row's id wraps around if Bank1 is the starting bank.
     def b0Row(addr: UInt) =
-      if (refillsToOneBank) {
-        addr(untagBits-1, blockOffBits-log2Ceil(refillCycles)+1) + bank(addr)
-      } else {
-        addr(untagBits-1, blockOffBits-log2Ceil(refillCycles)) + bank(addr)
-      }
+      addr(untagBits-1, blockOffBits-log2Ceil(refillCycles)) + bank(addr)
     // Bank1 row's id stays the same regardless of which Bank has the fetch address.
     def b1Row(addr: UInt) =
-      if (refillsToOneBank) {
-        addr(untagBits-1, blockOffBits-log2Ceil(refillCycles)+1)
-      } else {
-        addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
-      }
+      addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
 
     s1_bankid := RegNext(bank(s0_vaddr))
 
@@ -281,38 +265,20 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     var mem_idx0: UInt = null
     var mem_idx1: UInt = null
 
-    if (refillsToOneBank) {
-      // write a refill beat across only one beat.
-      mem_idx0 =
-        Mux(refill_one_beat, (refill_idx << (log2Ceil(refillCycles)-1)) | (refill_cnt >> 1.U),
-            b0Row(s0_vaddr))
-      mem_idx1 =
-        Mux(refill_one_beat, (refill_idx << (log2Ceil(refillCycles)-1)) | (refill_cnt >> 1.U),
-            b1Row(s0_vaddr))
+    // write a refill beat across both banks.
+    mem_idx0 =
+      Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
+        b0Row(s0_vaddr))
+    mem_idx1 =
+      Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
+        b1Row(s0_vaddr))
 
-      val wdata = VecInit(Seq.fill(nWays) { tl_out.d.bits.data })
-      when (wen && refill_cnt(0) === 0.U) {
-        array_0.write(mem_idx0, wdata, wmask)
-      }
-      when (wen && refill_cnt(0) === 1.U) {
-        array_1.write(mem_idx1, wdata, wmask)
-      }
-    } else {
-      // write a refill beat across both banks.
-      mem_idx0 =
-        Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
-            b0Row(s0_vaddr))
-      mem_idx1 =
-        Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
-            b1Row(s0_vaddr))
-
-      when (wen) {
-        val data = tl_out.d.bits.data
-        val wdata_0 = VecInit(Seq.fill(nWays) { data(wordBits/2-1, 0) })
-        val wdata_1 = VecInit(Seq.fill(nWays) { data(wordBits-1, wordBits/2) })
-        array_0.write(mem_idx0, wdata_0, wmask)
-        array_1.write(mem_idx1, wdata_1, wmask)
-      }
+    when (wen) {
+      val data = tl_out.d.bits.data
+      val wdata_0 = VecInit(Seq.fill(nWays) { data(wordBits/2-1, 0) })
+      val wdata_1 = VecInit(Seq.fill(nWays) { data(wordBits-1, wordBits/2) })
+      array_0.write(mem_idx0, wdata_0, wmask)
+      array_1.write(mem_idx1, wdata_1, wmask)
     }
     val rdata_0 = Wire(Vec(nWays, UInt((wordBits/nBanks).W)))
     val rdata_1 = Wire(Vec(nWays, UInt((wordBits/nBanks).W)))
@@ -380,7 +346,6 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     "==L1-ICache==",
     "Fetch bytes   : " + cacheParams.fetchBytes,
     "Block bytes   : " + (1 << blockOffBits),
-    "Row bytes     : " + rowBytes,
     "Word bits     : " + wordBits,
     "Sets          : " + nSets,
     "Ways          : " + nWays,
