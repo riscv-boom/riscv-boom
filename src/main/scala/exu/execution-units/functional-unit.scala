@@ -168,6 +168,13 @@ class ALUUnit(dataWidth: Int)(implicit p: Parameters)
   alu.io.fn  := uop.fcn_op //HERE!!
   alu.io.dw  := uop.fcn_dw
 
+  val bitmanip = Module(new BITMANIP())
+
+  bitmanip.io.in1 := op1_data.asUInt
+  bitmanip.io.in2 := op2_data.asUInt
+  bitmanip.io.fn  := uop.fcn_op 
+  bitmanip.io.dw  := uop.fcn_dw
+
 
   val rs1 = io.req.bits.rs1_data
   val rs2 = io.req.bits.rs2_data
@@ -273,12 +280,15 @@ class ALUUnit(dataWidth: Int)(implicit p: Parameters)
 //   val reg_data = Reg(outType = Bits(width = xLen))
 //   reg_data := alu.io.out
 //   io.resp.bits.data := reg_data
-  val alu_out = Mux(io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data,
+
+  val alu_or_bitmanip = Mux(uop.is_bitmanip, alu.io.out, bitmanip.io.out)
+  
+  val alu_out = Mux(io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data, 
       Mux(io.req.bits.uop.ldst_is_rs1, io.req.bits.rs1_data, io.req.bits.rs2_data),
-      Mux(io.req.bits.uop.uopc === uopMOV, io.req.bits.rs2_data, alu.io.out))
+      Mux(io.req.bits.uop.uopc === uopMOV, io.req.bits.rs2_data, alu_or_bitmanip)) //selection happen here
   io.resp.valid := io.req.valid
   io.resp.bits.uop := io.req.bits.uop
-  io.resp.bits.data := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
+  io.resp.bits.data := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out) //alu_out isn't just alu anymore
   io.resp.bits.predicated := io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data
   assert(io.resp.ready)
 
