@@ -281,7 +281,7 @@ class ALUUnit(dataWidth: Int)(implicit p: Parameters)
 //   reg_data := alu.io.out
 //   io.resp.bits.data := reg_data
 
-  val alu_or_bitmanip = Mux(uop.is_bitmanip, alu.io.out, bitmanip.io.out)
+  val alu_or_bitmanip = Mux(uop.is_bitmanip, bitmanip.io.out, alu.io.out)
   
   val alu_out = Mux(io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data, 
       Mux(io.req.bits.uop.ldst_is_rs1, io.req.bits.rs1_data, io.req.bits.rs2_data),

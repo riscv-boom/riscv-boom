@@ -145,9 +145,8 @@ class RRDDecode(implicit p: Parameters) extends BoomModule {
 
       BitPat(uopORCB)  -> List(FN_ORCB    , DW_XPR, OP1_RS1, OP2_X   , CSR.N),
 
-      BitPat(uopREV8)  -> List(FN_REV8    , DW_XPR, OP1_RS1, OP2_X   , CSR.N))
-    // pack
-      
+      BitPat(uopREV8)  -> List(FN_REV8    , DW_XPR, OP1_RS1, OP2_X   , CSR.N),
+      BitPat(uopPACK)  -> List(FN_PACK    , DW_XPR, OP1_RS1, OP2_RS2 , CSR.N))      
 
 
   val uop = WireInit(io.in)

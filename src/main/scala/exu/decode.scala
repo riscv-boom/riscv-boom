@@ -219,7 +219,8 @@ object DecodeTables
     RORW               -> List(Y, N, uopRORW   , fc2oh(FC_ALU)  ,RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_X  , FN_X , Y),
 
     ORC_B              -> List(Y, N, uopORCB   , fc2oh(FC_ALU)  ,RT_FIX, RT_FIX, RT_X  , N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_X  , FN_X , Y),
-    REV8               -> List(Y, N, uopREV8   , fc2oh(FC_ALU)  ,RT_FIX, RT_FIX, RT_X  , N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_X  , FN_X , Y)
+    REV8               -> List(Y, N, uopREV8   , fc2oh(FC_ALU)  ,RT_FIX, RT_FIX, RT_X  , N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_X  , FN_X , Y),
+    PACK               -> List(Y, N, uopPACK   , fc2oh(FC_ALU)  ,RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_X  , FN_X , Y)
   )
   val F_table: Array[(BitPat, List[BitPat])] = Array(
     FLW                -> List(Y, Y, uopLD     , fc2oh(FC_AGEN), RT_FLT, RT_FIX, RT_X  , N, IS_I, Y, N, N, M_XRD   , N, N, CSR.N, DW_X  , FN_X  , N),

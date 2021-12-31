@@ -45,6 +45,8 @@ object BITMANIP {
     def FN_PACK  = 17.U(SZ_BITMANIP_FN.W)
 }
 
+import BITMANIP._
+
 class BITMANIP(implicit p: Parameters) extends CoreModule()(p) {
   val io = IO(new Bundle { //wrap IO 
     val dw = Input(UInt(SZ_DW.W))
@@ -62,16 +64,16 @@ class BITMANIP(implicit p: Parameters) extends CoreModule()(p) {
     val clz_msb =  PriorityEncoder(leading_reverse(63,32))
     val clz_lsb =  PriorityEncoder(leading_reverse(31,0))
 
-    val clzw =  Mux(clz_msb === 31.U && io.in1(63) === 0.U, 32.U, clz_msb)
-    val clz_lsb_res = Mux(clz_lsb === 31.U && io.in1(31) === 0.U, 32.U, clz_lsb)
-    val clz = Mux(clz_lsb_res === 32.U, clzw + clz_lsb_res, clz_lsb_res)
+    val clzw =  Mux(clz_msb === 31.U && io.in1(0) === 0.U, 32.U, clz_msb)
+    val clz_lsb_res = Mux(clz_lsb === 31.U && io.in1(32) === 0.U, 32.U, clz_lsb)
+    val clz = Mux(clz_lsb_res === 32.U, clzw +& clz_lsb_res, clz_lsb_res)
 
     //ctz, ctzw
     val ctz_msb =  PriorityEncoder(io.in1(63,32))
     val ctz_lsb =  PriorityEncoder(io.in1(31,0))
     val ctzw =  Mux(ctz_lsb === 31.U && io.in1(31) === 0.U, 32.U, ctz_lsb)
     val ctz_msb_res = Mux(ctz_msb === 31.U && io.in1(63) === 0.U, 32.U, ctz_msb)
-    val ctz = Mux(ctzw === 32.U, ctzw + ctz_msb_res, ctzw)
+    val ctz = Mux(ctzw === 32.U, ctzw +& ctz_msb_res, ctzw)
 
     val pcnt = PopCount(io.in1) //do math
     val pcntw = PopCount(io.in1(31,0))
