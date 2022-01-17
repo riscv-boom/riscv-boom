@@ -647,7 +647,7 @@ abstract class IterativeFunctionalUnit(dataWidth: Int)(implicit p: Parameters)
   val do_kill = Wire(Bool())
   do_kill := io.req.bits.kill // irrelevant default
 
-  when (io.req.fire()) {
+  when (io.req.fire) {
     // update incoming uop
     do_kill := IsKilledByBranch(io.brupdate, io.req.bits.uop) || io.req.bits.kill
     r_uop := io.req.bits.uop

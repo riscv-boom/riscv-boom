@@ -148,7 +148,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     None
   }
 
-  val do_enq = io.enq.fire()
+  val do_enq = io.enq.fire
 
 
   // This register lets us initialize the ghist to 0
@@ -344,7 +344,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   for (i <- 0 until 2) {
     val idx = io.get_ftq_pc(i).ftq_idx
     val next_idx = WrapInc(idx, num_entries)
-    val next_is_enq = (next_idx === enq_ptr) && io.enq.fire()
+    val next_is_enq = (next_idx === enq_ptr) && io.enq.fire
     val next_pc = Mux(next_is_enq, io.enq.bits.pc, pcs(next_idx))
     val get_entry = ram(idx)
     val next_entry = ram(next_idx)

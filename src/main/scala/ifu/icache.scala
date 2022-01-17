@@ -149,7 +149,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
 
 
 
-  val s0_valid = io.req.fire()
+  val s0_valid = io.req.fire
   val s0_vaddr = io.req.bits.addr
 
   val s1_valid = RegNext(s0_valid)
@@ -161,12 +161,12 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
 
   val invalidated = Reg(Bool())
   val refill_valid = RegInit(false.B)
-  val refill_fire = tl_out.a.fire()
+  val refill_fire = tl_out.a.fire
   val s2_miss = s2_valid && !s2_hit && !RegNext(refill_valid)
   val refill_paddr = RegEnable(io.s1_paddr, s1_valid && !(refill_valid || s2_miss))
   val refill_tag = refill_paddr(tagBits+untagBits-1,untagBits)
   val refill_idx = refill_paddr(untagBits-1,blockOffBits)
-  val refill_one_beat = tl_out.d.fire() && edge_out.hasData(tl_out.d.bits)
+  val refill_one_beat = tl_out.d.fire && edge_out.hasData(tl_out.d.bits)
 
   io.req.ready := !refill_one_beat
 
@@ -357,7 +357,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   tl_out.c.valid := false.B
   tl_out.e.valid := false.B
 
-  io.perf.acquire := tl_out.a.fire()
+  io.perf.acquire := tl_out.a.fire
 
   when (!refill_valid) { invalidated := false.B }
   when (refill_fire) { refill_valid := true.B }

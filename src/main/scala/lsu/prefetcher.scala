@@ -58,7 +58,7 @@ class NLPrefetcher(implicit edge: TLEdgeOut, p: Parameters) extends DataPrefetch
     req_valid := true.B
     req_addr  := mshr_req_addr
     req_cmd   := Mux(ClientStates.hasWritePermission(io.req_coh.state), M_PFW, M_PFR)
-  } .elsewhen (io.prefetch.fire()) {
+  } .elsewhen (io.prefetch.fire) {
     req_valid := false.B
   }
 
