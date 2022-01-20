@@ -485,7 +485,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   val cs = Wire(new CtrlSigs()).decode(inst, decode_table)
 
   // Exception Handling
-  io.csr_decode.csr_addr := inst
+  io.csr_decode.inst := inst
   val csr_en = cs.csr_cmd.isOneOf(CSR.S, CSR.C, CSR.W)
   val csr_ren = cs.csr_cmd.isOneOf(CSR.S, CSR.C) && uop.lrs1 === 0.U
   val system_insn = cs.csr_cmd === CSR.I
