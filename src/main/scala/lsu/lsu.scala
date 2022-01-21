@@ -254,6 +254,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.core.perf.release := io.dmem.perf.release
 
 
+
   val clear_store     = WireInit(false.B)
   val live_store_mask = RegInit(0.U(numStqEntries.W))
   var next_live_store_mask = Mux(clear_store, live_store_mask & ~(1.U << stq_head),
@@ -650,6 +651,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     dtlb.io.req(w).bits.size        := exe_size(w)
     dtlb.io.req(w).bits.cmd         := exe_cmd(w)
     dtlb.io.req(w).bits.passthrough := exe_passthr(w)
+    dtlb.io.req(w).bits.v           := io.ptw.status.v
+    dtlb.io.req(w).bits.prv         := io.ptw.status.prv
   }
   dtlb.io.kill                      := exe_kill.reduce(_||_)
   dtlb.io.sfence                    := exe_sfence

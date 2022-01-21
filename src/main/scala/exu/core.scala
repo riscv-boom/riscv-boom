@@ -1055,6 +1055,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   csr.io.hartid := io.hartid
   csr.io.interrupts := io.interrupts
 
+  // we do not support the H-extension
+  csr.io.htval := DontCare
+  csr.io.gva := DontCare
+
 // TODO can we add this back in, but handle reset properly and save us
 //      the mux above on csr.io.rw.cmd?
 //   assert (!(csr_rw_cmd =/= rocket.CSR.N && !exe_units(0).io.resp(0).valid),
