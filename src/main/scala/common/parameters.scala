@@ -80,6 +80,7 @@ case class BoomCoreParams(
   mulDiv: Option[freechips.rocketchip.rocket.MulDivParams] = Some(MulDivParams(divEarlyOut=true)),
   nBreakpoints: Int = 0, // TODO Fix with better frontend breakpoint unit
   nL2TLBEntries: Int = 512,
+  val nPTECacheEntries: Int = 8, // TODO: check
   nL2TLBWays: Int = 1,
   nLocalInterrupts: Int = 0,
   useNMI: Boolean = false,
@@ -87,6 +88,7 @@ case class BoomCoreParams(
   useDebug: Boolean = true,
   useUser: Boolean = true,
   useSupervisor: Boolean = false,
+  useHypervisor: Boolean = false,
   useVM: Boolean = true,
   useSCIE: Boolean = false,
   useRVE: Boolean = false,

@@ -106,7 +106,6 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
     val release = Bool()
   })
 
-  override def cloneType = new LSUDMemIO().asInstanceOf[this.type]
 }
 
 class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
@@ -250,9 +249,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     instruction = false, lgMaxSize = log2Ceil(coreDataBytes), rocket.TLBConfig(dcacheParams.nTLBSets, dcacheParams.nTLBWays)))
 
   io.ptw <> dtlb.io.ptw
-  io.core.perf.tlbMiss := io.ptw.req.fire()
+  io.core.perf.tlbMiss := io.ptw.req.fire
   io.core.perf.acquire := io.dmem.perf.acquire
   io.core.perf.release := io.dmem.perf.release
+
 
 
   val clear_store     = WireInit(false.B)
@@ -651,6 +651,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     dtlb.io.req(w).bits.size        := exe_size(w)
     dtlb.io.req(w).bits.cmd         := exe_cmd(w)
     dtlb.io.req(w).bits.passthrough := exe_passthr(w)
+    dtlb.io.req(w).bits.v           := io.ptw.status.v
+    dtlb.io.req(w).bits.prv         := io.ptw.status.prv
   }
   dtlb.io.kill                      := exe_kill.reduce(_||_)
   dtlb.io.sfence                    := exe_sfence
@@ -749,7 +751,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val dmem_req = Wire(Vec(memWidth, Valid(new BoomDCacheReq)))
   io.dmem.req.valid := dmem_req.map(_.valid).reduce(_||_)
   io.dmem.req.bits  := dmem_req
-  val dmem_req_fire = widthMap(w => dmem_req(w).valid && io.dmem.req.fire())
+  val dmem_req_fire = widthMap(w => dmem_req(w).valid && io.dmem.req.fire)
 
   val s0_executing_loads = WireInit(VecInit((0 until numLdqEntries).map(x=>false.B)))
 
@@ -864,7 +866,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     // Write data into the STQ
     if (w == 0)
       io.core.fp_stdata.ready := !will_fire_std_incoming(w) && !will_fire_stad_incoming(w)
-    val fp_stdata_fire = io.core.fp_stdata.fire() && (w == 0).B
+    val fp_stdata_fire = io.core.fp_stdata.fire && (w == 0).B
     when (will_fire_std_incoming(w) || will_fire_stad_incoming(w) || fp_stdata_fire)
     {
       val sidx = Mux(will_fire_std_incoming(w) || will_fire_stad_incoming(w),
@@ -878,7 +880,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         "[lsu] Incoming store is overwriting a valid data entry")
     }
   }
-  val will_fire_stdf_incoming = io.core.fp_stdata.fire()
+  val will_fire_stdf_incoming = io.core.fp_stdata.fire
   require (xLen >= fLen) // for correct SDQ size
 
   //-------------------------------------------------------------
@@ -1526,7 +1528,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.hellacache.resp.valid := false.B
   when (hella_state === h_ready) {
     io.hellacache.req.ready := true.B
-    when (io.hellacache.req.fire()) {
+    when (io.hellacache.req.fire) {
       hella_req   := io.hellacache.req.bits
       hella_state := h_s1
     }

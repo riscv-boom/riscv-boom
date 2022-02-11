@@ -472,7 +472,7 @@ class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flu
   val ptr_match = enq_ptr.value === deq_ptr.value
   io.empty := ptr_match && !maybe_full
   val full = ptr_match && maybe_full
-  val do_enq = WireInit(io.enq.fire())
+  val do_enq = WireInit(io.enq.fire)
   val do_deq = WireInit((io.deq.ready || !valids(deq_ptr.value)) && !io.empty)
 
   for (i <- 0 until entries) {
