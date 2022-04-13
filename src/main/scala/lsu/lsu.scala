@@ -103,7 +103,6 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
     val release = Bool()
   })
 
-  override def cloneType = new LSUDMemIO().asInstanceOf[this.type]
 }
 
 class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
@@ -549,7 +548,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   retry_queue.io.deq.ready := will_fire_load_retry.reduce(_||_) || will_fire_store_retry.reduce(_||_)
 
   val stq_execute_queue_flush = WireInit(false.B)
-  val stq_execute_queue = withReset(reset.toBool || stq_execute_queue_flush) {
+  val stq_execute_queue = withReset(reset.asBool || stq_execute_queue_flush) {
     Module(new Queue(new STQEntry, 4))
   }
   val stq_commit_e = stq_execute_queue.io.deq
@@ -760,7 +759,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     dtlb.io.req(w).bits.size        := exe_size(w)
     dtlb.io.req(w).bits.cmd         := exe_cmd(w)
     dtlb.io.req(w).bits.passthrough := exe_passthr(w)
-
+    dtlb.io.req(w).bits.prv         := io.ptw.status.prv
+    dtlb.io.req(w).bits.v           := io.ptw.status.v
 
     bkptu(w).io.status := io.core.status
     bkptu(w).io.bp     := io.core.bp

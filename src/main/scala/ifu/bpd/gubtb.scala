@@ -45,7 +45,7 @@ class GMicroBTBBranchPredictorBank(params: BoomGMicroBTBParams = BoomGMicroBTBPa
   val s1_meta = Wire(new MicroBTBPredictMeta)
   override val metaSz = s1_meta.asUInt.getWidth
 
-  val valids = RegInit(VecInit(0.U(nWays.W).toBools))
+  val valids = RegInit(VecInit(0.U(nWays.W).asBools))
   val meta = Reg(Vec(nWays, new MicroBTBMeta))
   val btb = Reg(Vec(nWays, UInt(vaddrBitsExtended.W)))
   val mems = Nil

@@ -373,6 +373,8 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   tlb.io.req.bits.vaddr := s1_vpc
   tlb.io.req.bits.passthrough := false.B
   tlb.io.req.bits.size  := log2Ceil(coreInstBytes * fetchWidth).U
+  tlb.io.req.bits.prv   := io.ptw.status.prv
+  tlb.io.req.bits.v     := io.ptw.status.v
   tlb.io.sfence         := RegNext(io.cpu.sfence)
   tlb.io.kill           := false.B
 
@@ -812,7 +814,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     Module(new Queue(new FetchBundle, 1, pipe=true, flow=false))}
   // TODO: Allow for 4-cycle branch predictors, instead of just reusing the cycle-3
   // response
-  val f4_bpd_queue = withReset(reset.toBool || f3_clear) {
+  val f4_bpd_queue = withReset(reset.asBool || f3_clear) {
     Module(new Queue(new BranchPredictionBundle, 1, pipe=true, flow=false)) }
 
   val fb  = Module(new FetchBuffer)

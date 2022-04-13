@@ -329,7 +329,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
 
   for (i <- 0 until 3) {
-    val idx = Mux(reset.toBool, 0.U(log2Ceil(ftqSz).W), io.arb_ftq_reqs(i))
+    val idx = Mux(reset.asBool, 0.U(log2Ceil(ftqSz).W), io.arb_ftq_reqs(i))
     val is_enq = (idx === enq_ptr) && io.enq.fire()
     val get_entry = ram(idx)
 

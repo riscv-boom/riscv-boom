@@ -53,7 +53,7 @@ class FA2MicroBTBBranchPredictorBank(params: BoomFA2MicroBTBParams = BoomFA2Micr
   val s1_meta = Wire(new MicroBTBPredictMeta)
   override val metaSz = s1_meta.asUInt.getWidth
 
-  val valids   = RegInit(VecInit(0.U(nWays.W).toBools))
+  val valids   = RegInit(VecInit(0.U(nWays.W).asBools))
   val meta     = Reg(Vec(nWays, new MicroBTBMeta))
   val btb      = Reg(Vec(nWays, Vec(if (useDualEntries) 2 else 1, UInt(vaddrBitsExtended.W))))
 

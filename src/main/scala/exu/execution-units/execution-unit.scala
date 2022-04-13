@@ -22,6 +22,7 @@ import chisel3.util._
 
 import freechips.rocketchip.config.{Parameters}
 import freechips.rocketchip.rocket.{BP, SFenceReq, CSR}
+import freechips.rocketchip.rocket.constants.{MemoryOpConstants}
 import freechips.rocketchip.tile.{XLen, RoCCCoreIO}
 import freechips.rocketchip.tile
 import freechips.rocketchip.util._
@@ -336,6 +337,7 @@ class UniqueExeUnit(
 )(implicit p: Parameters) extends ExecutionUnit("Unq")
   with HasIrfReadPorts
   with HasImmrfReadPort
+  with MemoryOpConstants
 {
   def nReaders = 2
 
@@ -400,6 +402,9 @@ class UniqueExeUnit(
     s.bits.rs2 := RegNext(exe_uop.bits.pimm(1))
     s.bits.addr := RegNext(exe_rs1_data)
     s.bits.asid := RegNext(exe_rs2_data)
+    s.bits.hv := RegNext(exe_uop.bits.mem_cmd === M_HFENCEV)
+    s.bits.hg := RegNext(exe_uop.bits.mem_cmd === M_HFENCEG)
+
     (Some(c), Some(s))
   } else {
     assert(!(exe_uop.valid && exe_uop.bits.fu_code(FC_CSR)))
