@@ -12,6 +12,7 @@ import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.util.uintToBitPat
 import freechips.rocketchip.rocket.CSR
+import boom.exu.BITMANIP._
 
 import boom.common._
 
@@ -107,8 +108,45 @@ class RRDDecode(implicit p: Parameters) extends BoomModule {
       BitPat(uopWFI)    -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I),
       BitPat(uopSCALL)  -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I),
       BitPat(uopSBREAK) -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I),
-      BitPat(uopERET)   -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I))
+      BitPat(uopERET)   -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I),
+         //
+           //                                       op1 sel   op2 sel
+           //                                       |         |         csr_cmd
+           //                                       |         |         |
+           //              bitmanip fcn     wd/word?|         |         |
+           //                   |           |       |         |         |
+      BitPat(uopANDN)   -> List(FN_ANDN   , DW_XPR, OP1_RS1, OP2_RS2 , CSR.N),
+      BitPat(uopORN)    -> List(FN_ORN    , DW_XPR, OP1_RS1, OP2_RS2 , CSR.N),
+      BitPat(uopXNOR)   -> List(FN_XNOR   , DW_XPR, OP1_RS1, OP2_RS2 , CSR.N),
 
+      BitPat(uopCLZ)    -> List(FN_CLZ    , DW_XPR, OP1_RS1, OP2_X   , CSR.N),
+      BitPat(uopCLZW)   -> List(FN_CLZ    , DW_32 , OP1_RS1, OP2_X   , CSR.N),
+      BitPat(uopCTZ)    -> List(FN_CTZ    , DW_XPR, OP1_RS1, OP2_X   , CSR.N),
+      BitPat(uopCTZW)   -> List(FN_CTZ    , DW_32 , OP1_RS1, OP2_X   , CSR.N),
+
+      BitPat(uopPCNT)   -> List(FN_PCNT   , DW_XPR, OP1_RS1, OP2_X   , CSR.N),
+      BitPat(uopPCNTW)  -> List(FN_PCNT   , DW_32 , OP1_RS1, OP2_X   , CSR.N),
+
+      BitPat(uopMAX)    -> List(FN_MAX    , DW_XPR, OP1_RS1, OP2_RS2 , CSR.N),
+      BitPat(uopMAXU)   -> List(FN_MAXU   , DW_XPR, OP1_RS1, OP2_RS2 , CSR.N),
+      BitPat(uopMIN)    -> List(FN_MIN    , DW_XPR, OP1_RS1, OP2_RS2 , CSR.N),
+      BitPat(uopMINU)   -> List(FN_MINU   , DW_XPR, OP1_RS1, OP2_RS2 , CSR.N),
+
+      BitPat(uopSEXTB) -> List(FN_SEXTB   , DW_XPR, OP1_RS1, OP2_X   , CSR.N),
+      BitPat(uopSEXTH) -> List(FN_SEXTH   , DW_XPR, OP1_RS1, OP2_X   , CSR.N),
+      BitPat(uopZEXTH) -> List(FN_ZEXTH   , DW_XPR, OP1_RS1, OP2_X   , CSR.N),
+
+      BitPat(uopROL)   -> List(FN_ROL     , DW_XPR, OP1_RS1, OP2_RS2 , CSR.N),
+      BitPat(uopROLW)  -> List(FN_ROL     , DW_32 , OP1_RS1, OP2_RS2 , CSR.N),
+      BitPat(uopROR)   -> List(FN_ROR     , DW_XPR, OP1_RS1, OP2_RS2 , CSR.N),
+      BitPat(uopRORI)  -> List(FN_ROR     , DW_XPR, OP1_RS1, OP2_IMM , CSR.N),
+      BitPat(uopRORIW) -> List(FN_ROR     , DW_32 , OP1_RS1, OP2_IMM , CSR.N),
+      BitPat(uopRORW)  -> List(FN_ROR     , DW_32 , OP1_RS1, OP2_RS2 , CSR.N),
+
+      BitPat(uopORCB)  -> List(FN_ORCB    , DW_XPR, OP1_RS1, OP2_X   , CSR.N),
+
+      BitPat(uopREV8)  -> List(FN_REV8    , DW_XPR, OP1_RS1, OP2_X   , CSR.N),
+      BitPat(uopPACK)  -> List(FN_PACK    , DW_XPR, OP1_RS1, OP2_RS2 , CSR.N))      
 
 
   val uop = WireInit(io.in)
@@ -134,7 +172,7 @@ object RRDDecode {
     val decoder = Module(new RRDDecode)
     decoder.io.in := uop
     val out = WireInit(uop)
-    out.fcn_op := decoder.io.out.fcn_op
+    out.fcn_op := decoder.io.out.fcn_op //change this field to 5
     out.fcn_dw := decoder.io.out.fcn_dw
     out.op1_sel := decoder.io.out.op1_sel
     out.op2_sel := decoder.io.out.op2_sel
