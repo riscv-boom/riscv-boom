@@ -51,8 +51,8 @@ class UOPCodeFPUDecoder(implicit p: Parameters) extends BoomModule with HasFPUPa
     //                          | | | | |  | | | | | | |  | | | |
     Array(
     BitPat(uopFCLASS_S) -> List(X,X,Y,N,N, N,X,S,S,N,Y,N, N,N,N,N),
-    BitPat(uopFMV_S_X)  -> List(X,X,N,N,N, X,X,S,D,Y,N,N, N,N,N,N),
-    BitPat(uopFMV_X_S)  -> List(X,X,Y,N,N, N,X,D,S,N,Y,N, N,N,N,N),
+    BitPat(uopFMV_W_X)  -> List(X,X,N,N,N, X,X,S,D,Y,N,N, N,N,N,N),
+    BitPat(uopFMV_X_W)  -> List(X,X,Y,N,N, N,X,D,S,N,Y,N, N,N,N,N),
 
     BitPat(uopFCVT_S_X) -> List(X,X,N,N,N, X,X,S,S,Y,N,N, N,N,N,Y),
 
@@ -192,7 +192,7 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
     when (fp_ctrl.swap23) { req.in3 := req.in2 }
     req.typ := ImmGenTyp(io_req.uop.imm_packed)
     req.fmt := Mux(tag === S, 0.U, 1.U) // TODO support Zfh and avoid special-case below
-    when (io_req.uop.uopc === uopFMV_X_S) {
+    when (io_req.uop.uopc === uopFMV_X_W) {
       req.fmt := 0.U
     }
 
