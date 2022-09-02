@@ -685,7 +685,11 @@ class BranchDecode(implicit p: Parameters) extends BoomModule
                SRL         -> List(N, N, N, Y, Y)
             ))
 
-  val (cs_is_br: Bool) :: (cs_is_jal: Bool) :: (cs_is_jalr:Bool) :: (cs_is_shadowable:Bool) :: (cs_has_rs2) :: Nil = bpd_csignals
+  val cs_is_br = bpd_csignals(0)(0)
+  val cs_is_jal = bpd_csignals(1)(0)
+  val cs_is_jalr = bpd_csignals(2)(0)
+  val cs_is_shadowable = bpd_csignals(3)(0)
+  val cs_has_rs2 = bpd_csignals(4)(0)
 
   io.out.is_call := (cs_is_jal || cs_is_jalr) && GetRd(io.inst) === RA
   io.out.is_ret  := cs_is_jalr && GetRs1(io.inst) === BitPat("b00?01") && GetRd(io.inst) === X0
