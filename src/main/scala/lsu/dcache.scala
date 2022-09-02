@@ -284,7 +284,7 @@ class BoomDuplicatedDataArray(implicit p: Parameters) extends AbstractBoomDataAr
 
     val raddr = io.read(j).bits.addr >> rowOffBits
     for (w <- 0 until nWays) {
-      val (array, omSRAM) = DescribedSRAM(
+      val array = DescribedSRAM(
         name = s"array_${w}_${j}",
         desc = "Non-blocking DCache Data Array",
         size = nSets * refillCycles,
@@ -347,7 +347,7 @@ class BoomBankedDataArray(implicit p: Parameters) extends AbstractBoomDataArray 
     val s2_bank_reads = Reg(Vec(nBanks, Bits(encRowBits.W)))
 
     for (b <- 0 until nBanks) {
-      val (array, omSRAM) = DescribedSRAM(
+      val array = DescribedSRAM(
         name = s"array_${w}_${b}",
         desc = "Non-blocking DCache Data Array",
         size = bankSize,
