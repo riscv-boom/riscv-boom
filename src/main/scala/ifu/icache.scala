@@ -18,7 +18,6 @@ import chisel3.internal.sourceinfo.{SourceInfo}
 import chisel3.experimental.{chiselName}
 
 import freechips.rocketchip.config.{Parameters}
-import freechips.rocketchip.subsystem.{RocketTilesKey}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
