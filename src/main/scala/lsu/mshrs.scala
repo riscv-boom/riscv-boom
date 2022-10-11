@@ -144,7 +144,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   // Block probes if a tag write we started is still in the pipeline
   val meta_hazard = RegInit(0.U(2.W))
   when (meta_hazard =/= 0.U) { meta_hazard := meta_hazard + 1.U }
-  when (io.meta_write.fire()) { meta_hazard := 1.U }
+  when (io.meta_write.fire) { meta_hazard := 1.U }
   io.probe_rdy   := (meta_hazard === 0.U && (state.isOneOf(s_invalid, s_refill_req, s_refill_resp, s_drain_rpq_loads) || (state === s_meta_read && grantack.valid)))
   io.idx.valid := state =/= s_invalid
   io.tag.valid := state =/= s_invalid
@@ -215,7 +215,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       toAddress       = Cat(req_tag, req_idx) << blockOffBits,
       lgSize          = lgCacheBlockBytes.U,
       growPermissions = grow_param)._2
-    when (io.mem_acquire.fire()) {
+    when (io.mem_acquire.fire) {
       state := s_refill_resp
     }
   } .elsewhen (state === s_refill_resp) {
@@ -228,7 +228,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       io.mem_grant.ready      := true.B
     }
 
-    when (io.mem_grant.fire()) {
+    when (io.mem_grant.fire) {
       grant_had_data := edge.hasData(io.mem_grant.bits)
     }
     when (refill_done) {
@@ -262,12 +262,12 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.resp.bits.uop  := rpq.io.deq.bits.uop
     io.resp.bits.data := loadgen.data
     io.resp.bits.is_hella := rpq.io.deq.bits.is_hella
-    when (rpq.io.deq.fire()) {
+    when (rpq.io.deq.fire) {
       commit_line   := true.B
     }
       .elsewhen (rpq.io.empty && !commit_line)
     {
-      when (!rpq.io.enq.fire()) {
+      when (!rpq.io.enq.fire) {
         state := s_mem_finish_1
         finish_to_prefetch := enablePrefetching.B
       }
@@ -282,7 +282,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.meta_read.bits.idx := req_idx
     io.meta_read.bits.tag := req_tag
     io.meta_read.bits.way_en := req.way_en
-    when (io.meta_read.fire()) {
+    when (io.meta_read.fire) {
       state := s_meta_resp_1
     }
   } .elsewhen (state === s_meta_resp_1) {
@@ -298,7 +298,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.meta_write.bits.data.tag := req_tag
     io.meta_write.bits.way_en   := req.way_en
 
-    when (io.meta_write.fire()) {
+    when (io.meta_write.fire) {
       state      := s_wb_req
     }
   } .elsewhen (state === s_wb_req) {
@@ -310,7 +310,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.wb_req.bits.way_en    := req.way_en
     io.wb_req.bits.source    := io.id
     io.wb_req.bits.voluntary := true.B
-    when (io.wb_req.fire()) {
+    when (io.wb_req.fire) {
       state := s_wb_resp
     }
   } .elsewhen (state === s_wb_resp) {
@@ -325,7 +325,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.refill.bits.way_en := req.way_en
     io.refill.bits.wmask  := ~(0.U(rowWords.W))
     io.refill.bits.data   := io.lb_resp
-    when (io.refill.fire()) {
+    when (io.refill.fire) {
       refill_ctr := refill_ctr + 1.U
       when (refill_ctr === (cacheDataBeats - 1).U) {
         state := s_drain_rpq
@@ -335,7 +335,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.replay <> rpq.io.deq
     io.replay.bits.way_en    := req.way_en
     io.replay.bits.addr := Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
-    when (io.replay.fire() && isWrite(rpq.io.deq.bits.uop.mem_cmd)) {
+    when (io.replay.fire && isWrite(rpq.io.deq.bits.uop.mem_cmd)) {
       // Set dirty bit
       val (is_hit, _, coh_on_hit) = new_coh.onAccess(rpq.io.deq.bits.uop.mem_cmd)
       assert(is_hit, "We still don't have permissions for this store")
@@ -350,14 +350,14 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.meta_write.bits.data.coh := new_coh
     io.meta_write.bits.data.tag := req_tag
     io.meta_write.bits.way_en   := req.way_en
-    when (io.meta_write.fire()) {
+    when (io.meta_write.fire) {
       state := s_mem_finish_1
       finish_to_prefetch := false.B
     }
   } .elsewhen (state === s_mem_finish_1) {
     io.mem_finish.valid := grantack.valid
     io.mem_finish.bits  := grantack.bits
-    when (io.mem_finish.fire() || !grantack.valid) {
+    when (io.mem_finish.fire || !grantack.valid) {
       grantack.valid := false.B
       state := s_mem_finish_2
     }
@@ -446,11 +446,11 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
   io.resp.bits.uop  := req.uop
   io.resp.bits.data := loadgen.data
 
-  when (io.req.fire()) {
+  when (io.req.fire) {
     req   := io.req.bits
     state := s_mem_access
   }
-  when (io.mem_access.fire()) {
+  when (io.mem_access.fire) {
     state := s_mem_ack
   }
   when (state === s_mem_ack && io.mem_ack.valid) {
@@ -460,7 +460,7 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
     }
   }
   when (state === s_resp) {
-    when (!send_resp || io.resp.fire()) {
+    when (!send_resp || io.resp.fire) {
       state := s_idle
     }
   }
@@ -548,7 +548,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   val sdq_val      = RegInit(0.U(cfg.nSDQ.W))
   val sdq_alloc_id = PriorityEncoder(~sdq_val(cfg.nSDQ-1,0))
   val sdq_rdy      = !sdq_val.andR
-  val sdq_enq      = req.fire() && cacheable && isWrite(req.bits.uop.mem_cmd)
+  val sdq_enq      = req.fire && cacheable && isWrite(req.bits.uop.mem_cmd)
   val sdq          = Mem(cfg.nSDQ, UInt(coreDataBits.W))
 
   when (sdq_enq) {
@@ -559,7 +559,6 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   // The LineBuffer Data
   // Holds refilling lines, prefetched lines
   val lb = Reg(Vec(nLBEntries, Vec(cacheDataBeats, UInt(encRowBits.W))))
-
   def widthMap[T <: Data](f: Int => T) = VecInit((0 until lsuWidth).map(f))
 
 
@@ -728,7 +727,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   }
   io.refill         <> refill_arb.io.out
 
-  val free_sdq = io.replay.fire() && isWrite(io.replay.bits.uop.mem_cmd)
+  val free_sdq = io.replay.fire && isWrite(io.replay.bits.uop.mem_cmd)
 
   io.replay <> replay_arb.io.out
   io.replay.bits.data := sdq(replay_arb.io.out.bits.sdq_id)

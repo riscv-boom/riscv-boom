@@ -18,16 +18,15 @@ import chisel3.internal.sourceinfo.{SourceInfo}
 import chisel3.experimental.{chiselName}
 
 import freechips.rocketchip.config.{Parameters}
-import freechips.rocketchip.subsystem.{RocketTilesKey}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.util._
 import freechips.rocketchip.util.property._
 import freechips.rocketchip.rocket.{HasL1ICacheParameters, ICacheParams, ICacheErrors, ICacheReq}
-import freechips.rocketchip.diplomaticobjectmodel.logicaltree.{LogicalTreeNode}
-import freechips.rocketchip.diplomaticobjectmodel.DiplomaticObjectModelAddressing
-import freechips.rocketchip.diplomaticobjectmodel.model.{OMComponent, OMICache, OMECC}
+
+
+
 
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}
@@ -51,27 +50,6 @@ class ICache(
 
   val size = icacheParams.nSets * icacheParams.nWays * icacheParams.blockBytes
   private val wordBytes = icacheParams.fetchBytes
-}
-class BoomICacheLogicalTreeNode(icache: ICache, deviceOpt: Option[SimpleDevice], params: ICacheParams) extends LogicalTreeNode(() => deviceOpt) {
-  override def getOMComponents(resourceBindings: ResourceBindings, children: Seq[OMComponent] = Nil): Seq[OMComponent] = {
-    Seq(
-      OMICache(
-        memoryRegions = DiplomaticObjectModelAddressing.getOMMemoryRegions("ITIM", resourceBindings),
-        interrupts = Nil,
-        nSets = params.nSets,
-        nWays = params.nWays,
-        blockSizeBytes = params.blockBytes,
-        dataMemorySizeBytes = params.nSets * params.nWays * params.blockBytes,
-        dataECC = params.dataECC.map(OMECC.fromString),
-        tagECC = params.tagECC.map(OMECC.fromString),
-        nTLBEntries = params.nTLBSets * params.nTLBWays,
-        nTLBSets = params.nTLBSets,
-        nTLBWays = params.nTLBWays,
-        maxTimSize = params.nSets * (params.nWays-1) * params.blockBytes,
-        memories = icache.module.asInstanceOf[ICacheModule].dataArrays.map(_._2)
-      )
-    )
-  }
 }
 
 /**
@@ -146,7 +124,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   // Each of these cases require some special-case handling.
   require (tl_out.d.bits.data.getWidth == wordBits)
 
-  val s0_valid = io.req.fire()
+  val s0_valid = io.req.fire
   val s0_vaddr = io.req.bits.addr
 
   val s1_valid = RegNext(s0_valid, false.B)
@@ -158,12 +136,12 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
 
   val invalidated = Reg(Bool())
   val refill_valid = RegInit(false.B)
-  val refill_fire = tl_out.a.fire()
+  val refill_fire = tl_out.a.fire
   val s2_miss = s2_valid && !s2_hit && !RegNext(refill_valid)
   val refill_paddr = RegEnable(io.s1_paddr, s1_valid && !(refill_valid || s2_miss))
   val refill_tag = refill_paddr(tagBits+untagBits-1,untagBits)
   val refill_idx = refill_paddr(untagBits-1,blockOffBits)
-  val refill_one_beat = tl_out.d.fire() && edge_out.hasData(tl_out.d.bits)
+  val refill_one_beat = tl_out.d.fire && edge_out.hasData(tl_out.d.bits)
 
   io.req.ready := !refill_one_beat
 
@@ -220,7 +198,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   if (nBanks == 1) {
     // Use unbanked icache for narrow accesses.
     s1_bankid := 0.U
-    val array = dataArrays(0)._1
+    val array = dataArrays(0)
     def row(addr: UInt) = addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
     val s0_ren = s0_valid
     val wen = refill_one_beat && !invalidated
@@ -244,8 +222,8 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
     }
   } else {
     // Use two banks, interleaved.
-    val array_0 = dataArrays(0)._1
-    val array_1 = dataArrays(1)._1
+    val array_0 = dataArrays(0)
+    val array_1 = dataArrays(1)
     require (nBanks == 2)
 
     // Bank0 row's id wraps around if Bank1 is the starting bank.
@@ -336,7 +314,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   tl_out.c.valid := false.B
   tl_out.e.valid := false.B
 
-  io.perf.acquire := tl_out.a.fire()
+  io.perf.acquire := tl_out.a.fire
 
   when (!refill_valid) { invalidated := false.B }
   when (refill_fire) { refill_valid := true.B }

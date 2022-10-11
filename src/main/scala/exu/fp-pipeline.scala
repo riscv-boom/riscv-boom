@@ -219,7 +219,6 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   io.to_int <> fpiu_unit.io_fpiu_resp.get
   io.dgen   := fpiu_unit.io_dgen.get
 
-
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // **** Commit Stage ****

@@ -1153,6 +1153,10 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   csr.io.hartid := io.hartid
   csr.io.interrupts := io.interrupts
 
+  // we do not support the H-extension
+  csr.io.htval := DontCare
+  csr.io.gva := DontCare
+
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   // **** Execute Stage ****

@@ -79,7 +79,7 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
 
   when (state === s_invalid) {
     io.req.ready := true.B
-    when (io.req.fire()) {
+    when (io.req.fire) {
       state := s_fill_buffer
       data_req_cnt := 0.U
       req := io.req.bits
@@ -100,7 +100,7 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
     r1_data_req_cnt   := 0.U
     r2_data_req_fired := r1_data_req_fired
     r2_data_req_cnt   := r1_data_req_cnt
-    when (io.data_req.fire() && io.meta_read.fire()) {
+    when (io.data_req.fire && io.meta_read.fire) {
       r1_data_req_fired := true.B
       r1_data_req_cnt   := data_req_cnt
       data_req_cnt := data_req_cnt + 1.U
@@ -116,7 +116,7 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
   } .elsewhen (state === s_lsu_release) {
     io.lsu_release.valid := true.B
     io.lsu_release.bits := probeResponse
-    when (io.lsu_release.fire()) {
+    when (io.lsu_release.fire) {
      state := s_active
     }
   } .elsewhen (state === s_active) {
@@ -126,10 +126,10 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
     when (io.mem_grant) {
       acked := true.B
     }
-    when (io.release.fire()) {
+    when (io.release.fire) {
       data_req_cnt := data_req_cnt + 1.U
     }
-    when ((data_req_cnt === (refillCycles-1).U) && io.release.fire()) {
+    when ((data_req_cnt === (refillCycles-1).U) && io.release.fire) {
       state := Mux(req.voluntary, s_grant, s_invalid)
     }
   } .elsewhen (state === s_grant) {
@@ -211,12 +211,12 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
 
   // state === s_invalid
   when (state === s_invalid) {
-    when (io.req.fire()) {
+    when (io.req.fire) {
       state := s_meta_read
       req := io.req.bits
     }
   } .elsewhen (state === s_meta_read) {
-    when (io.meta_read.fire()) {
+    when (io.meta_read.fire) {
       state := s_meta_resp
     }
   } .elsewhen (state === s_meta_resp) {
@@ -230,7 +230,7 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
   } .elsewhen (state === s_mshr_resp) {
     state := Mux(tag_matches && is_dirty, s_writeback_req, s_lsu_release)
   } .elsewhen (state === s_lsu_release) {
-    when (io.lsu_release.fire()) {
+    when (io.lsu_release.fire) {
       state := s_release
     }
   } .elsewhen (state === s_release) {
@@ -238,7 +238,7 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
       state := Mux(tag_matches, s_meta_write, s_invalid)
     }
   } .elsewhen (state === s_writeback_req) {
-    when (io.wb_req.fire()) {
+    when (io.wb_req.fire) {
       state := s_writeback_resp
     }
   } .elsewhen (state === s_writeback_resp) {
@@ -247,7 +247,7 @@ class BoomProbeUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1HellaCach
       state := s_meta_write
     }
   } .elsewhen (state === s_meta_write) {
-    when (io.meta_write.fire()) {
+    when (io.meta_write.fire) {
       state := s_meta_write_resp
     }
   } .elsewhen (state === s_meta_write_resp) {
@@ -284,7 +284,7 @@ class BoomDuplicatedDataArray(implicit p: Parameters) extends AbstractBoomDataAr
 
     val raddr = io.read(j).bits.addr >> rowOffBits
     for (w <- 0 until nWays) {
-      val (array, omSRAM) = DescribedSRAM(
+      val array = DescribedSRAM(
         name = s"array_${w}_${j}",
         desc = "Non-blocking DCache Data Array",
         size = nSets * refillCycles,
@@ -361,7 +361,7 @@ class BoomBankedDataArray(implicit p: Parameters) extends AbstractBoomDataArray 
   }
   val s2_bank_reads = Reg(Vec(nBanks, Vec(nWays, Bits(encRowBits.W))))
   for (b <- 0 until nBanks) {
-    val array = data_arrays(b)._1
+    val array = data_arrays(b)
 
     val ridx = Mux1H(s0_bank_read_gnts(b), s0_ridxs)
     val way_en = Mux1H(s0_bank_read_gnts(b), io.read.map(_.bits.way_en))
@@ -493,7 +493,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   }
   dataReadArb.io.out.ready := true.B
 
-  data.io.write.valid := dataWriteArb.io.out.fire()
+  data.io.write.valid := dataWriteArb.io.out.fire
   data.io.write.bits  := dataWriteArb.io.out.bits
   dataWriteArb.io.out.ready := true.B
   val singlePortedDCacheWrite = data.io.write.valid && dcacheSinglePorted.B
@@ -612,13 +612,13 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                  Mux(wb_fire                  , wb_req,
                  Mux(prober_fire              , prober_req,
                  Mux(prefetch_fire            , prefetch_req,
-                 Mux(mshrs.io.meta_read.fire(), mshr_read_req
+                 Mux(mshrs.io.meta_read.fire, mshr_read_req
                                               , replay_req)))))
-  val s0_type  = Mux(io.lsu.req.fire()        , t_lsu,
+  val s0_type  = Mux(io.lsu.req.fire        , t_lsu,
                  Mux(wb_fire                  , t_wb,
                  Mux(prober_fire              , t_probe,
                  Mux(prefetch_fire            , t_prefetch,
-                 Mux(mshrs.io.meta_read.fire(), t_mshr_meta_read
+                 Mux(mshrs.io.meta_read.fire, t_mshr_meta_read
                                               , t_replay)))))
 
   // Does this request need to send a response or nack
@@ -634,8 +634,9 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                  RegNext(s0_valid(w)                                     &&
                          !IsKilledByBranch(io.lsu.brupdate, false.B, s0_req(w).uop) &&
                          !(io.lsu.exception && s0_req(w).uop.uses_ldq)   &&
-                         !(s2_store_failed && io.lsu.req.fire() && s0_req(w).uop.uses_stq),
+                         !(s2_store_failed && io.lsu.req.fire && s0_req(w).uop.uses_stq),
                          init=false.B))
+
   for (w <- 0 until lsuWidth)
     assert(!(io.lsu.s1_kill(w) && !RegNext(io.lsu.req.fire()) && !RegNext(io.lsu.req.bits(w).valid)))
   val s1_addr         = s1_req.map(_.addr)
@@ -809,7 +810,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
   mshrs.io.meta_resp.valid      := !s2_nack_hit(0) || prober.io.mshr_wb_rdy
   mshrs.io.meta_resp.bits       := Mux1H(s2_tag_match_way(0), RegNext(meta(0).io.resp))
-  when (mshrs.io.req.map(_.fire()).reduce(_||_)) { replacer.miss }
+  when (mshrs.io.req.map(_.fire).reduce(_||_)) { replacer.miss }
   tl_out.a <> mshrs.io.mem_acquire
 
   // probes and releases
@@ -847,7 +848,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   wb.io.req            <> wbArb.io.out
   wb.io.data_resp       := s2_data_muxed(0)
   mshrs.io.wb_resp      := wb.io.resp
-  wb.io.mem_grant       := tl_out.d.fire() && tl_out.d.bits.source === cfg.nMSHRs.U
+  wb.io.mem_grant       := tl_out.d.fire && tl_out.d.bits.source === cfg.nMSHRs.U
 
   val lsu_release_arb = Module(new Arbiter(new TLBundleC(edge.bundle), 2))
   io.lsu.release <> lsu_release_arb.io.out

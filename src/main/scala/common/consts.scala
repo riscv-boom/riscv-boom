@@ -214,9 +214,9 @@ trait ScalarOpConstants
   //               =  66.U(UOPC_SZ.W)
   val uopAMO_AG    =  67.U(UOPC_SZ.W) // AMO-address gen (use normal STD for datagen)
 
-  val uopFMV_S_X   =  68.U(UOPC_SZ.W)
+  val uopFMV_W_X   =  68.U(UOPC_SZ.W)
   val uopFMV_D_X   =  69.U(UOPC_SZ.W)
-  val uopFMV_X_S   =  70.U(UOPC_SZ.W)
+  val uopFMV_X_W   =  70.U(UOPC_SZ.W)
   val uopFMV_X_D   =  71.U(UOPC_SZ.W)
 
   val uopFSGNJ_S   =  72.U(UOPC_SZ.W)

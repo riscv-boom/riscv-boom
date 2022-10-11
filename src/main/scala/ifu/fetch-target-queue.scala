@@ -135,7 +135,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
     None
   }
 
-  val do_enq = io.enq.fire()
+  val do_enq = io.enq.fire
 
 
   // This register lets us initialize the ghist to 0
