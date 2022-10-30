@@ -113,7 +113,7 @@ class WithNSmallBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends 
               DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, nMSHRs=2, nTLBWays=8)
             ),
             icache = Some(
-              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=2*4)
+              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=fetchWidth/2*4)
             ),
             hartId = i + idOffset
           ),
@@ -160,7 +160,7 @@ class WithNMediumBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends
               DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, nMSHRs=2, nTLBWays=8)
             ),
             icache = Some(
-              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=2*4)
+              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=4, fetchBytes=fetchWidth/2*4)
             ),
             hartId = i + idOffset
           ),
@@ -206,7 +206,7 @@ class WithNLargeBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends 
               DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=4, nTLBWays=16)
             ),
             icache = Some(
-              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, fetchBytes=4*4)
+              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, fetchBytes=fetchWidth/2*4)
             ),
             hartId = i + idOffset
           ),
@@ -254,7 +254,7 @@ class WithNMegaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
               DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=8, nTLBWays=32)
             ),
             icache = Some(
-              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, fetchBytes=4*4)
+              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, fetchBytes=fetchWidth/2*4)
             ),
             hartId = i + idOffset
           ),
@@ -302,7 +302,7 @@ class WithNGigaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
               DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, nMSHRs=8, nTLBWays=32)
             ),
             icache = Some(
-              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, fetchBytes=4*4)
+              ICacheParams(rowBits = site(SystemBusKey).beatBits, nSets=64, nWays=8, fetchBytes=fetchWidth/2*4)
             ),
             hartId = i + idOffset
           ),
