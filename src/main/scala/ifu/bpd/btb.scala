@@ -33,12 +33,14 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
   require(extendedNSets <= nSets)
   require(extendedNSets >= 1)
 
+  // 表项
   class BTBEntry extends Bundle {
     val offset   = SInt(offsetSz.W)
     val extended = Bool()
   }
   val btbEntrySz = offsetSz + 1
 
+  // 元数据
   class BTBMeta extends Bundle {
     val is_br = Bool()
     val tag   = UInt(tagSz.W)
@@ -52,7 +54,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
   val s1_meta = Wire(new BTBPredictMeta)
   val f3_meta = RegNext(RegNext(s1_meta))
 
-
+  // f3阶段
   io.f3_meta := f3_meta.asUInt
 
   override val metaSz = s1_meta.asUInt.getWidth
@@ -69,7 +71,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
   val mems = (((0 until nWays) map ({w:Int => Seq(
     (f"btb_meta_way$w", nSets, bankWidth * btbMetaSz),
     (f"btb_data_way$w", nSets, bankWidth * btbEntrySz))})).flatten ++ Seq(("ebtb", extendedNSets, vaddrBitsExtended)))
-
+  // 根据idx在set中进行index
   val s1_req_rbtb  = VecInit(btb.map { b => VecInit(b.read(s0_idx , s0_valid).map(_.asTypeOf(new BTBEntry))) })
   val s1_req_rmeta = VecInit(meta.map { m => VecInit(m.read(s0_idx, s0_valid).map(_.asTypeOf(new BTBMeta))) })
   val s1_req_rebtb = ebtb.read(s0_idx, s0_valid)
@@ -78,7 +80,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
   val s1_resp   = Wire(Vec(bankWidth, Valid(UInt(vaddrBitsExtended.W))))
   val s1_is_br  = Wire(Vec(bankWidth, Bool()))
   val s1_is_jal = Wire(Vec(bankWidth, Bool()))
-
+  // way hit
   val s1_hit_ohs = VecInit((0 until bankWidth) map { i =>
     VecInit((0 until nWays) map { w =>
       s1_req_rmeta(w)(i).tag === s1_req_tag(tagSz-1,0)
@@ -101,7 +103,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
 
     io.resp.f2(w) := io.resp_in(0).f2(w)
     io.resp.f3(w) := io.resp_in(0).f3(w)
-    when (RegNext(s1_hits(w))) {
+    when (RegNext(`s1_hits`(w))) {
       io.resp.f2(w).predicted_pc := RegNext(s1_resp(w))
       io.resp.f2(w).is_br        := RegNext(s1_is_br(w))
       io.resp.f2(w).is_jal       := RegNext(s1_is_jal(w))
@@ -119,6 +121,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
     }
   }
 
+  // 更新btb表的部分
   val alloc_way = if (nWays > 1) {
     val r_metas = Cat(VecInit(s1_req_rmeta.map { w => VecInit(w.map(_.tag)) }).asUInt, s1_req_tag(tagSz-1,0))
     val l = log2Ceil(nWays)
@@ -130,6 +133,7 @@ class BTBBranchPredictorBank(params: BoomBTBParams = BoomBTBParams())(implicit p
   } else {
     0.U
   }
+  // write to which way
   s1_meta.write_way := Mux(s1_hits.reduce(_||_),
     PriorityEncoder(s1_hit_ohs.map(_.asUInt).reduce(_|_)),
     alloc_way)

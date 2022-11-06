@@ -32,6 +32,7 @@ import boom.util._
 class FrontendResp(implicit p: Parameters) extends BoomBundle()(p) {
   val pc = UInt(vaddrBitsExtended.W)  // ID stage PC
   val data = UInt((fetchWidth * coreInstBits).W)
+
   val mask = UInt(fetchWidth.W)
   val xcpt = new FrontendExceptions
   val ghist = new GlobalHistory
@@ -48,13 +49,15 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
   // For the dual banked case, each bank ignores the contribution of the
   // last bank to the history. Thus we have to track the most recent update to the
   // history in that case
+  // 64bit
   val old_history = UInt(globalHistoryLength.W)
 
   val current_saw_branch_not_taken = Bool()
 
   val new_saw_branch_not_taken = Bool()
   val new_saw_branch_taken     = Bool()
-
+  // 是否出现新的跳转 需要更新
+  // return address stack
   val ras_idx = UInt(log2Ceil(nRasEntries).W)
 
   def histories(bank: Int) = {
@@ -83,8 +86,11 @@ class GlobalHistory(implicit p: Parameters) extends BoomBundle()(p)
   def update(branches: UInt, cfi_taken: Bool, cfi_is_br: Bool, cfi_idx: UInt,
     cfi_valid: Bool, addr: UInt,
     cfi_is_call: Bool, cfi_is_ret: Bool): GlobalHistory = {
+    // select the lower fetchWidth bit of cfi_idx
     val cfi_idx_fixed = cfi_idx(log2Ceil(fetchWidth)-1,0)
+    // one hot encode
     val cfi_idx_oh = UIntToOH(cfi_idx_fixed)
+    //逻辑电路的输出
     val new_history = Wire(new GlobalHistory)
 
     val not_taken_branches = branches & Mux(cfi_valid,
@@ -172,7 +178,9 @@ trait HasBoomFrontendParameters extends HasL1ICacheParameters
     }
   }
 
+  // 如何计算的?
   def fetchMask(addr: UInt) = {
+    // 取vpc指令地址的一部分fetchwidth
     val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
     if (nBanks == 1) {
       ((1 << fetchWidth)-1).U << idx
@@ -259,7 +267,7 @@ class BoomFrontendIO(implicit p: Parameters) extends BoomBundle
   // Give the backend a packet of instructions.
   val fetchpacket       = Flipped(new DecoupledIO(new FetchBufferResp))
 
-  // 1 for xcpt/jalr/auipc/flush
+  // 1 for xcpt/jalr/auipc/flush 恢复信息
   val get_pc            = Flipped(Vec(2, new GetPCFromFtqIO()))
   val debug_ftq_idx     = Output(Vec(coreWidth, UInt(log2Ceil(ftqSz).W)))
   val debug_fetch_pc    = Input(Vec(coreWidth, UInt(vaddrBitsExtended.W)))
@@ -348,13 +356,17 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val s0_vpc       = WireInit(0.U(vaddrBitsExtended.W))
   val s0_ghist     = WireInit((0.U).asTypeOf(new GlobalHistory))
+  // BSRC_SZ：2， Which branch predictor predicted us
+  // tsrc是什么? BSRC_SZ起什么作用
   val s0_tsrc      = WireInit(0.U(BSRC_SZ.W))
   val s0_valid     = WireInit(false.B)
   val s0_is_replay = WireInit(false.B)
   val s0_is_sfence = WireInit(false.B)
   val s0_replay_resp = Wire(new TLBResp)
+  // 转移预测重新执行
   val s0_replay_bpd_resp = Wire(new BranchPredictionBundle)
   val s0_replay_ppc  = Wire(UInt())
+  // 是否使用s3的bpd响应结果
   val s0_s1_use_f3_bpd_resp = WireInit(false.B)
 
 
@@ -366,10 +378,10 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s0_ghist   := (0.U).asTypeOf(new GlobalHistory)
     s0_tsrc    := BSRC_C
   }
-
+  // icache的请求信息
   icache.io.req.valid     := s0_valid
   icache.io.req.bits.addr := s0_vpc
-
+  // f0 转移预测请求
   bpd.io.f0_req.valid      := s0_valid
   bpd.io.f0_req.bits.pc    := s0_vpc
   bpd.io.f0_req.bits.ghist := s0_ghist
@@ -378,37 +390,53 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // **** ICache Access (F1) ****
   //      Translate VPC
   // --------------------------------------------------------
+
+  // icache 访问，并将vpc转换为ppc
+  // f0传递过来的vpc, valid, ghist
   val s1_vpc       = RegNext(s0_vpc)
+  // false?
   val s1_valid     = RegNext(s0_valid, false.B)
   val s1_ghist     = RegNext(s0_ghist)
   val s1_is_replay = RegNext(s0_is_replay)
   val s1_is_sfence = RegNext(s0_is_sfence)
   val f1_clear     = WireInit(false.B)
   val s1_tsrc      = RegNext(s0_tsrc)
+  // tlb的访问请求是否有效 s1_is_sfence?
+  // lazyModule?
   tlb.io.req.valid      := (s1_valid && !s1_is_replay && !f1_clear) || s1_is_sfence
   tlb.io.req.bits.cmd   := DontCare
   tlb.io.req.bits.vaddr := s1_vpc
   tlb.io.req.bits.passthrough := false.B
   tlb.io.req.bits.size  := log2Ceil(coreInstBytes * fetchWidth).U
+  // v prev?
   tlb.io.req.bits.v     := io.ptw.status.v
   tlb.io.req.bits.prv   := io.ptw.status.prv
   tlb.io.sfence         := RegNext(io.cpu.sfence)
   tlb.io.kill           := false.B
 
   val s1_tlb_miss = !s1_is_replay && tlb.io.resp.miss
+  // 如果当前s1正在replay，则设置为上个周期s0获取的replay_resp
+  s0_replay_resp := s2_tlb_resp
+  // replay是什么?
   val s1_tlb_resp = Mux(s1_is_replay, RegNext(s0_replay_resp), tlb.io.resp)
   val s1_ppc  = Mux(s1_is_replay, RegNext(s0_replay_ppc), tlb.io.resp.paddr)
+  // bpd相应 一周期预测
   val s1_bpd_resp = bpd.io.resp.f1
 
+  // 设置icache s1阶段的接口信息
   icache.io.s1_paddr := s1_ppc
   icache.io.s1_kill  := tlb.io.resp.miss || f1_clear
 
+  // f1阶段内部信号
+  // 取指掩码
   val f1_mask = fetchMask(s1_vpc)
+  // 对于每一条指令根据s1的bpd的预测结果来判断是否需要重定向（jal br && taken）
   val f1_redirects = (0 until fetchWidth) map { i =>
     s1_valid && f1_mask(i) && s1_bpd_resp.preds(i).predicted_pc.valid &&
     (s1_bpd_resp.preds(i).is_jal ||
       (s1_bpd_resp.preds(i).is_br && s1_bpd_resp.preds(i).taken))
   }
+  // 选择一条指令的结果进行重定向
   val f1_redirect_idx = PriorityEncoder(f1_redirects)
   val f1_do_redirect = f1_redirects.reduce(_||_) && useBPD.B
   val f1_targs = s1_bpd_resp.preds.map(_.predicted_pc.bits)
@@ -416,6 +444,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
                                 f1_targs(f1_redirect_idx),
                                 nextFetch(s1_vpc))
 
+  // 根据当前的预测结果更新ghist
   val f1_predicted_ghist = s1_ghist.update(
     s1_bpd_resp.preds.map(p => p.is_br && p.predicted_pc.valid).asUInt & f1_mask,
     s1_bpd_resp.preds(f1_redirect_idx).taken && f1_do_redirect,
@@ -428,9 +457,12 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   when (s1_valid && !s1_tlb_miss) {
     // Stop fetching on fault
+    // tlb出现异常则不进行fetch
     s0_valid     := !(s1_tlb_resp.ae.inst || s1_tlb_resp.pf.inst)
     s0_tsrc      := BSRC_1
+    // 根据一周期预测更新下一次取指令的vpc
     s0_vpc       := f1_predicted_target
+    // 更新s0的全局历史
     s0_ghist     := f1_predicted_ghist
     s0_is_replay := false.B
   }
@@ -450,11 +482,13 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s2_tlb_resp = RegNext(s1_tlb_resp)
   val s2_tlb_miss = RegNext(s1_tlb_miss)
   val s2_is_replay = RegNext(s1_is_replay) && s2_valid
+  // 是否有异常需要处理
   val s2_xcpt = s2_valid && (s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay
+  // s2指令是否可以放入队列中
   val f3_ready = Wire(Bool())
 
   icache.io.s2_kill := s2_xcpt
-
+  // 两周期预测的结果
   val f2_bpd_resp = bpd.io.resp.f2
   val f2_mask = fetchMask(s2_vpc)
   val f2_redirects = (0 until fetchWidth) map { i =>
@@ -462,6 +496,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     (f2_bpd_resp.preds(i).is_jal ||
       (f2_bpd_resp.preds(i).is_br && f2_bpd_resp.preds(i).taken))
   }
+  //  发生redirect的指令对应fetchBundle中的哪一条指令
   val f2_redirect_idx = PriorityEncoder(f2_redirects)
   val f2_targs = f2_bpd_resp.preds.map(_.predicted_pc.bits)
   val f2_do_redirect = f2_redirects.reduce(_||_) && useBPD.B
@@ -477,7 +512,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     s2_vpc,
     false.B,
     false.B)
-
+  // 是否需要更改f1阶段得到的预测结果 都是基于同一个vpc进行预测的结果
   val f2_correct_f1_ghist = s1_ghist =/= f2_predicted_ghist && enableGHistStallRepair.B
 
   when ((s2_valid && !icache.io.resp.valid) ||
@@ -527,6 +562,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
   val f4_ready = Wire(Bool())
   f3_ready := f3.io.enq.ready
+  // 何时将FrontendResp放入队列
   f3.io.enq.valid   := (s2_valid && !f2_clear &&
     (icache.io.resp.valid || ((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_tlb_miss))
   )
@@ -541,7 +577,9 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // RAS takes a cycle to read
   val ras_read_idx = RegInit(0.U(log2Ceil(nRasEntries).W))
   ras.io.read_idx := ras_read_idx
+  // ready && valid
   when (f3.io.enq.fire) {
+    // 内部寄存器
     ras_read_idx := f3.io.enq.bits.ghist.ras_idx
     ras.io.read_idx := f3.io.enq.bits.ghist.ras_idx
   }
@@ -591,6 +629,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val f3_prev_is_half = RegInit(false.B)
 
   require(fetchWidth >= 4) // Logic gets kind of annoying with fetchWidth = 2
+  // 根据低两位判断是不是压缩指令
   def isRVC(inst: UInt) = (inst(1,0) =/= 3.U)
   var redirect_found = false.B
   var bank_prev_is_half = f3_prev_is_half
@@ -601,6 +640,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     val bank_mask  = Wire(Vec(bankWidth, Bool()))
     val bank_insts = Wire(Vec(bankWidth, UInt(32.W)))
 
+    // 循环bankWidth 获取指令
     for (w <- 0 until bankWidth) {
       val i = (b * bankWidth) + w
 
@@ -613,35 +653,46 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       bpu.io.scontext := io.cpu.scontext
 
       val brsigs = Wire(new BranchDecodeSignals)
+      // bank的第0个指令 检查是否有遗留指令
       if (w == 0) {
+        // 将上次遗留的半条指令合并
         val inst0 = Cat(bank_data(15,0), f3_prev_half)
+        // 先获取前32位 不管是不是压缩指令
         val inst1 = bank_data(31,0)
         val exp_inst0 = ExpandRVC(inst0)
         val exp_inst1 = ExpandRVC(inst1)
+        // 两种情况下的PC地址
         val pc0 = (f3_aligned_pc + (i << log2Ceil(coreInstBytes)).U - 2.U)
         val pc1 = (f3_aligned_pc + (i << log2Ceil(coreInstBytes)).U)
 
         val bpd_decoder0 = Module(new BranchDecode)
+        // 为两条指令指定译码，判断是否为branch
         bpd_decoder0.io.inst := exp_inst0
         bpd_decoder0.io.pc   := pc0
         val bpd_decoder1 = Module(new BranchDecode)
+        // 为两条指令指定译码，判断是否为branch
         bpd_decoder1.io.inst := exp_inst1
         bpd_decoder1.io.pc   := pc1
 
+        // 在之前遗留了一半指令
         when (bank_prev_is_half) {
           bank_insts(w)                := inst0
           f3_fetch_bundle.insts(i)     := inst0
           f3_fetch_bundle.exp_insts(i) := exp_inst0
           bpu.io.pc                    := pc0
+          // bpd译码返回
           brsigs                       := bpd_decoder0.io.out
+          // 是否是边界指令
           f3_fetch_bundle.edge_inst(b) := true.B
+          // 不是第一个bank 使用last_inst
+          // 是第一个bank 使用上一次取指令遗留下来的
           if (b > 0) {
             val inst0b     = Cat(bank_data(15,0), last_inst)
             val exp_inst0b = ExpandRVC(inst0b)
             val bpd_decoder0b = Module(new BranchDecode)
             bpd_decoder0b.io.inst := exp_inst0b
             bpd_decoder0b.io.pc   := pc0
-
+            // ?
             when (f3_bank_mask(b-1)) {
               bank_insts(w)                := inst0b
               f3_fetch_bundle.insts(i)     := inst0b
@@ -650,6 +701,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
             }
           }
         } .otherwise {
+          // 没有遗留一半的指令在上一个周期
           bank_insts(w)                := inst1
           f3_fetch_bundle.insts(i)     := inst1
           f3_fetch_bundle.exp_insts(i) := exp_inst1
@@ -659,9 +711,13 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
         }
         valid := true.B
       } else {
+        // w != 0
         val inst = Wire(UInt(32.W))
         val exp_inst = ExpandRVC(inst)
+        // i bankWidth * b + w
+        // 第i条指令的pc
         val pc = f3_aligned_pc + (i << log2Ceil(coreInstBytes)).U
+        // 预译码 确定是否是branch
         val bpd_decoder = Module(new BranchDecode)
         bpd_decoder.io.inst := exp_inst
         bpd_decoder.io.pc   := pc
@@ -674,22 +730,29 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
         if (w == 1) {
           // Need special case since 0th instruction may carry over the wrap around
           inst  := bank_data(47,16)
+          // 要么w == 0是一半的指令 要么是RVC指令，16-47才有效
           valid := bank_prev_is_half || !(bank_mask(0) && !isRVC(bank_insts(0)))
         } else if (w == bankWidth - 1) {
+          // inst的高16位拼接为0，地位为bank的最后16位，
           inst  := Cat(0.U(16.W), bank_data(bankWidth*16-1,(bankWidth-1)*16))
+          // 此时只有当前16位是rvc，并且当前也是rvc才会使得valid有效
           valid := !((bank_mask(w-1) && !isRVC(bank_insts(w-1))) ||
             !isRVC(inst))
         } else {
+          // 获取w*16开始的32位设为inst
           inst  := bank_data(w*16+32-1,w*16)
+          // 上个w没有有效指令，并且也不是rvc指令
           valid := !(bank_mask(w-1) && !isRVC(bank_insts(w-1)))
         }
       }
-
+      // 每隔16位设置标识位
+      // 即当前的16位是不是rvc
       f3_is_rvc(i) := isRVC(bank_insts(w))
 
-
+      // 到目前为止数据有效 && 取值mask有效 && 并且没有重定向
       bank_mask(w) := f3.io.deq.valid && f3_imemresp.mask(i) && valid && !redirect_found
       f3_mask  (i) := f3.io.deq.valid && f3_imemresp.mask(i) && valid && !redirect_found
+      // 是否是JAL指令 是则使用预测地址 否则使用译码的目标
       f3_targs (i) := Mux(brsigs.cfi_type === CFI_JALR,
         f3_bpd_resp.io.deq.bits.preds(i).predicted_pc.bits,
         brsigs.target)
@@ -700,7 +763,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
         (f3_bpd_resp.io.deq.bits.preds(i).predicted_pc.bits =/= brsigs.target)
       )
 
-
+      // 根据是否是rvc计算每一条指令的pc
       f3_npc_plus4_mask(i) := (if (w == 0) {
         !f3_is_rvc(i) && !bank_prev_is_half
       } else {
@@ -716,6 +779,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
       lower_mask := UIntToOH(i.U)
       upper_mask := UIntToOH(offset_from_aligned_pc(log2Ceil(fetchBytes)+1,1)) << Mux(f3_is_last_bank_in_block, bankWidth.U, 0.U)
 
+      // sfb是什么?
       f3_fetch_bundle.sfbs(i) := (
         f3_mask(i) &&
         brsigs.sfb_offset.valid &&
@@ -734,17 +798,19 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
         brsigs.cfi_type === CFI_JAL || brsigs.cfi_type === CFI_JALR ||
         (brsigs.cfi_type === CFI_BR && f3_bpd_resp.io.deq.bits.preds(i).taken && useBPD.B)
       )
-
+      // branch的掩码
       f3_br_mask(i)   := f3_mask(i) && brsigs.cfi_type === CFI_BR
+      // 转移指令类型
       f3_cfi_types(i) := brsigs.cfi_type
       f3_call_mask(i) := brsigs.is_call
       f3_ret_mask(i)  := brsigs.is_ret
 
       f3_fetch_bundle.bp_debug_if_oh(i) := bpu.io.debug_if
       f3_fetch_bundle.bp_xcpt_if_oh (i) := bpu.io.xcpt_if
-
+      // 根据当前指令更新重定向的状态
       redirect_found = redirect_found || f3_redirects(i)
     }
+    // 上一个bank最后一条指令的低16位
     last_inst = bank_insts(bankWidth-1)(15,0)
     bank_prev_is_half = Mux(f3_bank_mask(b),
       (!(bank_mask(bankWidth-2) && !isRVC(bank_insts(bankWidth-2))) && !isRVC(last_inst)),
@@ -775,14 +841,15 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   when (f3_clear) {
     f3_prev_is_half := false.B
   }
-
+  // 这个bundle中有无控制流指令
   f3_fetch_bundle.cfi_idx.valid := f3_redirects.reduce(_||_)
+  // 选最低位那一个
   f3_fetch_bundle.cfi_idx.bits  := PriorityEncoder(f3_redirects)
 
   f3_fetch_bundle.ras_top := ras.io.read_addr
   // Redirect earlier stages only if the later stage
   // can consume this packet
-
+  // 获取f3阶段转移预测的信息，然后指导前端取指
   val f3_predicted_target = Mux(f3_redirects.reduce(_||_),
     Mux(f3_fetch_bundle.cfi_is_ret && useBPD.B && useRAS.B,
       ras.io.read_addr,
@@ -790,7 +857,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
     ),
     nextFetch(f3_fetch_bundle.pc)
   )
-
+  // 下一个PC
   f3_fetch_bundle.next_pc       := f3_predicted_target
   val f3_predicted_ghist = f3_fetch_bundle.ghist.update(
     f3_fetch_bundle.br_mask,
@@ -805,14 +872,16 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
 
 
   ras.io.write_valid := false.B
+  // ras.io.write_addr = pc+4/pc+2, 根据控制流指令是否为rvc
   ras.io.write_addr  := f3_aligned_pc + (f3_fetch_bundle.cfi_idx.bits << 1) + Mux(
     f3_fetch_bundle.cfi_npc_plus4, 4.U, 2.U)
   ras.io.write_idx   := WrapInc(f3_fetch_bundle.ghist.ras_idx, nRasEntries)
 
-
+  // 判断当前是否需要重定向取指
   val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist && enableGHistStallRepair.B
   val f3_correct_f2_ghist = s2_ghist =/= f3_predicted_ghist && enableGHistStallRepair.B
 
+  // 更新预测器
   when (f3.io.deq.valid && f4_ready) {
     when (f3_fetch_bundle.cfi_is_call && f3_fetch_bundle.cfi_idx.valid) {
       ras.io.write_valid := true.B

@@ -76,6 +76,7 @@ class FTQBundle(implicit p: Parameters) extends BoomBundle
  */
 class GetPCFromFtqIO(implicit p: Parameters) extends BoomBundle
 {
+  // index of the ftq (binary)
   val ftq_idx   = Input(UInt(log2Ceil(ftqSz).W))
 
   val entry     = Output(new FTQBundle)
@@ -100,6 +101,7 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   with HasBoomFrontendParameters
 {
   val num_entries = ftqSz
+  // log2 of FTQ size
   private val idx_sz = log2Ceil(num_entries)
 
   val io = IO(new BoomBundle {
@@ -139,7 +141,9 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
 
 
   val pcs      = Reg(Vec(num_entries, UInt(vaddrBitsExtended.W)))
+  // Creates a sequential/synchronous-read, sequential/synchronous-write SyncReadMem.
   val meta     = SyncReadMem(num_entries, Vec(nBanks, UInt(bpdMaxMetaLength.W)))
+  // store the ftq entry
   val ram      = Reg(Vec(num_entries, new FTQBundle))
   val ghist    = Seq.fill(2) { SyncReadMem(num_entries, new GlobalHistory) }
   val lhist    = if (useLHist) {
@@ -147,7 +151,8 @@ class FetchTargetQueue(implicit p: Parameters) extends BoomModule
   } else {
     None
   }
-
+  // def fire: Bool = target.ready && target.valid
+  // both ready and valid are true
   val do_enq = io.enq.fire
 
 
