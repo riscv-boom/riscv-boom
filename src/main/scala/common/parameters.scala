@@ -100,9 +100,10 @@ case class BoomCoreParams(
   /* debug stuff */
   enableCommitLogPrintf: Boolean = false,
   enableBranchPrintf: Boolean = false,
-  enableMemtracePrintf: Boolean = false
+  enableMemtracePrintf: Boolean = false,
 
 // DOC include end: BOOM Parameters
+  setTraceDoctorWidth: Int = 0
 ) extends freechips.rocketchip.tile.CoreParams
 {
   val haveFSDirty = true
@@ -113,6 +114,8 @@ case class BoomCoreParams(
   val jumpInFrontend: Boolean = false // unused in boom
 
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
+
+  override def traceDoctorWidth: Int = setTraceDoctorWidth
 }
 
 /**

@@ -28,19 +28,15 @@
 
 package boom.exu
 
-import java.nio.file.{Paths}
-
+import java.nio.file.Paths
 import chisel3._
 import chisel3.util._
-
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
-import freechips.rocketchip.rocket.{Causes, PRV}
-import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle}
-import freechips.rocketchip.devices.tilelink.{PLICConsts, CLINTConsts}
-
-import testchipip.{ExtendedTracedInstruction}
-
+import freechips.rocketchip.rocket.{Causes, PRV, TraceDoctor}
+import freechips.rocketchip.util.{CoreMonitorBundle, SeqToAugmentedSeq, Str, UIntIsOneOf}
+import freechips.rocketchip.devices.tilelink.{CLINTConsts, PLICConsts}
+import testchipip.ExtendedTracedInstruction
 import boom.common._
 import boom.ifu.{GlobalHistory, HasBoomFrontendParameters}
 import boom.exu.FUConstants._
@@ -62,6 +58,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     val lsu = Flipped(new boom.lsu.LSUCoreIO)
     val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
     val trace = Output(Vec(coreParams.retireWidth, new ExtendedTracedInstruction))
+    val traceDoctor = Output(new TraceDoctor(coreParams.traceDoctorWidth))
     val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
   }
   //**********************************
@@ -1426,6 +1423,23 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
         !dis_uops(w).exception
       )
     }
+  }
+
+  if (io.traceDoctor.traceWidth >= (64 + 64 + (coreWidth * 64))) {
+    // This for example provides the same information as tracerV
+    val traceValids: Vec[Bool] = rob.io.commit.arch_valids
+    val traceTimestamp: UInt = debug_tsc_reg(63, 0)
+    val traceFlags: UInt = traceValids.reverse.asUInt()(coreWidth - 1, 0)
+    val traceAddresses: UInt = Cat((for (i <- 0 until coreWidth) yield {
+      rob.io.commit.uops(i).debug_pc(vaddrBits - 1, 0).pad(64)
+    }).reverse)
+
+    io.traceDoctor.valid := traceValids.reduce(_||_) && !csr.io.csr_stall
+    io.traceDoctor.bits := Cat(Seq(
+      traceTimestamp.pad(64),
+      traceFlags.pad(64),
+      traceAddresses
+    ).reverse).pad(io.traceDoctor.traceWidth).asBools
   }
 
   if (usingTrace) {
