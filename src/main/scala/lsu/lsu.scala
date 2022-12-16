@@ -1923,10 +1923,10 @@ object GenByteMask
 object ForwardingAgeLogic
 {
   def apply(n: Int, matches: UInt, youngest: UInt): (UInt, Bool) = {
-    val module = Module(new ForwardingAgeLogic(n))
-    module.io.matches := matches
-    module.io.youngest := youngest
-    (module.io.found_idx, module.io.found)
+    val logic = Module(new ForwardingAgeLogic(n))
+    logic.io.matches := matches
+    logic.io.youngest := youngest
+    (logic.io.found_idx, logic.io.found)
   }
 }
 
