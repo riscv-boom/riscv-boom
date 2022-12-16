@@ -58,24 +58,24 @@ object DecodeTables
     SRAI               -> List(Y, N, uopSRAI   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_SRA )
   ) }
   val X64_table: Array[(BitPat, List[BitPat])] = Array(
-    LD                 -> List(Y, X, uopLD     , fc2oh(FC_AGEN), RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, M_XRD   , N, N, CSR.N, DW_X  , FN_X   ),
-    LWU                -> List(Y, X, uopLD     , fc2oh(FC_AGEN), RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, M_XRD   , N, N, CSR.N, DW_X  , FN_X   ),
-    SD                 -> List(Y, X, uopSTA    , FCOH_STORE    , RT_X  , RT_FIX, RT_FIX, N, IS_S, N, Y, N, M_XWR   , N, N, CSR.N, DW_X  , FN_X   ),
+    LD                 -> List(Y, N, uopLD     , fc2oh(FC_AGEN), RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, M_XRD   , N, N, CSR.N, DW_X  , FN_X   ),
+    LWU                -> List(Y, N, uopLD     , fc2oh(FC_AGEN), RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, M_XRD   , N, N, CSR.N, DW_X  , FN_X   ),
+    SD                 -> List(Y, N, uopSTA    , FCOH_STORE    , RT_X  , RT_FIX, RT_FIX, N, IS_S, N, Y, N, M_XWR   , N, N, CSR.N, DW_X  , FN_X   ),
 
-    SLLI               -> List(Y, X, uopSLLI   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_SL  ),
-    SRLI               -> List(Y, X, uopSRLI   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_SR  ),
-    SRAI               -> List(Y, X, uopSRAI   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_SRA ),
+    SLLI               -> List(Y, N, uopSLLI   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_SL  ),
+    SRLI               -> List(Y, N, uopSRLI   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_SR  ),
+    SRAI               -> List(Y, N, uopSRAI   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_SRA ),
 
-    ADDIW              -> List(Y, X, uopADDIW  , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_ADD ),
-    SLLIW              -> List(Y, X, uopSLLIW  , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SL  ),
-    SRAIW              -> List(Y, X, uopSRAIW  , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SRA ),
-    SRLIW              -> List(Y, X, uopSRLIW  , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SR  ),
+    ADDIW              -> List(Y, N, uopADDIW  , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_ADD ),
+    SLLIW              -> List(Y, N, uopSLLIW  , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SL  ),
+    SRAIW              -> List(Y, N, uopSRAIW  , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SRA ),
+    SRLIW              -> List(Y, N, uopSRLIW  , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SR  ),
 
-    ADDW               -> List(Y, X, uopADDW   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_ADD ),
-    SUBW               -> List(Y, X, uopSUBW   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SUB ),
-    SLLW               -> List(Y, X, uopSLLW   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SL  ),
-    SRAW               -> List(Y, X, uopSRAW   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SRA ),
-    SRLW               -> List(Y, X, uopSRLW   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SR  )
+    ADDW               -> List(Y, N, uopADDW   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_ADD ),
+    SUBW               -> List(Y, N, uopSUBW   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SUB ),
+    SLLW               -> List(Y, N, uopSLLW   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SL  ),
+    SRAW               -> List(Y, N, uopSRAW   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SRA ),
+    SRLW               -> List(Y, N, uopSRLW   , fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SR  )
   )
   val X_table: Array[(BitPat, List[BitPat])] = Array(
     LW                 -> List(Y, N, uopLD     , fc2oh(FC_AGEN), RT_FIX, RT_FIX, RT_X  , N, IS_I, Y, N, N, M_XRD   , N, N, CSR.N, DW_X  , FN_X   ),
@@ -392,13 +392,12 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
 
   require (fLen >= 64)
   val illegal_rm = inst(14,12).isOneOf(5.U,6.U) || (inst(14,12) === 7.U && io.fcsr_rm >= 5.U)
-  val id_illegal_insn = !cs_legal ||
-    cs.fp_val && (io.csr_decode.fp_illegal || illegal_rm) ||
-    cs.uopc === uopROCC && io.csr_decode.rocc_illegal ||
-    cs.is_amo && !io.status.isa('a'-'a')  ||
-    csr_en && (io.csr_decode.read_illegal || !csr_ren && io.csr_decode.write_illegal) ||
-    ((sfence || system_insn) && io.csr_decode.system_illegal)
-
+  val id_illegal_insn = (!cs_legal ||
+    (cs.fp_val && (io.csr_decode.fp_illegal || illegal_rm)) ||
+    (cs.uopc === uopROCC && io.csr_decode.rocc_illegal) ||
+    (cs.is_amo && !io.status.isa('a'-'a'))  ||
+    (csr_en && (io.csr_decode.read_illegal || !csr_ren && io.csr_decode.write_illegal)) ||
+    ((sfence || system_insn) && io.csr_decode.system_illegal))
 //     cs.div && !csr.io.status.isa('m'-'a') || TODO check for illegal div instructions
 
   def checkExceptions(x: Seq[(Bool, UInt)]) =
