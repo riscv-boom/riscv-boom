@@ -195,7 +195,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
       DescribedSRAM(
         name = s"dataArrayWay_${x}",
         desc = "ICache Data Array",
-        size = nSets * refillCycles,
+        size = ramDepth,
         data = UInt((wordBits).W)
       )
     }
@@ -205,14 +205,14 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
       DescribedSRAM(
         name = s"dataArrayB0Way_${x}",
         desc = "ICache Data Array",
-        size = nSets * refillCycles,
+        size = ramDepth,
         data = UInt((wordBits/nBanks).W)
       )} ++
     (0 until nWays).map { x =>
       DescribedSRAM(
         name = s"dataArrayB1Way_${x}",
         desc = "ICache Data Array",
-        size = nSets * refillCycles,
+        size = ramDepth,
         data = UInt((wordBits/nBanks).W)
       )}
   }
