@@ -145,7 +145,7 @@ class RegisterFileSynthesizable(
       val bypass_ens = bypassable_wports.map(x => x.valid &&
         x.bits.addr === read_addrs(i))
 
-      val bypass_data = Mux1H(VecInit(bypass_ens), VecInit(bypassable_wports.map(_.bits.data)))
+      val bypass_data = Mux1H(VecInit(bypass_ens.toSeq), VecInit(bypassable_wports.map(_.bits.data).toSeq))
 
       io.read_ports(i).data := Mux(bypass_ens.reduce(_|_), bypass_data, read_data(i))
     }

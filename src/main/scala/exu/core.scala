@@ -131,9 +131,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
                                                                    (if (usingRoCC) 1 else 0)))
   val iregister_read   = Module(new RegisterRead(
                            issue_units.map(_.issueWidth).sum,
-                           exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits),
+                           exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits).toSeq,
                            numIrfReadPorts,
-                           exe_units.withFilter(_.readsIrf).map(x => 2),
+                           exe_units.withFilter(_.readsIrf).map(x => 2).toSeq,
                            exe_units.numTotalBypassPorts,
                            jmp_unit.numBypassStages,
                            xLen))
@@ -1186,7 +1186,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     // Connect FPIU
     ll_wbarb.io.in(1)        <> fp_pipeline.io.to_int
     // Connect FLDs
-    fp_pipeline.io.ll_wports <> exe_units.memory_units.map(_.io.ll_fresp)
+    fp_pipeline.io.ll_wports <> exe_units.memory_units.map(_.io.ll_fresp).toSeq
   }
   if (usingRoCC) {
     require(usingFPU)

@@ -72,9 +72,9 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
                          ))
   val fregister_read = Module(new RegisterRead(
                          issue_unit.issueWidth,
-                         exe_units.withFilter(_.readsFrf).map(_.supportedFuncUnits),
+                         exe_units.withFilter(_.readsFrf).map(_.supportedFuncUnits).toSeq,
                          exe_units.numFrfReadPorts,
-                         exe_units.withFilter(_.readsFrf).map(x => 3),
+                         exe_units.withFilter(_.readsFrf).map(x => 3).toSeq,
                          0, // No bypass for FP
                          0,
                          fLen+1))
