@@ -18,7 +18,6 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.chiselName
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.ALU._
@@ -130,7 +129,6 @@ abstract class FunctionalUnit(
  * @param numStages how many pipeline stages does the functional unit have
  * @param dataWidth width of the data being operated on in the functional unit
  */
-@chiselName
 class ALUUnit(dataWidth: Int)(implicit p: Parameters)
   extends FunctionalUnit(
     isAluUnit = true,

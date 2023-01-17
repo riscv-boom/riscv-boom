@@ -133,7 +133,7 @@ class BoomTile private(
   // DCache
   lazy val dcache: BoomNonBlockingDCache = LazyModule(new BoomNonBlockingDCache(staticIdForMetadataUseOnly))
   val dCacheTap = TLIdentityNode()
-  tlMasterXbar.node := dCacheTap := TLBuffer() := dcache.node
+  tlMasterXbar.node := dCacheTap := TLBuffer() := TLWidthWidget(tileParams.dcache.get.rowBits/8) := dcache.node
 
 
   // Frontend/ICache
