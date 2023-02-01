@@ -35,11 +35,9 @@ import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
-import freechips.rocketchip.rocket.{Causes, PRV}
+import freechips.rocketchip.rocket.{Causes, PRV, TracedInstruction}
 import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle}
 import freechips.rocketchip.devices.tilelink.{PLICConsts, CLINTConsts}
-
-import testchipip.{ExtendedTracedInstruction}
 
 import boom.common._
 import boom.ifu.{GlobalHistory, HasBoomFrontendParameters}
@@ -49,7 +47,7 @@ import boom.util._
 /**
  * Top level core object that connects the Frontend to the rest of the pipeline.
  */
-class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
+class BoomCore()(implicit p: Parameters) extends BoomModule
   with HasBoomFrontendParameters // TODO: Don't add this trait
 {
   val io = new freechips.rocketchip.tile.CoreBundle
@@ -61,7 +59,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     val rocc = Flipped(new freechips.rocketchip.tile.RoCCCoreIO())
     val lsu = Flipped(new boom.lsu.LSUCoreIO)
     val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
-    val trace = Output(Vec(coreParams.retireWidth, new ExtendedTracedInstruction))
+    val trace = Output(Vec(coreParams.retireWidth, new TracedInstruction))
     val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
   }
   //**********************************
@@ -131,9 +129,9 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
                                                                    (if (usingRoCC) 1 else 0)))
   val iregister_read   = Module(new RegisterRead(
                            issue_units.map(_.issueWidth).sum,
-                           exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits),
+                           exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits).toSeq,
                            numIrfReadPorts,
-                           exe_units.withFilter(_.readsIrf).map(x => 2),
+                           exe_units.withFilter(_.readsIrf).map(x => 2).toSeq,
                            exe_units.numTotalBypassPorts,
                            jmp_unit.numBypassStages,
                            xLen))
@@ -1186,7 +1184,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     // Connect FPIU
     ll_wbarb.io.in(1)        <> fp_pipeline.io.to_int
     // Connect FLDs
-    fp_pipeline.io.ll_wports <> exe_units.memory_units.map(_.io.ll_fresp)
+    fp_pipeline.io.ll_wports <> exe_units.memory_units.map(_.io.ll_fresp).toSeq
   }
   if (usingRoCC) {
     require(usingFPU)
@@ -1428,7 +1426,7 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
     }
   }
 
-  if (usingTrace) {
+  if (trace) {
     for (w <- 0 until coreWidth) {
       // Delay the trace so we have a cycle to pull PCs out of the FTQ
       io.trace(w).valid      := RegNext(rob.io.commit.arch_valids(w))

@@ -22,8 +22,6 @@ import freechips.rocketchip.interrupts._
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile._
 
-import testchipip.{ExtendedTracedInstruction, WithExtendedTraceport}
-
 import boom.exu._
 import boom.ifu._
 import boom.lsu._
@@ -49,7 +47,6 @@ case class BoomTileParams(
   icache: Option[ICacheParams] = Some(ICacheParams()),
   dcache: Option[DCacheParams] = Some(DCacheParams()),
   btb: Option[BTBParams] = Some(BTBParams()),
-  trace: Boolean = false,
   name: Option[String] = Some("boom_tile"),
   hartId: Int = 0
 ) extends InstantiableTileParams[BoomTile]
@@ -77,7 +74,6 @@ class BoomTile private(
   extends BaseTile(boomParams, crossing, lookup, q)
   with SinksExternalInterrupts
   with SourcesExternalNotifications
-  with WithExtendedTraceport
 {
 
   // Private constructor ensures altered LazyModule.p is used implicitly
@@ -156,7 +152,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
 
   Annotated.params(this, outer.boomParams)
 
-  val core = Module(new BoomCore(outer.boomParams.trace)(outer.p))
+  val core = Module(new BoomCore()(outer.p))
   val lsu  = Module(new LSU()(outer.p, outer.dcache.module.edge))
 
   val ptwPorts         = ListBuffer(lsu.io.ptw, outer.frontend.module.io.ptw, core.io.ptw_tlb)
@@ -168,8 +164,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   outer.decodeCoreInterrupts(core.io.interrupts) // Decode the interrupt vector
 
   // Pass through various external constants and reports
-  outer.extTraceSourceNode.bundle <> core.io.trace
-  outer.traceSourceNode.bundle <> DontCare
+  outer.traceSourceNode.bundle <> core.io.trace
   outer.bpwatchSourceNode.bundle <> DontCare // core.io.bpwatch
   core.io.hartid := outer.hartIdSinkNode.bundle
 
@@ -183,7 +178,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   // PTW
   val ptw  = Module(new PTW(ptwPorts.length)(outer.dcache.node.edges.out(0), outer.p))
   core.io.ptw <> ptw.io.dpath
-  ptw.io.requestor <> ptwPorts
+  ptw.io.requestor <> ptwPorts.toSeq
   hellaCachePorts += ptw.io.mem
 
   // RoCC
@@ -235,7 +230,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
 
    // LSU IO
   val hellaCacheArb = Module(new HellaCacheArbiter(hellaCachePorts.length)(outer.p))
-  hellaCacheArb.io.requestor <> hellaCachePorts
+  hellaCacheArb.io.requestor <> hellaCachePorts.toSeq
   lsu.io.hellacache <> hellaCacheArb.io.mem
   outer.dcache.module.io.lsu <> lsu.io.dmem
 
