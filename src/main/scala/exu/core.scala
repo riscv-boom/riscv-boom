@@ -154,7 +154,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   ))
   val rob              = Module(new Rob(
     numIrfWritePorts + numFpWakeupPorts,
-    usingTrace
+    trace
   ))
   // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
   val int_wakeups  = Wire(Vec(numIntWakeups, Valid(new Wakeup)))
@@ -1046,7 +1046,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   //-------------------------------------------------------------
   //-------------------------------------------------------------
   arb_idx = 0
-  for ((unit, w) <- all_exe_units zipWithIndex) {
+  for ((unit, w) <- all_exe_units.zipWithIndex) {
     for (i <- 0 until unit.nReaders) {
       iregfile.io.arb_read_reqs(arb_idx) <> unit.io_arb_irf_reqs(i)
       arb_idx += 1
@@ -1055,7 +1055,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     unit.io_arb_rebusys := io.lsu.iwakeups
   }
   require(arb_idx == numIrfLogicalReadPorts)
-  for ((unit, w) <- (alu_exe_units) zipWithIndex) {
+  for ((unit, w) <- (alu_exe_units).zipWithIndex) {
     pregfile.io.arb_read_reqs(w) <> unit.io_arb_prf_req
     bregfile.io.arb_read_reqs(w) <> unit.io_arb_brf_req
   }
@@ -1069,7 +1069,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
 
   // Register Read <- Issue (rrd <- iss)
   var rd_idx = 0
-  for ((unit, w) <- all_exe_units zipWithIndex) {
+  for ((unit, w) <- all_exe_units.zipWithIndex) {
     for (i <- 0 until unit.nReaders) {
       unit.io_rrd_irf_resps(i) := iregfile.io.rrd_read_resps(rd_idx)
       rd_idx += 1

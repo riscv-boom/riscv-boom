@@ -9,13 +9,13 @@ import chisel3._
 import chisel3.util._
 
 import freechips.rocketchip.config.Parameters
-import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.util.uintToBitPat
 import freechips.rocketchip.rocket.CSR
 
 import boom.common._
 
 class RRDDecode(implicit p: Parameters) extends BoomModule {
+  val aluFn = new freechips.rocketchip.rocket.ALUFN()
   val io = IO(new Bundle {
     val in = Input(new MicroOp)
     val out = Output(new MicroOp)
@@ -23,91 +23,91 @@ class RRDDecode(implicit p: Parameters) extends BoomModule {
 
 
            //
-           //                                      op1 sel   op2 sel
-           //                                      |         |         csr_cmd
-           //                                      |         |         |
-           //                   alu fcn    wd/word?|         |         |
-           //                   |          |       |         |         |
-  val default: List[BitPat] = //|          |       |         |         |
-    List[BitPat](               FN_ADD   , DW_X  , OP1_X   , OP2_X   , CSR.N)
+           //                                            op1 sel   op2 sel
+           //                                            |         |         csr_cmd
+           //                                            |         |         |
+           //                   alu fcn          wd/word?|         |         |
+           //                   |                |       |         |         |
+  val default: List[BitPat] = //|                |       |         |         |
+    List[BitPat](               aluFn.FN_ADD   , DW_X  , OP1_X   , OP2_X   , CSR.N)
   val table: Array[(BitPat, List[BitPat])] =
     Array[(BitPat, List[BitPat])](
-      BitPat(uopLUI)    -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMM , CSR.N),
+      BitPat(uopLUI)    -> List(aluFn.FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMM , CSR.N),
 
-      BitPat(uopADDI)   -> List(FN_ADD   , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
-      BitPat(uopANDI)   -> List(FN_AND   , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
-      BitPat(uopORI)    -> List(FN_OR    , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
-      BitPat(uopXORI)   -> List(FN_XOR   , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
-      BitPat(uopSLTI)   -> List(FN_SLT   , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
-      BitPat(uopSLTIU)  -> List(FN_SLTU  , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
-      BitPat(uopSLLI)   -> List(FN_SL    , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
-      BitPat(uopSRAI)   -> List(FN_SRA   , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
-      BitPat(uopSRLI)   -> List(FN_SR    , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopADDI)   -> List(aluFn.FN_ADD   , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopANDI)   -> List(aluFn.FN_AND   , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopORI)    -> List(aluFn.FN_OR    , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopXORI)   -> List(aluFn.FN_XOR   , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopSLTI)   -> List(aluFn.FN_SLT   , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopSLTIU)  -> List(aluFn.FN_SLTU  , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopSLLI)   -> List(aluFn.FN_SL    , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopSRAI)   -> List(aluFn.FN_SRA   , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopSRLI)   -> List(aluFn.FN_SR    , DW_XPR, OP1_RS1 , OP2_IMM , CSR.N),
 
-      BitPat(uopADDIW)  -> List(FN_ADD   , DW_32 , OP1_RS1 , OP2_IMM , CSR.N),
-      BitPat(uopSLLIW)  -> List(FN_SL    , DW_32 , OP1_RS1 , OP2_IMM , CSR.N),
-      BitPat(uopSRAIW)  -> List(FN_SRA   , DW_32 , OP1_RS1 , OP2_IMM , CSR.N),
-      BitPat(uopSRLIW)  -> List(FN_SR    , DW_32 , OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopADDIW)  -> List(aluFn.FN_ADD   , DW_32 , OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopSLLIW)  -> List(aluFn.FN_SL    , DW_32 , OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopSRAIW)  -> List(aluFn.FN_SRA   , DW_32 , OP1_RS1 , OP2_IMM , CSR.N),
+      BitPat(uopSRLIW)  -> List(aluFn.FN_SR    , DW_32 , OP1_RS1 , OP2_IMM , CSR.N),
 
-      BitPat(uopADD)    -> List(FN_ADD   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopSLL)    -> List(FN_SL    , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopSUB)    -> List(FN_SUB   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopSLT)    -> List(FN_SLT   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopSLTU)   -> List(FN_SLTU  , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopAND)    -> List(FN_AND   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopOR)     -> List(FN_OR    , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopXOR)    -> List(FN_XOR   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopSRA)    -> List(FN_SRA   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopSRL)    -> List(FN_SR    , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopADD)    -> List(aluFn.FN_ADD   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopSLL)    -> List(aluFn.FN_SL    , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopSUB)    -> List(aluFn.FN_SUB   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopSLT)    -> List(aluFn.FN_SLT   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopSLTU)   -> List(aluFn.FN_SLTU  , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopAND)    -> List(aluFn.FN_AND   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopOR)     -> List(aluFn.FN_OR    , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopXOR)    -> List(aluFn.FN_XOR   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopSRA)    -> List(aluFn.FN_SRA   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopSRL)    -> List(aluFn.FN_SR    , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
 
       // Special case Mov
-      BitPat(uopMOV)    -> List(FN_ADD   , DW_X  , OP1_X   , OP2_X   , CSR.N),
+      BitPat(uopMOV)    -> List(aluFn.FN_ADD   , DW_X  , OP1_X   , OP2_X   , CSR.N),
 
-      BitPat(uopADDW)   -> List(FN_ADD   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopSUBW)   -> List(FN_SUB   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopSLLW)   -> List(FN_SL    , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopSRAW)   -> List(FN_SRA   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopSRLW)   -> List(FN_SR    , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopADDW)   -> List(aluFn.FN_ADD   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopSUBW)   -> List(aluFn.FN_SUB   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopSLLW)   -> List(aluFn.FN_SL    , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopSRAW)   -> List(aluFn.FN_SRA   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopSRLW)   -> List(aluFn.FN_SR    , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
 
-      BitPat(uopBEQ)    -> List(FN_SUB   , DW_XPR, OP1_X   , OP2_X   , CSR.N),
-      BitPat(uopBNE)    -> List(FN_SUB   , DW_XPR, OP1_X   , OP2_X   , CSR.N),
-      BitPat(uopBGE)    -> List(FN_SLT   , DW_XPR, OP1_X   , OP2_X   , CSR.N),
-      BitPat(uopBGEU)   -> List(FN_SLTU  , DW_XPR, OP1_X   , OP2_X   , CSR.N),
-      BitPat(uopBLT)    -> List(FN_SLT   , DW_XPR, OP1_X   , OP2_X   , CSR.N),
-      BitPat(uopBLTU)   -> List(FN_SLTU  , DW_XPR, OP1_X   , OP2_X   , CSR.N),
+      BitPat(uopBEQ)    -> List(aluFn.FN_SUB   , DW_XPR, OP1_X   , OP2_X   , CSR.N),
+      BitPat(uopBNE)    -> List(aluFn.FN_SUB   , DW_XPR, OP1_X   , OP2_X   , CSR.N),
+      BitPat(uopBGE)    -> List(aluFn.FN_SLT   , DW_XPR, OP1_X   , OP2_X   , CSR.N),
+      BitPat(uopBGEU)   -> List(aluFn.FN_SLTU  , DW_XPR, OP1_X   , OP2_X   , CSR.N),
+      BitPat(uopBLT)    -> List(aluFn.FN_SLT   , DW_XPR, OP1_X   , OP2_X   , CSR.N),
+      BitPat(uopBLTU)   -> List(aluFn.FN_SLTU  , DW_XPR, OP1_X   , OP2_X   , CSR.N),
 
-      BitPat(uopJAL)    -> List(FN_ADD   , DW_XPR, OP1_PC  , OP2_NEXT, CSR.N),
-      BitPat(uopJALR)   -> List(FN_ADD   , DW_XPR, OP1_PC  , OP2_NEXT, CSR.N),
-      BitPat(uopAUIPC)  -> List(FN_ADD   , DW_XPR, OP1_PC  , OP2_IMM , CSR.N),
+      BitPat(uopJAL)    -> List(aluFn.FN_ADD   , DW_XPR, OP1_PC  , OP2_NEXT, CSR.N),
+      BitPat(uopJALR)   -> List(aluFn.FN_ADD   , DW_XPR, OP1_PC  , OP2_NEXT, CSR.N),
+      BitPat(uopAUIPC)  -> List(aluFn.FN_ADD   , DW_XPR, OP1_PC  , OP2_IMM , CSR.N),
 
-      BitPat(uopMUL)    -> List(FN_MUL   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopMULH)   -> List(FN_MULH  , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopMULHU)  -> List(FN_MULHU , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopMULHSU) -> List(FN_MULHSU, DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopMULW)   -> List(FN_MUL   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopMUL)    -> List(aluFn.FN_MUL   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopMULH)   -> List(aluFn.FN_MULH  , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopMULHU)  -> List(aluFn.FN_MULHU , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopMULHSU) -> List(aluFn.FN_MULHSU, DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopMULW)   -> List(aluFn.FN_MUL   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
 
-      BitPat(uopDIV)    -> List(FN_DIV   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopDIVU)   -> List(FN_DIVU  , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopREM)    -> List(FN_REM   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopREMU)   -> List(FN_REMU  , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopDIVW)   -> List(FN_DIV   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopDIVUW)  -> List(FN_DIVU  , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopREMW)   -> List(FN_REM   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
-      BitPat(uopREMUW)  -> List(FN_REMU  , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopDIV)    -> List(aluFn.FN_DIV   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopDIVU)   -> List(aluFn.FN_DIVU  , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopREM)    -> List(aluFn.FN_REM   , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopREMU)   -> List(aluFn.FN_REMU  , DW_XPR, OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopDIVW)   -> List(aluFn.FN_DIV   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopDIVUW)  -> List(aluFn.FN_DIVU  , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopREMW)   -> List(aluFn.FN_REM   , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
+      BitPat(uopREMUW)  -> List(aluFn.FN_REMU  , DW_32 , OP1_RS1 , OP2_RS2 , CSR.N),
 
-      BitPat(uopCSRRW)  -> List(FN_ADD   , DW_XPR, OP1_RS1 , OP2_ZERO, CSR.W),
-      BitPat(uopCSRRS)  -> List(FN_ADD   , DW_XPR, OP1_RS1 , OP2_ZERO, CSR.S),
-      BitPat(uopCSRRC)  -> List(FN_ADD   , DW_XPR, OP1_RS1 , OP2_ZERO, CSR.C),
+      BitPat(uopCSRRW)  -> List(aluFn.FN_ADD   , DW_XPR, OP1_RS1 , OP2_ZERO, CSR.W),
+      BitPat(uopCSRRS)  -> List(aluFn.FN_ADD   , DW_XPR, OP1_RS1 , OP2_ZERO, CSR.S),
+      BitPat(uopCSRRC)  -> List(aluFn.FN_ADD   , DW_XPR, OP1_RS1 , OP2_ZERO, CSR.C),
 
-      BitPat(uopCSRRWI) -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.W),
-      BitPat(uopCSRRSI) -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.S),
-      BitPat(uopCSRRCI) -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.C),
+      BitPat(uopCSRRWI) -> List(aluFn.FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.W),
+      BitPat(uopCSRRSI) -> List(aluFn.FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.S),
+      BitPat(uopCSRRCI) -> List(aluFn.FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.C),
 
-      BitPat(uopSFENCE) -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.R),
-      BitPat(uopWFI)    -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I),
-      BitPat(uopSCALL)  -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I),
-      BitPat(uopSBREAK) -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I),
-      BitPat(uopERET)   -> List(FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I))
+      BitPat(uopSFENCE) -> List(aluFn.FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.R),
+      BitPat(uopWFI)    -> List(aluFn.FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I),
+      BitPat(uopSCALL)  -> List(aluFn.FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I),
+      BitPat(uopSBREAK) -> List(aluFn.FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I),
+      BitPat(uopERET)   -> List(aluFn.FN_ADD   , DW_XPR, OP1_ZERO, OP2_IMMC, CSR.I))
 
 
 
