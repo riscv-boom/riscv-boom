@@ -410,6 +410,26 @@ class WithNGigaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
   })
 )
 
+class WithCloneBoomTiles(
+  n: Int = 1,
+  cloneTileId: Int = 0,
+  overrideIdOffset: Option[Int] = None,
+  location: HierarchicalLocation = InSubsystem,
+  cloneLocation: HierarchicalLocation = InSubsystem
+) extends Config((site, here, up) => {
+  case TilesLocated(`location`) => {
+    val prev = up(TilesLocated(location), site)
+    val idOffset = overrideIdOffset.getOrElse(prev.size)
+    val tileAttachParams = up(TilesLocated(cloneLocation)).find(_.tileParams.hartId == cloneTileId)
+      .get.asInstanceOf[BoomTileAttachParams]
+    (0 until n).map { i =>
+      CloneTileAttachParams(cloneTileId, tileAttachParams.copy(
+        tileParams = tileAttachParams.tileParams.copy(hartId = i + idOffset)
+      ))
+    } ++ prev
+  }
+})
+
 /**
   * BOOM Configs for CS152 lab
   */

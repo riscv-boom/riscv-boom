@@ -248,7 +248,7 @@ class RenameStage(
   val remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
   val com_remap_reqs = Wire(Vec(plWidth, new RemapReq(lregSz, pregSz)))
   // Generate maptable requests.
-  for ((((ren1,ren2),com),w) <- ren1_uops zip ren2_uops zip io.com_uops zipWithIndex) {
+  for ((((ren1,ren2),com),w) <- (ren1_uops zip ren2_uops zip io.com_uops).zipWithIndex) {
     map_reqs(w).lrs1 := ren1.lrs1
     map_reqs(w).lrs2 := ren1.lrs2
     map_reqs(w).lrs3 := ren1.lrs3

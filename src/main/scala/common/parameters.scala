@@ -113,6 +113,7 @@ case class BoomCoreParams(
   clockGate: Boolean = false,
   mcontextWidth: Int = 0,
   scontextWidth: Int = 0,
+  trace: Boolean = false,
 
   /* debug stuff */
   enableCommitLogPrintf: Boolean = false,
@@ -130,6 +131,11 @@ case class BoomCoreParams(
   val nPTECacheEntries = 0
   val useHypervisor = false
   val jumpInFrontend: Boolean = false // unused in boom
+  val useBitManip = false
+  val useBitManipCrypto = false
+  val useCryptoNIST = false
+  val useCryptoSM = false
+  val traceHasWdata = trace
 
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
 }
@@ -214,6 +220,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val usingFDivSqrt = boomParams.fpu.isDefined && boomParams.fpu.get.divSqrt
 
   val mulDivParams = boomParams.mulDiv.getOrElse(MulDivParams())
+  val trace = boomParams.trace
   // TODO: Allow RV32IF
   require(!(xLen == 32 && usingFPU), "RV32 does not support fp")
 

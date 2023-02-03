@@ -161,4 +161,3 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   def starts_unsafe    = uses_ldq || (uses_stq && !is_fence) || is_br || is_jalr
 }
 
-
