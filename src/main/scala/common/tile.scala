@@ -81,7 +81,7 @@ class BoomTile private(
     this(params, crossing.crossingType, lookup, p)
 
   val intOutwardNode = IntIdentityNode()
-  val masterNode = visibilityNode
+  val masterNode = TLIdentityNode()
   val slaveNode = TLIdentityNode()
 
   val tile_master_blocker =
@@ -129,13 +129,14 @@ class BoomTile private(
   // DCache
   lazy val dcache: BoomNonBlockingDCache = LazyModule(new BoomNonBlockingDCache(staticIdForMetadataUseOnly))
   val dCacheTap = TLIdentityNode()
-  tlMasterXbar.node := dCacheTap := TLBuffer() := TLWidthWidget(tileParams.dcache.get.rowBits/8) := dcache.node
-
+  tlMasterXbar.node := dCacheTap := TLBuffer() := TLWidthWidget(tileParams.dcache.get.rowBits/8) := visibilityNode := dcache.node
 
   // Frontend/ICache
   val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, staticIdForMetadataUseOnly))
   frontend.resetVectorSinkNode := resetVectorNexusNode
   tlMasterXbar.node := TLBuffer() := TLWidthWidget(tileParams.icache.get.fetchBytes) := frontend.masterNode
+
+  require(tileParams.dcache.get.rowBits == tileParams.icache.get.rowBits)
 
   // ROCC
   val roccs = p(BuildRoCC).map(_(p))
