@@ -341,7 +341,7 @@ class WithNMegaTapeoutBooms(n: Int = 1, singlePorted: Boolean = true, overrideId
               fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
             ),
             dcache = Some(
-              DCacheParams(rowBits = site(SystemBusKey).beatBits, nSets=128, nWays=4, nMSHRs=8, nTLBWays=32)
+              DCacheParams(rowBits = 128, nSets=128, nWays=4, nMSHRs=8, nTLBWays=32)
             ),
             icache = Some(
               ICacheParams(rowBits = -1, nSets=64, nWays=8, fetchBytes=4*4)
