@@ -1426,19 +1426,30 @@ class BoomCore(usingTrace: Boolean)(implicit p: Parameters) extends BoomModule
   }
 
   if (io.traceDoctor.traceWidth >= (64 + 64 + (coreWidth * 64))) {
-    // This for example provides the same information as tracerV
-    val traceValids: Vec[Bool] = rob.io.commit.arch_valids
-    val traceTimestamp: UInt = debug_tsc_reg(63, 0)
-    val traceFlags: UInt = traceValids.reverse.asUInt()(coreWidth - 1, 0)
-    val traceAddresses: UInt = Cat((for (i <- 0 until coreWidth) yield {
-      rob.io.commit.uops(i).debug_pc(vaddrBits - 1, 0).pad(64)
-    }).reverse)
+    // If TracerV is also included, this assignment is redundant
+    for (w <- 0 until coreWidth) {
+      io.ifu.debug_ftq_idx(w) := rob.io.commit.uops(w).ftq_idx
+    }
 
-    io.traceDoctor.valid := traceValids.reduce(_||_) && !csr.io.csr_stall
+    val traceAddresses = for (w <- 0 until coreWidth) yield {
+      Sext((
+        AlignPCToBoundary(io.ifu.debug_fetch_pc(w), icBlockBytes) +
+          RegNext(rob.io.commit.uops(w).pc_lob) -
+          Mux(RegNext(rob.io.commit.uops(w).edge_inst), 2.U, 0.U)
+        )(vaddrBits - 1, 0),xLen)
+    }
+
+    val traceValids = RegNext(rob.io.commit.arch_valids)
+    val traceTimestamp = RegNext(debug_tsc_reg)
+    val coreStalled = RegNext(csr.io.csr_stall)
+
+    io.traceDoctor.valid := traceValids.reduce(_||_) && !coreStalled
+
+    // This layout matches the endianess nicely with C-structs
     io.traceDoctor.bits := Cat(Seq(
-      traceTimestamp.pad(64),
-      traceFlags.pad(64),
-      traceAddresses
+      traceTimestamp(63, 0).pad(64),
+      traceValids.reverse.asUInt()(coreWidth - 1, 0).pad(64),
+      traceAddresses.map(a => a(63, 0).pad(64)).reverse.asUInt()
     ).reverse).pad(io.traceDoctor.traceWidth).asBools
   }
 
