@@ -45,7 +45,7 @@ class SwBranchPredictorBank(implicit p: Parameters) extends BranchPredictorBank(
     pred_harness.io.update_pc    := io.update.bits.pc + (w << 1).U
     pred_harness.io.update_hist  := io.update.bits.ghist
     pred_harness.io.update_taken := w.U === io.update.bits.cfi_idx.bits &&
-                                      io.update.bits.cfi_idx.valid
+                                      io.update.bits.cfi_idx.valid && io.update.bits.cfi_taken
 
 
     io.resp.f2(w).taken              := pred_harness.io.req_taken
