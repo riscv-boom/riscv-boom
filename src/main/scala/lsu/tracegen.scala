@@ -2,7 +2,7 @@ package boom.lsu
 
 import chisel3._
 import chisel3.util._
-import freechips.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.diplomacy.{SimpleDevice, LazyModule, SynchronousCrossing, ClockCrossingType, BundleBridgeSource}
 import freechips.rocketchip.groundtest._
 import freechips.rocketchip.rocket._

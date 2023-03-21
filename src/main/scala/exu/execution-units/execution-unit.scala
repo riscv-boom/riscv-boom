@@ -20,7 +20,7 @@ import scala.collection.mutable.{ArrayBuffer}
 import chisel3._
 import chisel3.util._
 
-import freechips.rocketchip.config.{Parameters}
+import org.chipsalliance.cde.config.{Parameters}
 import freechips.rocketchip.rocket.{BP}
 import freechips.rocketchip.tile.{XLen, RoCCCoreIO}
 import freechips.rocketchip.tile

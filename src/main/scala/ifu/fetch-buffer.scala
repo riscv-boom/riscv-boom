@@ -16,7 +16,7 @@ package boom.ifu
 import chisel3._
 import chisel3.util._
 
-import freechips.rocketchip.config.{Parameters}
+import org.chipsalliance.cde.config.{Parameters}
 import freechips.rocketchip.rocket.{MStatus, BP, BreakpointUnit}
 
 import boom.common._
