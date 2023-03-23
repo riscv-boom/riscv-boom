@@ -143,6 +143,9 @@ class BoomCustomCSRs(implicit p: Parameters) extends freechips.rocketchip.tile.C
     Some(CustomCSR(chickenCSRId, mask, Some(init)))
   }
   def disableOOO = getOrElse(chickenCSR, _.value(3), true.B)
+  def marchid = CustomCSR.constant(CSRs.marchid, BigInt(2))
+
+  override def decls: Seq[CustomCSR] = super.decls +: marchid
 }
 
 /**
