@@ -13,7 +13,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.iotesters._
 
-import freechips.rocketchip.config.{Parameters}
+import org.chipsalliance.cde.config.{Parameters}
 import freechips.rocketchip.system._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._

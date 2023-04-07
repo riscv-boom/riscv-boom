@@ -15,7 +15,7 @@ import scala.collection.mutable.{ArrayBuffer}
 
 import chisel3._
 
-import freechips.rocketchip.config.{Parameters}
+import org.chipsalliance.cde.config.{Parameters}
 
 import boom.common._
 import boom.util.{BoomCoreStringPrefix}

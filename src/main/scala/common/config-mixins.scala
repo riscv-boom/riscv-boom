@@ -8,7 +8,7 @@ package boom.common
 import chisel3._
 import chisel3.util.{log2Up}
 
-import freechips.rocketchip.config.{Parameters, Config, Field}
+import org.chipsalliance.cde.config.{Parameters, Config, Field}
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink.{BootROMParams}
 import freechips.rocketchip.diplomacy.{SynchronousCrossing, AsynchronousCrossing, RationalCrossing}
