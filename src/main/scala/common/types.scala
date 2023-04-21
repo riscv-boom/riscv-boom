@@ -7,7 +7,7 @@ package boom.common
 
 import chisel3._
 
-import freechips.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 
 /**
  * BOOM module that is used to add parameters to the module

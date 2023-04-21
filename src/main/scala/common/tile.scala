@@ -10,7 +10,7 @@ import chisel3.util.{RRArbiter, Queue}
 
 import scala.collection.mutable.{ListBuffer}
 
-import freechips.rocketchip.config._
+import org.chipsalliance.cde.config._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.devices.tilelink._
 import freechips.rocketchip.diplomacy._
@@ -175,12 +175,6 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
 
   //fpuOpt foreach { fpu => core.io.fpu <> fpu.io } RocketFpu - not needed in boom
   core.io.rocc := DontCare
-  
-  // PTW
-  val ptw  = Module(new PTW(ptwPorts.length)(outer.dcache.node.edges.out(0), outer.p))
-  core.io.ptw <> ptw.io.dpath
-  ptw.io.requestor <> ptwPorts.toSeq
-  hellaCachePorts += ptw.io.mem
 
   // RoCC
   if (outer.roccs.size > 0) {
@@ -228,6 +222,12 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
     core.io.rocc.busy <> (cmdRouter.io.busy || outer.roccs.map(_.module.io.busy).reduce(_||_))
     core.io.rocc.interrupt := outer.roccs.map(_.module.io.interrupt).reduce(_||_)
   }
+
+  // PTW
+  val ptw  = Module(new PTW(ptwPorts.length)(outer.dcache.node.edges.out(0), outer.p))
+  core.io.ptw <> ptw.io.dpath
+  ptw.io.requestor <> ptwPorts.toSeq
+  ptw.io.mem +=: hellaCachePorts
 
    // LSU IO
   val hellaCacheArb = Module(new HellaCacheArbiter(hellaCachePorts.length)(outer.p))

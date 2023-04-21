@@ -33,7 +33,7 @@ import java.nio.file.{Paths}
 import chisel3._
 import chisel3.util._
 
-import freechips.rocketchip.config.Parameters
+import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.{Causes, PRV, CSR, CSRs, TracedInstruction}
 import freechips.rocketchip.tile.{HasFPUParameters}
@@ -1406,7 +1406,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
       // }
 
       // These csr signals do not exactly match up with the ROB commit signals.
-      io.trace(w).priv       := RegNext(csr.io.status.prv)
+      io.trace(w).priv       := RegNext(Cat(RegNext(csr.io.status.debug), csr.io.status.prv))
       // Can determine if it is an interrupt or not based on the MSB of the cause
       io.trace(w).exception  := RegNext(rob.io.com_xcpt.valid && !rob.io.com_xcpt.bits.cause(xLen - 1)) && (w == 0).B
       io.trace(w).interrupt  := RegNext(rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.cause(xLen - 1)) && (w == 0).B

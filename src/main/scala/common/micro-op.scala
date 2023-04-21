@@ -14,8 +14,8 @@ package boom.common
 import chisel3._
 import chisel3.util._
 
-import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util._
+import org.chipsalliance.cde.config.Parameters
 
 abstract trait HasBoomUOP extends BoomBundle
 {

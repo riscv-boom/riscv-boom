@@ -20,13 +20,10 @@ package boom.exu
 import chisel3._
 import chisel3.util._
 
-import freechips.rocketchip.config.Parameters
 import freechips.rocketchip.util._
-
+import org.chipsalliance.cde.config.Parameters
 import boom.common._
 import boom.util._
-
-
 
 abstract class AbstractRenameStage(
   plWidth: Int,

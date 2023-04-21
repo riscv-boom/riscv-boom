@@ -17,7 +17,7 @@ import chisel3.util._
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.util.{Str}
-import freechips.rocketchip.config.{Parameters}
+import org.chipsalliance.cde.config.{Parameters}
 import freechips.rocketchip.tile.{TileKey}
 
 import boom.common.{MicroOp}
@@ -456,7 +456,7 @@ class Compactor[T <: chisel3.Data](n: Int, k: Int, gen: T) extends Module
  * Assumption: enq.valid only high if not killed by branch (so don't check IsKilled on io.enq).
  */
 class BranchKillableQueue[T <: boom.common.HasBoomUOP](gen: T, entries: Int, flush_fn: boom.common.MicroOp => Bool = u => true.B, fastDeq: Boolean = false)
-  (implicit p: freechips.rocketchip.config.Parameters)
+  (implicit p: org.chipsalliance.cde.config.Parameters)
   extends boom.common.BoomModule()(p)
   with boom.common.HasBoomCoreParameters
 {
@@ -686,7 +686,7 @@ object BoomCoreStringPrefix
 }
 
 class BranchKillablePipeline[T <: boom.common.HasBoomUOP](gen: T, stages: Int)
-  (implicit p: freechips.rocketchip.config.Parameters)
+  (implicit p: org.chipsalliance.cde.config.Parameters)
   extends boom.common.BoomModule()(p)
   with boom.common.HasBoomCoreParameters
 {

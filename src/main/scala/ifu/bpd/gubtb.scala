@@ -3,7 +3,7 @@ package boom.ifu
 import chisel3._
 import chisel3.util._
 import chisel3.util.random.LFSR
-import freechips.rocketchip.config.{Field, Parameters}
+import org.chipsalliance.cde.config.{Field, Parameters}
 import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.tilelink._
 

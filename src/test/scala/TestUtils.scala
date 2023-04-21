@@ -10,7 +10,7 @@ import org.scalatest._
 import chisel3._
 import chisel3.util._
 
-import freechips.rocketchip.config.{Parameters, Config}
+import org.chipsalliance.cde.config.{Parameters, Config}
 import freechips.rocketchip.system._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.tilelink._

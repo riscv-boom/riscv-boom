@@ -12,7 +12,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
 import freechips.rocketchip.subsystem.{MemoryPortParams}
-import freechips.rocketchip.config.{Parameters, Field}
+import org.chipsalliance.cde.config.{Parameters, Field}
 import freechips.rocketchip.devices.tilelink.{BootROMParams, CLINTParams, PLICParams}
 
 import boom.ifu._
@@ -173,7 +173,6 @@ class BoomCustomCSRs(implicit p: Parameters) extends freechips.rocketchip.tile.C
   override def decls = enableOOOCSR.toSeq ++ enableBPDCSR.toSeq ++ bpmCSR.toSeq ++ chickenCSR ++ Seq(marchid)
   def enableOOO = getOrElse(enableOOOCSR, _.value(0), true.B) && !getOrElse(chickenCSR, _.value(3), false.B)
   def enableBPD = getOrElse(enableBPDCSR, _.value(0), true.B)
-
 }
 
 /**
