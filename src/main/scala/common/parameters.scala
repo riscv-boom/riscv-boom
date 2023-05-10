@@ -106,6 +106,7 @@ case class BoomCoreParams(
 // DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams
 {
+  override def traceCustom = Some(new BoomTraceBundle)
   val haveFSDirty = true
   val pmpGranularity: Int = 4
   val instBits: Int = 16
@@ -119,6 +120,10 @@ case class BoomCoreParams(
   val traceHasWdata = trace
 
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
+}
+
+class BoomTraceBundle extends Bundle {
+  val rob_empty = Bool()
 }
 
 /**
