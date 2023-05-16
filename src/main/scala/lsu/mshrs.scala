@@ -566,8 +566,8 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   // The LineBuffer Data
   // Holds refilling lines, prefetched lines
   val lb = Mem(nLBEntries * cacheDataBeats, UInt(encRowBits.W))
-  val lb_read_arb  = Module(new Arbiter(new LineBufferReadReq, cfg.nMSHRs))
-  val lb_write_arb = Module(new Arbiter(new LineBufferWriteReq, cfg.nMSHRs))
+  val lb_read_arb  = Module(new RRArbiter(new LineBufferReadReq, cfg.nMSHRs))
+  val lb_write_arb = Module(new RRArbiter(new LineBufferWriteReq, cfg.nMSHRs))
 
   lb_read_arb.io.out.ready  := false.B
   lb_write_arb.io.out.ready := true.B
