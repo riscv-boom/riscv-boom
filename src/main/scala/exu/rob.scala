@@ -298,7 +298,7 @@ class Rob(
   rob_debug_inst_mem.write(rob_tail, rob_debug_inst_wdata, rob_debug_inst_wmask)
   val rob_debug_inst_rdata = rob_debug_inst_mem.read(rob_head, will_commit.reduce(_||_))
 
-  val rob_fflags    = Seq.fill(coreWidth)(Mem(numRobRows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W)))
+  val rob_fflags    = Seq.fill(coreWidth)(Reg(Vec(numRobRows, UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))))
 
   for (w <- 0 until coreWidth) {
     def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
