@@ -298,6 +298,8 @@ class Rob(
   rob_debug_inst_mem.write(rob_tail, rob_debug_inst_wdata, rob_debug_inst_wmask)
   val rob_debug_inst_rdata = rob_debug_inst_mem.read(rob_head, will_commit.reduce(_||_))
 
+  val rob_fflags    = Seq.fill(coreWidth)(Reg(Vec(numRobRows, UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))))
+
   for (w <- 0 until coreWidth) {
     def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
 
@@ -308,7 +310,6 @@ class Rob(
     val rob_uop       = Reg(Vec(numRobRows, new MicroOp()))
     val rob_exception = Reg(Vec(numRobRows, Bool()))
     val rob_predicated = Reg(Vec(numRobRows, Bool())) // Was this instruction predicated out?
-    val rob_fflags    = Mem(numRobRows, Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))
 
     val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
 
@@ -326,7 +327,7 @@ class Rob(
       rob_uop(rob_tail)       := io.enq_uops(w)
       rob_exception(rob_tail) := io.enq_uops(w).exception
       rob_predicated(rob_tail)   := false.B
-      rob_fflags(rob_tail)    := 0.U
+      rob_fflags(w)(rob_tail)    := 0.U
 
       assert (rob_val(rob_tail) === false.B, "[rob] overwriting a valid entry.")
       assert ((io.enq_uops(w).rob_idx >> log2Ceil(coreWidth)) === rob_tail)
@@ -377,7 +378,7 @@ class Rob(
     for (i <- 0 until numFpuPorts) {
       val fflag_uop = io.fflags(i).bits.uop
       when (io.fflags(i).valid && MatchBank(GetBankIdx(fflag_uop.rob_idx))) {
-        rob_fflags(GetRowIdx(fflag_uop.rob_idx)) := io.fflags(i).bits.flags
+        rob_fflags(w)(GetRowIdx(fflag_uop.rob_idx)) := io.fflags(i).bits.flags
       }
     }
 
@@ -478,7 +479,7 @@ class Rob(
     // Outputs
     rob_head_vals(w)     := rob_val(rob_head)
     rob_tail_vals(w)     := rob_val(rob_tail)
-    rob_head_fflags(w)   := rob_fflags(rob_head)
+    rob_head_fflags(w)   := rob_fflags(w)(rob_head)
     rob_head_uses_stq(w) := rob_uop(rob_head).uses_stq
     rob_head_uses_ldq(w) := rob_uop(rob_head).uses_ldq
 
