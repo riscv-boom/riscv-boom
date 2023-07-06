@@ -36,7 +36,7 @@ import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
 import freechips.rocketchip.rocket.{Causes, PRV, CSR, CSRs, TracedInstruction}
-import freechips.rocketchip.tile.{HasFPUParameters}
+import freechips.rocketchip.tile.{HasFPUParameters, TraceBundle}
 import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle, PlusArg}
 import freechips.rocketchip.devices.tilelink.{PLICConsts, CLINTConsts}
 
@@ -60,7 +60,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     val rocc = Flipped(new freechips.rocketchip.tile.RoCCCoreIO())
     val lsu = Flipped(new boom.lsu.LSUCoreIO)
     val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
-    val trace = Output(Vec(coreParams.retireWidth, new TracedInstruction))
+    val trace = Output(new TraceBundle)
     val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
   }
   //**********************************
@@ -1369,17 +1369,22 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     }
   }
 
+  io.trace := DontCare
+  io.trace.time := csr.io.time
+  io.trace.insns map (t => t.valid := false.B)
+  io.trace.custom.get.asInstanceOf[BoomTraceBundle].rob_empty := rob.io.empty
+
   if (trace) {
     for (w <- 0 until coreWidth) {
       // Delay the trace so we have a cycle to pull PCs out of the FTQ
-      io.trace(w).valid      := RegNext(rob.io.commit.arch_valids(w))
+      io.trace.insns(w).valid      := RegNext(rob.io.commit.arch_valids(w))
 
       // Recalculate the PC
       io.ifu.debug_ftq_idx(w) := rob.io.commit.uops(w).ftq_idx
       val iaddr = (AlignPCToBoundary(io.ifu.debug_fetch_pc(w), icBlockBytes)
                    + RegNext(rob.io.commit.uops(w).pc_lob)
                    - Mux(RegNext(rob.io.commit.uops(w).edge_inst), 2.U, 0.U))(vaddrBits-1,0)
-      io.trace(w).iaddr      := Sext(iaddr, xLen)
+      io.trace.insns(w).iaddr      := Sext(iaddr, xLen)
 
       def getInst(uop: MicroOp, inst: UInt): UInt = {
         Mux(uop.is_rvc, Cat(0.U(16.W), inst(15,0)), inst)
@@ -1391,8 +1396,8 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
 
       // use debug_insts instead of uop.debug_inst to use the rob's debug_inst_mem
       // note: rob.debug_insts comes 1 cycle later
-      io.trace(w).insn       := getInst(RegNext(rob.io.commit.uops(w)), rob.io.commit.debug_insts(w))
-      io.trace(w).wdata.map { _ := RegNext(getWdata(rob.io.commit.uops(w), rob.io.commit.debug_wdata(w))) }
+      io.trace.insns(w).insn       := getInst(RegNext(rob.io.commit.uops(w)), rob.io.commit.debug_insts(w))
+      io.trace.insns(w).wdata.map { _ := RegNext(getWdata(rob.io.commit.uops(w), rob.io.commit.debug_wdata(w))) }
 
       // Comment out this assert because it blows up FPGA synth-asserts
       // This tests correctedness of the debug_inst mem
@@ -1401,22 +1406,20 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
       // }
       // This tests correctedness of recovering pcs through ftq debug ports
       // when (RegNext(rob.io.commit.valids(w))) {
-      //   assert(Sext(io.trace(w).iaddr, xLen) ===
+      //   assert(Sext(io.trace.insns(w).iaddr, xLen) ===
       //     RegNext(Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1,0), xLen)))
       // }
 
       // These csr signals do not exactly match up with the ROB commit signals.
-      io.trace(w).priv       := RegNext(Cat(RegNext(csr.io.status.debug), csr.io.status.prv))
+      io.trace.insns(w).priv       := RegNext(Cat(RegNext(csr.io.status.debug), csr.io.status.prv))
       // Can determine if it is an interrupt or not based on the MSB of the cause
-      io.trace(w).exception  := RegNext(rob.io.com_xcpt.valid && !rob.io.com_xcpt.bits.cause(xLen - 1)) && (w == 0).B
-      io.trace(w).interrupt  := RegNext(rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.cause(xLen - 1)) && (w == 0).B
-      io.trace(w).cause      := RegNext(rob.io.com_xcpt.bits.cause)
-      io.trace(w).tval       := RegNext(csr.io.tval)
+      io.trace.insns(w).exception  := RegNext(rob.io.com_xcpt.valid && !rob.io.com_xcpt.bits.cause(xLen - 1)) && (w == 0).B
+      io.trace.insns(w).interrupt  := RegNext(rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.cause(xLen - 1)) && (w == 0).B
+      io.trace.insns(w).cause      := RegNext(rob.io.com_xcpt.bits.cause)
+      io.trace.insns(w).tval       := RegNext(csr.io.tval)
     }
     dontTouch(io.trace)
   } else {
-    io.trace := DontCare
-    io.trace map (t => t.valid := false.B)
     io.ifu.debug_ftq_idx := DontCare
   }
 }

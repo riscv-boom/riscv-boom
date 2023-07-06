@@ -348,6 +348,8 @@ class Rob(
     ).asTypeOf(new RobCompactUop)
   }
 
+  val rob_fflags    = Seq.fill(coreWidth)(Reg(Vec(numRobRows, UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))))
+
   for (w <- 0 until coreWidth) {
     def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
 
@@ -358,7 +360,7 @@ class Rob(
     val rob_uop       = Reg(Vec(numRobRows, new MicroOp()))
     val rob_exception = Reg(Vec(numRobRows, Bool()))
     val rob_predicated = Reg(Vec(numRobRows, Bool())) // Was this instruction predicated out?
-    val rob_fflags    = Mem(numRobRows, Valid(Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W)))
+    val rob_fflags    = Reg(Vec(numRobRows, Valid(Bits(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))))
 
     val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
 
