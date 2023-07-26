@@ -14,8 +14,7 @@
 // Stores are sent to memory at (well, after) commit, loads are executed
 // optimstically ASAP.  If a misspeculation was discovered, the pipeline is
 // cleared. Loads put to sleep are retried.  If a LoadAddr and StoreAddr match,
-// the Load can receive its data by forwarding data out of the Store-Data
-// Queue.
+// the Load can receive its data by forwarding data out of the Store Queue.
 //
 // Currently, loads are sent to memory immediately, and in parallel do an
 // associative search of the STQ, on entering the LSU. If a hit on the STQ
