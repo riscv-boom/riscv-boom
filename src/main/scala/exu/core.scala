@@ -269,7 +269,9 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   csr.io.rocc_interrupt := io.rocc.interrupt
 
   val custom_csrs = Wire(new BoomCustomCSRs)
-  (custom_csrs.csrs zip csr.io.customCSRs).map { case (lhs, rhs) => lhs := rhs }
+  custom_csrs.csrs.foreach { c => c.stall := false.B; c.set := false.B; c.sdata := DontCare }
+
+  (custom_csrs.csrs zip csr.io.customCSRs).map { case (lhs, rhs) => lhs <> rhs }
 
   //val icache_blocked = !(io.ifu.fetchpacket.valid || RegNext(io.ifu.fetchpacket.valid))
   val icache_blocked = false.B
@@ -998,6 +1000,11 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   csr.io.rw.cmd         := freechips.rocketchip.rocket.CSR.maskCmd(csr_exe_unit.io.iresp.valid, csr_rw_cmd)
   csr.io.rw.wdata       := wb_wdata
 
+  rob.io.csr_replay.valid := csr_exe_unit.io.iresp.valid && csr.io.rw_stall
+  rob.io.csr_replay.bits.uop := csr_exe_unit.io.iresp.bits.uop
+  rob.io.csr_replay.bits.cause := MINI_EXCEPTION_CSR_REPLAY
+  rob.io.csr_replay.bits.badvaddr := DontCare
+
   // Extra I/O
   // Delay retire/exception 1 cycle
   csr.io.retire    := RegNext(PopCount(rob.io.commit.arch_valids.asUInt))
@@ -1410,6 +1417,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
 
   io.rocc := DontCare
   io.rocc.exception := csr.io.exception && csr.io.status.xs.orR
+  io.rocc.csrs <> csr.io.roccCSRs
   if (usingRoCC) {
     exe_units.rocc_unit.io.rocc.rocc         <> io.rocc
     exe_units.rocc_unit.io.rocc.dis_uops     := dis_uops
