@@ -635,7 +635,7 @@ class Rob(
   when (!(io.flush.valid || exception_thrown) && rob_state =/= s_rollback) {
 
     val new_xcpt_valid = io.lxcpt.valid || io.csr_replay.valid
-    val lxcpt_older = IsOlder(io.lxcpt.bits.uop.rob_idx, io.csr_replay.bits.uop.rob_idx, rob_head_idx) && io.lxcpt.valid
+    val lxcpt_older = !io.csr_replay.valid || (IsOlder(io.lxcpt.bits.uop.rob_idx, io.csr_replay.bits.uop.rob_idx, rob_head_idx) && io.lxcpt.valid)
     val new_xcpt = Mux(lxcpt_older, io.lxcpt.bits, io.csr_replay.bits)
 
     when (new_xcpt_valid) {

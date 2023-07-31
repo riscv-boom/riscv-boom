@@ -231,6 +231,7 @@ class BoomTraceGenTileModuleImp(outer: BoomTraceGenTile)
   tracegen.io.hartid := outer.hartIdSinkNode.bundle
 
   val ptw = Module(new DummyPTW(1))
+  ptw.io := DontCare
   val lsu = Module(new LSU()(outer.boom_params, outer.dcache.module.edge))
   val boom_shim = Module(new BoomLSUShim()(outer.boom_params))
   ptw.io.requestors.head <> lsu.io.ptw
