@@ -29,7 +29,7 @@ import chisel3._
 import chisel3.util._
 
 import org.chipsalliance.cde.config.Parameters
-import freechips.rocketchip.util.Str
+import freechips.rocketchip.util._
 
 import boom.common._
 import boom.util._
@@ -81,7 +81,8 @@ class RobIo(
   val debug_wb_wdata  = Input(Vec(numWakeupPorts, Bits(xLen.W)))
 
   val fflags = Flipped(Vec(numFpuPorts, new ValidIO(new FFlagsResp())))
-  val lxcpt = Flipped(new ValidIO(new Exception())) // LSU
+  val lxcpt = Input(Valid(new Exception())) // LSU
+  val csr_replay = Input(Valid(new Exception()))
 
   // Commit stage (free resources; also used for rollback).
   val commit = Output(new CommitSignals())
@@ -394,6 +395,10 @@ class Rob(
           "An instruction marked as safe is causing an exception")
       }
     }
+
+    when (io.csr_replay.valid && MatchBank(GetBankIdx(io.csr_replay.bits.uop.rob_idx))) {
+      rob_exception(GetRowIdx(io.csr_replay.bits.uop.rob_idx)) := true.B
+    }
     can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)
 
     //-----------------------------------------------
@@ -552,7 +557,7 @@ class Rob(
   // Note: exception must be in the commit bundle.
   // Note: exception must be the first valid instruction in the commit bundle.
   exception_thrown := will_throw_exception
-  val is_mini_exception = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING
+  val is_mini_exception = io.com_xcpt.bits.cause.isOneOf(MINI_EXCEPTION_MEM_ORDERING, MINI_EXCEPTION_CSR_REPLAY)
   io.com_xcpt.valid := exception_thrown && !is_mini_exception
   io.com_xcpt.bits.cause := r_xcpt_uop.exc_cause
 
@@ -628,14 +633,17 @@ class Rob(
   }
 
   when (!(io.flush.valid || exception_thrown) && rob_state =/= s_rollback) {
-    when (io.lxcpt.valid) {
-      val new_xcpt_uop = io.lxcpt.bits.uop
 
-      when (!r_xcpt_val || IsOlder(new_xcpt_uop.rob_idx, r_xcpt_uop.rob_idx, rob_head_idx)) {
+    val new_xcpt_valid = io.lxcpt.valid || io.csr_replay.valid
+    val lxcpt_older = !io.csr_replay.valid || (IsOlder(io.lxcpt.bits.uop.rob_idx, io.csr_replay.bits.uop.rob_idx, rob_head_idx) && io.lxcpt.valid)
+    val new_xcpt = Mux(lxcpt_older, io.lxcpt.bits, io.csr_replay.bits)
+
+    when (new_xcpt_valid) {
+      when (!r_xcpt_val || IsOlder(new_xcpt.uop.rob_idx, r_xcpt_uop.rob_idx, rob_head_idx)) {
         r_xcpt_val              := true.B
-        next_xcpt_uop           := new_xcpt_uop
-        next_xcpt_uop.exc_cause := io.lxcpt.bits.cause
-        r_xcpt_badvaddr         := io.lxcpt.bits.badvaddr
+        next_xcpt_uop           := new_xcpt.uop
+        next_xcpt_uop.exc_cause := new_xcpt.cause
+        r_xcpt_badvaddr         := new_xcpt.badvaddr
       }
     } .elsewhen (!r_xcpt_val && enq_xcpts.reduce(_|_)) {
       val idx = enq_xcpts.indexWhere{i: Bool => i}
