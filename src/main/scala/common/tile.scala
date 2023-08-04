@@ -58,7 +58,7 @@ case class BoomTileParams(
   }
   val beuAddr: Option[BigInt] = None
   val blockerCtrlAddr: Option[BigInt] = None
-  val boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
+  val boundaryBuffers: Boolean = true // if synthesized with hierarchical PnR, cut feed-throughs?
   val clockSinkParams: ClockSinkParameters = ClockSinkParameters()
 }
 
