@@ -309,7 +309,7 @@ class WithNMegaTapeoutBooms(n: Int = 1, singlePorted: Boolean = true, overrideId
               decodeWidth = 4,
               numRobEntries = 128,
               issueParams = Seq(
-                IssueParams(issueWidth=2, numEntries=32, iqType=IQ_MEM, dispatchWidth=4, numSlowEntries=20),
+                IssueParams(issueWidth=2, numEntries=20, iqType=IQ_MEM, dispatchWidth=4, numSlowEntries=16),
                 IssueParams(issueWidth=1, numEntries=20, iqType=IQ_UNQ, dispatchWidth=4, numSlowEntries=12),
                 IssueParams(issueWidth=4, numEntries=20, iqType=IQ_ALU, dispatchWidth=4, numSlowEntries=12),
                 IssueParams(issueWidth=2, numEntries=32, iqType=IQ_FP , dispatchWidth=4, numSlowEntries=20)),
