@@ -210,6 +210,7 @@ class RegisterRead(
     val numReadPorts = numReadPortsArray(w)
 
     io.exe_reqs(w).valid    := exe_reg_valids(w)
+    io.exe_reqs(w).bits := DontCare
     io.exe_reqs(w).bits.uop := exe_reg_uops(w)
     if (numReadPorts > 0) io.exe_reqs(w).bits.rs1_data := exe_reg_rs1_data(w)
     if (numReadPorts > 1) io.exe_reqs(w).bits.rs2_data := exe_reg_rs2_data(w)

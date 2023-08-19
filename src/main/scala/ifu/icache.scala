@@ -76,7 +76,6 @@ class ICacheBundle(val outer: ICache) extends BoomBundle()(outer.p)
 
   val s1_kill = Input(Bool()) // delayed one cycle w.r.t. req
   val s2_kill = Input(Bool()) // delayed two cycles; prevents I$ miss emission
-  val s2_prefetch = Input(Bool()) // should I$ prefetch next line on a miss?
 
   val resp = Valid(new ICacheResp(outer))
   val invalidate = Input(Bool())
@@ -107,7 +106,6 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
 {
   val enableICacheDelay = tileParams.core.asInstanceOf[BoomCoreParams].enableICacheDelay
   val io = IO(new ICacheBundle(outer))
-
   val (tl_out, edge_out) = outer.masterNode.out(0)
 
   require(isPow2(nSets) && isPow2(nWays))
@@ -321,6 +319,8 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
       s2_unbanked_data
     }
 
+  io.resp.bits.ae := DontCare
+  io.resp.bits.replay := DontCare
   io.resp.bits.data := s2_data
   io.resp.valid := s2_valid && s2_hit
 

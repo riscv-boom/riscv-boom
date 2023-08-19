@@ -7,6 +7,7 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.dataview._
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.tile.FPConstants._
 import freechips.rocketchip.tile.{FPUCtrlSigs, HasFPUParameters}
@@ -171,6 +172,7 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
     val req = Flipped(new ValidIO(new FpuReq))
     val resp = new ValidIO(new ExeUnitResp(65))
   })
+  io.resp.bits := DontCare
 
   // all FP units are padded out to the same latency for easy scheduling of the write port
   val fpu_latency = dfmaLatency
@@ -184,7 +186,7 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
   def fuInput(minT: Option[tile.FType]): tile.FPInput = {
     val req = Wire(new tile.FPInput)
     val tag = fp_ctrl.typeTagIn
-    req <> fp_ctrl
+    req.viewAsSupertype(new tile.FPUCtrlSigs) := fp_ctrl
     req.rm := fp_rm
     req.in1 := unbox(io_req.rs1_data, tag, minT)
     req.in2 := unbox(io_req.rs2_data, tag, minT)

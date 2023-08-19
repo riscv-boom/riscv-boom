@@ -154,20 +154,31 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   io.way.bits := req.way_en
 
   io.meta_write.valid    := false.B
+  io.meta_write.bits     := DontCare
   io.req_pri_rdy         := false.B
   io.req_sec_rdy         := sec_rdy && rpq.io.enq.ready
   io.mem_acquire.valid   := false.B
+  io.mem_acquire.bits    := DontCare
   io.refill.valid        := false.B
+  io.refill.bits         := DontCare
   io.replay.valid        := false.B
+  io.replay.bits         := DontCare
   io.wb_req.valid        := false.B
+  io.wb_req.bits         := DontCare
   io.resp.valid          := false.B
+  io.resp.bits           := DontCare
   io.commit_val          := false.B
   io.commit_addr         := req.addr
   io.commit_coh          := coh_on_grant
   io.meta_read.valid     := false.B
+  io.meta_read.bits      := DontCare
   io.mem_finish.valid    := false.B
+  io.mem_finish.bits     := DontCare
   io.lb_write.valid      := false.B
+  io.lb_write.bits       := DontCare
   io.lb_read.valid       := false.B
+  io.lb_read.bits        := DontCare
+  io.mem_grant.ready     := false.B
 
   when (io.req_sec_val && io.req_sec_rdy) {
     req.uop.mem_cmd := dirtier_cmd
@@ -448,6 +459,7 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
   val send_resp = isRead(req.uop.mem_cmd)
 
   io.resp.valid     := (state === s_resp) && send_resp
+  io.resp.bits.is_hella := req.is_hella
   io.resp.bits.uop  := req.uop
   io.resp.bits.data := loadgen.data
 

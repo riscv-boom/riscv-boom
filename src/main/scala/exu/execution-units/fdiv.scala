@@ -13,6 +13,7 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.dataview._
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.tile.FPConstants._
 import freechips.rocketchip.tile
@@ -120,7 +121,7 @@ class FDivSqrtUnit(implicit p: Parameters)
     r_buffer_val := true.B
     r_buffer_req := io.req.bits
     r_buffer_req.uop.br_mask := GetNewBrMask(io.brupdate, io.req.bits.uop)
-    r_buffer_fin <> fdiv_decoder.io.sigs
+    r_buffer_fin.viewAsSupertype(new tile.FPUCtrlSigs) := fdiv_decoder.io.sigs
 
     r_buffer_fin.rm := Mux(ImmGenRm(io.req.bits.uop.imm_packed) === 7.U, io.fcsr_rm, ImmGenRm(io.req.bits.uop.imm_packed))
     r_buffer_fin.typ := 0.U // unused for fdivsqrt

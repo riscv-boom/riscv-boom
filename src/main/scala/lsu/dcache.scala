@@ -407,7 +407,6 @@ class BoomNonBlockingDCache(staticIdForMetadataUseOnly: Int)(implicit p: Paramet
 
 
 class BoomDCacheBundle(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p) {
-  val errors = new DCacheErrors
   val lsu   = Flipped(new LSUDMemIO)
 }
 

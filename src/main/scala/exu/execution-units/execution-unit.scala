@@ -138,21 +138,31 @@ abstract class ExecutionUnit(
     val com_exception = if (hasMem || hasRocc) Input(Bool()) else null
   })
 
+  io.req.ready := false.B
+
   if (writesIrf)   {
+    io.iresp.valid := false.B
+    io.iresp.bits := DontCare
     io.iresp.bits.fflags.valid := false.B
     io.iresp.bits.predicated := false.B
     assert(io.iresp.ready)
   }
   if (writesLlIrf) {
+    io.ll_iresp.valid := false.B
+    io.ll_iresp.bits := DontCare
     io.ll_iresp.bits.fflags.valid := false.B
     io.ll_iresp.bits.predicated := false.B
   }
   if (writesFrf)   {
+    io.fresp.valid := false.B
+    io.fresp.bits := DontCare
     io.fresp.bits.fflags.valid := false.B
     io.fresp.bits.predicated := false.B
     assert(io.fresp.ready)
   }
   if (writesLlFrf) {
+    io.ll_fresp.valid := false.B
+    io.ll_fresp.bits := DontCare
     io.ll_fresp.bits.fflags.valid := false.B
     io.ll_fresp.bits.predicated := false.B
   }
