@@ -23,6 +23,8 @@ class BoomLSUShim(implicit p: Parameters) extends BoomModule()(p)
     val tracegen = Flipped(new HellaCacheIO)
   })
 
+  io.tracegen := DontCare
+  io.lsu := DontCare
   io.lsu.tsc_reg := 0.U(1.W)
 
   val rob_sz = numRobEntries
@@ -234,7 +236,9 @@ class BoomTraceGenTileModuleImp(outer: BoomTraceGenTile)
   ptw.io := DontCare
   val lsu = Module(new LSU()(outer.boom_params, outer.dcache.module.edge))
   val boom_shim = Module(new BoomLSUShim()(outer.boom_params))
-  ptw.io.requestors.head <> lsu.io.ptw
+  lsu.io.ptw := DontCare
+  ptw.io.requestors.head.req <> lsu.io.ptw.req
+  lsu.io.ptw.resp := ptw.io.requestors.head.resp
   outer.dcache.module.io.lsu <> lsu.io.dmem
   boom_shim.io.tracegen <> tracegen.io.mem
   tracegen.io.fence_rdy := boom_shim.io.tracegen.ordered
