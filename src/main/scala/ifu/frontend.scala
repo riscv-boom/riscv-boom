@@ -312,7 +312,6 @@ class BoomFrontendBundle(val outer: BoomFrontend) extends CoreBundle()(outer.p)
 {
   val cpu = Flipped(new BoomFrontendIO())
   val ptw = new TLBPTWIO()
-  val errors = new ICacheErrors
 }
 
 /**

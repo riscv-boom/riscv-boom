@@ -51,8 +51,7 @@ import boom.util._
 class BoomCore()(implicit p: Parameters) extends BoomModule
   with HasBoomFrontendParameters // TODO: Don't add this trait
 {
-  val io = new freechips.rocketchip.tile.CoreBundle
-  {
+  val io = IO(new Bundle {
     val hartid = Input(UInt(hartIdLen.W))
     val interrupts = Input(new freechips.rocketchip.tile.CoreInterrupts())
     val ifu = new boom.ifu.BoomFrontendIO
@@ -62,7 +61,12 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
     val trace = Output(new TraceBundle)
     val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
-  }
+  })
+
+  io.ptw_tlb := DontCare
+  io.ptw := DontCare
+  io.ifu := DontCare
+
   //**********************************
   // construct all of the modules
 

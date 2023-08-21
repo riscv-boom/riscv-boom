@@ -24,6 +24,8 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     val ptw = new TLBPTWIO
     val kill = Input(Bool())
   })
+  io.ptw := DontCare
+  io.resp := DontCare
 
   class EntryData extends Bundle {
     val ppn = UInt(ppnBits.W)

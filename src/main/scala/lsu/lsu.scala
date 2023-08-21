@@ -202,6 +202,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   with rocket.HasL1HellaCacheParameters
 {
   val io = IO(new LSUIO)
+  io.hellacache := DontCare
 
 
   val ldq = Reg(Vec(numLdqEntries, Valid(new LDQEntry)))
@@ -1273,7 +1274,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   //----------------------------------
   for (w <- 0 until memWidth) {
     io.core.exe(w).iresp.valid := false.B
+    io.core.exe(w).iresp.bits  := DontCare
     io.core.exe(w).fresp.valid := false.B
+    io.core.exe(w).fresp.bits  := DontCare
   }
 
   val dmem_resp_fired = WireInit(widthMap(w => false.B))

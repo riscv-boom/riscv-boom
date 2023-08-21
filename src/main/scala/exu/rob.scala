@@ -559,6 +559,7 @@ class Rob(
   exception_thrown := will_throw_exception
   val is_mini_exception = io.com_xcpt.bits.cause.isOneOf(MINI_EXCEPTION_MEM_ORDERING, MINI_EXCEPTION_CSR_REPLAY)
   io.com_xcpt.valid := exception_thrown && !is_mini_exception
+  io.com_xcpt.bits := DontCare
   io.com_xcpt.bits.cause := r_xcpt_uop.exc_cause
 
   io.com_xcpt.bits.badvaddr := Sext(r_xcpt_badvaddr, xLen)
@@ -583,6 +584,7 @@ class Rob(
 
   // delay a cycle for critical path considerations
   io.flush.valid          := flush_val
+  io.flush.bits           := DontCare
   io.flush.bits.ftq_idx   := flush_uop.ftq_idx
   io.flush.bits.pc_lob    := flush_uop.pc_lob
   io.flush.bits.edge_inst := flush_uop.edge_inst

@@ -88,6 +88,9 @@ abstract class AbstractRenameStage(
     val debug = Output(new DebugRenameStageIO(numPhysRegs))
   })
 
+  io.ren_stalls.foreach(_ := false.B)
+  io.debug := DontCare
+
   def BypassAllocations(uop: MicroOp, older_uops: Seq[MicroOp], alloc_reqs: Seq[Bool]): MicroOp
 
   //-------------------------------------------------------------
@@ -356,7 +359,6 @@ class PredRenameStage(
   numWbPorts: Int)
   (implicit p: Parameters) extends AbstractRenameStage(plWidth, numPhysRegs, numWbPorts)(p)
 {
-
   def BypassAllocations(uop: MicroOp, older_uops: Seq[MicroOp], alloc_reqs: Seq[Bool]): MicroOp = {
     uop
   }

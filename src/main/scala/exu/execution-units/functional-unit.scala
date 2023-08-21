@@ -18,6 +18,7 @@ package boom.exu
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.dataview._
 
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.util._
@@ -186,6 +187,15 @@ abstract class FunctionalUnit(
     val scontext = if (isMemAddrCalcUnit) Input(UInt(coreParams.scontextWidth.W)) else null
 
   })
+
+  io.bypass.foreach { b => b.valid := false.B; b.bits := DontCare }
+
+  io.resp.valid := false.B
+  io.resp.bits := DontCare
+
+  if (isJmpUnit) {
+    io.get_ftq_pc.ftq_idx := DontCare
+  }
 }
 
 /**
@@ -595,7 +605,7 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
   val req = Wire(new tile.FPInput)
   val tag = fp_ctrl.typeTagIn
 
-  req <> fp_ctrl
+  req.viewAsSupertype(new tile.FPUCtrlSigs) := fp_ctrl
 
   req.rm := fp_rm
   req.in1 := unbox(io_req.rs1_data, tag, None)
