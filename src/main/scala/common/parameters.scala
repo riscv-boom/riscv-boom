@@ -119,7 +119,7 @@ case class BoomCoreParams(
   val useCryptoSM = false
   val traceHasWdata = trace
   val useConditionalZero = false
-
+  val useVector = false
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
 }
 
