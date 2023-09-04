@@ -47,7 +47,6 @@ class NullPrefetcher(implicit edge: TLEdgeOut, p: Parameters) extends DataPrefet
   */
 class NLPrefetcher(implicit edge: TLEdgeOut, p: Parameters) extends DataPrefetcher
 {
-
   val req_valid = RegInit(false.B)
   val req_addr  = Reg(UInt(coreMaxAddrBits.W))
   val req_cmd   = Reg(UInt(M_SZ.W))
@@ -63,12 +62,9 @@ class NLPrefetcher(implicit edge: TLEdgeOut, p: Parameters) extends DataPrefetch
   }
 
   io.prefetch.valid            := req_valid && io.mshr_avail
+  io.prefetch.bits             := DontCare
   io.prefetch.bits.addr        := req_addr
   io.prefetch.bits.uop         := NullMicroOp
   io.prefetch.bits.uop.mem_cmd := req_cmd
   io.prefetch.bits.data        := DontCare
-
-
 }
-
-
