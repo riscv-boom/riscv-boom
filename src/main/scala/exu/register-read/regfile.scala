@@ -114,7 +114,7 @@ class RegisterFileSynthesizable(
 {
   // --------------------------------------------------------------
 
-  val regfile = Mem(numRegisters, UInt(registerWidth.W))
+  val regfile = SyncReadMem(numRegisters, UInt(registerWidth.W))
 
   // --------------------------------------------------------------
   // Read ports.
@@ -125,7 +125,7 @@ class RegisterFileSynthesizable(
   val read_addrs = io.read_ports.map(p => RegNext(p.addr))
 
   for (i <- 0 until numReadPorts) {
-    read_data(i) := regfile(read_addrs(i))
+    read_data(i) := regfile(io.read_ports(i).addr)
   }
 
   // --------------------------------------------------------------
