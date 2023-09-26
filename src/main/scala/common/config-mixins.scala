@@ -288,7 +288,7 @@ class WithNGigaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
               numLdqEntries = 32,
               numStqEntries = 32,
               maxBrCount = 20,
-              numFetchBufferEntries = 32,
+              numFetchBufferEntries = 35,
               enablePrefetching = true,
               numDCacheBanks = 1,
               ftq = FtqParameters(nEntries=40),
