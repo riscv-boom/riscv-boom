@@ -165,7 +165,7 @@ class BoomLSUShim(implicit p: Parameters) extends BoomModule()(p)
 
 case class BoomTraceGenTileAttachParams(
   tileParams: BoomTraceGenParams,
-  crossingParams: TileCrossingParamsLike
+  crossingParams: HierarchicalElementCrossingParamsLike
 ) extends CanAttachTile {
   type TileType = BoomTraceGenTile
   val lookup: LookupByHartIdImpl = HartsWontDeduplicate(tileParams)
@@ -180,10 +180,10 @@ case class BoomTraceGenParams(
     memStart: BigInt,
     numGens: Int,
     dcache: Option[DCacheParams] = Some(DCacheParams()),
-    hartId: Int = 0
+    tileId: Int = 0
 ) extends InstantiableTileParams[BoomTraceGenTile]
 {
-  def instantiate(crossing: TileCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters): BoomTraceGenTile = {
+  def instantiate(crossing: HierarchicalElementCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters): BoomTraceGenTile = {
     new BoomTraceGenTile(this, crossing, lookup)
   }
   val core = RocketCoreParams(nPMPs = 0) //TODO remove this
@@ -192,8 +192,10 @@ case class BoomTraceGenParams(
   val beuAddr = None
   val blockerCtrlAddr = None
   val name = None
-  val traceParams = TraceGenParams(wordBits, addrBits, addrBag, maxRequests, memStart, numGens, dcache, hartId)
+  val traceParams = TraceGenParams(wordBits, addrBits, addrBag, maxRequests, memStart, numGens, dcache, tileId)
   val clockSinkParams: ClockSinkParameters = ClockSinkParameters()
+  val baseName = "boom_l1_tracegen"
+  val uniqueName = s"${baseName}_$tileId"
 }
 
 class BoomTraceGenTile private(
@@ -204,18 +206,18 @@ class BoomTraceGenTile private(
   with SinksExternalInterrupts
   with SourcesExternalNotifications
 {
-  def this(params: BoomTraceGenParams, crossing: TileCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters) =
+  def this(params: BoomTraceGenParams, crossing: HierarchicalElementCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters) =
     this(params, crossing.crossingType, lookup, p)
 
   val cpuDevice: SimpleDevice = new SimpleDevice("groundtest", Nil)
-  val intOutwardNode: IntOutwardNode = IntIdentityNode()
+  val intOutwardNode: Option[IntOutwardNode] = Some(IntIdentityNode())
   val slaveNode: TLInwardNode = TLIdentityNode()
   val statusNode = BundleBridgeSource(() => new GroundTestStatus)
 
   val boom_params = p.alterMap(Map(TileKey -> BoomTileParams(
     dcache=params.dcache,
     core=BoomCoreParams(nPMPs=0, numLdqEntries=16, numStqEntries=16, useVM=false))))
-  val dcache = LazyModule(new BoomNonBlockingDCache(staticIdForMetadataUseOnly)(boom_params))
+  val dcache = LazyModule(new BoomNonBlockingDCache(tileId)(boom_params))
 
 
   val masterNode: TLOutwardNode = TLIdentityNode() := visibilityNode := dcache.node
@@ -256,6 +258,6 @@ class BoomTraceGenTileModuleImp(outer: BoomTraceGenTile)
   status.timeout.bits := 0.U
   status.error.valid := false.B
 
-  assert(!tracegen.io.timeout, s"TraceGen tile ${outer.tileParams.hartId}: request timed out")
+  assert(!tracegen.io.timeout, s"TraceGen tile ${outer.tileParams.tileId}: request timed out")
 
 }

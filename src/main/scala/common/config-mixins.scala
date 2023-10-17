@@ -82,12 +82,12 @@ class WithRationalBoomTiles extends Config((site, here, up) => {
 /**
  * 1-wide BOOM.
  */
-class WithNSmallBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
+class WithNSmallBooms(n: Int = 1) extends Config(
   new WithTAGELBPD ++ // Default to TAGE-L BPD
   new Config((site, here, up) => {
     case TilesLocated(InSubsystem) => {
       val prev = up(TilesLocated(InSubsystem), site)
-      val idOffset = overrideIdOffset.getOrElse(prev.size)
+      val idOffset = up(NumTiles)
       (0 until n).map { i =>
         BoomTileAttachParams(
           tileParams = BoomTileParams(
@@ -115,25 +115,26 @@ class WithNSmallBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends 
             icache = Some(
               ICacheParams(rowBits = 64, nSets=64, nWays=4, fetchBytes=2*4)
             ),
-            hartId = i + idOffset
+            tileId = i + idOffset
           ),
           crossingParams = RocketCrossingParams()
         )
       } ++ prev
     }
     case XLen => 64
+    case NumTiles => up(NumTiles) + n
   })
 )
 
 /**
  * 2-wide BOOM.
  */
-class WithNMediumBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
+class WithNMediumBooms(n: Int = 1) extends Config(
   new WithTAGELBPD ++ // Default to TAGE-L BPD
   new Config((site, here, up) => {
     case TilesLocated(InSubsystem) => {
       val prev = up(TilesLocated(InSubsystem), site)
-      val idOffset = overrideIdOffset.getOrElse(prev.size)
+      val idOffset = up(NumTiles)
       (0 until n).map { i =>
         BoomTileAttachParams(
           tileParams = BoomTileParams(
@@ -161,25 +162,26 @@ class WithNMediumBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends
             icache = Some(
               ICacheParams(rowBits = 64, nSets=64, nWays=4, fetchBytes=2*4)
             ),
-            hartId = i + idOffset
+            tileId = i + idOffset
           ),
           crossingParams = RocketCrossingParams()
         )
       } ++ prev
     }
     case XLen => 64
+    case NumTiles => up(NumTiles) + n
   })
 )
 // DOC include start: LargeBoomConfig
 /**
  * 3-wide BOOM. Try to match the Cortex-A15.
  */
-class WithNLargeBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
+class WithNLargeBooms(n: Int = 1) extends Config(
   new WithTAGELBPD ++ // Default to TAGE-L BPD
   new Config((site, here, up) => {
     case TilesLocated(InSubsystem) => {
       val prev = up(TilesLocated(InSubsystem), site)
-      val idOffset = overrideIdOffset.getOrElse(prev.size)
+      val idOffset = up(NumTiles)
       (0 until n).map { i =>
         BoomTileAttachParams(
           tileParams = BoomTileParams(
@@ -206,13 +208,14 @@ class WithNLargeBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends 
             icache = Some(
               ICacheParams(rowBits = 128, nSets=64, nWays=8, fetchBytes=4*4)
             ),
-            hartId = i + idOffset
+            tileId = i + idOffset
           ),
           crossingParams = RocketCrossingParams()
         )
       } ++ prev
     }
     case XLen => 64
+    case NumTiles => up(NumTiles) + n
   })
 )
 // DOC include end: LargeBoomConfig
@@ -220,12 +223,12 @@ class WithNLargeBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends 
 /**
  * 4-wide BOOM.
  */
-class WithNMegaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
+class WithNMegaBooms(n: Int = 1) extends Config(
   new WithTAGELBPD ++ // Default to TAGE-L BPD
   new Config((site, here, up) => {
     case TilesLocated(InSubsystem) => {
       val prev = up(TilesLocated(InSubsystem), site)
-      val idOffset = overrideIdOffset.getOrElse(prev.size)
+      val idOffset = up(NumTiles)
       (0 until n).map { i =>
         BoomTileAttachParams(
           tileParams = BoomTileParams(
@@ -253,25 +256,26 @@ class WithNMegaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
             icache = Some(
               ICacheParams(rowBits = 128, nSets=64, nWays=8, fetchBytes=4*4)
             ),
-            hartId = i + idOffset
+            tileId = i + idOffset
           ),
           crossingParams = RocketCrossingParams()
         )
       } ++ prev
     }
     case XLen => 64
+    case NumTiles => up(NumTiles) + n
   })
 )
 
 /**
  * 5-wide BOOM.
   */
-class WithNGigaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
+class WithNGigaBooms(n: Int = 1) extends Config(
   new WithTAGELBPD ++ // Default to TAGE-L BPD
   new Config((site, here, up) => {
     case TilesLocated(InSubsystem) => {
       val prev = up(TilesLocated(InSubsystem), site)
-      val idOffset = overrideIdOffset.getOrElse(prev.size)
+      val idOffset = up(NumTiles)
       (0 until n).map { i =>
         BoomTileAttachParams(
           tileParams = BoomTileParams(
@@ -300,45 +304,46 @@ class WithNGigaBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends C
             icache = Some(
               ICacheParams(rowBits = 128, nSets=64, nWays=8, fetchBytes=4*4)
             ),
-            hartId = i + idOffset
+            tileId = i + idOffset
           ),
           crossingParams = RocketCrossingParams()
         )
       } ++ prev
     }
     case XLen => 64
+    case NumTiles => up(NumTiles) + n
   })
 )
 
 class WithCloneBoomTiles(
   n: Int = 1,
   cloneTileId: Int = 0,
-  overrideIdOffset: Option[Int] = None,
   location: HierarchicalLocation = InSubsystem,
   cloneLocation: HierarchicalLocation = InSubsystem
 ) extends Config((site, here, up) => {
   case TilesLocated(`location`) => {
     val prev = up(TilesLocated(location), site)
-    val idOffset = overrideIdOffset.getOrElse(prev.size)
-    val tileAttachParams = up(TilesLocated(cloneLocation)).find(_.tileParams.hartId == cloneTileId)
+    val idOffset = up(NumTiles)
+    val tileAttachParams = up(TilesLocated(cloneLocation)).find(_.tileParams.tileId == cloneTileId)
       .get.asInstanceOf[BoomTileAttachParams]
     (0 until n).map { i =>
       CloneTileAttachParams(cloneTileId, tileAttachParams.copy(
-        tileParams = tileAttachParams.tileParams.copy(hartId = i + idOffset)
+        tileParams = tileAttachParams.tileParams.copy(tileId = i + idOffset)
       ))
     } ++ prev
   }
+  case NumTiles => up(NumTiles) + n
 })
 
 /**
   * BOOM Configs for CS152 lab
   */
-class WithNCS152BaselineBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
+class WithNCS152BaselineBooms(n: Int = 1) extends Config(
   new WithTAGELBPD ++ // Default to TAGE-L BPD
   new Config((site, here, up) => {
     case TilesLocated(InSubsystem) => {
       val prev = up(TilesLocated(InSubsystem), site)
-      val idOffset = overrideIdOffset.getOrElse(prev.size)
+      val idOffset = up(NumTiles)
       (0 until n).map { i =>
         val coreWidth = 1                     // CS152: Change me (1 to 4)
         val memWidth = 1                      // CS152: Change me (1 or 2)
@@ -371,22 +376,23 @@ class WithNCS152BaselineBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) 
               nWays=4,  // CS152: Change me (1-8)
               nMSHRs=2  // CS152: Change me (1+)
             )),
-            hartId = i + idOffset
+            tileId = i + idOffset
           ),
           crossingParams = RocketCrossingParams()
         )
       } ++ prev
     }
     case XLen => 64
+    case NumTiles => up(NumTiles) + n
   })
 )
 
-class WithNCS152DefaultBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) extends Config(
+class WithNCS152DefaultBooms(n: Int = 1) extends Config(
   new WithTAGELBPD ++ // Default to TAGE-L BPD
   new Config((site, here, up) => {
     case TilesLocated(InSubsystem) => {
       val prev = up(TilesLocated(InSubsystem), site)
-      val idOffset = overrideIdOffset.getOrElse(prev.size)
+      val idOffset = up(NumTiles)
       (0 until n).map { i =>
         val coreWidth = 3                     // CS152: Change me (1 to 4)
         val memWidth = 1                      // CS152: Change me (1 or 2)
@@ -420,13 +426,14 @@ class WithNCS152DefaultBooms(n: Int = 1, overrideIdOffset: Option[Int] = None) e
               nWays=4,  // CS152: Change me (1-8)
               nMSHRs=2  // CS152: Change me (1+)
             )),
-            hartId = i + idOffset
+            tileId = i + idOffset
           ),
           crossingParams = RocketCrossingParams()
         )
       } ++ prev
     }
     case XLen => 64
+    case NumTiles => up(NumTiles) + n
   })
 )
 
