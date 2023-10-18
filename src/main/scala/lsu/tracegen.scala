@@ -210,7 +210,7 @@ class BoomTraceGenTile private(
     this(params, crossing.crossingType, lookup, p)
 
   val cpuDevice: SimpleDevice = new SimpleDevice("groundtest", Nil)
-  val intOutwardNode: Option[IntOutwardNode] = Some(IntIdentityNode())
+  val intOutwardNode: Option[IntOutwardNode] = None
   val slaveNode: TLInwardNode = TLIdentityNode()
   val statusNode = BundleBridgeSource(() => new GroundTestStatus)
 

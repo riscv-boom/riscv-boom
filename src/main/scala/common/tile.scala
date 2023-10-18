@@ -82,7 +82,7 @@ class BoomTile private(
   def this(params: BoomTileParams, crossing: HierarchicalElementCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters) =
     this(params, crossing.crossingType, lookup, p)
 
-  val intOutwardNode = Some(IntIdentityNode())
+  val intOutwardNode = None
   val masterNode = TLIdentityNode()
   val slaveNode = TLIdentityNode()
 
