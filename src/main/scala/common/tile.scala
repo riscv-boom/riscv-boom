@@ -190,6 +190,13 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
         hellaCachePorts += dcIF.io.cache
         respArb.io.in(i) <> Queue(rocc.module.io.resp)
       }
+      // first keep fpu ios unconnected
+      val fp_ios = outer.roccs.map(r => {
+        val roccio = r.module.io
+        roccio.fpu_req.ready := true.B
+        roccio.fpu_resp.valid := false.B
+        roccio.fpu_resp.bits := DontCare
+      })
       // Create this FPU just for RoCC
       val nFPUPorts = outer.roccs.filter(_.usesFPU).size
       if (nFPUPorts > 0) {
