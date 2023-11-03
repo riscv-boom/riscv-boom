@@ -253,7 +253,8 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   val ae_array = widthMap(w =>
     Mux(misaligned(w), eff_array(w), 0.U) |
     Mux(cmd_lrsc(w)  , ~lrscAllowed(w), 0.U))
-  val ae_valid_array = widthMap(w => Cat(true.B, !do_refill, Fill(normal_entries(w).size, true.B)))
+  val ae_valid_array = widthMap(w => Cat(if (special_entry.isEmpty) true.B else Cat(true.B, Fill(special_entry.size, !do_refill)),
+                                         Fill(normal_entries(w).size, true.B)))
   val ae_ld_array = widthMap(w => Mux(cmd_read(w), ae_array(w) | ~pr_array(w), 0.U))
   val ae_st_array = widthMap(w =>
     Mux(cmd_write_perms(w)   , ae_array(w) | ~pw_array(w), 0.U) |
