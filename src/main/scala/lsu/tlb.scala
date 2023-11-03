@@ -253,6 +253,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   val ae_array = widthMap(w =>
     Mux(misaligned(w), eff_array(w), 0.U) |
     Mux(cmd_lrsc(w)  , ~lrscAllowed(w), 0.U))
+  val ae_valid_array = widthMap(w => Cat(true.B, !do_refill, Fill(normal_entries(w).size, true.B)))
   val ae_ld_array = widthMap(w => Mux(cmd_read(w), ae_array(w) | ~pr_array(w), 0.U))
   val ae_st_array = widthMap(w =>
     Mux(cmd_write_perms(w)   , ae_array(w) | ~pw_array(w), 0.U) |
@@ -293,9 +294,9 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     io.resp(w).pf.ld   := (bad_va(w) && cmd_read(w)) || (pf_ld_array(w) & hits(w)).orR
     io.resp(w).pf.st   := (bad_va(w) && cmd_write_perms(w)) || (pf_st_array(w) & hits(w)).orR
     io.resp(w).pf.inst := bad_va(w) || (pf_inst_array(w) & hits(w)).orR
-    io.resp(w).ae.ld   := (ae_ld_array(w) & hits(w)).orR
-    io.resp(w).ae.st   := (ae_st_array(w) & hits(w)).orR
-    io.resp(w).ae.inst := (~px_array(w)   & hits(w)).orR
+    io.resp(w).ae.ld   := (ae_valid_array(w) & ae_ld_array(w) & hits(w)).orR
+    io.resp(w).ae.st   := (ae_valid_array(w) & ae_st_array(w) & hits(w)).orR
+    io.resp(w).ae.inst := (ae_valid_array(w) & ~px_array(w)   & hits(w)).orR
     io.resp(w).ma.ld   := (ma_ld_array(w) & hits(w)).orR
     io.resp(w).ma.st   := (ma_st_array(w) & hits(w)).orR
     io.resp(w).ma.inst := false.B // this is up to the pipeline to figure out
