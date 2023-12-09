@@ -11,7 +11,7 @@ The Berkeley Out-of-Order Machine (BOOM)
 The Berkeley Out-of-Order Machine (BOOM) is heavily inspired by the MIPS R10000 [1]_ and the Alpha 21264 [2]_ out–of–order processors.
 Like the MIPS R10000 and the Alpha 21264, BOOM is a unified physical register file design (also known as “explicit register renaming").
 
-BOOM implements the open-source `RISC-V ISA <https://riscv.org>`__ and utilizes the `Chisel <chisel-lang>`__ hardware construction language to construct a generator for the core.
+BOOM implements the open-source `RISC-V ISA <https://riscv.org>`__ and utilizes the `Chisel <https://chisel-lang.org>`__ hardware construction language to construct a generator for the core.
 A generator can be thought of a generalized RTL design.
 A standard RTL design can be viewed as a single instance of a generator design.
 Thus, BOOM is a family of out-of-order designs rather than a single instance of a core.
