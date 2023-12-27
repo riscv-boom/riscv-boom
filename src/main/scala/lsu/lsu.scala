@@ -9,25 +9,23 @@
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 //
-// Load/Store Unit is made up of the Load-Address Queue, the Store-Address
-// Queue, and the Store-Data queue (LAQ, SAQ, and SDQ).
+// Load/Store Unit is made up of the Load Queue, the Store Queue (LDQ and STQ).
 //
 // Stores are sent to memory at (well, after) commit, loads are executed
 // optimstically ASAP.  If a misspeculation was discovered, the pipeline is
 // cleared. Loads put to sleep are retried.  If a LoadAddr and StoreAddr match,
-// the Load can receive its data by forwarding data out of the Store-Data
-// Queue.
+// the Load can receive its data by forwarding data out of the Store Queue.
 //
 // Currently, loads are sent to memory immediately, and in parallel do an
-// associative search of the SAQ, on entering the LSU. If a hit on the SAQ
-// search, the memory request is killed on the next cycle, and if the SDQ entry
+// associative search of the STQ, on entering the LSU. If a hit on the STQ
+// search, the memory request is killed on the next cycle, and if the STQ entry
 // is valid, the store data is forwarded to the load (delayed to match the
 // load-use delay to delay with the write-port structural hazard). If the store
 // data is not present, or it's only a partial match (SB->LH), the load is put
-// to sleep in the LAQ.
+// to sleep in the LDQ.
 //
 // Memory ordering violations are detected by stores at their addr-gen time by
-// associatively searching the LAQ for newer loads that have been issued to
+// associatively searching the LDQ for newer loads that have been issued to
 // memory.
 //
 // The store queue contains both speculated and committed stores.
