@@ -91,7 +91,7 @@ class ICacheBundle(val outer: ICache) extends BoomBundle()(outer.p)
 object GetPropertyByHartId
 {
   def apply[T <: Data](tiles: Seq[RocketTileParams], f: RocketTileParams => Option[T], hartId: UInt): T = {
-    PriorityMux(tiles.collect { case t if f(t).isDefined => (t.hartId.U === hartId) -> f(t).get })
+    PriorityMux(tiles.collect { case t if f(t).isDefined => (t.tileId.U === hartId) -> f(t).get })
   }
 }
 

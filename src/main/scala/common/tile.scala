@@ -48,18 +48,20 @@ case class BoomTileParams(
   dcache: Option[DCacheParams] = Some(DCacheParams()),
   btb: Option[BTBParams] = Some(BTBParams()),
   name: Option[String] = Some("boom_tile"),
-  hartId: Int = 0
+  tileId: Int = 0
 ) extends InstantiableTileParams[BoomTile]
 {
   require(icache.isDefined)
   require(dcache.isDefined)
-  def instantiate(crossing: TileCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters): BoomTile = {
+  def instantiate(crossing: HierarchicalElementCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters): BoomTile = {
     new BoomTile(this, crossing, lookup)
   }
   val beuAddr: Option[BigInt] = None
   val blockerCtrlAddr: Option[BigInt] = None
   val boundaryBuffers: Boolean = false // if synthesized with hierarchical PnR, cut feed-throughs?
   val clockSinkParams: ClockSinkParameters = ClockSinkParameters()
+  val baseName = name.getOrElse("boom_tile")
+  val uniqueName = s"${baseName}_$tileId"
 }
 
 /**
@@ -77,10 +79,10 @@ class BoomTile private(
 {
 
   // Private constructor ensures altered LazyModule.p is used implicitly
-  def this(params: BoomTileParams, crossing: TileCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters) =
+  def this(params: BoomTileParams, crossing: HierarchicalElementCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters) =
     this(params, crossing.crossingType, lookup, p)
 
-  val intOutwardNode = IntIdentityNode()
+  val intOutwardNode = None
   val masterNode = TLIdentityNode()
   val slaveNode = TLIdentityNode()
 
@@ -107,7 +109,7 @@ class BoomTile private(
   }
 
   ResourceBinding {
-    Resource(cpuDevice, "reg").bind(ResourceAddress(staticIdForMetadataUseOnly))
+    Resource(cpuDevice, "reg").bind(ResourceAddress(tileId))
   }
 
   override def makeMasterBoundaryBuffers(crossing: ClockCrossingType)(implicit p: Parameters) = crossing match {
@@ -127,13 +129,13 @@ class BoomTile private(
   override lazy val module = new BoomTileModuleImp(this)
 
   // DCache
-  lazy val dcache: BoomNonBlockingDCache = LazyModule(new BoomNonBlockingDCache(staticIdForMetadataUseOnly))
+  lazy val dcache: BoomNonBlockingDCache = LazyModule(new BoomNonBlockingDCache(tileId))
   val dCacheTap = TLIdentityNode()
   tlMasterXbar.node := dCacheTap := TLWidthWidget(tileParams.dcache.get.rowBits/8) := visibilityNode := dcache.node
 
 
   // Frontend/ICache
-  val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, staticIdForMetadataUseOnly))
+  val frontend = LazyModule(new BoomFrontend(tileParams.icache.get, tileId))
   frontend.resetVectorSinkNode := resetVectorNexusNode
   tlMasterXbar.node := TLWidthWidget(tileParams.icache.get.rowBits/8) := frontend.masterNode
 
@@ -247,7 +249,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   val frontendStr = outer.frontend.module.toString
   val coreStr = core.toString
   val boomTileStr =
-    (BoomCoreStringPrefix(s"======BOOM Tile ${staticIdForMetadataUseOnly} Params======") + "\n"
+    (BoomCoreStringPrefix(s"======BOOM Tile ${outer.tileId} Params======") + "\n"
     + frontendStr
     + coreStr + "\n")
 

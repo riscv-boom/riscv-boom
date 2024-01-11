@@ -652,7 +652,7 @@ object BoomCoreStringPrefix
   * @return String combining the list with the prefix per line
   */
   def apply(strs: String*)(implicit p: Parameters) = {
-    val prefix = "[C" + s"${p(TileKey).hartId}" + "] "
+    val prefix = "[C" + s"${p(TileKey).tileId}" + "] "
     strs.map(str => prefix + str + "\n").mkString("")
   }
 }
