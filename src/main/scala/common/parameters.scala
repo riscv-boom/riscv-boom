@@ -97,6 +97,7 @@ case class BoomCoreParams(
   mcontextWidth: Int = 0,
   scontextWidth: Int = 0,
   trace: Boolean = false,
+  traceRFWb: Boolean = false,
 
   /* debug stuff */
   enableCommitLogPrintf: Boolean = false,
@@ -118,6 +119,7 @@ case class BoomCoreParams(
   val useCryptoNIST = false
   val useCryptoSM = false
   val traceHasWdata = trace
+  val traceHasRFWdata = traceRFWb
   val useConditionalZero = false
 
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
