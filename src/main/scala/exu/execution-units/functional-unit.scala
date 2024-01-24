@@ -346,7 +346,7 @@ class ALUUnit(isJmpUnit: Boolean = false, numStages: Int = 1, dataWidth: Int)(im
   val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
                 rs1(xLen-1) & ~rs2(xLen-1)).asBool
 
-  val pc_sel = MuxLookup(uop.ctrl.br_type, PC_PLUS4,
+  val pc_sel = MuxLookup(uop.ctrl.br_type, PC_PLUS4)(
                  Seq(   BR_N   -> PC_PLUS4,
                         BR_NE  -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
                         BR_EQ  -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
