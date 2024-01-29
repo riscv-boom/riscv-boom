@@ -65,6 +65,43 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new RoCCShimIO)
 
+  io.req.ready := true.B
+  io.core.rocc.exception := false.B
+  io.core.rocc.mem.req.ready := false.B
+  io.core.rocc.mem.s2_nack := false.B
+  io.core.rocc.mem.s2_nack_cause_raw := false.B
+  io.core.rocc.mem.s2_uncached := false.B
+  io.core.rocc.mem.s2_paddr := DontCare
+  io.core.rocc.mem.resp.valid := false.B
+  io.core.rocc.mem.resp.bits := DontCare
+  io.core.rocc.mem.replay_next := false.B
+  io.core.rocc.mem.s2_xcpt.ma.ld := false.B
+  io.core.rocc.mem.s2_xcpt.ma.st := false.B
+  io.core.rocc.mem.s2_xcpt.pf.ld := false.B
+  io.core.rocc.mem.s2_xcpt.pf.st := false.B
+  io.core.rocc.mem.s2_xcpt.gf.ld := false.B
+  io.core.rocc.mem.s2_xcpt.gf.st := false.B
+  io.core.rocc.mem.s2_xcpt.ae.ld := false.B
+  io.core.rocc.mem.s2_xcpt.ae.st := false.B
+  io.core.rocc.mem.s2_gpa := DontCare
+  io.core.rocc.mem.s2_gpa_is_pte := false.B
+  io.core.rocc.mem.uncached_resp.map(r => {
+    r.valid := false.B
+    r.bits := DontCare
+  })
+  io.core.rocc.mem.ordered := false.B
+  io.core.rocc.mem.perf.acquire := false.B
+  io.core.rocc.mem.perf.release := false.B
+  io.core.rocc.mem.perf.grant := false.B
+  io.core.rocc.mem.perf.tlbMiss := false.B
+  io.core.rocc.mem.perf.blocked := false.B
+  io.core.rocc.mem.perf.canAcceptStoreThenLoad := false.B
+  io.core.rocc.mem.perf.canAcceptStoreThenRMW := false.B
+  io.core.rocc.mem.perf.canAcceptLoadThenLoad := false.B
+  io.core.rocc.mem.perf.storeBufferEmptyAfterLoad := false.B
+  io.core.rocc.mem.perf.storeBufferEmptyAfterStore := false.B
+  io.core.rocc.mem.clock_enabled := false.B
+
   // RoCC execute queue. Wait for PNR, holds operands and inst bits
   val rxq_val       = Reg(Vec(numRxqEntries, Bool()))
   val rxq_op_val    = Reg(Vec(numRxqEntries, Bool()))
@@ -134,6 +171,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
 
   // Execute
   io.core.rocc.cmd.valid := false.B
+  io.core.rocc.cmd.bits  := DontCare
   rcq.io.enq.valid       := false.B
   rcq.io.enq.bits        := rxq_uop(rxq_head)
   when (rxq_op_val   (rxq_head) &&
@@ -206,6 +244,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
 
   io.core.rocc.resp.ready := io.resp.ready && rcq.io.deq.bits.dst_rtype =/= RT_X
   io.resp.valid           := false.B
+  io.resp.bits            := DontCare
   rcq.io.deq.ready        := false.B
   when (handle_resp) {
     assert((rcq.io.deq.bits.dst_rtype === RT_X)

@@ -53,7 +53,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
 {
   val io = IO(new Bundle {
     val hartid = Input(UInt(hartIdLen.W))
-    val interrupts = Input(new freechips.rocketchip.tile.CoreInterrupts())
+    val interrupts = Input(new freechips.rocketchip.rocket.CoreInterrupts(false))
     val ifu = new boom.ifu.BoomFrontendIO
     val ptw = Flipped(new freechips.rocketchip.rocket.DatapathPTWIO())
     val rocc = Flipped(new freechips.rocketchip.tile.RoCCCoreIO())

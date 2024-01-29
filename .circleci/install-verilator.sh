@@ -12,7 +12,7 @@ source $SCRIPT_DIR/defaults.sh
 # set stricthostkeychecking to no (must happen before rsync)
 run "echo \"Ping $SERVER\""
 
-run "git clone http://git.veripool.org/git/verilator $REMOTE_VERILATOR_DIR; \
+run "git clone https://git.veripool.org/git/verilator $REMOTE_VERILATOR_DIR; \
      cd $REMOTE_VERILATOR_DIR; \
      git checkout $VERILATOR_VERSION; \
      autoconf; \
