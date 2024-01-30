@@ -35,10 +35,12 @@ class RenameBusyTable(
   val pregSz = log2Ceil(numPregs)
 
   val io = IO(new BoomBundle()(p) {
+    // 重命名的uop序列
     val ren_uops = Input(Vec(plWidth, new MicroOp))
     val busy_resps = Output(Vec(plWidth, new BusyResp))
+    // 指示每个指令是否分配了新的物理寄存器
     val rebusy_reqs = Input(Vec(plWidth, Bool()))
-
+    // 从写回阶段返回的信息
     val wb_pdsts = Input(Vec(numWbPorts, UInt(pregSz.W)))
     val wb_valids = Input(Vec(numWbPorts, Bool()))
 
@@ -56,6 +58,7 @@ class RenameBusyTable(
   busy_table := busy_table_next
 
   // Read the busy table.
+  // 判断要重命名的指令块中是否存在后面指令的源寄存器是前面指令的目的寄存器
   for (i <- 0 until plWidth) {
     val prs1_was_bypassed = (0 until i).map(j =>
       io.ren_uops(i).lrs1 === io.ren_uops(j).ldst && io.rebusy_reqs(j)).foldLeft(false.B)(_||_)

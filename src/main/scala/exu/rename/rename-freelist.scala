@@ -32,6 +32,7 @@ class RenameFreeList(
     val alloc_pregs   = Output(Vec(plWidth, Valid(UInt(pregSz.W))))
 
     // Pregs returned by the ROB.
+    // 物理寄存器回收
     val dealloc_pregs = Input(Vec(plWidth, Valid(UInt(pregSz.W))))
 
     // Branch info for starting new allocation lists.
@@ -51,18 +52,26 @@ class RenameFreeList(
   val br_alloc_lists = Reg(Vec(maxBrCount, UInt(numPregs.W)))
 
   // Select pregs from the free list.
+  // 优先编码找N个空闲的位置 串行的过程，一个一个找 返回值为onehot向量 即为1的那一位表示选择了哪一个
   val sels = SelectFirstN(free_list, plWidth)
+  // 是否需要该物理寄存器
   val sel_fire  = Wire(Vec(plWidth, Bool()))
 
   // Allocations seen by branches in each pipeline slot.
   val allocs = io.alloc_pregs map (a => UIntToOH(a.bits))
+  // 每一条指令分配的物理寄存器
   val alloc_masks = (allocs zip io.reqs).scanRight(0.U(n.W)) { case ((a,r),m) => m | a & Fill(n,r) }
 
   // Masks that modify the freelist array.
+  // 用于指示freelist中需要被修改的位置
   val sel_mask = (sels zip sel_fire) map { case (s,f) => s & Fill(n,f) } reduce(_|_)
+  // 如果当前io.brupdate.b2的信息表明预测错误，则根据分支tag寻找br_alloc_lists，确定哪些寄存器要被回收
   val br_deallocs = br_alloc_lists(io.brupdate.b2.uop.br_tag) & Fill(n, io.brupdate.b2.mispredict)
+  // 两个部分：1 本身由于指令提交回收的 2 由于预测错误需要回收的
   val dealloc_mask = io.dealloc_pregs.map(d => UIntToOH(d.bits)(numPregs-1,0) & Fill(n,d.valid)).reduce(_|_) | br_deallocs
 
+
+  // 记录io.ren_br_tags中的tag信息是否有效
   val br_slots = VecInit(io.ren_br_tags.map(tag => tag.valid)).asUInt
   // Create branch allocation lists.
   for (i <- 0 until maxBrCount) {

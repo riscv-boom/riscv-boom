@@ -17,6 +17,7 @@ import boom.common._
 import boom.util._
 import org.chipsalliance.cde.config.Parameters
 
+// 获得当前请求的逻辑寄存器号
 class MapReq(val lregSz: Int) extends Bundle
 {
   val lrs1 = UInt(lregSz.W)
@@ -24,7 +25,8 @@ class MapReq(val lregSz: Int) extends Bundle
   val lrs3 = UInt(lregSz.W)
   val ldst = UInt(lregSz.W)
 }
-
+// 物理寄存器号的回复
+// stale pdst：写回寄存器
 class MapResp(val pregSz: Int) extends Bundle
 {
   val prs1 = UInt(pregSz.W)
@@ -33,6 +35,7 @@ class MapResp(val pregSz: Int) extends Bundle
   val stale_pdst = UInt(pregSz.W)
 }
 
+// 重命名请求
 class RemapReq(val lregSz: Int, val pregSz: Int) extends Bundle
 {
   val ldst = UInt(lregSz.W)
@@ -40,6 +43,7 @@ class RemapReq(val lregSz: Int, val pregSz: Int) extends Bundle
   val valid = Bool()
 }
 
+// float : is it a float register?
 class RenameMapTable(
   val plWidth: Int,
   val numLregs: Int,
@@ -67,6 +71,9 @@ class RenameMapTable(
   })
 
   // The map table register array and its branch snapshots.
+  // numLregs: 逻辑寄存器的个数
+  // pregSz: 物理寄存器索引需要的二进制位数
+  // 每一个逻辑寄存器与一个物理寄存器索引对应
   val map_table = RegInit(VecInit(Seq.fill(numLregs){0.U(pregSz.W)}))
   val br_snapshots = Reg(Vec(maxBrCount, Vec(numLregs, UInt(pregSz.W))))
 
@@ -74,6 +81,7 @@ class RenameMapTable(
   val remap_table = Wire(Vec(plWidth+1, Vec(numLregs, UInt(pregSz.W))))
 
   // Uops requesting changes to the map table.
+  // 当前阶段被重命名的目的寄存器映射得到的物理寄存器号
   val remap_pdsts = io.remap_reqs map (_.pdst)
   val remap_ldsts_oh = io.remap_reqs map (req => UIntToOH(req.ldst) & Fill(numLregs, req.valid.asUInt))
 
@@ -84,6 +92,9 @@ class RenameMapTable(
         remap_table(j)(i) := 0.U
       }
     } else {
+      // 第i个逻辑寄存器在每个slot中的指令重命名后对应新的状态
+      // 得到一个长度为plWidth+1的物理寄存器序列（第i个逻辑寄存器的映射变化）
+      // (ldst, new_pdst) ： ldst(i), remap_pdsts
       val remapped_row = (remap_ldsts_oh.map(ldst => ldst(i)) zip remap_pdsts)
         .scanLeft(map_table(i)) {case (pdst, (ldst, new_pdst)) => Mux(ldst, new_pdst, pdst)}
 
@@ -94,12 +105,13 @@ class RenameMapTable(
   }
 
   // Create snapshots of new mappings.
+  // 如果第i条指令的br_tag有效 则记录第i条指令重命名后的重命名表状态
   for (i <- 0 until plWidth) {
     when (io.ren_br_tags(i).valid) {
       br_snapshots(io.ren_br_tags(i).bits) := remap_table(i+1)
     }
   }
-
+  // 分支预测错误 使用snapshot
   when (io.brupdate.b2.mispredict) {
     // Restore the map table to a branch snapshot.
     map_table := br_snapshots(io.brupdate.b2.uop.br_tag)
@@ -107,6 +119,15 @@ class RenameMapTable(
     // Update mappings.
     map_table := remap_table(plWidth)
   }
+  // 同一个周期前面指令可能已经为ldst分配了新的物理寄存器，但此时map_table并没有更新
+  /*
+  对于上述mapping代码而言，首先是一个for循环，从0到plWidth这些指令需要进行映射。
+  接下来对于第i条指令，它的映射结果prs1先赋一个初始值map_table(io.map_reqs(i).lrs1)，
+  再从它之前的指令中依次判断是否bypass、该指令是否修改了映射关系、该指令的ldst是否和本指令的lrs1相同，
+  如果上述三个条件均满足（即该指令发生了RAW，它的操作数需要映射到最近一条写这个ISA寄存器的指令所映射的物理寄存器），
+  则将结果改为该指令的pdst，否则还使用当前值。
+  */
+  // p: map_table(io.map_reqs(i).lrs1)
 
   // Read out mappings.
   for (i <- 0 until plWidth) {
