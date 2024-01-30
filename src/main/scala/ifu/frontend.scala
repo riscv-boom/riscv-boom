@@ -240,7 +240,7 @@ class FetchBundle(implicit p: Parameters) extends BoomBundle
   val end_half      = Valid(UInt(16.W))
 
 
-  val bpd_meta      = Vec(nBanks, UInt())
+  val bpd_meta      = Vec(nBanks, UInt(bpdMaxMetaLength.W))
 
   // Source of the prediction from this bundle
   val fsrc    = UInt(BSRC_SZ.W)
