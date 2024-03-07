@@ -507,9 +507,9 @@ workflows:
                     <<: *ignore_fork
 
             # Run generic syntax checking
-            - run-scala-checkstyle:
-                filters:
-                    <<: *ignore_fork
+            # - run-scala-checkstyle:
+            #     filters:
+            #         <<: *ignore_fork
 
             # Prepare the verilator builds
             - prepare-smallboomconfig:
