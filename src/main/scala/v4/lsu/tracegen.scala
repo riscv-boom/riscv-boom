@@ -158,6 +158,7 @@ class BoomLSUShim(implicit p: Parameters) extends BoomModule()(p)
 
   io.lsu.rob_head_idx := rob_head
 
+  io.tracegen.ordered := ready_for_amo && io.lsu.fencei_rdy
 
   io.lsu.mcontext := 0.U(1.W)
   io.lsu.scontext := 0.U(1.W)
