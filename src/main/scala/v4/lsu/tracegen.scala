@@ -22,6 +22,7 @@ class BoomLSUShim(implicit p: Parameters) extends BoomModule()(p)
     val tracegen = Flipped(new HellaCacheIO)
   })
 
+  io.lsu := DontCare
   io.lsu.tsc_reg := 0.U(1.W)
 
   val rob_sz = numRobEntries
@@ -41,7 +42,7 @@ class BoomLSUShim(implicit p: Parameters) extends BoomModule()(p)
     Mux(idx === (max-1).U, 0.U, idx + 1.U)
   }
 
-
+  io.tracegen := DontCare
   io.tracegen.req.ready := (!rob_bsy(rob_tail) &&
     !rob_wait_till_empty &&
     (ready_for_amo || !(isAMO(io.tracegen.req.bits.cmd) || io.tracegen.req.bits.cmd === M_XLR || io.tracegen.req.bits.cmd === M_XSC)) &&
