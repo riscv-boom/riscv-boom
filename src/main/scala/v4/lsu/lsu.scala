@@ -538,9 +538,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   retry_queue.io.enq.bits.uop.uses_stq := can_enq_store_retry
   retry_queue.io.enq.bits.uop.stq_idx  := stq_enq_retry_idx
 
-  when (can_enq_store_retry && retry_queue.io.enq.fire()) {
+  when (can_enq_store_retry && retry_queue.io.enq.fire) {
     stq_addr(stq_enq_retry_idx).valid := false.B
-  } .elsewhen (can_enq_load_retry && retry_queue.io.enq.fire()) {
+  } .elsewhen (can_enq_load_retry && retry_queue.io.enq.fire) {
     ldq_addr(ldq_enq_retry_idx).valid := false.B
   }
 
@@ -570,7 +570,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   )
   stq_execute_queue.io.enq.valid := can_enq_store_execute
 
-  when (can_enq_store_execute && stq_execute_queue.io.enq.fire()) {
+  when (can_enq_store_execute && stq_execute_queue.io.enq.fire) {
     stq_execute_head := WrapInc(stq_execute_head, numStqEntries)
   }
 
@@ -1484,7 +1484,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val dmem_resp_fired = WireInit(widthMap(w => false.B))
   for (w <- 0 until lsuWidth) {
     val w1 = Reg(Valid(new Wakeup))
-    w1.valid := wakeupArbs(w).io.in(1).fire() && !IsKilledByBranch(io.core.brupdate, io.core.exception, wakeupArbs(w).io.in(1).bits)
+    w1.valid := wakeupArbs(w).io.in(1).fire && !IsKilledByBranch(io.core.brupdate, io.core.exception, wakeupArbs(w).io.in(1).bits)
     w1.bits  := UpdateBrMask(io.core.brupdate, wakeupArbs(w).io.in(1).bits)
 
     val w2 = Reg(Valid(new Wakeup))
@@ -1523,7 +1523,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     if (w == lsuWidth-1) {
       io.dmem.ll_resp.ready := !io.dmem.resp(w).valid && !wb_spec_wakeups(w).valid
     }
-    when (io.dmem.resp(w).valid || ((w == lsuWidth-1).B && io.dmem.ll_resp.fire())) {
+    when (io.dmem.resp(w).valid || ((w == lsuWidth-1).B && io.dmem.ll_resp.fire)) {
       when (resp.uop.uses_ldq) {
         assert(!resp.is_hella)
         val ldq_idx = resp.uop.ldq_idx
@@ -1838,7 +1838,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       hella_state := h_wait
     }
   } .elsewhen (hella_state === h_wait) {
-    when (io.dmem.ll_resp.fire() && io.dmem.ll_resp.bits.is_hella) {
+    when (io.dmem.ll_resp.fire && io.dmem.ll_resp.bits.is_hella) {
       hella_state := h_ready
 
       io.hellacache.resp.valid       := true.B
@@ -1873,7 +1873,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       hella_state := h_wait
     }
   } .elsewhen (hella_state === h_dead) {
-    when (io.dmem.ll_resp.fire() && io.dmem.ll_resp.bits.is_hella) {
+    when (io.dmem.ll_resp.fire && io.dmem.ll_resp.bits.is_hella) {
       hella_state := h_ready
     }
     for (w <- 0 until lsuWidth) {

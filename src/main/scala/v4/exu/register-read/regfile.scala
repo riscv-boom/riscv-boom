@@ -165,7 +165,7 @@ class PartiallyPortedRF[T <: Data](
       read_issued = issue_read || read_issued
     }
     io.arb_read_reqs(i).ready := PopCount(io.arb_read_reqs.take(i).map(_.valid)) < numPhysicalReadPorts.U
-    assert(!(io.arb_read_reqs(i).fire() && !read_issued))
+    assert(!(io.arb_read_reqs(i).fire && !read_issued))
   }
 
   for (j <- 0 until numPhysicalReadPorts) {

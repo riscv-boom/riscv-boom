@@ -607,7 +607,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // The BPD resp comes in f3
   f3_bpd_queue.io.enq.valid := f3.io.deq.valid && RegNext(f3.io.enq.ready)
   f3_bpd_queue.io.enq.bits  := bpd.io.resp.f3
-  when (f3_bpd_queue.io.enq.fire()) {
+  when (f3_bpd_queue.io.enq.fire) {
     bpd.io.f3_fire := true.B
   }
 
@@ -723,7 +723,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   f3_fetch_bundle.lhist    := f3_bpd_resp.lhist
   f3_fetch_bundle.bpd_meta := f3_bpd_resp.meta
 
-  when (f3.io.deq.fire()) {
+  when (f3.io.deq.fire) {
     assert(f3_bpd_resp.pc === f3_fetch_bundle.pc)
   }
 
@@ -823,7 +823,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   // RAS takes a cycle to read
   val ras_read_idx = RegInit(0.U(log2Ceil(nRasEntries).W))
   ras.io.read_idx := ras_read_idx
-  when (f3.io.deq.fire()) {
+  when (f3.io.deq.fire) {
     ras_read_idx := f4.io.enq.bits.ghist.ras_idx
     ras.io.read_idx := f4.io.enq.bits.ghist.ras_idx
   }
