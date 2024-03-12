@@ -263,7 +263,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   io.core.rocc.resp.ready := resp_arb.io.in(1).ready
   io.resp <> resp_arb.io.out
 
-  when (io.core.rocc.resp.fire()) {
+  when (io.core.rocc.resp.fire) {
     assert(rcq(rcq_head).valid && rcq(rcq_head).bits.uop.ldst === io.core.rocc.resp.bits.rd)
     rcq(rcq_head).valid := false.B
     rcq_head := WrapInc(rcq_head, numRcqEntries)

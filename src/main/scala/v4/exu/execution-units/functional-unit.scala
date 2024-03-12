@@ -175,7 +175,7 @@ class ALUUnit(dataWidth: Int)(implicit p: Parameters)
   val br_lt  = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
                 rs1(xLen-1) & ~rs2(xLen-1)).asBool
 
-  val pc_sel = MuxLookup(uop.br_type, PC_PLUS4,
+  val pc_sel = MuxLookup(uop.br_type, PC_PLUS4)(
                  Seq(   B_N   -> PC_PLUS4,
                         B_NE  -> Mux(!br_eq,  PC_BRJMP, PC_PLUS4),
                         B_EQ  -> Mux( br_eq,  PC_BRJMP, PC_PLUS4),
@@ -391,7 +391,7 @@ class DivUnit(dataWidth: Int)(implicit p: Parameters)
 
   val req = Reg(Valid(new MicroOp()))
 
-  when (io.req.fire()) {
+  when (io.req.fire) {
     req.valid := !IsKilledByBranch(io.brupdate, io.kill, io.req.bits)
     req.bits  := UpdateBrMask(io.brupdate, io.req.bits.uop)
   } .otherwise {
@@ -420,7 +420,7 @@ class DivUnit(dataWidth: Int)(implicit p: Parameters)
   io.resp.valid       := div.io.resp.valid && req.valid
   io.resp.bits.data   := div.io.resp.bits.data
   io.resp.bits.uop    := req.bits
-  when (io.resp.fire()) {
+  when (io.resp.fire) {
     req.valid := false.B
   }
 }

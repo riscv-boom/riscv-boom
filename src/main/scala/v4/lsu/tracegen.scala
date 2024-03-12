@@ -109,12 +109,12 @@ class BoomLSUShim(implicit p: Parameters) extends BoomModule()(p)
   assert(!io.lsu.lxcpt.valid)
 
 
-  io.lsu.agen(0).valid     := ShiftRegister(io.tracegen.req.fire(), 2)
+  io.lsu.agen(0).valid     := ShiftRegister(io.tracegen.req.fire, 2)
   io.lsu.agen(0).bits      := DontCare
   io.lsu.agen(0).bits.uop  := ShiftRegister(tracegen_uop, 2)
   io.lsu.agen(0).bits.data := ShiftRegister(io.tracegen.req.bits.addr, 2)
 
-  io.lsu.dgen(0).valid     := ShiftRegister(io.tracegen.req.fire() && tracegen_uop.uses_stq, 2)
+  io.lsu.dgen(0).valid     := ShiftRegister(io.tracegen.req.fire && tracegen_uop.uses_stq, 2)
   io.lsu.dgen(0).bits      := DontCare
   io.lsu.dgen(0).bits.uop  := ShiftRegister(tracegen_uop, 2)
   io.lsu.dgen(0).bits.data := ShiftRegister(io.tracegen.req.bits.data, 2)

@@ -492,7 +492,7 @@ class BranchKillableQueue[T <: boom.v4.common.HasBoomUOP](gen: T, entries: Int, 
     out_valid := out_valid && !IsKilledByBranch(io.brupdate, false.B, out_uop) && !(io.flush && flush_fn(out_uop))
 
     main.io.deq.ready := false.B
-    when (io.deq.fire() || !out_valid) {
+    when (io.deq.fire || !out_valid) {
       out_valid := main.io.deq.valid && !IsKilledByBranch(io.brupdate, false.B, main.io.deq.bits.uop) && !(io.flush && flush_fn(main.io.deq.bits.uop))
       out_reg := main.io.deq.bits
       out_uop := UpdateBrMask(io.brupdate, main.io.deq.bits.uop)
@@ -511,7 +511,7 @@ class BranchKillableQueue[T <: boom.v4.common.HasBoomUOP](gen: T, entries: Int, 
     val ptr_match = enq_ptr.value === deq_ptr.value
     io.empty := ptr_match && !maybe_full
     val full = ptr_match && maybe_full
-    val do_enq = WireInit(io.enq.fire() && !IsKilledByBranch(io.brupdate, false.B, io.enq.bits.uop) && !(io.flush && flush_fn(io.enq.bits.uop)))
+    val do_enq = WireInit(io.enq.fire && !IsKilledByBranch(io.brupdate, false.B, io.enq.bits.uop) && !(io.flush && flush_fn(io.enq.bits.uop)))
     val do_deq = WireInit((io.deq.ready || !valids(deq_ptr.value)) && !io.empty)
 
     for (i <- 0 until entries) {

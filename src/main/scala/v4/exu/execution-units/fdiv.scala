@@ -101,7 +101,7 @@ class FDivSqrtUnit2(implicit p: Parameters)
   fpiu.io.in.bits.typ := io.req.bits.uop.fp_typ
   fpiu.io.in.bits.fmaCmd := 0.U
 
-  when (io.req.fire()) {
+  when (io.req.fire) {
     r_req.valid := !IsKilledByBranch(io.brupdate, io.kill, io.req.bits.uop.br_mask)
     r_req.bits  := UpdateBrMask(io.brupdate, io.req.bits)
     r_sigs := fdiv_decoder.io.sigs
@@ -129,7 +129,7 @@ class FDivSqrtUnit2(implicit p: Parameters)
   io.resp.bits.data := r_out_wdata
   io.resp.bits.fflags.valid := io.resp.valid
   io.resp.bits.fflags.bits  := r_out_flags
-  when (io.resp.fire() || reset.asBool) {
+  when (io.resp.fire || reset.asBool) {
     r_req.valid := false.B
     r_out_valid := false.B
   }
