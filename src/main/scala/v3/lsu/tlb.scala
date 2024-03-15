@@ -160,7 +160,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   def fastCheck(member: TLManagerParameters => Boolean, w: Int) =
     legal_address(w) && edge.manager.fastProperty(mpu_physaddr(w), member, (b:Boolean) => b.B)
   val cacheable = widthMap(w => fastCheck(_.supportsAcquireT, w) && (instruction || !usingDataScratchpad).B)
-  val homogeneous = widthMap(w => TLBPageLookup(edge.manager.managers, xLen, p(CacheBlockBytes), BigInt(1) << pgIdxBits)(mpu_physaddr(w)).homogeneous)
+  val homogeneous = widthMap(w => TLBPageLookup(edge.manager.managers, xLen, p(CacheBlockBytes), BigInt(1) << pgIdxBits, 1 << lgMaxSize)(mpu_physaddr(w)).homogeneous)
   val prot_r   = widthMap(w => fastCheck(_.supportsGet, w) && pmp(w).io.r)
   val prot_w   = widthMap(w => fastCheck(_.supportsPutFull, w) && pmp(w).io.w)
   val prot_al  = widthMap(w => fastCheck(_.supportsLogical, w))
