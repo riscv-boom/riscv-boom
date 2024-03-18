@@ -49,8 +49,8 @@ for line in args.file:
             'jal' if is_jal == '1' else (
             'jalr' if is_jalr == '1' else (
             'X')))
-        print(src, taken, addr, label, flush=True)
-        mispredicted = (src == '3')
+        #print(src, taken, addr, label, flush=True)
+        mispredicted = (src == '4')
         if is_jal != '1':# and int(addr, 16) < 0x80000000:
             if addr not in branches:
                 branches[addr] = BranchInfo(addr, mispredicted, is_br, is_jalr)
