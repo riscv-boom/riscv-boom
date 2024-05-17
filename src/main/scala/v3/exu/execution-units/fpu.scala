@@ -114,6 +114,7 @@ class UOPCodeFPUDecoder(implicit p: Parameters) extends BoomModule with HasFPUPa
                  s.swap23, s.typeTagIn, s.typeTagOut, s.fromint, s.toint, s.fastpipe, s.fma,
                  s.div, s.sqrt, s.wflags)
   sigs zip decoder map {case(s,d) => s := d}
+  s.vec := false.B
 }
 
 /**
