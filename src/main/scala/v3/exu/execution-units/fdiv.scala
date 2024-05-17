@@ -61,6 +61,7 @@ class UOPCodeFDivDecoder(implicit p: Parameters) extends BoomModule
   val sigs = Seq(s.ldst, s.wen, s.ren1, s.ren2, s.ren3, s.swap12,
                  s.swap23, s.typeTagIn, s.typeTagOut, s.fromint, s.toint, s.fastpipe, s.fma,
                  s.div, s.sqrt, s.wflags)
+  s.vec := false.B
   sigs zip decoder map {case(s,d) => s := d}
 }
 
