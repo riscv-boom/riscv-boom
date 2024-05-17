@@ -347,7 +347,7 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   val s0_valid     = WireInit(false.B)
   val s0_is_replay = WireInit(false.B)
   val s0_is_sfence = WireInit(false.B)
-  val s0_replay_resp = Wire(new TLBResp)
+  val s0_replay_resp = Wire(new TLBResp(log2Ceil(fetchBytes)))
   val s0_replay_ppc  = Wire(UInt())
 
 
