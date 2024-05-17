@@ -207,7 +207,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
           // This FPU does not get CPU requests
           fpu.io := DontCare
           fpu.io.fcsr_rm := core.io.fcsr_rm
-          fpu.io.dmem_resp_val := false.B
+          fpu.io.ll_resp_val := false.B
           fpu.io.valid := false.B
           fpu.io.killx := false.B
           fpu.io.killm := false.B
