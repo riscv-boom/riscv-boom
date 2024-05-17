@@ -1527,6 +1527,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.hellacache.s2_nack   := false.B
   io.hellacache.s2_xcpt   := (0.U).asTypeOf(new rocket.HellaCacheExceptions)
   io.hellacache.resp.valid := false.B
+  io.hellacache.store_pending := stq.map(_.valid).reduce(_||_)
   when (hella_state === h_ready) {
     io.hellacache.req.ready := true.B
     when (io.hellacache.req.fire) {

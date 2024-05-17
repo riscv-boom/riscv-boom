@@ -1788,6 +1788,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.hellacache.ordered       := DontCare
   io.hellacache.perf          := DontCare
   io.hellacache.clock_enabled := true.B
+  io.hellacache.store_pending := stq_valid.reduce(_||_)
   io.hellacache.resp.valid := false.B
   io.hellacache.resp.bits.addr   := hella_req.addr
   io.hellacache.resp.bits.tag    := hella_req.tag

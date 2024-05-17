@@ -296,6 +296,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   csr.io.rocc_interrupt := io.rocc.interrupt
   csr.io.gva := DontCare
   csr.io.htval := DontCare
+  csr.io.mhtinst_read_pseudo := false.B
 
   val custom_csrs = Wire(new BoomCustomCSRs)
   custom_csrs.csrs.foreach { c => c.stall := false.B; c.set := false.B; c.sdata := DontCare }
