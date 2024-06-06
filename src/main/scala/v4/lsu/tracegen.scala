@@ -3,7 +3,8 @@ package boom.v4.lsu
 import chisel3._
 import chisel3.util._
 import org.chipsalliance.cde.config.Parameters
-import freechips.rocketchip.diplomacy.{SimpleDevice, LazyModule, SynchronousCrossing, ClockCrossingType, BundleBridgeSource}
+import freechips.rocketchip.diplomacy.{SimpleDevice, LazyModule, BundleBridgeSource}
+import freechips.rocketchip.prci.{SynchronousCrossing, ClockCrossingType}
 import freechips.rocketchip.groundtest._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.rocket.constants.{MemoryOpConstants}
