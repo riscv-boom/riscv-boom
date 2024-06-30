@@ -23,7 +23,6 @@ import chisel3.util._
 import freechips.rocketchip.rocket.{BP, SFenceReq, CSR}
 import freechips.rocketchip.rocket.constants.{MemoryOpConstants}
 import org.chipsalliance.cde.config.{Parameters}
-import freechips.rocketchip.tile.{XLen, RoCCCoreIO}
 import freechips.rocketchip.tile
 import freechips.rocketchip.util._
 

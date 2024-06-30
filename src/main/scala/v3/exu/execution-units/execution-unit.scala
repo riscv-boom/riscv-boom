@@ -22,7 +22,6 @@ import chisel3.util._
 
 import org.chipsalliance.cde.config.{Parameters}
 import freechips.rocketchip.rocket.{BP}
-import freechips.rocketchip.tile.{XLen, RoCCCoreIO}
 import freechips.rocketchip.tile
 
 import FUConstants._
@@ -220,7 +219,7 @@ class ALUExeUnit(
     numBypassStages  =
       if (hasAlu && hasMul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
       else if (hasAlu) 1 else 0,
-    dataWidth        = p(tile.XLen) + 1,
+    dataWidth        = 64 + 1,
     bypassable       = hasAlu,
     alwaysBypassable = hasAlu && !(hasMem || hasJmpUnit || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
     hasCSR           = hasCSR,

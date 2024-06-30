@@ -136,7 +136,6 @@ class WithNSmallBooms(n: Int = 1) extends Config(
         )
       } ++ prev
     }
-    case XLen => 64
     case NumTiles => up(NumTiles) + n
   })
 )
@@ -188,7 +187,6 @@ class WithNMediumBooms(n: Int = 1) extends Config(
         )
       } ++ prev
     }
-    case XLen => 64
     case NumTiles => up(NumTiles) + n
   })
 )
@@ -240,7 +238,6 @@ class WithNLargeBooms(n: Int = 1) extends Config(
         )
       } ++ prev
     }
-    case XLen => 64
     case NumTiles => up(NumTiles) + n
   })
 )
@@ -294,7 +291,6 @@ class WithNMegaBooms(n: Int = 1) extends Config(
         )
       } ++ prev
     }
-    case XLen => 64
     case NumTiles => up(NumTiles) + n
   })
 )
@@ -356,7 +352,6 @@ class WithNMegaTapeoutBooms(n: Int = 1, singlePorted: Boolean = true) extends Co
         )
       } ++ prev
     }
-    case XLen => 64
     case NumTiles => up(NumTiles) + n
   })
 )
@@ -411,7 +406,6 @@ class WithNGigaBooms(n: Int = 1) extends Config(
         )
       } ++ prev
     }
-    case XLen => 64
     case NumTiles => up(NumTiles) + n
   })
 )
@@ -485,7 +479,6 @@ class WithNCS152BaselineBooms(n: Int = 1) extends Config(
         )
       } ++ prev
     }
-    case XLen => 64
     case NumTiles => up(NumTiles) + n
   })
 )
@@ -537,7 +530,6 @@ class WithNCS152DefaultBooms(n: Int = 1) extends Config(
         )
       } ++ prev
     }
-    case XLen => 64
     case NumTiles => up(NumTiles) + n
   })
 )
