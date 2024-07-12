@@ -257,7 +257,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
       ("branch misprediction",              () => b2.mispredict),
       ("control-flow target misprediction", () => b2.mispredict &&
                                                   b2.cfi_type === CFI_JALR),
-      ("flush",                             () => rob.io.flush.valid)
+      ("flush",                             () => rob.io.flush.valid),
       ("branch resolved",                   () => b2.valid)
     )),
 
