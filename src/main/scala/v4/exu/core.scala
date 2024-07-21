@@ -281,7 +281,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
       ("control-flow target misprediction", () => b2.mispredict &&
                                                   b2.cfi_type === CFI_JALR),
       ("flush",                             () => rob.io.flush.valid),
-      ("branch resolved",                   () => b2.valid)
+// ("branch resolved",                   () => b2.valid)
     )),
 
     new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
