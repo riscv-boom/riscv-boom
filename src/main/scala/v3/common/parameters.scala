@@ -115,10 +115,6 @@ case class BoomCoreParams(
   val lrscCycles: Int = 80 // worst case is 14 mispredicted branches + slop
   val retireWidth = decodeWidth
   val jumpInFrontend: Boolean = false // unused in boom
-  val useBitManip = false
-  val useBitManipCrypto = false
-  val useCryptoNIST = false
-  val useCryptoSM = false
   val traceHasWdata = trace
   val useConditionalZero = false
   val useZba = false
