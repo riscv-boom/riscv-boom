@@ -97,7 +97,7 @@ abstract class ExecutionUnit(name: String)(implicit p: Parameters) extends BoomM
   rrd_uop.bits  := UpdateBrMask(io_brupdate, arb_uop.bits)
   val exe_uop = Reg(Valid(new MicroOp))
   exe_uop.valid := rrd_uop.valid && !IsKilledByBranch(io_brupdate, io_kill, rrd_uop.bits)
-  exe_uop.bits  := UpdateBrMask(io_brupdate, RRDDecode(rrd_uop.bits))
+  exe_uop.bits  := UpdateBrMask(io_brupdate, rrd_uop.bits)
 }
 
 trait HasIrfReadPorts { this: ExecutionUnit =>
