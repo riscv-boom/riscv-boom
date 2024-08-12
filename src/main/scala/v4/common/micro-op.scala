@@ -131,7 +131,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val frs3_en          = Bool()
 
   val fcn_dw           = Bool()
-  val fcn_op           = UInt((new freechips.rocketchip.rocket.ALUFN()).SZ_ALU_FN.W)
+  val fcn_op           = UInt(freechips.rocketchip.rocket.ALU.SZ_ALU_FN.W)
 
   // floating point information
   val fp_val           = Bool()             // is a floating-point instruction (F- or D-extension)?
