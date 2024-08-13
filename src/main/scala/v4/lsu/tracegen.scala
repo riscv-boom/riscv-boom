@@ -56,7 +56,7 @@ class BoomLSUShim(implicit p: Parameters) extends BoomModule()(p)
   tracegen_uop.uses_ldq     := isRead(io.tracegen.req.bits.cmd) && !isWrite(io.tracegen.req.bits.cmd)
   tracegen_uop.uses_stq     := isWrite(io.tracegen.req.bits.cmd)
   tracegen_uop.rob_idx      := rob_tail
-  tracegen_uop.uopc         := io.tracegen.req.bits.tag
+  tracegen_uop.debug_inst   := io.tracegen.req.bits.tag
   tracegen_uop.mem_size     := io.tracegen.req.bits.size
   tracegen_uop.mem_cmd      := io.tracegen.req.bits.cmd
   tracegen_uop.mem_signed   := io.tracegen.req.bits.signed
@@ -123,7 +123,7 @@ class BoomLSUShim(implicit p: Parameters) extends BoomModule()(p)
 
   io.tracegen.resp.valid     := io.lsu.iresp(0).valid
   io.tracegen.resp.bits      := DontCare
-  io.tracegen.resp.bits.tag  := io.lsu.iresp(0).bits.uop.uopc
+  io.tracegen.resp.bits.tag  := io.lsu.iresp(0).bits.uop.debug_inst
   io.tracegen.resp.bits.size := io.lsu.iresp(0).bits.uop.mem_size
   io.tracegen.resp.bits.data := io.lsu.iresp(0).bits.data
 

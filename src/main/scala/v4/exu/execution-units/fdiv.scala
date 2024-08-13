@@ -13,6 +13,7 @@ package boom.v4.exu
 
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.dataview._
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.tile.FPConstants._
 import freechips.rocketchip.tile
@@ -20,49 +21,6 @@ import boom.v4.common._
 import boom.v4.util._
 import freechips.rocketchip.tile.HasFPUParameters
 import freechips.rocketchip.util.uintToBitPat
-
-/**
- * Decoder for FPU divide and square root signals
- */
-class UOPCodeFDivDecoder(implicit p: Parameters) extends BoomModule
-  with HasFPUParameters
-{
-  val io = IO(new Bundle {
-    val uopc = Input(Bits(UOPC_SZ.W))
-    val sigs = Output(new tile.FPInput)
-  })
-
-  val N = BitPat("b0")
-  val Y = BitPat("b1")
-  val X = BitPat("b?")
-
-  val decoder = freechips.rocketchip.rocket.DecodeLogic(io.uopc,
-    // Note: not all of these signals are used or necessary, but we're
-    // constrained by the need to fit the rocket.FPU units' ctrl signals.
-    //                                      swap12         fma
-    //                                      | swap32       | div
-    //                                      | | typeTagIn  | | sqrt
-    //                           ldst       | | | typeTagOut | | wflags
-    //                           | wen      | | | | from_int | | |
-    //                           | | ren1   | | | | | to_int | | |
-    //                           | | | ren2 | | | | | | fast | | |
-    //                           | | | | ren3 | | | | | |  | | | |
-    //                           | | | | |  | | | | | | |  | | | |
-    /* Default */           List(X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
-    Array(
-      BitPat(uopFDIV_S)  -> List(X,X,Y,Y,X, X,X,S,S,X,X,X, X,Y,N,Y),
-      BitPat(uopFDIV_D)  -> List(X,X,Y,Y,X, X,X,D,D,X,X,X, X,Y,N,Y),
-      BitPat(uopFSQRT_S) -> List(X,X,Y,N,X, X,X,S,S,X,X,X, X,N,Y,Y),
-      BitPat(uopFSQRT_D) -> List(X,X,Y,N,X, X,X,D,D,X,X,X, X,N,Y,Y)
-    ): Array[(BitPat, List[BitPat])])
-
-  val s = io.sigs
-  io.sigs := DontCare
-  val sigs = Seq(s.ldst, s.wen, s.ren1, s.ren2, s.ren3, s.swap12,
-                 s.swap23, s.typeTagIn, s.typeTagOut, s.fromint, s.toint, s.fastpipe, s.fma,
-                 s.div, s.sqrt, s.wflags)
-  sigs zip decoder map {case(s,d) => s := d}
-}
 
 /**
   * Modern implementation that doesn't rely on upconverting, compared to original FDivSqrtUnit
@@ -84,27 +42,25 @@ class FDivSqrtUnit2(implicit p: Parameters)
   val kill = IsKilledByBranch(io.brupdate, io.kill, r_req)
   io.req.ready := !r_req.valid
 
-  val fdiv_decoder = Module(new UOPCodeFDivDecoder)
-  fdiv_decoder.io.uopc := io.req.bits.uop.uopc
-
   r_req := UpdateBrMask(io.brupdate, io.kill, r_req)
   r_out_valid := r_out_valid && !kill
   io.req.ready := !r_req.valid && !divSqrt_inFlight && !r_out_valid
 
   val fpiu = Module(new tile.FPToInt)
   fpiu.io.in.valid := io.req.valid
-  fpiu.io.in.bits  := fdiv_decoder.io.sigs
+  fpiu.io.in.bits.viewAsSupertype(new tile.FPUCtrlSigs)  := io.req.bits.uop.fp_ctrl
   fpiu.io.in.bits.rm := Mux(io.req.bits.uop.fp_rm === 7.U, io.fcsr_rm, io.req.bits.uop.fp_rm)
-  fpiu.io.in.bits.in1 := unbox(io.req.bits.rs1_data, fdiv_decoder.io.sigs.typeTagIn, None)
-  fpiu.io.in.bits.in2 := unbox(io.req.bits.rs2_data, fdiv_decoder.io.sigs.typeTagIn, None)
+  fpiu.io.in.bits.in1 := unbox(io.req.bits.rs1_data, io.req.bits.uop.fp_ctrl.typeTagIn, None)
+  fpiu.io.in.bits.in2 := unbox(io.req.bits.rs2_data, io.req.bits.uop.fp_ctrl.typeTagIn, None)
   fpiu.io.in.bits.in3 := DontCare
   fpiu.io.in.bits.typ := io.req.bits.uop.fp_typ
   fpiu.io.in.bits.fmaCmd := 0.U
+  fpiu.io.in.bits.fmt := DontCare
 
   when (io.req.fire) {
     r_req.valid := !IsKilledByBranch(io.brupdate, io.kill, io.req.bits.uop.br_mask)
     r_req.bits  := UpdateBrMask(io.brupdate, io.req.bits)
-    r_sigs := fdiv_decoder.io.sigs
+    r_sigs := io.req.bits.uop.fp_ctrl
     r_rm := io.fcsr_rm
   }
   for (t <- floatTypes) {

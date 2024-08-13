@@ -26,7 +26,6 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   with freechips.rocketchip.rocket.constants.MemoryOpConstants
   with freechips.rocketchip.rocket.constants.ScalarOpConstants
 {
-  val uopc             = UInt(UOPC_SZ.W)       // micro-op code
   val inst             = UInt(32.W)
   val debug_inst       = UInt(32.W)
   val is_rvc           = Bool()
@@ -56,11 +55,12 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val is_sfb           = Bool()                      // is this a sfb or in the shadow of a sfb
   val is_fence         = Bool()
   val is_fencei        = Bool()
+  val is_sfence        = Bool()
   val is_amo           = Bool()
   val is_eret          = Bool()
   val is_sys_pc2epc    = Bool()                      // Is a ECall or Breakpoint -- both set EPC to PC.
   val is_rocc          = Bool()
-
+  val is_mov           = Bool()
 
   // Index into FTQ to figure out our fetch PC.
   val ftq_idx          = UInt(log2Ceil(ftqSz).W)
@@ -80,6 +80,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
 
   val op1_sel          = UInt(OP1_X.getWidth.W)
   val op2_sel          = UInt(OP2_X.getWidth.W)
+
+  val fp_ctrl          = new freechips.rocketchip.tile.FPUCtrlSigs
 
   val rob_idx          = UInt(robAddrSz.W)
   val ldq_idx          = UInt(ldqAddrSz.W)

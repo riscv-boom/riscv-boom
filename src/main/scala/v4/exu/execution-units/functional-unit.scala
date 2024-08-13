@@ -274,7 +274,7 @@ class ALUUnit(dataWidth: Int)(implicit p: Parameters)
 //   io.resp.bits.data := reg_data
   val alu_out = Mux(io.req.bits.uop.is_sfb_shadow && io.req.bits.pred_data,
       Mux(io.req.bits.uop.ldst_is_rs1, io.req.bits.rs1_data, io.req.bits.rs2_data),
-      Mux(io.req.bits.uop.uopc === uopMOV, io.req.bits.rs2_data, alu.io.out))
+      Mux(io.req.bits.uop.is_mov, io.req.bits.rs2_data, alu.io.out))
   io.resp.valid := io.req.valid
   io.resp.bits.uop := io.req.bits.uop
   io.resp.bits.data := Mux(io.req.bits.uop.is_sfb_br, pc_sel === PC_BRJMP, alu_out)
@@ -333,15 +333,14 @@ class IntToFPUnit(latency: Int)(implicit p: Parameters)
     needsFcsr = true)
   with tile.HasFPUParameters
 {
+  val io_req = io.req.bits
+
   io.req.ready := true.B
   val pipe = Module(new BranchKillablePipeline(new FuncUnitReq(dataWidth), latency))
   pipe.io.req := io.req
   pipe.io.flush := io.kill
   pipe.io.brupdate := io.brupdate
-  val fp_decoder = Module(new UOPCodeFPUDecoder) // TODO use a simpler decoder
-  val io_req = io.req.bits
-  fp_decoder.io.uopc := io_req.uop.uopc
-  val fp_ctrl = fp_decoder.io.sigs
+  val fp_ctrl = io_req.uop.fp_ctrl
   val fp_rm = Mux(io_req.uop.fp_rm === 7.U, io.fcsr_rm, io_req.uop.fp_rm)
 
   val req = Wire(new tile.FPInput)

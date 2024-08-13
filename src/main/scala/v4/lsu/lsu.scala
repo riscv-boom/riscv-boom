@@ -714,8 +714,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                     Mux(will_fire_store_agen    (w)  , stq_incoming_e(w).bits.uop,
                     Mux(will_fire_load_retry    (w) ||
                         will_fire_store_retry   (w)  , retry_queue.io.deq.bits.uop,
-                    Mux(will_fire_hella_incoming(w)  , NullMicroOp,
-                                                       NullMicroOp)))))
+                    Mux(will_fire_hella_incoming(w)  , 0.U.asTypeOf(new MicroOp),
+                                                       0.U.asTypeOf(new MicroOp))))))
 
   val exe_tlb_vaddr = widthMap(w =>
                     Mux(will_fire_load_agen_exec(w) ||
@@ -1734,7 +1734,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         val stdata = Mux(commit_store, stq_data(temp_stq_commit_head).bits    , 0.U)
         val wbdata = Mux(commit_store, stq_debug_wb_data(temp_stq_commit_head), ldq_debug_wb_data(temp_ldq_head))
         printf("MT %x %x %x %x %x %x %x\n",
-          io.core.tsc_reg, uop.uopc, uop.mem_cmd, uop.mem_size, addr, stdata, wbdata)
+          io.core.tsc_reg, 0.U, uop.mem_cmd, uop.mem_size, addr, stdata, wbdata)
       }
     }
 

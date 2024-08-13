@@ -86,7 +86,7 @@ class IssueUnitCollapsing(
       when (io.dis_uops(w).bits.fu_code(FC_I2F)) {
         dis_uops(w).prs2 := Cat(io.dis_uops(w).bits.fp_rm, io.dis_uops(w).bits.fp_typ)
       }
-      when (io.dis_uops(w).bits.uopc === uopSFENCE) {
+      when (io.dis_uops(w).bits.is_sfence) {
         dis_uops(w).pimm := io.dis_uops(w).bits.mem_size
       }
     }
