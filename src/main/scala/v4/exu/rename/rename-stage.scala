@@ -427,20 +427,18 @@ class ImmRenameStage(plWidth: Int, numWbPorts: Int)(implicit p: Parameters) exte
     val imm_lo = imm(immPregSz-1, 0)
     val short_imm = imm_hi === 0.U || ~imm_hi === 0.U
 
-    ren2_alloc_reqs(w) := ren2_uops(w).imm_sel =/= IS_N && !short_imm
+    ren2_alloc_reqs(w) := ren2_uops(w).imm_rename
 
     assert(!ren2_alloc_fire(w) || ren2_uops(w).iq_type(IQ_ALU) || ren2_uops(w).iq_type(IQ_MEM) || ren2_uops(w).iq_type(IQ_UNQ))
 
 
     val can_allocate = freelist.io.alloc_pregs(w).valid
     // Push back against Decode stage if Rename1 can't proceed.
-    io.ren_stalls(w) := (ren2_uops(w).imm_sel =/= IS_N) && !can_allocate
+    io.ren_stalls(w) := ren2_uops(w).imm_rename && !can_allocate
 
     io.ren2_uops(w) := GetNewUopAndBrMask(ren2_uops(w), io.brupdate)
-    io.ren2_uops(w).pimm := freelist.io.alloc_pregs(w).bits
-    when (short_imm) {
-      io.ren2_uops(w).pimm    := imm_lo
-      io.ren2_uops(w).imm_sel := IS_SH
+    when (ren2_uops(w).imm_rename) {
+      io.ren2_uops(w).pimm := freelist.io.alloc_pregs(w).bits
     }
 
   }

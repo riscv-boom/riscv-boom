@@ -24,6 +24,7 @@ import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.util._
 import freechips.rocketchip.tile
 import freechips.rocketchip.rocket.{PipelinedMultiplier,BP,BreakpointUnit,Causes,CSR}
+import freechips.rocketchip.rocket.ALU._
 
 import boom.v4.common._
 import boom.v4.ifu._
@@ -143,29 +144,38 @@ class ALUUnit(dataWidth: Int)(implicit p: Parameters)
   val imm_xprlen = io.req.bits.imm_data //ImmGen(uop.imm_packed, uop.imm_sel)
 
   // operand 1 select
-  var op1_data: UInt = null
 
   // Get the uop PC for jumps
   val block_pc = AlignPCToBoundary(io.req.bits.ftq_info(0).pc, icBlockBytes)
   val uop_pc = (block_pc | uop.pc_lob) - Mux(uop.edge_inst, 2.U, 0.U)
+  val op1_shamt = Mux(uop.fcn_op === FN_ADD, io.req.bits.uop.pimm(2,1), 0.U)
+  val op1_shl = Mux(uop.fcn_dw === DW_32, // shaddw
+    io.req.bits.rs1_data(31,0), io.req.bits.rs1_data) << op1_shamt
 
-  op1_data = Mux(uop.op1_sel === OP1_RS1 , io.req.bits.rs1_data,
-             Mux(uop.op1_sel === OP1_PC  , Sext(uop_pc, xLen),
-                                           0.U))
+  val op1_data = MuxLookup(uop.op1_sel, 0.U)(Seq(
+    OP1_RS1    -> io.req.bits.rs1_data,
+    OP1_PC     -> Sext(uop_pc, xLen),
+    OP1_RS1SHL  -> op1_shl
+  ))
 
   // operand 2 select
-  val op2_data = Mux(uop.op2_sel === OP2_IMM,  Sext(imm_xprlen, xLen),
-                 Mux(uop.op2_sel === OP2_IMMC, io.req.bits.uop.prs1(4,0),
-                 Mux(uop.op2_sel === OP2_RS2 , io.req.bits.rs2_data,
-                 Mux(uop.op2_sel === OP2_NEXT, Mux(uop.is_rvc, 2.U, 4.U),
-                                               0.U))))
+  val op2_oh = UIntToOH(Mux(uop.op2_sel(0), // rs1
+    io.req.bits.rs2_data, imm_xprlen)(log2Ceil(xLen)-1,0))
+  val op2_data = MuxLookup(uop.op2_sel, 0.U)(Seq(
+    OP2_IMM  -> Sext(imm_xprlen, xLen),
+    OP2_IMMC -> io.req.bits.uop.prs1(4,0),
+    OP2_RS2  -> io.req.bits.rs2_data,
+    OP2_NEXT -> Mux(uop.is_rvc, 2.U, 4.U),
+    OP2_RS2OH -> op2_oh,
+    OP2_IMMOH -> op2_oh
+  ))
 
   val alu = Module(new freechips.rocketchip.rocket.ALU())
 
   alu.io.in1 := op1_data.asUInt
   alu.io.in2 := op2_data.asUInt
   alu.io.fn  := uop.fcn_op
-  alu.io.dw  := uop.fcn_dw
+  alu.io.dw  := Mux(uop.op1_sel === OP1_RS1SHL, DW_64, uop.fcn_dw)
 
 
   val rs1 = io.req.bits.rs1_data

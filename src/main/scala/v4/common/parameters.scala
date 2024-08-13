@@ -136,9 +136,9 @@ case class BoomCoreParams(
   val jumpInFrontend: Boolean = false // unused in boom
   val traceHasWdata = trace
   val useConditionalZero = false
-  val useZba = false
-  val useZbb = false
-  val useZbs = false
+  val useZba = true
+  val useZbb = true
+  val useZbs = true
 
   override def customCSRs(implicit p: Parameters) = new BoomCustomCSRs
 }

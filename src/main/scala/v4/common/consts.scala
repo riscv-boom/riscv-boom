@@ -70,6 +70,7 @@ trait ScalarOpConstants
   val OP1_RS1 = 0.U(2.W) // Register Source #1
   val OP1_ZERO= 1.U(2.W)
   val OP1_PC  = 2.U(2.W)
+  val OP1_RS1SHL = 3.U(2.W)
   val OP1_X   = BitPat("b??")
 
   // RS2 Operand Select Signal
@@ -78,6 +79,8 @@ trait ScalarOpConstants
   val OP2_ZERO= 2.U(3.W) // constant 0
   val OP2_NEXT= 3.U(3.W) // constant 2/4 (for PC+2/4)
   val OP2_IMMC= 4.U(3.W) // for CSR imm found in RS1
+  val OP2_RS2OH = 5.U(3.W)
+  val OP2_IMMOH = 6.U(3.W)
   val OP2_X   = BitPat("b???")
 
   // Register File Write Enable Signal
@@ -104,6 +107,7 @@ trait ScalarOpConstants
   val IS_J   = 4.U(3.W)  // UJ-Type (J/JAL)
   val IS_SH  = 5.U(3.W)  // short-type (sign extend from pimm to get imm)
   val IS_N   = 6.U(3.W)  // No immediate (zeros immediate)
+  val IS_F3  = 7.U(3.W)  // funct3
 
   // Decode Stage Control Signals
   val RT_FIX   = 0.U(2.W)

@@ -16,7 +16,7 @@ import freechips.rocketchip.rocket.CustomInstructions._
 import freechips.rocketchip.rocket.RVCExpander
 import freechips.rocketchip.rocket.ALU._
 import freechips.rocketchip.rocket.{CSR, Causes, DecodeLogic}
-import freechips.rocketchip.util.{uintToBitPat,UIntIsOneOf}
+import freechips.rocketchip.util._
 
 import boom.v4.common._
 import boom.v4.util._
@@ -275,6 +275,53 @@ object DecodeTables
     FSQRT_S            -> List(Y, Y, fc2oh(FC_FDV) , RT_FLT, RT_FLT, RT_X  , N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_X  , FN_X   ,X,X,Y,N,X, X,X,S,S,X,X,X, X,N,Y,Y),
     FSQRT_D            -> List(Y, Y, fc2oh(FC_FDV) , RT_FLT, RT_FLT, RT_X  , N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_X  , FN_X   ,X,X,Y,N,X, X,X,D,D,X,X,X, X,N,Y,Y),
   )
+  def B_table: Seq[(BitPat, List[BitPat])] = Seq(
+    SH1ADD             -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_F3,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ADD , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    SH2ADD             -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_F3,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ADD , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    SH3ADD             -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_F3,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ADD , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    SH1ADD_UW          -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_F3,N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_ADD , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    SH2ADD_UW          -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_F3,N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_ADD , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    SH3ADD_UW          -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_F3,N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_ADD , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    ADD_UW             -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_F3,N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_ADD , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    SLLI_UW            -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_SL  , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+
+    ANDN               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ANDN, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    ORN                -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ORN , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    XNOR               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_XNOR, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    MAX                -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_MAX , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    MAXU               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_MAXU, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    MIN                -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_MIN , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    MINU               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_MINU, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    ROL                -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ROL , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    ROR                -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ROR , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    RORI               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ROR , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+
+    CLZ                -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR,FN_UNARY, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    CTZ                -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR,FN_UNARY, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    CPOP               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR,FN_UNARY, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    ORC_B              -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR,FN_UNARY, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    SEXT_B             -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR,FN_UNARY, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    SEXT_H             -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR,FN_UNARY, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    ZEXT_H             -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR,FN_UNARY, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    REV8               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR,FN_UNARY, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+
+    ROLW               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_ROL , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    RORW               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_ROR , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    RORIW              -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_32 , FN_ROR , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+
+    CLZW               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_32 ,FN_UNARY, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    CTZW               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_32 ,FN_UNARY, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    CPOPW              -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_32 ,FN_UNARY, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+
+    BCLR               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ANDN, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    BCLRI              -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_ANDN, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    BINV               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_XOR , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    BINVI              -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_XOR , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    BSET               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_OR  , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    BSETI              -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_OR  , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    BEXT               -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_FIX, N, IS_N ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_BEXT, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+    BEXTI              -> List(Y, N, fc2oh(FC_ALU) , RT_FIX, RT_FIX, RT_X  , N, IS_I ,N, N, N, M_X     , N, N, CSR.N, DW_XPR, FN_BEXT, X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
+  )
   def RoCC_table: Seq[(BitPat, List[BitPat])] = Seq(
   // Note: We use fc2oh(FC_CSR) since CSR instructions cannot co-execute with RoCC instructions
     CUSTOM0            -> List(Y, N, fc2oh(FC_CSR) , RT_X  , RT_X  , RT_X  , N, IS_N, N, N, N, M_X     , N, N, CSR.N, DW_X  , FN_X   , X,X,X,X,X, X,X,X,X,X,X,X, X,X,X,X),
@@ -386,6 +433,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     DecodeTables.F_table ++
     DecodeTables.FDivSqrt_table ++
     DecodeTables.X64_table ++
+    DecodeTables.B_table ++
     (if (usingRoCC) DecodeTables.RoCC_table else Nil)
   )
 
@@ -491,9 +539,19 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   // repackage the immediate, and then pass the fewest number of bits around
   val di24_20 = Mux(cs.imm_sel === IS_B || cs.imm_sel === IS_S, inst(11,7), inst(24,20))
   val imm_packed = Cat(inst(31,25), di24_20, inst(19,12))
+  val imm = ImmGen(imm_packed, cs.imm_sel)
+  val imm_hi = imm >> (immPregSz-1)
+  val imm_lo = imm(immPregSz-1, 0)
+  val short_imm = imm_hi === 0.U || ~imm_hi === 0.U || cs.imm_sel === IS_F3
 
+  uop.imm_rename := cs.imm_sel =/= IS_N && cs.imm_sel =/= IS_F3
   uop.imm_packed := imm_packed
   uop.imm_sel    := cs.imm_sel
+  when (short_imm) {
+    uop.imm_rename := false.B
+    uop.imm_sel := IS_SH
+    uop.pimm := Mux(cs.imm_sel === IS_F3, inst(14,12), imm_lo)
+  }
 
   uop.fp_rm   := inst(14,12)
   uop.fp_typ  := inst(21,20)
@@ -516,6 +574,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     uop.op1_sel := OP1_ZERO
   } .elsewhen (inst === JAL || inst === JALR || inst === AUIPC) {
     uop.op1_sel := OP1_PC
+  } .elsewhen (Seq(SH1ADD, SH2ADD, SH3ADD, SH1ADD_UW, SH2ADD_UW, SH3ADD_UW, ADD_UW, SLLI_UW).map(_ === inst).orR) {
+    uop.op1_sel := OP1_RS1SHL
   }
 
   uop.op2_sel := OP2_RS2
@@ -526,6 +586,8 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     uop.op2_sel := OP2_IMMC
   } .elsewhen (inst === JAL || inst === JALR) {
     uop.op2_sel := OP2_NEXT
+  } .elsewhen (Seq(BCLR, BCLRI, BINV, BINVI, BSET, BSETI).map(_ === inst).orR) {
+    uop.op2_sel := Mux(uop.lrs2_rtype === RT_FIX, OP2_RS2OH, OP2_IMMOH)
   } .elsewhen (cs.imm_sel === IS_U || cs.imm_sel === IS_I || cs.imm_sel === IS_S) {
     uop.op2_sel := OP2_IMM
   }
