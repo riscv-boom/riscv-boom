@@ -49,7 +49,7 @@ class FDivSqrtUnit2(implicit p: Parameters)
   val fpiu = Module(new tile.FPToInt)
   fpiu.io.in.valid := io.req.valid
   fpiu.io.in.bits.viewAsSupertype(new tile.FPUCtrlSigs)  := io.req.bits.uop.fp_ctrl
-  fpiu.io.in.bits.rm := Mux(io.req.bits.uop.fp_rm === 7.U, io.fcsr_rm, io.req.bits.uop.fp_rm)
+  fpiu.io.in.bits.rm := io.req.bits.uop.fp_rm
   fpiu.io.in.bits.in1 := unbox(io.req.bits.rs1_data, io.req.bits.uop.fp_ctrl.typeTagIn, None)
   fpiu.io.in.bits.in2 := unbox(io.req.bits.rs2_data, io.req.bits.uop.fp_ctrl.typeTagIn, None)
   fpiu.io.in.bits.in3 := DontCare
@@ -66,13 +66,13 @@ class FDivSqrtUnit2(implicit p: Parameters)
   for (t <- floatTypes) {
     val tag = r_sigs.typeTagOut
     val divSqrt = Module(new hardfloat.DivSqrtRecFN_small(t.exp, t.sig, 0))
-    divSqrt.io.inValid := r_req.valid && (tag === typeTag(t).U) && (r_sigs.div || r_sigs.sqrt) && !divSqrt_inFlight
+    divSqrt.io.inValid := r_req.valid && (tag === typeTag(t).U) && (r_sigs.div || r_sigs.sqrt) && !divSqrt_inFlight && !r_out_valid
     divSqrt.io.sqrtOp := r_sigs.sqrt
     divSqrt.io.a := maxType.unsafeConvert(fpiu.io.out.bits.in.in1, t)
     divSqrt.io.b := maxType.unsafeConvert(fpiu.io.out.bits.in.in2, t)
     divSqrt.io.roundingMode := fpiu.io.out.bits.in.rm
     divSqrt.io.detectTininess := hardfloat.consts.tininess_afterRounding
-    when (!divSqrt.io.inReady) { divSqrt_inFlight := true.B }
+    when (!divSqrt.io.inReady || divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt) { divSqrt_inFlight := true.B }
     when (divSqrt.io.outValid_div || divSqrt.io.outValid_sqrt) {
       r_out_valid := r_req.valid && !kill
       r_out_flags := divSqrt.io.exceptionFlags

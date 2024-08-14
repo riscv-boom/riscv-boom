@@ -43,7 +43,7 @@ class FPU(implicit p: Parameters) extends BoomModule with tile.HasFPUParameters
   val io_req = io.req.bits
 
   val fp_ctrl = io.req.bits.uop.fp_ctrl
-  val fp_rm = Mux(io_req.uop.fp_rm === 7.U, io_req.fcsr_rm, io_req.uop.fp_rm)
+  val fp_rm = io_req.uop.fp_rm
 
   def fuInput(minT: Option[tile.FType]): tile.FPInput = {
     val req = Wire(new tile.FPInput)

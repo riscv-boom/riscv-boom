@@ -641,8 +641,6 @@ class FPExeUnit(val hasFDiv: Boolean = false, val hasFpiu: Boolean = false)(impl
     assert(!(fdivsqrt.io.req.valid && !fdivsqrt.io.req.ready))
     fdivsqrt.io.req.valid := exe_uop.valid && exe_uop.bits.fu_code(FC_FDV)
     fdivsqrt.io.req.bits := exe_fp_req
-    fdivsqrt.io.req.bits.uop.fp_rm  := exe_uop.bits.prs2(4,2)
-    fdivsqrt.io.req.bits.uop.fp_typ := exe_uop.bits.prs2(1,0)
     fdivsqrt.io.brupdate := io_brupdate
     fdivsqrt.io.kill     := io_kill
     fdivsqrt.io.fcsr_rm  := io_fcsr_rm

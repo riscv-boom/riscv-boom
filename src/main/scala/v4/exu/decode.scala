@@ -553,7 +553,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
     uop.pimm := Mux(cs.imm_sel === IS_F3, inst(14,12), imm_lo)
   }
 
-  uop.fp_rm   := inst(14,12)
+  uop.fp_rm   := Mux(inst(14,12) === 7.U, io.fcsr_rm, inst(14,12))
   uop.fp_typ  := inst(21,20)
 
   //-------------------------------------------------------------
