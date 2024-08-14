@@ -13,7 +13,7 @@ The current version of the BOOM microarchitecture ([SonicBOOM, or BOOMv3](https:
 
 Feature | BOOM
 --- | ---
-ISA | RISC-V (RV64GC)
+ISA | RISC-V (RV64GCB)
 Synthesizable |√
 FPGA |√
 Parameterized |√
