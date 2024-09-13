@@ -7,3 +7,6 @@ lib
 *~
 .nfs*
 .#*
+/.bloop/
+/.metals/
+/out/
