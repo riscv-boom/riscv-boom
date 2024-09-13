@@ -11,7 +11,7 @@ import mill.bsp._
 
 object boom extends ScalaModule { m =>
   override def millSourcePath = os.pwd
-  override def scalaVersion = "2.13.10"
+  override def scalaVersion = "2.13.14"
   override def scalacOptions = Seq(
     "-language:reflectiveCalls",
     "-deprecation",
@@ -19,13 +19,18 @@ object boom extends ScalaModule { m =>
     "-Xcheckinit",
     "-P:chiselplugin:genBundleElements"
   )
+  val chiselVersion = "6.5.0"
+  val rocketVersion = "1.6-snapshot"
   override def ivyDeps = Agg(
-    ivy"edu.berkeley.cs::chisel3:3.5.6",
-    ivy"edu.berkeley.cs::rocketchip:1.6.0",
-	ivy"ch.epfl.scala::bloop-config:1.5.5"
-
+    ivy"org.chipsalliance::chisel:$chiselVersion",
+    ivy"org.chipsalliance::cde:$rocketVersion",
+    ivy"org.chipsalliance::macros:$rocketVersion",
+    ivy"org.chipsalliance::diplomacy-$chiselVersion:$rocketVersion",
+    ivy"org.chipsalliance::hardfloat-$chiselVersion:$rocketVersion",
+    ivy"org.chipsalliance::rocketchip-$chiselVersion:$rocketVersion",
+	ivy"ch.epfl.scala::bloop-config:2.0.3"
   )
   override def scalacPluginIvyDeps = Agg(
-    ivy"edu.berkeley.cs:::chisel3-plugin:3.5.6",
+    ivy"org.chipsalliance:::chisel-plugin:$chiselVersion",
   )
 }

@@ -1,18 +1,24 @@
 import sbt.project
 
-ThisBuild / scalaVersion     := "2.13.10"
+ThisBuild / scalaVersion     := "2.13.14"
 ThisBuild / version          := "3.0"
 ThisBuild / organization     := "ucb-bar"
 
-val chiselVersion = "3.6.0"
+val chiselVersion = "6.5.0"
+
+val rocketVersion = "1.6-snapshot"
 
 lazy val root = (project in file("."))
   .settings(
     name := "boom",
     libraryDependencies ++= Seq(
-      "edu.berkeley.cs" %% "chisel3" % chiselVersion,
-      "edu.berkeley.cs" %% "rocketchip" % "1.6.0",
-	  "ch.epfl.scala" %% "bloop-config" % "1.5.5"
+      "org.chipsalliance" %% "chisel" % chiselVersion,
+      "org.chipsalliance" %% "cde" % rocketVersion,
+      "org.chipsalliance" %% s"diplomacy-$chiselVersion" % rocketVersion,
+      "org.chipsalliance" %% s"hardfloat-$chiselVersion" % rocketVersion,
+      "org.chipsalliance" %% "macros" % rocketVersion,
+      "org.chipsalliance" %% s"rocketchip-$chiselVersion" % rocketVersion,
+	  "ch.epfl.scala" %% "bloop-config" % "2.0.3"
     ),
     scalacOptions ++= Seq(
       "-language:reflectiveCalls",
@@ -21,11 +27,10 @@ lazy val root = (project in file("."))
       "-Xcheckinit",
       "-P:chiselplugin:genBundleElements"
     ),
-    addCompilerPlugin("edu.berkeley.cs" % "chisel3-plugin" % chiselVersion cross CrossVersion.full),
+    addCompilerPlugin("org.chipsalliance" % "chisel-plugin" % chiselVersion cross CrossVersion.full),
 	resolvers ++= Seq(
     Resolver.sonatypeRepo("snapshots"),
     Resolver.sonatypeRepo("releases"),
     Resolver.mavenLocal
 )
-
 )
