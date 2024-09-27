@@ -63,7 +63,7 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
   val r_address = Cat(req.tag, req.idx) << blockOffBits
   val id = cfg.nMSHRs
   val probeResponse = edge.ProbeAck(
-                          fromSource = id.U,
+                          fromSource = req.source,
                           toAddress = r_address,
                           lgSize = lgCacheBlockBytes.U,
                           reportPermissions = req.param,
