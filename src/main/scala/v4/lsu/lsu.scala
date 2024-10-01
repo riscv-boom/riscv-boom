@@ -1240,8 +1240,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
           when ((l_executed || l_succeeded) &&
                 !s1_executing_loads(i) && // If the load is proceeding in parallel we don't need to kill it
                 l_observed) {        // Its only a ordering failure if the cache line was observed between the younger load and us
-            ldq_order_fail(i) := true.B
-            failed_load := true.B
+            //ldq_order_fail(i) := true.B
+            // failed_load := true.B
+
+	    // this case is no longer possible where an older search gets replayed and found that a younger search has already been released. Note that this is stronger than rvwmo.
             assert(false.B)
           }
         } .elsewhen (lcam_ldq_idx(w) =/= i.U) {
