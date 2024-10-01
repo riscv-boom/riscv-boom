@@ -1236,11 +1236,12 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                 l_observed) {        // Its only a ordering failure if the cache line was observed between the younger load and us
             ldq_order_fail(i) := true.B
             failed_load := true.B
+            assert(false.B)
           }
         } .elsewhen (lcam_ldq_idx(w) =/= i.U) {
           // The load is older, and it wasn't executed
           // we need to kill ourselves, and prevent forwarding
-          when (!(l_executed || l_succeeded)) {
+          when (!(l_executed && l_succeeded)) {
             s1_set_execute(lcam_ldq_idx(w))    := false.B
             when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
               io.dmem.s1_kill(w)               := true.B
