@@ -1281,7 +1281,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
           io.dmem.s1_kill(w) := true.B
         }
         kill_forward(w) := true.B
-	    }
+      }
 
 
 
