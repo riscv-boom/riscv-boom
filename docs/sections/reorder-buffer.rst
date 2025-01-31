@@ -4,8 +4,8 @@ The Reorder Buffer (ROB) and the Dispatch Stage
 ===============================================
 
 The **Reorder Buffer (ROB)** tracks the state of all inflight instructions in the pipeline.
-The role of the ROB is to provide the illusion to the programmer that
-his program executes in-order. After instructions are *decoded* and
+The role of the ROB is to provide the illusion to the programmers that
+their program executes in-order. After instructions are *decoded* and
 *renamed*, they are then *dispatched* to the ROB and the **Issue Queue** and
 marked as *busy*. As instructions finish execution, they inform the ROB
 and are marked *not busy*. Once the "head" of the ROB is no longer busy,
