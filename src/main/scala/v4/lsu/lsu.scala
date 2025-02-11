@@ -215,45 +215,37 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 {
   val io = IO(new LSUIO)
 
-// /**
-//   * Object to determine whether queue
-//   * index i0 is older than index i1.
-//  */
-// object IsOlder
-// {
-//   def apply(i0: UInt, i1: UInt, head: UInt) = ((i0 < i1) ^ (i0 < head) ^ (i1 < head))
-// }
   def IsOlderLSU(i0: UInt, i1: UInt, head: UInt): Bool = {
     idx_age_ot(i0, i1) ^ idx_age_ot(i0, head) ^ idx_age_ot(i1, head)
   }
-  def get_real_lsq_idx(idx: UInt): UInt = {
+  def GetRealLSQIdx(idx: UInt): UInt = {
     idx(idx.getWidth-2, 0)
   }  
 
 
-  def get_lsq_idx_carry(idx: UInt): UInt = {
+  def GetLSQIdxCarry(idx: UInt): UInt = {
     idx(idx.getWidth-1)
   }
   /**
     when age1 is younger (later) than age2, return true,
     when age1 is older (earlier than age2, return false
 
-    idx_age_younger_than(entry1, entry2) = entry1.dep_mask(entry2)
+    IdxAgeYoungerThan(entry1, entry2) = entry1.dep_mask(entry2)
     first entry must be real idx
     second entry must be idx pointer
     */
-  object idx_age_younger_than{
+  object IdxAgeYoungerThan{
     def apply(age1: UInt, age2: UInt): Bool = {
       assert(age1.widthKnown)
       assert(age2.widthKnown)
       val age1_width : Int = age1.getWidth
       val age2_width : Int = age2.getWidth
       assert(age1_width == age2_width)
-      val age1_overflow : UInt = get_lsq_idx_carry(age1)
-      val age2_overflow : UInt = get_lsq_idx_carry(age2)
+      val age1_overflow : UInt = GetLSQIdxCarry(age1)
+      val age2_overflow : UInt = GetLSQIdxCarry(age2)
 
-      val age1_age      : UInt = get_real_lsq_idx(age1)
-      val age2_age      : UInt = get_real_lsq_idx(age2)
+      val age1_age      : UInt = GetRealLSQIdx(age1)
+      val age2_age      : UInt = GetRealLSQIdx(age2)
 
       Mux1H(Seq(
         (age1_overflow === age2_overflow) -> (age1_age > age2_age),
@@ -262,32 +254,32 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
   }
 
-  object idx_age_eq{
+  object IdxAgeEq{
     def apply(age1: UInt, age2: UInt): Bool = {
       assert(age1.getWidth == age2.getWidth)
       val width = age1.getWidth
-      val age1_overflow : UInt = get_lsq_idx_carry(age1)
-      val age2_overflow : UInt = get_lsq_idx_carry(age2)
-      val age1_age      : UInt = get_real_lsq_idx(age1)
-      val age2_age      : UInt = get_real_lsq_idx(age2)
+      val age1_overflow : UInt = GetLSQIdxCarry(age1)
+      val age2_overflow : UInt = GetLSQIdxCarry(age2)
+      val age1_age      : UInt = GetRealLSQIdx(age1)
+      val age2_age      : UInt = GetRealLSQIdx(age2)
       age1_age === age2_age
     }
   }
 
-  def idx_age_yt(age1: UInt, age2: UInt) : Bool = {
-    idx_age_younger_than(age1, age2)
+  def IdxAgeYt(age1: UInt, age2: UInt) : Bool = {
+    IdxAgeYoungerThan(age1, age2)
   }
 
-  def idx_age_ye(age1: UInt, age2: UInt) : Bool = {
-    idx_age_younger_than(age1, age2) | idx_age_eq(age1, age2)
+  def IdxAgeYe(age1: UInt, age2: UInt) : Bool = {
+    IdxAgeYoungerThan(age1, age2) | IdxAgeEq(age1, age2)
   }
 
-  def idx_age_ot(age1: UInt, age2: UInt) : Bool = {
-    idx_age_younger_than(age2, age1)
+  def IdxAgeOt(age1: UInt, age2: UInt) : Bool = {
+    IdxAgeYoungerThan(age2, age1)
   }
 
-  def idx_age_oe(age1: UInt, age2: UInt) : Bool = {
-    idx_age_ot(age1, age2) | idx_age_eq(age1, age2)
+  def IdxAgeOe(age1: UInt, age2: UInt) : Bool = {
+    IdxAgeOt(age1, age2) | IdxAgeEq(age1, age2)
   }
 
   def SafeRegNext[T <: Data](x: T): T = {
@@ -413,15 +405,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   //-------------------------------------------------------------
   //-------------------------------------------------------------
 
-  // This is a newer store than existing loads, so clear the bit in all the store dependency masks
-  // for (i <- 0 until numLdqEntries)
-  // {
-  //   when (clear_store)
-  //   {
-  //     ldq_st_dep_mask(i) := ldq_st_dep_mask(i) & ~(1.U << stq_head)
-  //   }
-  // }
-
   // Decode stage
   var ld_enq_idx = ldq_tail
   var st_enq_idx = stq_tail
@@ -439,9 +422,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                               live_store_mask)
 
 
-  var ldq_tail_oh = UIntToOH(get_real_lsq_idx(ldq_tail))(numLdqEntries-1,0)
+  var ldq_tail_oh = UIntToOH(GetRealLSQIdx(ldq_tail))(numLdqEntries-1,0)
   val ldq_valids  = ldq_valid.asUInt | dis_ldq_oh.asUInt
-  var stq_tail_oh = UIntToOH(get_real_lsq_idx(stq_tail))(numStqEntries-1,0)
+  var stq_tail_oh = UIntToOH(GetRealLSQIdx(stq_tail))(numStqEntries-1,0)
   val stq_valids  = stq_valid.asUInt | dis_stq_oh.asUInt
 
   val stq_nonempty = stq_valid.reduce(_||_)
@@ -603,13 +586,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   // Enqueue into the retry queue
   val ldq_enq_retry_idx = Reg(UInt((1+ldqAddrSz).W))
   ldq_enq_retry_idx := LSUAgePriorityEncoder((0 until numLdqEntries).map(i => {
-    ldq_addr(i).valid && ldq_addr_is_virtual(i) && (i.U =/= get_real_lsq_idx(ldq_enq_retry_idx))
+    ldq_addr(i).valid && ldq_addr_is_virtual(i) && (i.U =/= GetRealLSQIdx(ldq_enq_retry_idx))
   }), ldq_head)
   val ldq_enq_retry_e = WireInit(ldq_read(ldq_enq_retry_idx))
 
   val stq_enq_retry_idx = Reg(UInt((1+stqAddrSz).W))
   stq_enq_retry_idx := LSUAgePriorityEncoder((0 until numStqEntries).map(i => {
-    stq_addr(i).valid && stq_addr_is_virtual(i) && (i.U =/= get_real_lsq_idx(stq_enq_retry_idx))
+    stq_addr(i).valid && stq_addr_is_virtual(i) && (i.U =/= GetRealLSQIdx(stq_enq_retry_idx))
   }), stq_commit_head)
   val stq_enq_retry_e   = WireInit(stq_read(stq_enq_retry_idx))
 
@@ -726,7 +709,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                               (w == lsuWidth-1).B                                      &&
                               (!ldq_wakeup_e.bits.addr_is_uncacheable || (io.core.commit_load_at_rob_head &&
                                                                           ldq_head === ldq_wakeup_idx &&
-                              idx_age_ye(stq_head, ldq_wakeup_e.bits.next_stq_idx)))))
+                              IdxAgeYe(stq_head, ldq_wakeup_e.bits.next_stq_idx)))))
 
 
   // Can we fire an incoming hellacache request
@@ -1246,13 +1229,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                         Mux(fired_store_retry(w), SafeRegNext(stq_retry_idx), 0.U((1+stqAddrSz).W))))
 
   // is_younger_mask(i) == 1 means i is younger than ldq_idx (ldq_idx is older than i)
-  //  val lcam_younger_load_mask = widthMap(w => IsYoungerMask(get_real_lsq_idx(lcam_ldq_idx(w)), get_real_lsq_idx(ldq_head), numLdqEntries))
+  //  val lcam_younger_load_mask = widthMap(w => IsYoungerMask(GetRealLSQIdx(lcam_ldq_idx(w)), GetRealLSQIdx(ldq_head), numLdqEntries))
   val lcam_younger_load_mask = Wire(Vec(lsuWidth, Vec(numLdqEntries, Bool())))
 
   for (w <- 0 until lsuWidth) {
     for (i <- 0 until numLdqEntries) {
       
-      lcam_younger_load_mask(w)(i) := EntryValidFromAge(lcam_ldq_idx(w), ldq_tail, i.U((ldqAddrSz+1).W)) & (i.U =/= get_real_lsq_idx(lcam_ldq_idx(w)))
+      lcam_younger_load_mask(w)(i) := EntryValidFromAge(lcam_ldq_idx(w), ldq_tail, i.U((ldqAddrSz+1).W)) & (i.U =/= GetRealLSQIdx(lcam_ldq_idx(w)))
     }      
   }
 
@@ -1322,7 +1305,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                    !l_addr_is_virtual                                  &&
 //                 search is older than the load
 // the lcam entry depends on the stq_entry -> stq entry pointed to by lcam_stq_idx(w) is older
-                   idx_age_ot(lcam_stq_idx(w), l_next_stq_idx)         &&
+                   IdxAgeOt(lcam_stq_idx(w), l_next_stq_idx)         &&
                    dword_addr_matches(w)                               &&
                    mask_overlap(w)) {
 
@@ -1330,7 +1313,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
         // the stq entry forwarded out of is even older than this store
         val forwarded_is_older = IsOlderLSU(l_forward_stq_idx, lcam_stq_idx(w), l_uop.stq_idx)
-//        val forwarded_is_older = idx_age_ot(l_forward_stq_idx, lcam_stq_idx(w))
+//        val forwarded_is_older = IdxAgeOt(l_forward_stq_idx, lcam_stq_idx(w))
         // We are older than this load, which overlapped us.
         when (!l_forward_std_val || // If the load wasn't forwarded, it definitely failed
           ((l_forward_stq_idx =/= lcam_stq_idx(w)) && forwarded_is_older)) { // If the load forwarded from us, we might be ok
@@ -1354,10 +1337,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
             ldq_order_fail(i) := true.B
             failed_load := true.B
           }
-        } .elsewhen (get_real_lsq_idx(lcam_ldq_idx(w)) =/= i.U) {
+        } .elsewhen (GetRealLSQIdx(lcam_ldq_idx(w)) =/= i.U) {
           // The load is older, and it wasn't executed
           // we need to kill ourselves, and prevent forwarding
-          // TW: this is the cause of the bug
           when (!(l_executed || l_succeeded)) {
             s1_set_execute(lcam_ldq_idx(w))    := false.B
             when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
@@ -1383,7 +1365,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
             nack_dword_addr_matches            &&
             nack_mask_overlap                  &&
             IsOlderLSU(io.dmem.nack(wi).bits.uop.ldq_idx, lcam_ldq_idx(w), ldq_head)
-//            idx_age_ot(io.dmem.nack(wi).bits.uop.ldq_idx, lcam_ldq_idx(w))
+//            IdxAgeOt(io.dmem.nack(wi).bits.uop.ldq_idx, lcam_ldq_idx(w))
             ) {
         s1_set_execute(lcam_ldq_idx(w)) := false.B
         when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
@@ -1402,7 +1384,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
             forward_mask_overlap              &&
             wb_ldst_forward_e(wi).observed    &&
             IsOlderLSU(lcam_ldq_idx(w), wb_ldst_forward_ldq_idx(wi), ldq_head)
-//            idx_age_ot(lcam_ldq_idx(w), wb_ldst_forward_ldq_idx(wi))
+//            IdxAgeOt(lcam_ldq_idx(w), wb_ldst_forward_ldq_idx(wi))
             ) {
         ldq_order_fail(wb_ldst_forward_ldq_idx(wi)) := true.B
         failed_load := true.B
@@ -1410,12 +1392,12 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
       // A older store might find a younger load which is forwarding from the wrong place
       val forwarded_is_older = IsOlderLSU(wb_ldst_forward_stq_idx(wi), lcam_stq_idx(w), wb_ldst_forward_e(wi).uop.stq_idx)
-//      val forwarded_is_older = idx_age_ot(wb_ldst_forward_stq_idx(wi), lcam_stq_idx(w)) 
+//      val forwarded_is_older = IdxAgeOt(wb_ldst_forward_stq_idx(wi), lcam_stq_idx(w)) 
       when (do_st_search(w)                                    &&
             wb_ldst_forward_valid(wi)                          &&
             forward_dword_addr_matches                         &&
             forward_mask_overlap                               &&
-            idx_age_ot(lcam_stq_idx(w), wb_ldst_forward_e(wi).next_stq_idx) &&
+            IdxAgeOt(lcam_stq_idx(w), wb_ldst_forward_e(wi).next_stq_idx) &&
             forwarded_is_older) {
         ldq_order_fail(wb_ldst_forward_ldq_idx(wi)) := true.B
         failed_load := true.B
@@ -1456,7 +1438,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       // for the load address depend on this entry in laq, the entry must be younger than the head of the store queue (as the stq head always points to an invalid entry), but older than the next stq entry (means not younger) (in the perspective of the current load )at the point of issue
       assert(reset.asBool | io.core.brupdate.b1.mispredict_mask.orR | io.core.brupdate.b2.mispredict | s_valid === EntryValidFromAge(stq_head, stq_tail, i.U((stqAddrSz+1).W)), s"Entry $i has failed")
 
-      //      age_matches(w)(i)     := idx_age_younger_than(i.U((stqAddrSz+1).W), stq_head) && !idx_age_younger_than(i.U((stqAddrSz+1).W), lcam_next_stq_idx(w))
+      //      age_matches(w)(i)     := IdxAgeYoungerThan(i.U((stqAddrSz+1).W), stq_head) && !IdxAgeYoungerThan(i.U((stqAddrSz+1).W), lcam_next_stq_idx(w))
       age_matches(w)(i)     := EntryValidFromAge(stq_head,lcam_next_stq_idx(w),i.U((stqAddrSz+1).W))
     }
   }
@@ -1470,13 +1452,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       assert(head.getWidth == tail.getWidth)
       assert(head.getWidth == ptr.getWidth)
 
-      val real_head_idx = get_real_lsq_idx(head)
-      val real_tail_idx = get_real_lsq_idx(tail)
+      val real_head_idx = GetRealLSQIdx(head)
+      val real_tail_idx = GetRealLSQIdx(tail)
       // the pointer doesn't have the extra carry bit
-      val real_ptr_idx = get_real_lsq_idx(ptr)
+      val real_ptr_idx = GetRealLSQIdx(ptr)
 
-      val head_carry = get_lsq_idx_carry(head)
-      val tail_carry = get_lsq_idx_carry(tail)
+      val head_carry = GetLSQIdxCarry(head)
+      val tail_carry = GetLSQIdxCarry(tail)
 
       Mux(head_carry === tail_carry,
         (real_ptr_idx >= real_head_idx) & (real_ptr_idx < real_tail_idx),
@@ -1516,8 +1498,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   // Find the youngest store which the load is dependent on
   for (w <- 0 until lsuWidth) {
-    val (youngest_matching, match_found) = ForwardingAgeLogic(numStqEntries, ldst_addr_matches(w), get_real_lsq_idx(lcam_uop(w).stq_idx))
-    val (youngest_forwarder, forwarder_found) = ForwardingAgeLogic(numStqEntries, ldst_forward_matches(w), get_real_lsq_idx(lcam_uop(w).stq_idx))
+    val (youngest_matching, match_found) = ForwardingAgeLogic(numStqEntries, ldst_addr_matches(w), GetRealLSQIdx(lcam_uop(w).stq_idx))
+    val (youngest_forwarder, forwarder_found) = ForwardingAgeLogic(numStqEntries, ldst_forward_matches(w), GetRealLSQIdx(lcam_uop(w).stq_idx))
 
     wb_ldst_forward_stq_idx(w) := youngest_forwarder
     // Forward if st-ld forwarding is possible from the writemask and loadmask
@@ -1672,7 +1654,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       } .otherwise {
         assert(io.dmem.nack(w).bits.uop.uses_stq)
         when (IsOlderLSU(io.dmem.nack(w).bits.uop.stq_idx, stq_execute_head, stq_head)) {
-//        when (idx_age_ot(io.dmem.nack(w).bits.uop.stq_idx, stq_execute_head)) {
+//        when (IdxAgeOt(io.dmem.nack(w).bits.uop.stq_idx, stq_execute_head)) {
           stq_execute_queue_flush := true.B
           stq_execute_head := io.dmem.nack(w).bits.uop.stq_idx
         }
