@@ -215,79 +215,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 {
   val io = IO(new LSUIO)
 
-  def IsOlderLSU(i0: UInt, i1: UInt, head: UInt): Bool = {
-    idx_age_ot(i0, i1) ^ idx_age_ot(i0, head) ^ idx_age_ot(i1, head)
-  }
-  def GetRealLSQIdx(idx: UInt): UInt = {
-    idx(idx.getWidth-2, 0)
-  }  
-
-
-  def GetLSQIdxCarry(idx: UInt): UInt = {
-    idx(idx.getWidth-1)
-  }
-  /**
-    when age1 is younger (later) than age2, return true,
-    when age1 is older (earlier than age2, return false
-
-    IdxAgeYoungerThan(entry1, entry2) = entry1.dep_mask(entry2)
-    first entry must be real idx
-    second entry must be idx pointer
-    */
-  object IdxAgeYoungerThan{
-    def apply(age1: UInt, age2: UInt): Bool = {
-      assert(age1.widthKnown)
-      assert(age2.widthKnown)
-      val age1_width : Int = age1.getWidth
-      val age2_width : Int = age2.getWidth
-      assert(age1_width == age2_width)
-      val age1_overflow : UInt = GetLSQIdxCarry(age1)
-      val age2_overflow : UInt = GetLSQIdxCarry(age2)
-
-      val age1_age      : UInt = GetRealLSQIdx(age1)
-      val age2_age      : UInt = GetRealLSQIdx(age2)
-
-      Mux1H(Seq(
-        (age1_overflow === age2_overflow) -> (age1_age > age2_age),
-        (age1_overflow =/= age2_overflow) -> (age1_age < age2_age)
-      ))
-    }
-  }
-
-  object IdxAgeEq{
-    def apply(age1: UInt, age2: UInt): Bool = {
-      assert(age1.getWidth == age2.getWidth)
-      val width = age1.getWidth
-      val age1_overflow : UInt = GetLSQIdxCarry(age1)
-      val age2_overflow : UInt = GetLSQIdxCarry(age2)
-      val age1_age      : UInt = GetRealLSQIdx(age1)
-      val age2_age      : UInt = GetRealLSQIdx(age2)
-      age1_age === age2_age
-    }
-  }
-
-  def IdxAgeYt(age1: UInt, age2: UInt) : Bool = {
-    IdxAgeYoungerThan(age1, age2)
-  }
-
-  def IdxAgeYe(age1: UInt, age2: UInt) : Bool = {
-    IdxAgeYoungerThan(age1, age2) | IdxAgeEq(age1, age2)
-  }
-
-  def IdxAgeOt(age1: UInt, age2: UInt) : Bool = {
-    IdxAgeYoungerThan(age2, age1)
-  }
-
-  def IdxAgeOe(age1: UInt, age2: UInt) : Bool = {
-    IdxAgeOt(age1, age2) | IdxAgeEq(age1, age2)
-  }
-
-  def SafeRegNext[T <: Data](x: T): T = {
-    val reg = Reg(chiselTypeOf(x))
-    reg := x
-    reg
-  }
-
 
   // invariant: saq cannot dequeue when there are older loads uncommitted
   //val ldq                 = Reg(Vec(numLdqEntries, Valid(new LDQEntry)))
@@ -468,7 +395,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       val ldq_idx = dis_uops(w).bits.ldq_idx
       ldq_valid          (ldq_idx)       := !IsKilledByBranch(io.core.brupdate, io.core.exception, dis_uops(w).bits)
       ldq_uop            (ldq_idx)       := UpdateBrMask(io.core.brupdate, dis_uops(w).bits)
-//      ldq_next_stq_idx   (ldq_idx)       := WrapInc(st_enq_idx, 1+stqAddrSz)
       ldq_addr           (ldq_idx).valid := false.B
       ldq_executed       (ldq_idx)       := false.B
       ldq_will_succeed   (ldq_idx)       := false.B
@@ -480,7 +406,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       val stq_idx = dis_uops(w).bits.stq_idx
       stq_valid          (stq_idx)        := !IsKilledByBranch(io.core.brupdate, io.core.exception, dis_uops(w).bits)
       stq_uop            (stq_idx)        := UpdateBrMask(io.core.brupdate, dis_uops(w).bits)
-//      stq_next_ldq_idx   (stq_idx)        := WrapInc
       stq_addr           (stq_idx).valid  := false.B
       stq_data           (stq_idx).valid  := false.B
       stq_committed      (stq_idx)        := false.B
@@ -509,14 +434,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   ldq_tail := ld_enq_idx
   stq_tail := st_enq_idx
-
-  // If we got a mispredict, the tail will be misaligned for 1 extra cycle
-//  assert (io.core.brupdate.b2.mispredict ||
-//          stq_valid(stq_execute_head) ||
-//          dis_stq_oh(stq_execute_head) ||
-//          stq_head === stq_execute_head ||
-//          stq_tail === stq_execute_head,
-//            "stq_execute_head got off track.")
 
   io.dmem.force_order   := io.core.fence_dmem
   io.core.fencei_rdy    := !stq_nonempty && io.dmem.ordered
@@ -569,7 +486,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val stq_tail_plus   = WrapAdd(stq_tail, (2*coreWidth).U, 2*numStqEntries)
 
   val stq_almost_full = SafeRegNext(IsOlderLSU(stq_head, stq_tail_plus, stq_tail))
-//  val stq_almost_full = false.B
 
   // The store at the commit head needs the DCache to appear ordered
   // Delay firing load wakeups and retries now
@@ -714,7 +630,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                               (w == lsuWidth-1).B                                      &&
                               (!ldq_wakeup_e.bits.addr_is_uncacheable || (io.core.commit_load_at_rob_head &&
                                                                           ldq_head === ldq_wakeup_idx &&
-                              IdxAgeYe(stq_head, ldq_wakeup_e.bits.next_stq_idx)))))
+                                                                          IdxAgeYe(stq_head, ldq_wakeup_e.bits.next_stq_idx))
+                              )))
 
 
   // Can we fire an incoming hellacache request
@@ -1220,26 +1137,23 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   val lcam_mask  = widthMap(w => GenByteMask(lcam_addr(w), lcam_uop(w).mem_size))
   val lcam_next_stq_idx = widthMap(w => mem_ldq_e(w).bits.next_stq_idx)
-  // val lcam_stq_older_than_current_bitmask = widthMap(w =>
 
-  // )
   val lcam_is_release = widthMap(w => fired_release(w))
   val lcam_ldq_idx  = widthMap(w =>
                       Mux(fired_load_agen     (w) ||
                           fired_load_agen_exec(w)  , mem_incoming_uop(w).ldq_idx,
                       Mux(fired_load_wakeup  (w), SafeRegNext(ldq_wakeup_idx),
-                        Mux(fired_load_retry   (w), SafeRegNext(ldq_retry_idx), 0.U((1+ldqAddrSz).W)))))
+                      Mux(fired_load_retry   (w), SafeRegNext(ldq_retry_idx), 0.U((1+ldqAddrSz).W)))))
+  
   val lcam_stq_idx  = widthMap(w =>
                       Mux(fired_store_agen (w), mem_incoming_uop(w).stq_idx,
-                        Mux(fired_store_retry(w), SafeRegNext(stq_retry_idx), 0.U((1+stqAddrSz).W))))
+                      Mux(fired_store_retry(w), SafeRegNext(stq_retry_idx), 0.U((1+stqAddrSz).W))))
 
   // is_younger_mask(i) == 1 means i is younger than ldq_idx (ldq_idx is older than i)
-  //  val lcam_younger_load_mask = widthMap(w => IsYoungerMask(GetRealLSQIdx(lcam_ldq_idx(w)), GetRealLSQIdx(ldq_head), numLdqEntries))
   val lcam_younger_load_mask = Wire(Vec(lsuWidth, Vec(numLdqEntries, Bool())))
 
   for (w <- 0 until lsuWidth) {
     for (i <- 0 until numLdqEntries) {
-      
       lcam_younger_load_mask(w)(i) := EntryValidFromAge(lcam_ldq_idx(w), ldq_tail, i.U((ldqAddrSz+1).W)) & (i.U =/= GetRealLSQIdx(lcam_ldq_idx(w)))
     }      
   }
@@ -1349,7 +1263,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         } .elsewhen (GetRealLSQIdx(lcam_ldq_idx(w)) =/= i.U) {
           // The load is older, and it wasn't executed
           // we need to kill ourselves, and prevent forwarding
-	  // can also forward from the next cycle
+	      // can also forward from the next cycle
           when (!(l_executed && (l_succeeded || l_will_succeed))) {
             s1_set_execute(lcam_ldq_idx(w))    := false.B
             when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
@@ -1451,34 +1365,11 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       // for the load address depend on this entry in laq, the entry must be younger than the head of the store queue (as the stq head always points to an invalid entry), but older than the next stq entry (means not younger) (in the perspective of the current load )at the point of issue
       assert(reset.asBool | io.core.brupdate.b1.mispredict_mask.orR | io.core.brupdate.b2.mispredict | s_valid === EntryValidFromAge(stq_head, stq_tail, i.U((stqAddrSz+1).W)), s"Entry $i has failed")
 
-      //      age_matches(w)(i)     := IdxAgeYoungerThan(i.U((stqAddrSz+1).W), stq_head) && !IdxAgeYoungerThan(i.U((stqAddrSz+1).W), lcam_next_stq_idx(w))
       age_matches(w)(i)     := EntryValidFromAge(stq_head,lcam_next_stq_idx(w),i.U((stqAddrSz+1).W))
     }
   }
-      // assert(reset.asBool | (!(head_carry === tail_carry) || (real_head_idx <= real_tail_idx)))
-      // assert(reset.asBool | (!(head_carry =/= tail_carry) || (real_head_idx > real_tail_idx)))
 
-  object EntryValidFromAge {
-    def apply(head: UInt, tail: UInt, ptr: UInt) : Bool = {
-      assert(head.widthKnown)
-      assert(tail.widthKnown)
-      assert(head.getWidth == tail.getWidth)
-      assert(head.getWidth == ptr.getWidth)
 
-      val real_head_idx = GetRealLSQIdx(head)
-      val real_tail_idx = GetRealLSQIdx(tail)
-      // the pointer doesn't have the extra carry bit
-      val real_ptr_idx = GetRealLSQIdx(ptr)
-
-      val head_carry = GetLSQIdxCarry(head)
-      val tail_carry = GetLSQIdxCarry(tail)
-
-      Mux(head_carry === tail_carry,
-        (real_ptr_idx >= real_head_idx) & (real_ptr_idx < real_tail_idx),
-        (real_ptr_idx >= real_head_idx) | (real_ptr_idx < real_tail_idx)
-      )
-    }
-  }
   val fast_stq_valids = stq_valid.asUInt
   for (w <- 0 until lsuWidth) {
     // address matches in store queue /\ is older than the current entry /\ valid
@@ -1667,7 +1558,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       } .otherwise {
         assert(io.dmem.nack(w).bits.uop.uses_stq)
         when (IsOlderLSU(io.dmem.nack(w).bits.uop.stq_idx, stq_execute_head, stq_head)) {
-//        when (IdxAgeOt(io.dmem.nack(w).bits.uop.stq_idx, stq_execute_head)) {
           stq_execute_queue_flush := true.B
           stq_execute_head := io.dmem.nack(w).bits.uop.stq_idx
         }
@@ -2175,4 +2065,115 @@ class ForwardingAgeLogic(n: Int) extends Module()
          found_idx := (i % n).U
       }
    }
+}
+
+object GetRealLSQIdx{
+  def apply (idx: UInt): UInt = {
+    idx(idx.getWidth-2, 0)
+  }
+}
+
+object GetLSQIdxCarry{
+  def apply(idx: UInt): UInt = {
+    idx(idx.getWidth-1)
+  }
+}
+/**
+  when age1 is younger (later) than age2, return true,
+  when age1 is older (earlier than age2, return false
+
+  IdxAgeYoungerThan(entry1, entry2) = entry1.dep_mask(entry2)
+  first entry must be real idx
+  second entry must be idx pointer
+  */
+object IdxAgeYoungerThan{
+  def apply(age1: UInt, age2: UInt): Bool = {
+    assert(age1.widthKnown)
+    assert(age2.widthKnown)
+    val age1_width : Int = age1.getWidth
+    val age2_width : Int = age2.getWidth
+    assert(age1_width == age2_width)
+    val age1_overflow : UInt = GetLSQIdxCarry(age1)
+    val age2_overflow : UInt = GetLSQIdxCarry(age2)
+
+    val age1_age      : UInt = GetRealLSQIdx(age1)
+    val age2_age      : UInt = GetRealLSQIdx(age2)
+
+    Mux1H(Seq(
+      (age1_overflow === age2_overflow) -> (age1_age > age2_age),
+      (age1_overflow =/= age2_overflow) -> (age1_age < age2_age)
+    ))
+  }
+}
+
+object IdxAgeEq{
+  def apply(age1: UInt, age2: UInt): Bool = {
+    assert(age1.getWidth == age2.getWidth)
+    val width = age1.getWidth
+    val age1_overflow : UInt = GetLSQIdxCarry(age1)
+    val age2_overflow : UInt = GetLSQIdxCarry(age2)
+    val age1_age      : UInt = GetRealLSQIdx(age1)
+    val age2_age      : UInt = GetRealLSQIdx(age2)
+    age1_age === age2_age
+  }
+}
+
+object IdxAgeYt{
+  def apply(age1: UInt, age2: UInt) : Bool = {
+    IdxAgeYoungerThan(age1, age2)
+  }
+}
+
+object IdxAgeYe{
+  def apply(age1: UInt, age2: UInt) : Bool = {
+    IdxAgeYoungerThan(age1, age2) | IdxAgeEq(age1, age2)
+  }
+}
+
+object IdxAgeOt{
+  def apply(age1: UInt, age2: UInt) : Bool = {
+    IdxAgeYoungerThan(age2, age1)
+  }
+}
+
+object IdxAgeOe{
+  def apply(age1: UInt, age2: UInt) : Bool = {
+    IdxAgeOt(age1, age2) | IdxAgeEq(age1, age2)
+  }
+}
+
+object IsOlderLSU {
+  def apply(i0: UInt, i1: UInt, head: UInt): Bool = {
+    IdxAgeOt(i0, i1) ^ IdxAgeOt(i0, head) ^ IdxAgeOt(i1, head)
+  }
+}
+
+object SafeRegNext{
+  def apply[T <: Data](x: T): T = {
+    val reg = Reg(chiselTypeOf(x))
+    reg := x
+    reg
+  }
+}
+
+object EntryValidFromAge {
+  def apply(head: UInt, tail: UInt, ptr: UInt) : Bool = {
+    assert(head.widthKnown)
+    assert(tail.widthKnown)
+    assert(head.getWidth == tail.getWidth)
+    assert(head.getWidth == ptr.getWidth)
+
+    val real_head_idx = GetRealLSQIdx(head)
+    val real_tail_idx = GetRealLSQIdx(tail)
+    // the pointer doesn't have the extra carry bit
+    val real_ptr_idx = GetRealLSQIdx(ptr)
+
+    val head_carry = GetLSQIdxCarry(head)
+    val tail_carry = GetLSQIdxCarry(tail)
+
+    Mux(head_carry === tail_carry,
+      (real_ptr_idx >= real_head_idx) & (real_ptr_idx < real_tail_idx),
+      (real_ptr_idx >= real_head_idx) | (real_ptr_idx < real_tail_idx)
+    )
+  }
 }
