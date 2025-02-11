@@ -226,10 +226,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   def IsOlderLSU(i0: UInt, i1: UInt, head: UInt): Bool = {
     idx_age_ot(i0, i1) ^ idx_age_ot(i0, head) ^ idx_age_ot(i1, head)
   }
-
   def get_real_lsq_idx(idx: UInt): UInt = {
     idx(idx.getWidth-2, 0)
-  }
+  }  
+
 
   def get_lsq_idx_carry(idx: UInt): UInt = {
     idx(idx.getWidth-1)
@@ -326,7 +326,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     e.bits.order_fail          := ldq_order_fail         (idx)
     e.bits.observed            := ldq_observed           (idx)
     e.bits.next_stq_idx        := ldq_next_stq_idx       (idx)    
-o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
+    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
     e.bits.forward_std_val     := ldq_forward_std_val    (idx)
     e.bits.forward_stq_idx     := ldq_forward_stq_idx    (idx)
     e.bits.debug_wb_data       := ldq_debug_wb_data      (idx)
@@ -578,9 +578,9 @@ o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
   val p2_block_load_mask = RegNext(p1_block_load_mask)
 
   // Prioritize emptying the store queue when it is almost full
-  val stq_tail_plus   = WrapAdd(stq_tail, (2*coreWidth).U, numStqEntries)
+  val stq_tail_plus   = WrapAdd(stq_tail, (2*coreWidth).U, 2*numStqEntries)
 
-//  val stq_almost_full = SafeRegNext(IsOlder(get_real_lsq_idx(stq_head), get_real_lsq_idx(stq_tail_plus), get_real_lsq_idx(stq_tail)))
+  val stq_almost_full = SafeRegNext(IsOlderLSU(stq_head, stq_tail_plus, stq_tail))
 //  val stq_almost_full = false.B
 
   // The store at the commit head needs the DCache to appear ordered
@@ -593,7 +593,7 @@ o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
   val stq_incoming_idx = widthMap(i => agen(i).bits.uop.stq_idx)
   val stq_incoming_e   = widthMap(i => WireInit(stq_read(stq_incoming_idx(i))))
 
-  val ldq_wakeup_idx = SafeRegNext(AgePriorityEncoder((0 until numLdqEntries).map(i=> {
+  val ldq_wakeup_idx = SafeRegNext(LSUAgePriorityEncoder((0 until numLdqEntries).map(i=> {
     val block = block_load_mask(i) || p1_block_load_mask(i)
     ldq_addr(i).valid && !ldq_executed(i) && !ldq_succeeded(i) && !ldq_addr_is_virtual(i) && !block
   }), ldq_head))
@@ -602,14 +602,14 @@ o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
 
   // Enqueue into the retry queue
   val ldq_enq_retry_idx = Reg(UInt((1+ldqAddrSz).W))
-  ldq_enq_retry_idx := AgePriorityEncoder((0 until numLdqEntries).map(i => {
-    ldq_addr(i).valid && ldq_addr_is_virtual(i) && (i.U =/= ldq_enq_retry_idx)
+  ldq_enq_retry_idx := LSUAgePriorityEncoder((0 until numLdqEntries).map(i => {
+    ldq_addr(i).valid && ldq_addr_is_virtual(i) && (i.U =/= get_real_lsq_idx(ldq_enq_retry_idx))
   }), ldq_head)
   val ldq_enq_retry_e = WireInit(ldq_read(ldq_enq_retry_idx))
 
   val stq_enq_retry_idx = Reg(UInt((1+stqAddrSz).W))
-  stq_enq_retry_idx := AgePriorityEncoder((0 until numStqEntries).map(i => {
-    stq_addr(i).valid && stq_addr_is_virtual(i) && (i.U =/= stq_enq_retry_idx)
+  stq_enq_retry_idx := LSUAgePriorityEncoder((0 until numStqEntries).map(i => {
+    stq_addr(i).valid && stq_addr_is_virtual(i) && (i.U =/= get_real_lsq_idx(stq_enq_retry_idx))
   }), stq_commit_head)
   val stq_enq_retry_e   = WireInit(stq_read(stq_enq_retry_idx))
 
@@ -1165,7 +1165,7 @@ o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
 
   // Task 1: Clr ROB busy bit
 
-  val stq_clr_head_idx = RegNext(AgePriorityEncoder((0 until numStqEntries).map(i => {
+  val stq_clr_head_idx = RegNext(LSUAgePriorityEncoder((0 until numStqEntries).map(i => {
     stq_valid(i) && !stq_cleared(i)
   }), stq_commit_head))
 
@@ -1199,7 +1199,8 @@ o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
     io.core.clr_bsy(i).valid := clr_valid_1 && !IsKilledByBranch(io.core.brupdate, io.core.exception, clr_uop_1)
     io.core.clr_bsy(i).bits  := clr_uop_1.rob_idx
 
-    clr_idx = WrapInc(clr_idx, numStqEntries)
+    //FIXME: remove this
+    clr_idx = WrapIncWCarry(clr_idx, numStqEntries)
   }
 
 
@@ -1245,7 +1246,15 @@ o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
                         Mux(fired_store_retry(w), SafeRegNext(stq_retry_idx), 0.U((1+stqAddrSz).W))))
 
   // is_younger_mask(i) == 1 means i is younger than ldq_idx (ldq_idx is older than i)
-  val lcam_younger_load_mask = widthMap(w => IsYoungerMask(get_real_lsq_idx(lcam_ldq_idx(w)), get_real_lsq_idx(ldq_head), numLdqEntries))
+  //  val lcam_younger_load_mask = widthMap(w => IsYoungerMask(get_real_lsq_idx(lcam_ldq_idx(w)), get_real_lsq_idx(ldq_head), numLdqEntries))
+  val lcam_younger_load_mask = Wire(Vec(lsuWidth, Vec(numLdqEntries, Bool())))
+
+  for (w <- 0 until lsuWidth) {
+    for (i <- 0 until numLdqEntries) {
+      
+      lcam_younger_load_mask(w)(i) := EntryValidFromAge(lcam_ldq_idx(w), ldq_tail, i.U((ldqAddrSz+1).W)) & (i.U =/= get_real_lsq_idx(lcam_ldq_idx(w)))
+    }      
+  }
 
 
   val can_forward = widthMap(w => Mux(fired_load_agen(w) || fired_load_agen_exec(w) || fired_load_retry(w),
@@ -1345,9 +1354,10 @@ o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
             ldq_order_fail(i) := true.B
             failed_load := true.B
           }
-        } .elsewhen (lcam_ldq_idx(w) =/= i.U) {
+        } .elsewhen (get_real_lsq_idx(lcam_ldq_idx(w)) =/= i.U) {
           // The load is older, and it wasn't executed
           // we need to kill ourselves, and prevent forwarding
+          // TW: this is the cause of the bug
           when (!(l_executed || l_succeeded)) {
             s1_set_execute(lcam_ldq_idx(w))    := false.B
             when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
@@ -1416,7 +1426,10 @@ o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
   val addr_matches    = Wire(Vec(lsuWidth, Vec(numStqEntries, Bool())))
   val forward_matches = Wire(Vec(lsuWidth, Vec(numStqEntries, Bool())))
   val prs2_matches    = Wire(Vec(lsuWidth, Vec(numStqEntries, Bool())))
+  // age_matches(w)(i) |-> stq(i) is older than the searcher
   val age_matches     = Wire(Vec(lsuWidth, Vec(numStqEntries, Bool())))
+
+
   for (i <- 0 until numStqEntries) {
     //val s_e    = WireInit(stq(i))
     val s_addr            = stq_addr(i)
@@ -1448,7 +1461,8 @@ o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
     }
   }
       // assert(reset.asBool | (!(head_carry === tail_carry) || (real_head_idx <= real_tail_idx)))
-      // assert(reset.asBool | (!(head_carry =/= tail_carry) || (real_head_idx > real_tail_idx)))      
+      // assert(reset.asBool | (!(head_carry =/= tail_carry) || (real_head_idx > real_tail_idx)))
+
   object EntryValidFromAge {
     def apply(head: UInt, tail: UInt, ptr: UInt) : Bool = {
       assert(head.widthKnown)
@@ -1481,6 +1495,7 @@ o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
   val stq_amos = VecInit(stq_uop.map(u => u.is_fence || u.is_amo))
   for (w <- 0 until lsuWidth) {
     val has_older_amo = (stq_amos.asUInt & age_matches(w).asUInt) =/= 0.U
+    //tianrui: this is the place of the bug
     when (do_ld_search(w) && (has_older_amo || (ldst_addr_matches(w) =/= 0.U))) {
       when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
         io.dmem.s1_kill(w)               := true.B
@@ -1541,7 +1556,7 @@ o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
 
 
   // Forward this load to the youngest matching store
-  val mem_stld_forward_stq_idx = widthMap(w => AgePriorityEncoder(stld_prs2_matches(w).asBools, lcam_uop(w).stq_idx))
+  val mem_stld_forward_stq_idx = widthMap(w => LSUAgePriorityEncoder(stld_prs2_matches(w).asBools, lcam_uop(w).stq_idx))
   val mem_stld_forward_valid   = widthMap(w => do_ld_search(w) && stld_prs2_matches(w)(mem_stld_forward_stq_idx(w)))
 
 
@@ -1558,7 +1573,7 @@ o    e.bits.ld_byte_mask        := ldq_ld_byte_mask       (idx)
 
   // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
   // TODO encapsulate this in an age-based  priority-encoder
-  val l_idx = AgePriorityEncoder((0 until numLdqEntries).map { i => ldq_valid(i) && ldq_order_fail(i) }, ldq_head)
+  val l_idx = LSUAgePriorityEncoder((0 until numLdqEntries).map { i => ldq_valid(i) && ldq_order_fail(i) }, ldq_head)
 
   // one exception port, but multiple causes!
   // - 1) the incoming store-address finds a faulting load (it is by definition younger)
@@ -2090,6 +2105,23 @@ object GenByteMask
                    (size === 3.U) -> 255.U(8.W)))
       mask
    }
+}
+
+/**
+ * Object to return the lowest bit position after the head.
+ */
+object LSUAgePriorityEncoder
+{
+  def _private_helper(idx: UInt): UInt = {
+    idx(idx.getWidth-2, 0)
+  }
+  def apply(in: Seq[Bool], head: UInt): UInt = {
+    val head_base = _private_helper(head)
+    val head_overflow = head(head.getWidth - 1)
+    val base = AgePriorityEncoder(in, head_base)
+    val overflow = Mux(base >= head_base, head_overflow, ~head_overflow)
+    Cat(overflow, base)
+  }
 }
 
 
