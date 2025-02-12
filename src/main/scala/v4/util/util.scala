@@ -217,6 +217,25 @@ object WrapInc
 }
 
 /**
+  * Object for incrementing with a carry bit
+  * the n is to denote the bit width without the carry bit
+  */
+object WrapIncWCarry
+{
+  def apply(value: UInt, n: Int): UInt = {
+    if (isPow2(n)) {
+      (value+1.U)(log2Ceil(n), 0)
+    } else {
+      assert(value.getWidth>= log2Ceil(n) + 1)
+      val carry = value(value.getWidth-1)
+      val base = value(value.getWidth-2, 0)
+      val wrap = (base === (n-1).U)
+      Mux(wrap, Cat(~carry, 0.U((value.getWidth-1).W)), Cat(carry, base+1.U))
+    }
+  }
+}
+
+/**
  * Object to decrement an input value, wrapping it if
  * necessary.
  */

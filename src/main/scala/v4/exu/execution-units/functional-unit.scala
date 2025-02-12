@@ -52,8 +52,8 @@ class FuncUnitReq(val dataWidth: Int)(implicit p: Parameters) extends BoomBundle
 
 class BrInfoBundle(implicit p: Parameters) extends BoomBundle
 {
-  val ldq_idx = UInt(ldqAddrSz.W)
-  val stq_idx = UInt(stqAddrSz.W)
+  val ldq_idx = UInt((1+ldqAddrSz).W)
+  val stq_idx = UInt((1+stqAddrSz).W)
   val rxq_idx = UInt(log2Ceil(numRxqEntries).W)
 }
 

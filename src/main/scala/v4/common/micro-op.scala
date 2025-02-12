@@ -85,8 +85,8 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val fp_ctrl          = new freechips.rocketchip.tile.FPUCtrlSigs
 
   val rob_idx          = UInt(robAddrSz.W)
-  val ldq_idx          = UInt(ldqAddrSz.W)
-  val stq_idx          = UInt(stqAddrSz.W)
+  val ldq_idx          = UInt((1+ldqAddrSz).W)
+  val stq_idx          = UInt((1+stqAddrSz).W)
   val rxq_idx          = UInt(log2Ceil(numRxqEntries).W)
   val pdst             = UInt(maxPregSz.W)
   val prs1             = UInt(maxPregSz.W)
