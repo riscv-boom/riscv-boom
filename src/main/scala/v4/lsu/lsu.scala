@@ -484,7 +484,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   // Prioritize emptying the store queue when it is almost full
   val stq_tail_plus   = WrapAdd(stq_tail, (2*coreWidth).U, 2*numStqEntries)
-
   val stq_almost_full = SafeRegNext(IsOlderLSU(stq_head, stq_tail_plus, stq_tail))
 
   // The store at the commit head needs the DCache to appear ordered
@@ -630,8 +629,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                               (w == lsuWidth-1).B                                      &&
                               (!ldq_wakeup_e.bits.addr_is_uncacheable || (io.core.commit_load_at_rob_head &&
                                                                           ldq_head === ldq_wakeup_idx &&
-                                                                          IdxAgeYe(stq_head, ldq_wakeup_e.bits.next_stq_idx))
-                              )))
+                                                                          IdxAgeYe(stq_head, ldq_wakeup_e.bits.next_stq_idx)))))
 
 
   // Can we fire an incoming hellacache request
@@ -1104,7 +1102,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     io.core.clr_bsy(i).valid := clr_valid_1 && !IsKilledByBranch(io.core.brupdate, io.core.exception, clr_uop_1)
     io.core.clr_bsy(i).bits  := clr_uop_1.rob_idx
 
-    //FIXME: remove this
     clr_idx = WrapIncWCarry(clr_idx, numStqEntries)
   }
 
@@ -1137,14 +1134,12 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   val lcam_mask  = widthMap(w => GenByteMask(lcam_addr(w), lcam_uop(w).mem_size))
   val lcam_next_stq_idx = widthMap(w => mem_ldq_e(w).bits.next_stq_idx)
-
   val lcam_is_release = widthMap(w => fired_release(w))
   val lcam_ldq_idx  = widthMap(w =>
                       Mux(fired_load_agen     (w) ||
                           fired_load_agen_exec(w)  , mem_incoming_uop(w).ldq_idx,
                       Mux(fired_load_wakeup  (w), SafeRegNext(ldq_wakeup_idx),
                       Mux(fired_load_retry   (w), SafeRegNext(ldq_retry_idx), 0.U((1+ldqAddrSz).W)))))
-  
   val lcam_stq_idx  = widthMap(w =>
                       Mux(fired_store_agen (w), mem_incoming_uop(w).stq_idx,
                       Mux(fired_store_retry(w), SafeRegNext(stq_retry_idx), 0.U((1+stqAddrSz).W))))
@@ -1223,17 +1218,16 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                    l_addr.valid                                        &&
                    (l_executed || l_succeeded)                         &&
                    !l_addr_is_virtual                                  &&
-//                 search is older than the load
-// the lcam entry depends on the stq_entry -> stq entry pointed to by lcam_stq_idx(w) is older
-                   IdxAgeOt(lcam_stq_idx(w), l_next_stq_idx)         &&
+                   IdxAgeOt(lcam_stq_idx(w), l_next_stq_idx)           &&
                    dword_addr_matches(w)                               &&
                    mask_overlap(w)) {
 
+        // searcher is older than the load
+        // the lcam entry depends on the stq_entry -> stq entry pointed to by lcam_stq_idx(w) is older
         assert(l_next_stq_idx === l_uop.stq_idx)
 
         // the stq entry forwarded out of is even older than this store
         val forwarded_is_older = IsOlderLSU(l_forward_stq_idx, lcam_stq_idx(w), l_uop.stq_idx)
-//        val forwarded_is_older = IdxAgeOt(l_forward_stq_idx, lcam_stq_idx(w))
         // We are older than this load, which overlapped us.
         when (!l_forward_std_val || // If the load wasn't forwarded, it definitely failed
           ((l_forward_stq_idx =/= lcam_stq_idx(w)) && forwarded_is_older)) { // If the load forwarded from us, we might be ok
@@ -1289,9 +1283,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
             io.dmem.nack(wi).bits.uop.uses_ldq &&
             nack_dword_addr_matches            &&
             nack_mask_overlap                  &&
-            IsOlderLSU(io.dmem.nack(wi).bits.uop.ldq_idx, lcam_ldq_idx(w), ldq_head)
-//            IdxAgeOt(io.dmem.nack(wi).bits.uop.ldq_idx, lcam_ldq_idx(w))
-            ) {
+            IsOlderLSU(io.dmem.nack(wi).bits.uop.ldq_idx, lcam_ldq_idx(w), ldq_head)) {
         s1_set_execute(lcam_ldq_idx(w)) := false.B
         when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
           io.dmem.s1_kill(w) := true.B
@@ -1310,20 +1302,18 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
             forward_dword_addr_matches        &&
             forward_mask_overlap              &&
             wb_ldst_forward_e(wi).observed    &&
-            IsOlderLSU(lcam_ldq_idx(w), wb_ldst_forward_ldq_idx(wi), ldq_head)
-//            IdxAgeOt(lcam_ldq_idx(w), wb_ldst_forward_ldq_idx(wi))
-            ) {
+            IsOlderLSU(lcam_ldq_idx(w), wb_ldst_forward_ldq_idx(wi), ldq_head)) {
         ldq_order_fail(wb_ldst_forward_ldq_idx(wi)) := true.B
         failed_load := true.B
       }
 
       // A older store might find a younger load which is forwarding from the wrong place
       val forwarded_is_older = IsOlderLSU(wb_ldst_forward_stq_idx(wi), lcam_stq_idx(w), wb_ldst_forward_e(wi).uop.stq_idx)
-//      val forwarded_is_older = IdxAgeOt(wb_ldst_forward_stq_idx(wi), lcam_stq_idx(w)) 
-      when (do_st_search(w)                                    &&
-            wb_ldst_forward_valid(wi)                          &&
-            forward_dword_addr_matches                         &&
-            forward_mask_overlap                               &&
+
+      when (do_st_search(w)                                               &&
+            wb_ldst_forward_valid(wi)                                     &&
+            forward_dword_addr_matches                                    &&
+            forward_mask_overlap                                          &&
             IdxAgeOt(lcam_stq_idx(w), wb_ldst_forward_e(wi).next_stq_idx) &&
             forwarded_is_older) {
         ldq_order_fail(wb_ldst_forward_ldq_idx(wi)) := true.B
@@ -1458,7 +1448,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   }
 
   // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
-  // TODO encapsulate this in an age-based  priority-encoder
   val l_idx = LSUAgePriorityEncoder((0 until numLdqEntries).map { i => ldq_valid(i) && ldq_order_fail(i) }, ldq_head)
 
   // one exception port, but multiple causes!
