@@ -1447,8 +1447,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     io.core.clr_unsafe(w).bits  := RegNext(lcam_uop(w).rob_idx)
   }
 
-  // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
-  val l_idx = LSUAgePriorityEncoder((0 until numLdqEntries).map { i => ldq_valid(i) && ldq_order_fail(i) }, ldq_head)
+
 
   // one exception port, but multiple causes!
   // - 1) the incoming store-address finds a faulting load (it is by definition younger)
@@ -1457,7 +1456,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val r_xcpt       = Reg(new Exception)
 
   val ld_xcpt_valid = (ldq_order_fail.asUInt & ldq_valid.asUInt) =/= 0.U
-  val ld_xcpt_uop   = WireInit(ldq_uop(Mux(l_idx >= numLdqEntries.U, l_idx - numLdqEntries.U, l_idx)))
+
+  // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
+  val l_idx = LSUAgePriorityEncoder((0 until numLdqEntries).map { i => ldq_valid(i) && ldq_order_fail(i) }, ldq_head)
+  val ld_xcpt_uop   = WireInit(ldq_uop(l_idx))
 
   val use_mem_xcpt = (mem_xcpt_valid && IsOlder(mem_xcpt_uop.rob_idx, ld_xcpt_uop.rob_idx, io.core.rob_head_idx)) || !ld_xcpt_valid
 
