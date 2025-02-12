@@ -483,7 +483,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val p2_block_load_mask = RegNext(p1_block_load_mask)
 
   // Prioritize emptying the store queue when it is almost full
-  val stq_tail_plus   = WrapAdd(stq_tail, (2*coreWidth).U, 2*numStqEntries)
+  val stq_tail_plus   = WrapAddWCarryWidth(stq_tail, (2*coreWidth).U, 2*numStqEntries, (1+stqAddrSz))
   val stq_almost_full = SafeRegNext(IsOlderLSU(stq_head, stq_tail_plus, stq_tail))
 
   // The store at the commit head needs the DCache to appear ordered
@@ -1068,7 +1068,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   // Task 1: Clr ROB busy bit
 
-  val stq_clr_head_idx = RegNext(LSUAgePriorityEncoder((0 until numStqEntries).map(i => {
+  val stq_clr_head_idx = SafeRegNext(LSUAgePriorityEncoder((0 until numStqEntries).map(i => {
     stq_valid(i) && !stq_cleared(i)
   }), stq_commit_head))
 
@@ -2164,5 +2164,17 @@ object EntryValidFromAge {
       (real_ptr_idx >= real_head_idx) & (real_ptr_idx < real_tail_idx),
       (real_ptr_idx >= real_head_idx) | (real_ptr_idx < real_tail_idx)
     )
+  }
+}
+
+object WrapAddWCarryWidth
+{
+  def apply(value: UInt, amt: UInt, n: Int, w: Int): UInt = {
+    if (isPow2(n)) {
+      (value + amt)(w-1, 0)
+    } else {
+      val sum = Cat(0.U(1.W), value) + Cat(0.U(1.W), amt)
+      Mux(sum >= n.U, sum - n.U, sum)(w-1, 0)
+    }
   }
 }
