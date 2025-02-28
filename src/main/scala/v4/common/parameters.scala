@@ -123,7 +123,8 @@ case class BoomCoreParams(
 
   /* external project facing parameters, do not enable unless you're using boom
    for other projects*/
-  enableConservativeNonSpeculativeInterference: Boolean = false
+  /* enableConservativeSNI: speculative non-interference */
+  enableConservativeSNI: Boolean = false
 
 // DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams
@@ -325,7 +326,7 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableBankedFPFreelist = boomParams.enableBankedFPFreelist
   val enableBPDHPMs = boomParams.enableBPDHPMs
 
-  val enableConservativeNonSpeculativeInterference = boomParams.enableConservativeNonSpeculativeInterference
+  val enableConservativeSNI = boomParams.enableConservativeSNI
 
 
   //************************************

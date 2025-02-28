@@ -249,7 +249,7 @@ class IssueUnitCollapsing(
     issue_slots(i).grant := false.B
     var uop_issued = false.B
 
-    // when enabling a conservative implementation of non-speculative interference, delay issue of instructions that have not passed PnR
+    // when enabling a conservative implementation of speculative non-interference, delay issue of instructions that have not passed PnR
     val issue_slot_past_pnr = IsOlder(issue_slots(i).iss_uop.rob_idx, io.rob_pnr_idx, io.rob_head) | (issue_slots(i).iss_uop.rob_idx === io.rob_pnr_idx)
     val issue_past_pnr = MuxCase(true.B, Array(
       issue_slots(i).iss_uop.is_br -> issue_slot_past_pnr,
@@ -259,14 +259,14 @@ class IssueUnitCollapsing(
       issue_slots(i).iss_uop.fu_code(FC_DIV) -> issue_slot_past_pnr,
       issue_slots(i).iss_uop.fu_code(FC_AGEN) -> (issue_slots(i).iss_uop.rob_idx === io.rob_head)
     ))
-    val can_issue_nsi = issue_past_pnr | !enableConservativeNonSpeculativeInterference.B
+    val can_issue_sni = issue_past_pnr | !enableConservativeSNI.B
 
     for (w <- 0 until issueWidth) {
       val fu_code_match = (issue_slots(i).iss_uop.fu_code zip io.fu_types(w)).map {
         case (r,c) => r && c
       } .reduce(_||_)
 
-      val can_allocate = fu_code_match && iss_select_mask(w)(i).B && can_issue_nsi
+      val can_allocate = fu_code_match && iss_select_mask(w)(i).B && can_issue_sni
 
       when (requests(i) && !uop_issued && can_allocate && !port_issued(w)) {
         issue_slots(i).grant := true.B
