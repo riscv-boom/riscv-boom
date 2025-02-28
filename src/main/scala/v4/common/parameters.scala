@@ -119,7 +119,11 @@ case class BoomCoreParams(
   /* debug stuff */
   enableCommitLogPrintf: Boolean = false,
   enableBranchPrintf: Boolean = false,
-  enableMemtracePrintf: Boolean = false
+  enableMemtracePrintf: Boolean = false,
+
+  /* external project facing parameters, do not enable unless you're using boom
+   for other projects*/
+  enableConservativeNonSpeculativeInterference: Boolean = false
 
 // DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams
@@ -320,6 +324,9 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val dcacheSinglePorted = boomParams.dcacheSinglePorted
   val enableBankedFPFreelist = boomParams.enableBankedFPFreelist
   val enableBPDHPMs = boomParams.enableBPDHPMs
+
+  val enableConservativeNonSpeculativeInterference = boomParams.enableConservativeNonSpeculativeInterference
+
 
   //************************************
   // Implicitly calculated constants

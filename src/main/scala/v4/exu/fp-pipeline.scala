@@ -67,6 +67,8 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
   val issue_unit     = IssueUnit(fpIssueParams, numWakeupPorts, false, false)
   issue_unit.suggestName("fp_issue_unit")
+  issue_unit.io.rob_head := DontCare
+  issue_unit.io.rob_pnr_idx := DontCare
   val fregfileBankedWriteArray = Seq.fill(numFrfWritePorts) { None }
   val fregfile       = Module(new BankedRF(
     UInt((fLen+1).W),
