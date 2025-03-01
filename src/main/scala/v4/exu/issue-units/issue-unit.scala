@@ -58,6 +58,10 @@ abstract class IssueUnit(
     val squash_grant     = Input(Bool())
 
     val tsc_reg          = Input(UInt(xLen.W))
+
+    // For the speculative non-interference (SNI) implementation
+    val rob_head = Input(UInt(robAddrSz.W))
+    val rob_pnr_idx = Input(UInt(robAddrSz.W))
   })
 
 

@@ -1025,6 +1025,9 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     iss_unit.io.child_rebusys := alu_exe_units.map(_.io_child_rebusy).reduce(_|_)
 
     iss_unit.io.wakeup_ports := int_wakeups
+
+    iss_unit.io.rob_pnr_idx := rob.io.rob_pnr_idx
+    iss_unit.io.rob_head    := rob.io.rob_head_idx
   }
 
   mem_iss_unit.io.squash_grant := (
