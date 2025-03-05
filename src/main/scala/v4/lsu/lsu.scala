@@ -325,11 +325,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   def widthMap[T <: Data](f: Int => T) = VecInit((0 until lsuWidth).map(f))
 
-  // default connection from flip flop to next state
-
-  val ldq_will_succeed        = WireDefault(ldq_succeeded)
-  ldq_succeeded := ldq_will_succeed
-
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
@@ -397,7 +392,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       ldq_uop            (ldq_idx)       := UpdateBrMask(io.core.brupdate, dis_uops(w).bits)
       ldq_addr           (ldq_idx).valid := false.B
       ldq_executed       (ldq_idx)       := false.B
-      ldq_will_succeed   (ldq_idx)       := false.B
+      ldq_succeeded      (ldq_idx)       := false.B
       ldq_order_fail     (ldq_idx)       := false.B
       ldq_observed       (ldq_idx)       := false.B
       ldq_forward_std_val(ldq_idx)       := false.B
@@ -1187,7 +1182,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     val l_addr_is_virtual = ldq_addr_is_virtual(i)
     val l_executed        = ldq_executed(i)
     val l_succeeded       = ldq_succeeded(i)
-    val l_will_succeed    = ldq_will_succeed(i)
     val l_observed        = ldq_observed(i)
     val l_mask            = ldq_ld_byte_mask(i)
     val l_next_stq_idx    = ldq_next_stq_idx(i)
@@ -1248,17 +1242,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
           when ((l_executed || l_succeeded) &&
                 !s1_executing_loads(i) && // If the load is proceeding in parallel we don't need to kill it
                 l_observed) {        // Its only a ordering failure if the cache line was observed between the younger load and us
-            //ldq_order_fail(i) := true.B
-            // failed_load := true.B
-
-	    // this case is no longer possible where an older search gets replayed and found that a younger search has already been released. Note that this is stronger than rvwmo.
-            assert(false.B)
+            ldq_order_fail(i) := true.B
+            failed_load := true.B
           }
         } .elsewhen (GetRealLSQIdx(lcam_ldq_idx(w)) =/= i.U) {
           // The load is older, and it wasn't executed
           // we need to kill ourselves, and prevent forwarding
-	      // can also forward from the next cycle
-          when (!(l_executed && (l_succeeded || l_will_succeed))) {
+          when (!(l_executed || l_succeeded)) {
             s1_set_execute(lcam_ldq_idx(w))    := false.B
             when (RegNext(dmem_req_fire(w) && !s0_kills(w)) && !fired_load_agen(w)) {
               io.dmem.s1_kill(w)               := true.B
@@ -1274,7 +1264,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   for (wi <- 0 until lsuWidth) {
     for (w <- 0 until lsuWidth) {
       // A younger load might find a older nacking load
-      // this is not the full case, need also to account for the situation where the older load already went to sleep above
       val nack_dword_addr_matches = (lcam_addr(w) >> 3) === (io.dmem.nack(wi).bits.addr >> 3)
       val nack_mask = GenByteMask(io.dmem.nack(wi).bits.addr, io.dmem.nack(wi).bits.uop.mem_size)
       val nack_mask_overlap = (nack_mask & lcam_mask(w)) =/= 0.U
@@ -1290,8 +1279,6 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         }
         kill_forward(w) := true.B
       }
-
-
 
       // A older load might find a younger forwarding load
       val forward_dword_addr_matches = (lcam_addr(w) >> 3 === wb_ldst_forward_ld_addr(wi) >> 3)
@@ -1581,7 +1568,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
         assert(send_iresp ^ send_fresp)
         dmem_resp_fired(w) := true.B
 
-        ldq_will_succeed (ldq_idx) := iresp(w).valid || fresp(w).valid
+        ldq_succeeded    (ldq_idx) := iresp(w).valid || fresp(w).valid
         ldq_debug_wb_data(ldq_idx) := resp.data
 
         wb_slow_wakeups(w).valid    := send_iresp
@@ -1647,7 +1634,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       iresp(w).bits.data := loadgen.data
       fresp(w).bits.data := loadgen.data
 
-      ldq_will_succeed   (f_idx) := true.B
+      ldq_succeeded      (f_idx) := true.B
       ldq_forward_std_val(f_idx) := true.B
       ldq_forward_stq_idx(f_idx) := wb_ldst_forward_stq_idx(w)
 
