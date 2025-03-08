@@ -142,6 +142,9 @@ class BoomTile private(
 
   // ROCC
   val roccs = p(BuildRoCC).map(_(p))
+  val roccCSRs = roccs.map(_.roccCSRs)
+  require(roccCSRs.flatten.map(_.id).toSet.size == roccCSRs.flatten.size,
+    "LazyRoCC instantiations require overlapping CSRs")
   roccs.map(_.atlNode).foreach { atl => tlMasterXbar.node :=* atl }
   roccs.map(_.tlNode).foreach { tl => tlOtherMastersNode :=* tl }
 }
@@ -153,7 +156,7 @@ class BoomTile private(
  */
 class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
 
-  val core = Module(new BoomCore()(outer.p))
+  val core = Module(new BoomCore(outer.roccCSRs)(outer.p))
   val lsu  = Module(new LSU()(outer.p, outer.dcache.module.edge))
 
   val ptwPorts         = ListBuffer(lsu.io.ptw, outer.frontend.module.io.ptw, core.io.ptw_tlb)
@@ -228,6 +231,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
     core.io.rocc.resp <> respArb.io.out
     core.io.rocc.busy <> (cmdRouter.io.busy || outer.roccs.map(_.module.io.busy).reduce(_||_))
     core.io.rocc.interrupt := outer.roccs.map(_.module.io.interrupt).reduce(_||_)
+    (core.io.rocc.csrs zip outer.roccs.map(_.module.io.csrs).flatten).foreach { t => t._2 <> t._1 }
   }
 
   // PTW
