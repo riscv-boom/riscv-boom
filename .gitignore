@@ -10,3 +10,5 @@ lib
 /.bloop/
 /.metals/
 /out/
+util/csmith/output/
+util/csmith/csmith/
