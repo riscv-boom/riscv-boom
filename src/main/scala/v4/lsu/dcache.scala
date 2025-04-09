@@ -513,12 +513,12 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   dataReadArb.io.in(2).valid := io.lsu.req.valid && !block_incoming_reqs
   for (w <- 0 until lsuWidth) {
     // Tag read for new requests
-    metaReadArb.io.in(4).bits.req(w).idx    := io.lsu.req.bits(w).bits.addr >> blockOffBits
+    metaReadArb.io.in(4).bits.req(w).idx    := io.lsu.req.bits(w).bits.paddr >> blockOffBits
     metaReadArb.io.in(4).bits.req(w).way_en := DontCare
     metaReadArb.io.in(4).bits.req(w).tag    := DontCare
     // Data read for new requests
     dataReadArb.io.in(2).bits.valid(w)      := io.lsu.req.bits(w).valid
-    dataReadArb.io.in(2).bits.req(w).addr   := io.lsu.req.bits(w).bits.addr
+    dataReadArb.io.in(2).bits.req(w).addr   := io.lsu.req.bits(w).bits.paddr
     dataReadArb.io.in(2).bits.req(w).way_en := ~0.U(nWays.W)
   }
 
@@ -527,7 +527,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val replay_req = Wire(Vec(lsuWidth, new BoomDCacheReq))
   replay_req               := DontCare
   replay_req(0).uop        := mshrs.io.replay.bits.uop
-  replay_req(0).addr       := mshrs.io.replay.bits.addr
+  replay_req(0).paddr       := mshrs.io.replay.bits.paddr
   replay_req(0).data       := mshrs.io.replay.bits.data
   replay_req(0).is_hella   := mshrs.io.replay.bits.is_hella
   // Don't let replays get nacked due to conflict with dcache write
@@ -535,12 +535,12 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   // Tag read for MSHR replays
   // We don't actually need to read the metadata, for replays we already know our way
   metaReadArb.io.in(0).valid              := mshrs.io.replay.valid && !singlePortedDCacheWrite
-  metaReadArb.io.in(0).bits.req(0).idx    := mshrs.io.replay.bits.addr >> blockOffBits
+  metaReadArb.io.in(0).bits.req(0).idx    := mshrs.io.replay.bits.paddr >> blockOffBits
   metaReadArb.io.in(0).bits.req(0).way_en := DontCare
   metaReadArb.io.in(0).bits.req(0).tag    := DontCare
   // Data read for MSHR replays
   dataReadArb.io.in(0).valid              := mshrs.io.replay.valid && !singlePortedDCacheWrite
-  dataReadArb.io.in(0).bits.req(0).addr   := mshrs.io.replay.bits.addr
+  dataReadArb.io.in(0).bits.req(0).addr   := mshrs.io.replay.bits.paddr
   dataReadArb.io.in(0).bits.req(0).way_en := mshrs.io.replay.bits.way_en
   dataReadArb.io.in(0).bits.valid         := widthMap(w => (w == 0).B)
 
@@ -549,7 +549,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val mshr_read_req = Wire(Vec(lsuWidth, new BoomDCacheReq))
   mshr_read_req             := DontCare
   mshr_read_req(0).uop      := NullMicroOp
-  mshr_read_req(0).addr     := Cat(mshrs.io.meta_read.bits.tag, mshrs.io.meta_read.bits.idx) << blockOffBits
+  mshr_read_req(0).paddr     := Cat(mshrs.io.meta_read.bits.tag, mshrs.io.meta_read.bits.idx) << blockOffBits
   mshr_read_req(0).data     := DontCare
   mshr_read_req(0).is_hella := false.B
   metaReadArb.io.in(3).valid       := mshrs.io.meta_read.valid
@@ -564,7 +564,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val wb_req = Wire(Vec(lsuWidth, new BoomDCacheReq))
   wb_req             := DontCare
   wb_req(0).uop      := NullMicroOp
-  wb_req(0).addr     := Cat(wb.io.meta_read.bits.tag, wb.io.data_req.bits.addr)
+  wb_req(0).paddr     := Cat(wb.io.meta_read.bits.tag, wb.io.data_req.bits.addr)
   wb_req(0).data     := DontCare
   wb_req(0).is_hella := false.B
   // Couple the two decoupled interfaces of the WBUnit's meta_read and data_read
@@ -586,7 +586,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val prober_req   = Wire(Vec(lsuWidth, new BoomDCacheReq))
   prober_req             := DontCare
   prober_req(0).uop      := NullMicroOp
-  prober_req(0).addr     := Cat(prober.io.meta_read.bits.tag, prober.io.meta_read.bits.idx) << blockOffBits
+  prober_req(0).paddr     := Cat(prober.io.meta_read.bits.tag, prober.io.meta_read.bits.idx) << blockOffBits
   prober_req(0).data     := DontCare
   prober_req(0).is_hella := false.B
   // Tag read for prober
@@ -603,7 +603,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   prefetch_req(0) := mshrs.io.prefetch.bits
   // Tag read for prefetch
   metaReadArb.io.in(5).valid              := mshrs.io.prefetch.valid
-  metaReadArb.io.in(5).bits.req(0).idx    := mshrs.io.prefetch.bits.addr >> blockOffBits
+  metaReadArb.io.in(5).bits.req(0).idx    := mshrs.io.prefetch.bits.paddr >> blockOffBits
   metaReadArb.io.in(5).bits.req(0).way_en := DontCare
   metaReadArb.io.in(5).bits.req(0).tag    := DontCare
   mshrs.io.prefetch.ready := metaReadArb.io.in(5).ready
@@ -643,7 +643,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
   for (w <- 0 until lsuWidth)
     assert(!(io.lsu.s1_kill(w) && !RegNext(io.lsu.req.fire) && !RegNext(io.lsu.req.bits(w).valid)))
-  val s1_addr         = s1_req.map(_.addr)
+  val s1_addr         = s1_req.map(_.paddr)
   val s1_nack         = s1_addr.map(a => a(idxMSB,idxLSB) === prober.io.meta_write.bits.idx && !prober.io.req.ready)
   val s1_send_resp_or_nack = RegNext(s0_send_resp_or_nack)
   val s1_type         = RegNext(s0_type)
@@ -700,14 +700,14 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val lrsc_addr  = Reg(UInt())
   val s2_lr = s2_req(0).uop.mem_cmd === M_XLR && (!RegNext(s1_nack(0)) || s2_type === t_replay)
   val s2_sc = s2_req(0).uop.mem_cmd === M_XSC && (!RegNext(s1_nack(0)) || s2_type === t_replay)
-  val s2_lrsc_addr_match = widthMap(w => lrsc_valid && lrsc_addr === (s2_req(w).addr >> blockOffBits))
+  val s2_lrsc_addr_match = widthMap(w => lrsc_valid && lrsc_addr === (s2_req(w).paddr >> blockOffBits))
   val s2_sc_fail = s2_sc && !s2_lrsc_addr_match(0)
   when (lrsc_count > 0.U) { lrsc_count := lrsc_count - 1.U }
   when (s2_valid(0) && ((s2_type === t_lsu && s2_hit(0) && !s2_nack(0)) ||
                      (s2_type === t_replay && s2_req(0).uop.mem_cmd =/= M_FLUSH_ALL))) {
     when (s2_lr) {
       lrsc_count := (lrscCycles - 1).U
-      lrsc_addr := s2_req(0).addr >> blockOffBits
+      lrsc_addr := s2_req(0).paddr >> blockOffBits
     }
     when (lrsc_count > 0.U) {
       lrsc_count := 0.U
@@ -725,7 +725,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   }
 
   when (s2_valid(0)) {
-    when (s2_req(0).addr === debug_sc_fail_addr) {
+    when (s2_req(0).paddr === debug_sc_fail_addr) {
       when (s2_sc_fail) {
         debug_sc_fail_cnt := debug_sc_fail_cnt + 1.U
       } .elsewhen (s2_sc) {
@@ -733,7 +733,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
       }
     } .otherwise {
       when (s2_sc_fail) {
-        debug_sc_fail_addr := s2_req(0).addr
+        debug_sc_fail_addr := s2_req(0).paddr
         debug_sc_fail_cnt  := 1.U
       }
     }
@@ -748,7 +748,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   }
 
   val s2_data_muxed = widthMap(w => Mux1H(s2_tag_match_way(w), s2_data(w)))
-  val s2_word_idx   = widthMap(w => if (rowWords == 1) 0.U else s2_req(w).addr(log2Up(rowWords*wordBytes)-1, log2Up(wordBytes)))
+  val s2_word_idx   = widthMap(w => if (rowWords == 1) 0.U else s2_req(w).paddr(log2Up(rowWords*wordBytes)-1, log2Up(wordBytes)))
 
   // replacement policy
   val replacer = cacheParams.replacement
@@ -802,7 +802,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
     assert(!(mshrs.io.req(w).valid && s2_type === t_replay), "Replays should not need to go back into MSHRs")
     mshrs.io.req(w).bits             := DontCare
     mshrs.io.req(w).bits.uop         := s2_req(w).uop
-    mshrs.io.req(w).bits.addr        := s2_req(w).addr
+    mshrs.io.req(w).bits.paddr        := s2_req(w).paddr
     mshrs.io.req(w).bits.tag_match   := s2_tag_match(w)
     mshrs.io.req(w).bits.old_meta    := Mux(s2_tag_match(w), L1Metadata(s2_repl_meta(w).tag, s2_hit_state(w)), s2_repl_meta(w))
     mshrs.io.req(w).bits.way_en      := Mux(s2_tag_match(w), s2_tag_match_way(w), s2_replaced_way_en)
@@ -869,7 +869,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s2_data_word = Wire(Vec(lsuWidth, UInt()))
 
   val loadgen = (0 until lsuWidth).map { w =>
-    new LoadGen(s2_req(w).uop.mem_size, s2_req(w).uop.mem_signed, s2_req(w).addr,
+    new LoadGen(s2_req(w).uop.mem_size, s2_req(w).uop.mem_signed, s2_req(w).paddr,
                 s2_data_word(w), s2_sc && (w == 0).B, wordBytes)
   }
   // Mux between cache responses and uncache responses
@@ -910,9 +910,9 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s5_req   = RegNext(s4_req)
   val s5_valid = RegNext(s4_valid)
 
-  val s3_bypass = widthMap(w => s3_valid && ((s2_req(w).addr >> wordOffBits) === (s3_req.addr >> wordOffBits)))
-  val s4_bypass = widthMap(w => s4_valid && ((s2_req(w).addr >> wordOffBits) === (s4_req.addr >> wordOffBits)))
-  val s5_bypass = widthMap(w => s5_valid && ((s2_req(w).addr >> wordOffBits) === (s5_req.addr >> wordOffBits)))
+  val s3_bypass = widthMap(w => s3_valid && ((s2_req(w).paddr >> wordOffBits) === (s3_req.paddr >> wordOffBits)))
+  val s4_bypass = widthMap(w => s4_valid && ((s2_req(w).paddr >> wordOffBits) === (s4_req.paddr >> wordOffBits)))
+  val s5_bypass = widthMap(w => s5_valid && ((s2_req(w).paddr >> wordOffBits) === (s5_req.paddr >> wordOffBits)))
 
   // Store -> Load bypassing
   for (w <- 0 until lsuWidth) {
@@ -922,7 +922,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
                                          s2_data_word_prebypass(w))))
   }
   val amoalu   = Module(new AMOALU(xLen))
-  amoalu.io.mask := new StoreGen(s3_req.uop.mem_size, s3_req.addr, 0.U, xLen/8).mask
+  amoalu.io.mask := new StoreGen(s3_req.uop.mem_size, s3_req.paddr, 0.U, xLen/8).mask
   amoalu.io.cmd  := s3_req.uop.mem_cmd
   amoalu.io.lhs  := s3_data_word
   amoalu.io.rhs  := RegNext(s2_req(0).data)
@@ -932,8 +932,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   val s3_way   = RegNext(s2_tag_match_way(0))
 
   dataWriteArb.io.in(0).valid       := s3_valid
-  dataWriteArb.io.in(0).bits.addr   := s3_req.addr
-  dataWriteArb.io.in(0).bits.wmask  := UIntToOH(s3_req.addr.extract(rowOffBits-1,offsetlsb))
+  dataWriteArb.io.in(0).bits.addr   := s3_req.paddr
+  dataWriteArb.io.in(0).bits.wmask  := UIntToOH(s3_req.paddr.extract(rowOffBits-1,offsetlsb))
   dataWriteArb.io.in(0).bits.data   := Fill(rowWords, s3_req.data)
   dataWriteArb.io.in(0).bits.way_en := s3_way
 
