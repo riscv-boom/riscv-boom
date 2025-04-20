@@ -29,7 +29,11 @@ class IssueUnitBanked(
   val innerParams = params.copy(issueWidth = 1, dispatchWidth = if (singleWideDispatch) 1 else params.dispatchWidth)
 
   val issue_units = (0 until params.issueWidth).map { w =>
-    val u = Module(new IssueUnitCollapsing(innerParams, numWakeupPorts)).suggestName(s"col_${w}")
+    val u = if (innerParams.useMatrixIssue) {
+      Module(new IssueUnitAgeMatrix(innerParams, numWakeupPorts)).suggestName(s"col_${w}")      
+    } else {
+      Module(new IssueUnitCollapsing(innerParams, numWakeupPorts)).suggestName(s"col_${w}")      
+    }
     u.io.wakeup_ports := io.wakeup_ports
     u.io.pred_wakeup_port := io.pred_wakeup_port
     u.io.child_rebusys := io.child_rebusys

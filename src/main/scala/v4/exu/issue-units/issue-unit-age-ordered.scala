@@ -178,7 +178,7 @@ class IssueUnitCollapsing(
     }
   }
 
-  //-------------------------------------------------------------
+ //-------------------------------------------------------------
 
   // which entries' uops will still be next cycle? (not being issued and vacated)
   val will_be_valid = (0 until numIssueSlots).map(i => issue_slots(i).will_be_valid) ++
