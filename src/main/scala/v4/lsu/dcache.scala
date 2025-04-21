@@ -803,6 +803,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
     mshrs.io.req(w).bits             := DontCare
     mshrs.io.req(w).bits.uop         := s2_req(w).uop
     mshrs.io.req(w).bits.paddr        := s2_req(w).paddr
+    mshrs.io.req(w).bits.vaddr        := s2_req(w).vaddr
     mshrs.io.req(w).bits.tag_match   := s2_tag_match(w)
     mshrs.io.req(w).bits.old_meta    := Mux(s2_tag_match(w), L1Metadata(s2_repl_meta(w).tag, s2_hit_state(w)), s2_repl_meta(w))
     mshrs.io.req(w).bits.way_en      := Mux(s2_tag_match(w), s2_tag_match_way(w), s2_replaced_way_en)
