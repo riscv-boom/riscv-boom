@@ -26,6 +26,7 @@ case class IssueParams(
   numEntries: Int = 8,
   useFullIssueSel: Boolean = true,
   numSlowEntries: Int = 0,
+  useMatrixIssue: Boolean = true,
   iqType: Int
 )
 
@@ -82,7 +83,11 @@ object IssueUnit
     if (useColumnIssueUnit)
       Module(new IssueUnitBanked(params, numWakeupPorts, useSingleWideDispatch))
     else
-      Module(new IssueUnitCollapsing(params, numWakeupPorts))
+      if (params.useMatrixIssue) {
+        Module(new IssueUnitAgeMatrix(params, numWakeupPorts))        
+      } else {
+        Module(new IssueUnitCollapsing(params, numWakeupPorts))        
+      }
   }
 
 }
