@@ -101,6 +101,7 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   io.core.rocc.mem.perf.storeBufferEmptyAfterLoad := false.B
   io.core.rocc.mem.perf.storeBufferEmptyAfterStore := false.B
   io.core.rocc.mem.clock_enabled := false.B
+  io.core.rocc.mem.store_pending := false.B
 
   // RoCC execute queue. Wait for PNR, holds operands and inst bits
   val rxq_val       = Reg(Vec(numRxqEntries, Bool()))
