@@ -42,7 +42,7 @@ them. This is particularly helpful as most instructions need only one
 operand. However, it does add extra complexity to the design, which is
 often manifested as extra pipeline stages to arbitrate and detect
 structural hazards. It also requires the ability to kill issued
-:term:`Micro-Ops (UOPs)<Micro-Op (UOP)` and re-issue them from the **Issue Queue** on a later cycle.
+:term:`Micro-Ops (UOPs)<Micro-Op (UOP)>` and re-issue them from the **Issue Queue** on a later cycle.
 
 Bypass Network
 --------------
