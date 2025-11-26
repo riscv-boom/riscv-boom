@@ -537,3 +537,46 @@ class WithSWBPD extends Config((site, here, up) => {
     case other => other
   }
 })
+
+// ---------------------
+// Stream Buffer Prefetcher Config Fragments
+// ---------------------
+
+/**
+ * Enable stream buffer prefetcher with default parameters
+ */
+class WithStreamBufferPrefetcher extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
+      streamBufferParams = Some(StreamBufferParams())
+    )))
+    case other => other
+  }
+})
+
+/**
+ * Configure stream buffer prefetcher parameters
+ *
+ * @param nEntries Number of stream buffer entries (concurrent streams tracked)
+ * @param nPrefetchAhead Number of cache lines to prefetch ahead
+ * @param detectStride Enable stride detection (vs unit stride only)
+ * @param trainThreshold Accesses needed before confident prefetching
+ */
+class WithStreamBufferParams(
+  nEntries: Int = 4,
+  nPrefetchAhead: Int = 2,
+  detectStride: Boolean = false,
+  trainThreshold: Int = 2
+) extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
+      streamBufferParams = Some(StreamBufferParams(
+        nEntries = nEntries,
+        nPrefetchAhead = nPrefetchAhead,
+        detectStride = detectStride,
+        trainThreshold = trainThreshold
+      ))
+    )))
+    case other => other
+  }
+})

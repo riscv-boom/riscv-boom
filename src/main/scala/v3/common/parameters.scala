@@ -102,7 +102,10 @@ case class BoomCoreParams(
   /* debug stuff */
   enableCommitLogPrintf: Boolean = false,
   enableBranchPrintf: Boolean = false,
-  enableMemtracePrintf: Boolean = false
+  enableMemtracePrintf: Boolean = false,
+
+  /* stream buffer prefetcher */
+  streamBufferParams: Option[StreamBufferParams] = None
 
 // DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams
@@ -266,6 +269,11 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
   val enableSFBOpt = boomParams.enableSFBOpt
   val enableGHistStallRepair = boomParams.enableGHistStallRepair
   val enableBTBFastRepair = boomParams.enableBTBFastRepair
+
+  //************************************
+  // Stream Buffer Prefetcher
+  val streamBufferParams = boomParams.streamBufferParams
+  val enableStreamBuffer = streamBufferParams.isDefined
 
   //************************************
   // Implicitly calculated constants
