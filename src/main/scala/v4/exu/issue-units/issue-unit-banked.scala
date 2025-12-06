@@ -41,6 +41,9 @@ class IssueUnitBanked(
     u.io.flush_pipeline := io.flush_pipeline
     u.io.squash_grant := io.squash_grant
     u.io.tsc_reg := io.tsc_reg
+    // for SNI
+    u.io.rob_head := io.rob_head
+    u.io.rob_pnr_idx := io.rob_pnr_idx
 
     u.io.fu_types(0) := io.fu_types(w)
     u
