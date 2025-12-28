@@ -26,7 +26,8 @@ case class IssueParams(
   numEntries: Int = 8,
   useFullIssueSel: Boolean = true,
   numSlowEntries: Int = 0,
-  useMatrixIssue: Boolean = true,
+  // useMatrixIssue: Boolean = true,
+  useMatrixIssue: Boolean = false,
   iqType: Int
 )
 
