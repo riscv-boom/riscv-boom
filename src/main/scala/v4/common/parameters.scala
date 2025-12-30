@@ -122,7 +122,9 @@ case class BoomCoreParams(
   enableMemtracePrintf: Boolean = false,
 
   /* enableConservativeSNI: speculative non-interference */
-  enableConservativeSNI: Boolean = false
+  enableConservativeSNI: Boolean = false,
+
+  enableTraceCoreIngress: Boolean = false,
 
 // DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams

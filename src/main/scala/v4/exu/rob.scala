@@ -89,6 +89,9 @@ class RobIo(
   // Let the CSRFile stall us (e.g., wfi).
   val csr_stall = Input(Bool())
 
+  // Let the TraceEncoder stall us
+  val trace_stall = Input(Bool())
+
   // Flush signals (including exceptions, pipeline replays, and memory ordering failures)
   // to send to the frontend for redirection.
   val flush = Valid(new CommitExceptionSignals)
@@ -448,7 +451,7 @@ class Rob(
 
     // Can this instruction commit? (the check for exceptions/rob_state happens later).
     // Block commit if there is mispredict
-    can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall && !io.brupdate.b2.mispredict
+    can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall && !io.brupdate.b2.mispredict && !io.trace_stall
 
 
     // use the same "com_uop" for both rollback AND commit
