@@ -198,7 +198,7 @@ class ALUUnit(dataWidth: Int)(implicit p: Parameters)
                         ))
 
   val is_taken = io.req.valid &&
-                   (uop.br_type =/= BR_N) &&
+                   (uop.br_type =/= B_N) &&
                    (pc_sel =/= PC_PLUS4)
 
 
