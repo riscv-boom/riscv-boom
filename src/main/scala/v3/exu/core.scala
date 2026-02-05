@@ -39,6 +39,7 @@ import freechips.rocketchip.tile.{TraceBundle}
 import freechips.rocketchip.rocket.{Causes, PRV, TracedInstruction}
 import freechips.rocketchip.util.{Str, UIntIsOneOf, CoreMonitorBundle}
 import freechips.rocketchip.devices.tilelink.{PLICConsts, CLINTConsts}
+import freechips.rocketchip.trace.{TraceCoreIngress, TraceCoreInterface, TraceCoreParams}
 
 import boom.v3.common._
 import boom.v3.ifu.{GlobalHistory, HasBoomFrontendParameters}
@@ -51,6 +52,8 @@ import boom.v3.util._
 class BoomCore()(implicit p: Parameters) extends BoomModule
   with HasBoomFrontendParameters // TODO: Don't add this trait
 {
+  val traceIngressParams = TraceCoreParams(nGroups = boomParams.retireWidth, iretireWidth = 1, 
+                                            xlen = coreParams.xLen, iaddrWidth = vaddrBitsExtended) 
   val io = IO(new Bundle {
     val hartid = Input(UInt(hartIdLen.W))
     val interrupts = Input(new freechips.rocketchip.rocket.CoreInterrupts(false))
@@ -61,6 +64,8 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
     val trace = Output(new TraceBundle)
     val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
+    val traceStall = Input(Bool())
+    val trace_core_ingress = if (boomParams.enableTraceCoreIngress) Some(Output(new TraceCoreInterface(traceIngressParams))) else None
   })
 
   io.ptw_tlb := DontCare
@@ -731,7 +736,8 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   rob.io.enq_partial_stall := dis_stalls.last // TODO come up with better ROB compacting scheme.
   rob.io.debug_tsc := debug_tsc_reg
   rob.io.csr_stall := csr.io.csr_stall
-
+  rob.io.trace_stall := io.traceStall
+  
   // Minor hack: ecall and breaks need to increment the FTQ deq ptr earlier than commit, since
   // they write their PC into the CSR the cycle before they commit.
   // Since these are also unique, increment the FTQ ptr when they are dispatched
@@ -1492,5 +1498,31 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     dontTouch(io.trace)
   } else {
     io.ifu.debug_ftq_idx := DontCare
+  }
+
+  if (boomParams.enableTraceCoreIngress) {
+    for (w <- 0 until coreWidth) {
+        val trace_ingress = Module(new TraceCoreIngress(traceIngressParams))
+        trace_ingress.io.in.valid := RegNext(rob.io.commit.arch_valids(w) || (rob.io.com_xcpt.valid && rob.io.com_xcpt.bits.emask(w)))
+        // this is predicted to be taken, but since it is commited, it must have been predicted correctly
+        trace_ingress.io.in.taken := RegNext(rob.io.commit.uops(w).taken) 
+        trace_ingress.io.in.is_branch := RegNext(rob.io.commit.uops(w).is_br)
+        trace_ingress.io.in.is_jal := RegNext(rob.io.commit.uops(w).is_jal)
+        trace_ingress.io.in.is_jalr := RegNext(rob.io.commit.uops(w).is_jalr)
+        trace_ingress.io.in.insn := RegNext(rob.io.commit.uops(w).debug_inst)
+        trace_ingress.io.in.pc := RegNext(rob.io.commit.uops(w).debug_pc)
+        trace_ingress.io.in.is_compressed := RegNext(rob.io.commit.uops(w).is_rvc)
+        trace_ingress.io.in.interrupt := RegNext(rob.io.commit.uops(w).exception && rob.io.commit.uops(w).exc_cause(xLen - 1)) 
+        trace_ingress.io.in.exception := RegNext((rob.io.commit.uops(w).exception && !rob.io.commit.uops(w).exc_cause(xLen - 1)) || rob.io.commit.uops(w).is_sys_pc2epc)
+        // trace_ingress.io.in.interrupt := false.B // TODO: add interrupt support
+        // trace_ingress.io.in.exception := RegNext(rob.io.com_xcpt.bits.emask(w))
+        trace_ingress.io.in.trap_return := RegNext(rob.io.commit.uops(w).is_eret)
+        io.trace_core_ingress.get.group(w) <> trace_ingress.io.out
+    }
+    io.trace_core_ingress.get.ctx := RegNext(csr.io.ptbr.asid)
+    io.trace_core_ingress.get.tval := RegNext(csr.io.tval)
+    io.trace_core_ingress.get.cause := RegNext(csr.io.cause)
+    io.trace_core_ingress.get.time := RegNext(csr.io.time)
+    io.trace_core_ingress.get.priv := RegNext(csr.io.status.prv)
   }
 }

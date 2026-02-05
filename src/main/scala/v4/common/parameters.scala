@@ -125,6 +125,7 @@ case class BoomCoreParams(
   enableConservativeSNI: Boolean = false,
 
   enableTraceCoreIngress: Boolean = false,
+  override val asidLen: Int = 0
 
 // DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams

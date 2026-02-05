@@ -102,7 +102,10 @@ case class BoomCoreParams(
   /* debug stuff */
   enableCommitLogPrintf: Boolean = false,
   enableBranchPrintf: Boolean = false,
-  enableMemtracePrintf: Boolean = false
+  enableMemtracePrintf: Boolean = false,
+
+  enableTraceCoreIngress: Boolean = false,
+  override val asidLen: Int = 0
 
 // DOC include end: BOOM Parameters
 ) extends freechips.rocketchip.tile.CoreParams

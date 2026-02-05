@@ -687,3 +687,14 @@ class WithSWBPD extends Config((site, here, up) => {
     case other => other
   }
 })
+
+class WithNoColumnIssue extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(
+      core = tp.tileParams.core.asInstanceOf[BoomCoreParams].copy(
+        enableColumnALUIssue = false
+      )
+    ))
+    case other => other
+  }
+})

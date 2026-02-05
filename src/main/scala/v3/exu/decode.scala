@@ -588,6 +588,7 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
   uop.is_br          := cs.is_br
   uop.is_jal         := (uop.uopc === uopJAL)
   uop.is_jalr        := (uop.uopc === uopJALR)
+  uop.is_eret        := (uop.uopc === uopERET)
   // uop.is_jump        := cs.is_jal || (uop.uopc === uopJALR)
   // uop.is_ret         := (uop.uopc === uopJALR) &&
   //                       (uop.ldst === X0) &&

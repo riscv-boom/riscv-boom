@@ -60,7 +60,10 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
 
     private def sectorIdx(vpn: UInt) = vpn.extract(log2Ceil(nSectors)-1, 0)
     def getData(vpn: UInt) = OptimizationBarrier(data(sectorIdx(vpn)).asTypeOf(new EntryData))
-    def sectorHit(vpn: UInt, asid: UInt) = valid.orR && sectorTagMatch(vpn) && asidMatch(asid, sectorIdx(vpn), false)
+    def sectorHit(vpn: UInt, asid: UInt) = {
+      val idx = sectorIdx(vpn)
+      valid(idx) && sectorTagMatch(vpn) && asidMatch(asid, idx, false)
+    }
     def sectorTagMatch(vpn: UInt) = ((tag ^ vpn) >> log2Ceil(nSectors)) === 0.U
     def asidMatch(asid: UInt, idx: UInt, ignoreAsid: Boolean) = if (usingASID && !ignoreAsid) (entry_data(idx).g === true.B || tag_sectored_asid.get(idx) === asid) else true.B
     def hit(vpn: UInt, asid: UInt, ignoreAsid: Boolean = false) = {
@@ -120,7 +123,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
            for (((v, e), i) <- (valid zip entry_data).zipWithIndex)
              when (e.fragmented_superpage) { 
               v := false.B 
-              if (usingASID) { tag_sectored_asid.get(i) := 0.U }
+              // if (usingASID) { tag_sectored_asid.get(i) := 0.U }
           }
          }
       }
@@ -130,7 +133,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
         for (i <- 0 until nSectors) {
           when (valid(i) && !entry_data(i).g && tag_sectored_asid.get(i) === asid) {
             valid(i) := false.B
-            tag_sectored_asid.get(i) := 0.U
+            // tag_sectored_asid.get(i) := 0.U
           }
         }
       }
@@ -139,7 +142,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
        for (((v, e), i) <- (valid zip entry_data).zipWithIndex)
          when (!e.g) { 
           v := false.B 
-          if (usingASID) { tag_sectored_asid.get(i) := 0.U }
+          // if (usingASID) { tag_sectored_asid.get(i) := 0.U }
         }
     }
   }
@@ -375,17 +378,15 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
       for (w <- 0 until memWidth) {
         assert(!io.sfence.bits.rs1 || (io.sfence.bits.addr >> pgIdxBits) === vpn(w))
         for (e <- all_entries) {
-          // when (io.sfence.bits.rs1) { e.invalidateVPN(vpn(w)) }
-          // .elsewhen (io.sfence.bits.rs2) { 
-          //   if (usingASID) { 
-          //     e.invalidateAsid(flushAsid) 
-          //   } else { 
-          //     e.invalidateNonGlobal() 
-          //   }
-          // }
-          // .otherwise { e.invalidate() }
-          // always invalidate everything for now
-          e.invalidate()
+          when (io.sfence.bits.rs1) { e.invalidateVPN(vpn(w)) }
+          .elsewhen (io.sfence.bits.rs2) { 
+            if (usingASID) { 
+              e.invalidateAsid(flushAsid) 
+            } else { 
+              e.invalidateNonGlobal() 
+            }
+          }
+          .otherwise { e.invalidate() }
         }
       }
     }

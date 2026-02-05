@@ -9,6 +9,7 @@ import freechips.rocketchip.tilelink._
 import freechips.rocketchip.subsystem.{CacheBlockBytes}
 import freechips.rocketchip.diplomacy.{RegionType}
 import freechips.rocketchip.util._
+import freechips.rocketchip.tile.CoreBundle
 
 import boom.v4.common._
 import boom.v4.exu.{BrResolutionInfo, Exception, CommitSignals}
@@ -43,22 +44,24 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     val fragmented_superpage = Bool()
   }
 
-  class Entry(val nSectors: Int, val superpage: Boolean, val superpageOnly: Boolean) extends Bundle {
+  class Entry(val nSectors: Int, val superpage: Boolean, val superpageOnly: Boolean) extends CoreBundle()(p) {
     require(nSectors == 1 || !superpage)
     require(isPow2(nSectors))
     require(!superpageOnly || superpage)
 
     val level = UInt(log2Ceil(pgLevels).W)
     val tag = UInt(vpnBits.W)
+    val tag_sectored_asid = usingASID.option(Vec(nSectors, UInt(asidLen.W)))
     val data = Vec(nSectors, UInt(new EntryData().getWidth.W))
     val valid = Vec(nSectors, Bool())
     def entry_data = data.map(_.asTypeOf(new EntryData))
 
     private def sectorIdx(vpn: UInt) = vpn.extract(log2Ceil(nSectors)-1, 0)
     def getData(vpn: UInt) = OptimizationBarrier(data(sectorIdx(vpn)).asTypeOf(new EntryData))
-    def sectorHit(vpn: UInt) = valid.orR && sectorTagMatch(vpn)
+    def sectorHit(vpn: UInt, asid: UInt) = valid.orR && sectorTagMatch(vpn) && asidMatch(asid, sectorIdx(vpn), false)
     def sectorTagMatch(vpn: UInt) = ((tag ^ vpn) >> log2Ceil(nSectors)) === 0.U
-    def hit(vpn: UInt) = {
+    def asidMatch(asid: UInt, idx: UInt, ignoreAsid: Boolean) = if (usingASID && !ignoreAsid) (entry_data(idx).g === true.B || tag_sectored_asid.get(idx) === asid) else true.B
+    def hit(vpn: UInt, asid: UInt, ignoreAsid: Boolean = false) = {
       if (superpage && usingVM) {
         var tagMatch = valid.head
         for (j <- 0 until pgLevels) {
@@ -66,10 +69,10 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
           val ignore = level < j.U || (superpageOnly && j == pgLevels - 1).B
           tagMatch = tagMatch && (ignore || tag(base + pgLevelBits - 1, base) === vpn(base + pgLevelBits - 1, base))
         }
-        tagMatch
+        tagMatch && asidMatch(asid, 0.U, ignoreAsid)
       } else {
         val idx = sectorIdx(vpn)
-        valid(idx) && sectorTagMatch(vpn)
+        valid(idx) && sectorTagMatch(vpn) && asidMatch(asid, idx, ignoreAsid)
       }
     }
     def ppn(vpn: UInt) = {
@@ -86,33 +89,56 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
       }
     }
 
-    def insert(tag: UInt, level: UInt, entry: EntryData) {
+    def insert(tag: UInt, level: UInt, entry: EntryData, asid: UInt) {
       this.tag := tag
       this.level := level.extract(log2Ceil(pgLevels - superpageOnly.toInt)-1, 0)
 
       val idx = sectorIdx(tag)
       valid(idx) := true.B
       data(idx) := entry.asUInt
+      if (usingASID) { tag_sectored_asid.get(idx) := asid }
     }
 
-    def invalidate() { valid.foreach(_ := false.B) }
+    def invalidate() { 
+      valid.foreach(_ := false.B) 
+      if (usingASID) { tag_sectored_asid.get.foreach(_ := 0.U) }
+    }
     def invalidateVPN(vpn: UInt) {
       if (superpage) {
-         when (hit(vpn)) { invalidate() }
+         when (hit(vpn, 0.U, ignoreAsid = true)) { invalidate() }
       } else {
-        when (sectorTagMatch(vpn)) { valid(sectorIdx(vpn)) := false.B }
+        when (sectorTagMatch(vpn)) { 
+          valid(sectorIdx(vpn)) := false.B 
+          if (usingASID) { tag_sectored_asid.get(sectorIdx(vpn)) := 0.U }
+        }
 
         // For fragmented superpage mappings, we assume the worst (largest)
         // case, and zap entries whose most-significant VPNs match
          when (((tag ^ vpn) >> (pgLevelBits * (pgLevels - 1))) === 0.U) {
-           for ((v, e) <- valid zip entry_data)
-             when (e.fragmented_superpage) { v := false.B }
+           for (((v, e), i) <- (valid zip entry_data).zipWithIndex)
+             when (e.fragmented_superpage) { 
+              v := false.B 
+              if (usingASID) { tag_sectored_asid.get(i) := 0.U }
+          }
          }
       }
     }
+    def invalidateAsid(asid: UInt) {
+      if (usingASID) {
+        for (i <- 0 until nSectors) {
+          when (valid(i) && !entry_data(i).g && tag_sectored_asid.get(i) === asid) {
+            valid(i) := false.B
+            tag_sectored_asid.get(i) := 0.U
+          }
+        }
+      }
+    }
     def invalidateNonGlobal() {
-       for ((v, e) <- valid zip entry_data)
-         when (!e.g) { v := false.B }
+       for (((v, e), i) <- (valid zip entry_data).zipWithIndex)
+         when (!e.g) { 
+          v := false.B 
+          if (usingASID) { tag_sectored_asid.get(i) := 0.U }
+        }
     }
   }
 
@@ -128,6 +154,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   val s_ready :: s_request :: s_wait :: s_wait_invalidate :: Nil = Enum(4)
   val state = RegInit(s_ready)
   val r_refill_tag = Reg(UInt(vpnBits.W))
+  val r_refill_asid = usingASID.option(Reg(UInt(asidLen.W)))
   val r_superpage_repl_addr = Reg(UInt(log2Ceil(superpage_entries.size).W))
   val r_sectored_repl_addr = Reg(UInt(log2Ceil(sectored_entries.size).W))
   val r_sectored_hit_addr = Reg(UInt(log2Ceil(sectored_entries.size).W))
@@ -136,6 +163,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   val priv = if (instruction) io.ptw.status.prv else io.ptw.status.dprv
   val priv_s = priv(0)
   val priv_uses_vm = priv <= PRV.S.U
+  val currentAsid = if (usingASID) { io.ptw.ptbr.asid(asidLen-1, 0) } else 0.U
   val vm_enabled = widthMap(w => usingVM.B && io.ptw.ptbr.mode(io.ptw.ptbr.mode.getWidth-1) && priv_uses_vm && !io.req(w).bits.passthrough)
 
   // share a single physical memory attribute checker (unshare if critical path)
@@ -166,15 +194,16 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   val prot_x   = widthMap(w => fastCheck(_.executable, w) && pmp(w).io.x)
   val prot_eff = widthMap(w => fastCheck(Seq(RegionType.PUT_EFFECTS, RegionType.GET_EFFECTS) contains _.regionType, w))
 
-  val sector_hits = widthMap(w => VecInit(sectored_entries.map(_.sectorHit(vpn(w)))))
-  val superpage_hits = widthMap(w => VecInit(superpage_entries.map(_.hit(vpn(w)))))
-  val hitsVec = widthMap(w => VecInit(all_entries.map(vm_enabled(w) && _.hit(vpn(w)))))
+  val sector_hits = widthMap(w => VecInit(sectored_entries.map(_.sectorHit(vpn(w), currentAsid))))
+  val superpage_hits = widthMap(w => VecInit(superpage_entries.map(_.hit(vpn(w), currentAsid))))
+  val hitsVec = widthMap(w => VecInit(all_entries.map(vm_enabled(w) && _.hit(vpn(w), currentAsid))))
   val real_hits = widthMap(w => hitsVec(w).asUInt)
   val hits = widthMap(w => Cat(!vm_enabled(w), real_hits(w)))
   val ppn = widthMap(w => Mux1H(hitsVec(w) :+ !vm_enabled(w), all_entries.map(_.ppn(vpn(w))) :+ vpn(w)(ppnBits-1, 0)))
 
     // permission bit arrays
   when (do_refill) {
+    val refillAsid = if (usingASID) r_refill_asid.get else 0.U
     val pte = io.ptw.resp.bits.pte
     val newEntry = Wire(new EntryData)
     newEntry.ppn := pte.ppn
@@ -194,16 +223,16 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     newEntry.fragmented_superpage := io.ptw.resp.bits.fragmented_superpage
 
     when (special_entry.nonEmpty.B && !io.ptw.resp.bits.homogeneous) {
-      special_entry.foreach(_.insert(r_refill_tag, io.ptw.resp.bits.level, newEntry))
+      special_entry.foreach(_.insert(r_refill_tag, io.ptw.resp.bits.level, newEntry, refillAsid))
     }.elsewhen (io.ptw.resp.bits.level < (pgLevels-1).U) {
       for ((e, i) <- superpage_entries.zipWithIndex) when (r_superpage_repl_addr === i.U) {
-        e.insert(r_refill_tag, io.ptw.resp.bits.level, newEntry)
+        e.insert(r_refill_tag, io.ptw.resp.bits.level, newEntry, refillAsid)
       }
     }.otherwise {
       val waddr = Mux(r_sectored_hit, r_sectored_hit_addr, r_sectored_repl_addr)
       for ((e, i) <- sectored_entries.zipWithIndex) when (waddr === i.U) {
         when (!r_sectored_hit) { e.invalidate() }
-        e.insert(r_refill_tag, 0.U, newEntry)
+        e.insert(r_refill_tag, 0.U, newEntry, refillAsid)
       }
     }
   }
@@ -325,7 +354,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
       when (io.req(w).fire && tlb_miss(w) && state === s_ready) {
         state := s_request
         r_refill_tag := vpn(w)
-
+        if (usingASID) { r_refill_asid.get := currentAsid }
         r_superpage_repl_addr := replacementEntry(superpage_entries, superpage_plru.way)
         r_sectored_repl_addr  := replacementEntry(sectored_entries, sectored_plru.way)
         r_sectored_hit_addr   := OHToUInt(sector_hits(w))
@@ -345,11 +374,18 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     }
 
     when (sfence) {
+      val flushAsid = if (usingASID) io.sfence.bits.asid(asidLen-1, 0) else 0.U
       for (w <- 0 until lsuWidth) {
         assert(!io.sfence.bits.rs1 || (io.sfence.bits.addr >> pgIdxBits) === vpn(w))
         for (e <- all_entries) {
           when (io.sfence.bits.rs1) { e.invalidateVPN(vpn(w)) }
-          .elsewhen (io.sfence.bits.rs2) { e.invalidateNonGlobal() }
+          .elsewhen (io.sfence.bits.rs2) { 
+            if (usingASID) { 
+              e.invalidateAsid(flushAsid) 
+            } else { 
+              e.invalidateNonGlobal() 
+            }
+          }
           .otherwise { e.invalidate() }
         }
       }

@@ -96,6 +96,8 @@ class RobIo(
 
   // Let the CSRFile stall us (e.g., wfi).
   val csr_stall = Input(Bool())
+  // let the trace encoder stall us
+  val trace_stall = Input(Bool())
 
   // Flush signals (including exceptions, pipeline replays, and memory ordering failures)
   // to send to the frontend for redirection.
@@ -148,6 +150,8 @@ class CommitExceptionSignals(implicit p: Parameters) extends BoomBundle
 // The ROB needs to tell the FTQ if there's a pipeline flush (and what type)
 // so the FTQ can drive the frontend with the correct redirected PC.
   val flush_typ  = FlushTypes()
+  // signal which instruction is causing the exception
+  val emask      = Vec(coreWidth, Bool())
 }
 
 /**
@@ -389,6 +393,7 @@ class Rob(
 
     when (io.lxcpt.valid && MatchBank(GetBankIdx(io.lxcpt.bits.uop.rob_idx))) {
       rob_exception(GetRowIdx(io.lxcpt.bits.uop.rob_idx)) := true.B
+      rob_uop(GetRowIdx(io.lxcpt.bits.uop.rob_idx)).exception := true.B
       when (io.lxcpt.bits.cause =/= MINI_EXCEPTION_MEM_ORDERING) {
         // In the case of a mem-ordering failure, the failing load will have been marked safe already.
         assert(rob_unsafe(GetRowIdx(io.lxcpt.bits.uop.rob_idx)),
@@ -398,6 +403,7 @@ class Rob(
 
     when (io.csr_replay.valid && MatchBank(GetBankIdx(io.csr_replay.bits.uop.rob_idx))) {
       rob_exception(GetRowIdx(io.csr_replay.bits.uop.rob_idx)) := true.B
+      rob_uop(GetRowIdx(io.csr_replay.bits.uop.rob_idx)).exception := true.B
     }
     can_throw_exception(w) := rob_val(rob_head) && rob_exception(rob_head)
 
@@ -405,7 +411,7 @@ class Rob(
     // Commit or Rollback
 
     // Can this instruction commit? (the check for exceptions/rob_state happens later).
-    can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall
+    can_commit(w) := rob_val(rob_head) && !(rob_bsy(rob_head)) && !io.csr_stall && !io.trace_stall
 
 
     // use the same "com_uop" for both rollback AND commit
@@ -572,6 +578,8 @@ class Rob(
   io.com_xcpt.bits.edge_inst := com_xcpt_uop.edge_inst
   io.com_xcpt.bits.is_rvc    := com_xcpt_uop.is_rvc
   io.com_xcpt.bits.pc_lob    := com_xcpt_uop.pc_lob
+  val xcpt_mask = PriorityEncoderOH(rob_head_vals)
+  io.com_xcpt.bits.emask     := xcpt_mask
 
   val flush_commit_mask = Range(0,coreWidth).map{i => io.commit.valids(i) && io.commit.uops(i).flush_on_commit}
   val flush_commit = flush_commit_mask.reduce(_|_)

@@ -101,6 +101,7 @@ class MicroOp(implicit p: Parameters) extends BoomBundle
   val uses_ldq         = Bool()
   val uses_stq         = Bool()
   val is_sys_pc2epc    = Bool()                      // Is a ECall or Breakpoint -- both set EPC to PC.
+  val is_eret          = Bool()
   val is_unique        = Bool()                      // only allow this instruction in the pipeline, wait for STQ to
                                                      // drain, clear fetcha fter it (tell ROB to un-ready until empty)
   val flush_on_commit  = Bool()                      // some instructions need to flush the pipeline behind them
