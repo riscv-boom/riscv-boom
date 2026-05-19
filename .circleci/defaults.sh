@@ -111,7 +111,8 @@ REMOTE_ESP_DIR=$REMOTE_WORK_DIR/esp-tools-install
 REMOTE_CHIPYARD_DIR=$REMOTE_WORK_DIR/chipyard
 REMOTE_VERILATOR_DIR=$REMOTE_PREFIX-$CIRCLE_SHA1-verilator-install
 REMOTE_SIM_DIR=$REMOTE_CHIPYARD_DIR/sims/verilator
-REMOTE_JAVA_ARGS="-Xmx16G -Xss8M -Dsbt.ivy.home=$REMOTE_WORK_DIR/.ivy2 -Dsbt.supershell=false -Dsbt.global.base=$REMOTE_WORK_DIR/.sbt -Dsbt.boot.directory=$REMOTE_WORK_DIR/.sbt/boot"
+REMOTE_JAVA_OPTS="-Xmx16G -Xss8M"
+REMOTE_SBT_OPTS="-Dsbt.ivy.home=$REMOTE_WORK_DIR/.ivy2 -Dsbt.supershell=false -Dsbt.global.base=$REMOTE_WORK_DIR/.sbt -Dsbt.boot.directory=$REMOTE_WORK_DIR/.sbt/boot"
 REMOTE_SPEC=$CI_DIR/../abejgonza/cpu2017-1.0.1.iso # TODO: this is temporary until a better location is found
 
 # remote variables (on manager instance)

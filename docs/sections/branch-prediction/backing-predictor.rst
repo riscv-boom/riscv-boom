@@ -52,7 +52,7 @@ prevented a prediction from being made.
 
 The :term:`BPD<Backing Predictor (BPD)>` provides a bit-vector of taken/not-taken predictions, the size
 of the bit-vector matching the :term:`Fetch Width` of the pipeline (one
-bit for each instruction in the :term:`Fetch Packet` ). A later **Fetch** stage will
+bit for each instruction in the :term:`Fetch Packet` ). A later **Fetch** stage
 will decode the instructions in the :term:`Fetch Packet` , compute the branch targets, and decide in conjunction with
 the :term:`BPD<Backing Predictor (BPD)>` 's prediction bit-vector if a :term:`Front-end` redirect should be made.
 

@@ -13,7 +13,7 @@ The current version of the BOOM microarchitecture ([SonicBOOM, or BOOMv3](https:
 
 Feature | BOOM
 --- | ---
-ISA | RISC-V (RV64GC)
+ISA | RISC-V (RV64GCB)
 Synthesizable |√
 FPGA |√
 Parameterized |√
@@ -50,6 +50,8 @@ If you use BOOMv3 in your published work, please cite BOOM as
   title={SonicBOOM: The 3rd Generation Berkeley Out-of-Order Machine},
   author={Zhao, Jerry and Korpan, Ben and Gonzalez, Abraham and Asanovic, Krste},
   booktitle={Fourth Workshop on Computer Architecture Research with RISC-V},
+  year={2020},
+  month={May}
 }
 ```
 
