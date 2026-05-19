@@ -45,6 +45,6 @@ high-performance designs:
 
     * This allows decode and rename to proceed in parallel.
 
-More information about the RISC-V ISA can be found at http://riscv.org.
+More information about the RISC-V ISA can be found at https://riscv.org.
 
 .. [1] Currently, BOOM does not implement the proposed "V" vector extension.

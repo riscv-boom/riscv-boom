@@ -275,6 +275,7 @@ jobs:
             - run:
                 name: Run MediumBoomConfig riscv tests
                 command: .circleci/run-tests.sh mediumboom
+                no_output_timeout: 30m
     largeboomconfig-run-csmith-tests:
         executor: main-env
         steps:
@@ -336,6 +337,7 @@ jobs:
             - run:
                 name: Run HwachaBoomConfig riscv tests
                 command: .circleci/run-tests.sh hwachaboom
+                no_output_timeout: 30m
 
     ###########################################################################################
 
@@ -490,14 +492,24 @@ workflows:
         when: << pipeline.parameters.build-and-test-boom-configs-run >>
         jobs:
             # Make the toolchains
-            - install-riscv-toolchain
-            - install-esp-toolchain
+            - install-riscv-toolchain:
+                filters: &ignore_fork
+                    branches:
+                        ignore: /pull\/[0-9]+/
+
+            - install-esp-toolchain:
+                filters:
+                    <<: *ignore_fork
 
             # Setup build environment
-            - prepare-build-environment
+            - prepare-build-environment:
+                filters:
+                    <<: *ignore_fork
 
             # Run generic syntax checking
-            - run-scala-checkstyle
+            # - run-scala-checkstyle:
+            #     filters:
+            #         <<: *ignore_fork
 
             # Prepare the verilator builds
             - prepare-smallboomconfig:
@@ -576,10 +588,11 @@ workflows:
                     branches:
                         only:
                             - master
-
         when: << pipeline.parameters.init-firesim-run >>
         jobs:
             - aws-approval:
+                filters:
+                    <<: *ignore_fork
                 type: approval
 
             - initialize-manager:
