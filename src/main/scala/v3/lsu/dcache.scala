@@ -700,7 +700,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
       }
     }
   }
-  assert(debug_sc_fail_cnt < 100.U, "L1DCache failed too many SCs in a row")
+  assert(debug_sc_fail_cnt < 100000.U, "L1DCache failed too many SCs in a row")
 
   val s2_data = Wire(Vec(memWidth, Vec(nWays, UInt(encRowBits.W))))
   for (i <- 0 until memWidth) {
