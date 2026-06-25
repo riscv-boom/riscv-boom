@@ -176,4 +176,7 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
   // The mem-unit will also bypass writes to readers in the RRD stage.
   // NOTE: This does NOT include the ll_wport
   val bypassable_write_port_mask = exe_units.withFilter(x => x.writesIrf).map(u => u.bypassable)
+
+  // TMA L3: aggregate divider busy across all execution units
+  def anyDivBusy: Bool = exe_units.map(_.io.perf_div_busy).foldLeft(false.B)(_||_)
 }

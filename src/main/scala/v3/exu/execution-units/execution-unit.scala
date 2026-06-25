@@ -135,9 +135,13 @@ abstract class ExecutionUnit(
 
     // TODO move this out of ExecutionUnit
     val com_exception = if (hasMem || hasRocc) Input(Bool()) else null
+
+    // TMA L3: divider busy (INT div or FP div/sqrt)
+    val perf_div_busy = Output(Bool())
   })
 
   io.req.ready := false.B
+  io.perf_div_busy := false.B // default: no divider
 
   if (writesIrf)   {
     io.iresp.valid := false.B
@@ -253,6 +257,9 @@ class ALUExeUnit(
   val div_busy  = WireInit(false.B)
   val ifpu_busy = WireInit(false.B)
 
+  // TMA L3: expose integer divider busy
+  io.perf_div_busy := div_busy
+
   // The Functional Units --------------------
   // Specifically the functional units with fast writeback to IRF
   val iresp_fu_units = ArrayBuffer[FunctionalUnit]()
@@ -345,7 +352,7 @@ class ALUExeUnit(
 
     // buffer up results since we share write-port on integer regfile.
     val queue = Module(new BranchKillableQueue(new ExeUnitResp(dataWidth),
-      entries = intToFpLatency + 3)) // TODO being overly conservative
+      entries = intToFpLatency + 10)) // TODO being overly conservative
     queue.io.enq.valid       := ifpu.io.resp.valid
     queue.io.enq.bits.uop    := ifpu.io.resp.bits.uop
     queue.io.enq.bits.data   := ifpu.io.resp.bits.data
@@ -461,6 +468,9 @@ class FPUExeUnit(
   val fdiv_busy = WireInit(false.B)
   val fpiu_busy = WireInit(false.B)
 
+  // TMA L3: expose FP divider busy
+  io.perf_div_busy := fdiv_busy
+
   // The Functional Units --------------------
   val fu_units = ArrayBuffer[FunctionalUnit]()
 
@@ -535,7 +545,7 @@ class FPUExeUnit(
     // TODO instantiate our own fpiu; and remove it from fpu.scala.
     // buffer up results since we share write-port on integer regfile.
     val queue = Module(new BranchKillableQueue(new ExeUnitResp(dataWidth),
-      entries = dfmaLatency + 3)) // TODO being overly conservative
+      entries = dfmaLatency + 10)) // TODO being overly conservative
     queue.io.enq.valid       := (fpu.io.resp.valid &&
                                  fpu.io.resp.bits.uop.fu_code_is(FU_F2I) &&
                                  fpu.io.resp.bits.uop.uopc =/= uopSTA) // STA means store data gen for floating point

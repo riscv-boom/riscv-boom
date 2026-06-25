@@ -58,6 +58,7 @@ class RobIo(
   val rob_tail_idx = Output(UInt(robAddrSz.W))
   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
   val rob_head_idx = Output(UInt(robAddrSz.W))
+  val full = Output(Bool())
 
   // Handle Branch Misspeculations
   val brupdate = Input(new BrUpdateInfo())
@@ -108,6 +109,9 @@ class RobIo(
   // Stall the frontend if we know we will redirect the PC
   val flush_frontend = Output(Bool())
 
+
+  val tma_killed_by_branch_count = Output(UInt(log2Ceil(numRobEntries + 1).W))
+  val tma_killed_by_rollback_count = Output(UInt(log2Ceil(numRobEntries + 1).W))
 
   val debug_tsc = Input(UInt(xLen.W))
 }
@@ -301,6 +305,9 @@ class Rob(
 
   val rob_fflags    = Seq.fill(coreWidth)(Reg(Vec(numRobRows, UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W))))
 
+  val tma_killed_by_branch_per_bank = Wire(Vec(coreWidth, Vec(numRobRows, Bool())))
+  val tma_killed_by_rollback_per_bank = Wire(Vec(coreWidth, Vec(numRobRows, Bool())))
+
   for (w <- 0 until coreWidth) {
     def MatchBank(bank_idx: UInt): Bool = (bank_idx === w.U)
 
@@ -434,14 +441,21 @@ class Rob(
     assert (!(io.commit.valids.reduce(_||_) && io.commit.rbk_valids.reduce(_||_)),
       "com_valids and rbk_valids are mutually exclusive")
 
+    val tma_killed_by_rollback = Wire(Vec(numRobRows, Bool()))
+    for (i <- 0 until numRobRows) {
+      tma_killed_by_rollback(i) := false.B
+    }
+
     when (rbk_row) {
       rob_val(com_idx)       := false.B
+      tma_killed_by_rollback(com_idx) := rob_val(com_idx)
       rob_exception(com_idx) := false.B
     }
 
     if (enableCommitMapTable) {
       when (RegNext(exception_thrown)) {
         for (i <- 0 until numRobRows) {
+          tma_killed_by_rollback(i) := rob_val(i)
           rob_val(i) := false.B
           rob_bsy(i) := false.B
           rob_uop(i).debug_inst := BUBBLE
@@ -449,14 +463,19 @@ class Rob(
       }
     }
 
+    val tma_killed_by_branch = Wire(Vec(numRobRows, Bool()))
+
     // -----------------------------------------------
     // Kill speculated entries on branch mispredict
     for (i <- 0 until numRobRows) {
       val br_mask = rob_uop(i).br_mask
 
+      tma_killed_by_branch(i) := false.B
+
       //kill instruction if mispredict & br mask match
       when (IsKilledByBranch(io.brupdate, br_mask))
       {
+        tma_killed_by_branch(i) := rob_val(i) && !tma_killed_by_rollback(i)
         rob_val(i) := false.B
         rob_uop(i.U).debug_inst := BUBBLE
       } .elsewhen (rob_val(i)) {
@@ -465,6 +484,8 @@ class Rob(
       }
     }
 
+    tma_killed_by_branch_per_bank(w) := tma_killed_by_branch
+    tma_killed_by_rollback_per_bank(w) := tma_killed_by_rollback
 
     // Debug signal to figure out which prediction structure
     // or core resolved a branch correctly
@@ -528,6 +549,9 @@ class Rob(
     io.commit.debug_wdata(w) := rob_debug_wdata(rob_head)
 
   } //for (w <- 0 until coreWidth)
+
+  io.tma_killed_by_branch_count := tma_killed_by_branch_per_bank.map(bank => PopCount(bank.asUInt)).reduce(_ +& _)
+  io.tma_killed_by_rollback_count := tma_killed_by_rollback_per_bank.map(bank => PopCount(bank.asUInt)).reduce(_ +& _)
 
   // **************************************************************************
   // --------------------------------------------------------------------------
@@ -801,6 +825,7 @@ class Rob(
   io.rob_pnr_idx  := rob_pnr_idx
   io.empty        := empty
   io.ready        := (rob_state === s_normal) && !full && !r_xcpt_val
+  io.full         := full
 
   //-----------------------------------------------
   //-----------------------------------------------

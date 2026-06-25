@@ -89,6 +89,16 @@ class IssueUnitIO(
   val event_empty      = Output(Bool()) // used by HPM events; is the issue unit empty?
 
   val tsc_reg          = Input(UInt(width=xLen.W))
+
+  // Data dependency perf counters
+  val perf_dep = Output(new Bundle {
+    val not_ready_slots        = UInt(16.W) // PopCount(valid && !request)
+    val dep_stall              = Bool()     // has valid entries but none requesting
+    val iq_dispatched_ready    = UInt(16.W) // ops dispatched with all operands ready
+    val iq_dispatched_not_ready = UInt(16.W) // ops dispatched with >= 1 operand not ready
+    val issued_with_poison     = UInt(16.W) // grants where uop has poisoned operand
+    val squash_grants          = UInt(16.W) // grants squashed by ld_miss + poison
+  })
 }
 
 /**
@@ -174,6 +184,47 @@ abstract class IssueUnit(
 
   //-------------------------------------------------------------
 
+
+  //-------------------------------------------------------------
+  // Data dependency perf counters
+  // NOTE: These are scheduler-readiness diagnostics. A slot's `request` signal
+  // depends on p1/p2/p3/ppred and !kill (see issue-slot.scala), so
+  // `valid && !request` includes predicate-not-ready cases, not only
+  // register data dependencies. This is intentional — the counters
+  // capture total IQ readiness stalls from all operand/predicate sources.
+
+  // Slots that are valid but not ready to issue (blocked on operands or predicates)
+  val perf_valid_not_ready = VecInit((0 until numIssueSlots).map(i =>
+    issue_slots(i).valid && !issue_slots(i).request))
+  io.perf_dep.not_ready_slots := PopCount(perf_valid_not_ready)
+
+  // Dep stall: at least one valid entry exists, but none are requesting
+  val has_valid = issue_slots.map(_.valid).reduce(_||_)
+  val has_request = issue_slots.map(_.request).reduce(_||_)
+  io.perf_dep.dep_stall := has_valid && !has_request
+
+  // Operand readiness at dispatch: count ops dispatched with all/some operands ready
+  val disp_ready = (0 until dispatchWidth).map { w =>
+    io.dis_uops(w).fire && !dis_uops(w).prs1_busy && !dis_uops(w).prs2_busy && !dis_uops(w).prs3_busy
+  }
+  val disp_not_ready = (0 until dispatchWidth).map { w =>
+    io.dis_uops(w).fire && (dis_uops(w).prs1_busy || dis_uops(w).prs2_busy || dis_uops(w).prs3_busy)
+  }
+  io.perf_dep.iq_dispatched_ready := PopCount(disp_ready)
+  io.perf_dep.iq_dispatched_not_ready := PopCount(disp_not_ready)
+
+  // Issued with poison: slots granted where the uop has a poisoned operand
+  val perf_issued_poison = VecInit((0 until numIssueSlots).map(i =>
+    issue_slots(i).grant && (issue_slots(i).uop.iw_p1_poisoned || issue_slots(i).uop.iw_p2_poisoned)))
+  io.perf_dep.issued_with_poison := PopCount(perf_issued_poison)
+
+  // Squashed grants: grants that will be squashed because ld_miss arrived and operand was poisoned
+  val perf_squash = VecInit((0 until numIssueSlots).map(i =>
+    issue_slots(i).grant && io.ld_miss &&
+    (issue_slots(i).uop.iw_p1_poisoned || issue_slots(i).uop.iw_p2_poisoned)))
+  io.perf_dep.squash_grants := PopCount(perf_squash)
+
+  //-------------------------------------------------------------
 
   def getType: String =
     if (iqType == IQT_INT.litValue) "int"

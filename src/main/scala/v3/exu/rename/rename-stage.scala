@@ -86,6 +86,9 @@ abstract class AbstractRenameStage(
 
     val debug_rob_empty = Input(Bool())
     val debug = Output(new DebugRenameStageIO(numPhysRegs))
+
+    val tma_kill_machine_clear = Output(UInt(log2Ceil(plWidth + 1).W))
+    val tma_kill_branch_mispredict = Output(UInt(log2Ceil(plWidth + 1).W))
   })
 
   io.ren_stalls.foreach(_ := false.B)
@@ -117,6 +120,8 @@ abstract class AbstractRenameStage(
     ren1_uops(w)          := io.dec_uops(w)
   }
 
+  
+
   for (w <- 0 until plWidth) {
     val r_valid  = RegInit(false.B)
     val r_uop    = Reg(new MicroOp)
@@ -144,6 +149,9 @@ abstract class AbstractRenameStage(
   // Outputs
 
   io.ren2_mask := ren2_valids
+  io.tma_kill_machine_clear := Mux(io.kill, PopCount(ren2_valids.asUInt), 0.U)
+  io.tma_kill_branch_mispredict := Mux(io.kill, 0.U, PopCount((0 until plWidth).map(w =>
+    ren2_valids(w) && IsKilledByBranch(io.brupdate, ren2_uops(w).br_mask))))
 
 
 }

@@ -32,11 +32,73 @@ class WithBoomCommitLogPrintf extends Config((site, here, up) => {
   }
 })
 
+// Like WithBoomCommitLogPrintf, but additionally wraps each committed opcode
+// in a DASM(...) token so that spike-dasm rewrites it to a disassembled
+// mnemonic in the trace. Breaks direct line-diff against Spike's
+// --log-commits output; use WithBoomCommitLogPrintf for cosim.
+class WithBoomHumanReadableCommitLog extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
+      enableCommitLogPrintf = true,
+      enableCommitLogHumanReadable = true
+    )))
+    case other => other
+  }
+})
+
 
 class WithBoomBranchPrintf extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
       enableBranchPrintf = true
+    )))
+    case other => other
+  }
+})
+
+class WithBoomTMACounters extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
+      enableTMACounters = true,
+      enableMemOrderCounters = true
+    )))
+    case other => other
+  }
+})
+
+class WithBoomDataDepCounters extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
+      enableDataDepCounters = true
+    )))
+    case other => other
+  }
+})
+
+class WithBoomOOOEngineCounters extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
+      enableOOOEngineCounters = true
+    )))
+    case other => other
+  }
+})
+
+class WithBoomMemOrderCounters extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
+      enableMemOrderCounters = true
+    )))
+    case other => other
+  }
+})
+
+// Enable DPI-C based TMA counter dump at simulation end.
+// Only use in Verilator/VCS simulation configs — not for FPGA, FireSim, or ASIC.
+class WithBoomTMASimDump extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
+      enableTMASimDump = true
     )))
     case other => other
   }
@@ -249,6 +311,50 @@ class WithNMegaBooms(n: Int = 1) extends Config(
             ),
             dcache = Some(
               DCacheParams(rowBits = 128, nSets=64, nWays=8, nMSHRs=8, nTLBWays=32)
+            ),
+            icache = Some(
+              ICacheParams(rowBits = 128, nSets=64, nWays=8, fetchBytes=4*4)
+            ),
+            tileId = i + idOffset
+          ),
+          crossingParams = RocketCrossingParams()
+        )
+      } ++ prev
+    }
+    case NumTiles => up(NumTiles) + n
+  })
+)
+
+class WithNMegaBoomsBigCaches(n: Int = 1) extends Config(
+  new WithTAGELBPD ++ // Default to TAGE-L BPD
+  new Config((site, here, up) => {
+    case TilesLocated(InSubsystem) => {
+      val prev = up(TilesLocated(InSubsystem), site)
+      val idOffset = up(NumTiles)
+      (0 until n).map { i =>
+        BoomTileAttachParams(
+          tileParams = BoomTileParams(
+            core = BoomCoreParams(
+              fetchWidth = 8,
+              decodeWidth = 4,
+              numRobEntries = 128,
+              issueParams = Seq(
+                IssueParams(issueWidth=2, numEntries=24, iqType=IQT_MEM.litValue, dispatchWidth=4),
+                IssueParams(issueWidth=4, numEntries=40, iqType=IQT_INT.litValue, dispatchWidth=4),
+                IssueParams(issueWidth=2, numEntries=32, iqType=IQT_FP.litValue , dispatchWidth=4)),
+              numIntPhysRegisters = 128,
+              numFpPhysRegisters = 128,
+              numLdqEntries = 32,
+              numStqEntries = 32,
+              maxBrCount = 20,
+              numFetchBufferEntries = 32,
+              enablePrefetching = true,
+              numDCacheBanks = 1,
+              ftq = FtqParameters(nEntries=40),
+              fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true))
+            ),
+            dcache = Some(
+              DCacheParams(rowBits = 256, nSets=64, nWays=8, nMSHRs=16, nTLBWays=32)
             ),
             icache = Some(
               ICacheParams(rowBits = 128, nSets=64, nWays=8, fetchBytes=4*4)

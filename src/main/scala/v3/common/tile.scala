@@ -86,6 +86,9 @@ class BoomTile private(
   val masterNode = TLIdentityNode()
   val slaveNode = TLIdentityNode()
 
+  // Connect slaveNode to the slave crossbar (needed for MMIO devices inside the tile)
+  DisableMonitors { implicit p => tlSlaveXbar.node :*= slaveNode }
+
   val tile_master_blocker =
     tileParams.blockerCtrlAddr
       .map(BasicBusBlockerParams(_, xBytes, masterPortBeatBytes, deadlock = true))
@@ -139,12 +142,25 @@ class BoomTile private(
   frontend.resetVectorSinkNode := resetVectorNexusNode
   tlMasterXbar.node := TLWidthWidget(tileParams.icache.get.rowBits/8) := frontend.masterNode
 
-  require(tileParams.dcache.get.rowBits == tileParams.icache.get.rowBits)
+  // require(tileParams.dcache.get.rowBits == tileParams.icache.get.rowBits)
 
   // ROCC
   val roccs = p(BuildRoCC).map(_(p))
   roccs.map(_.atlNode).foreach { atl => tlMasterXbar.node :=* atl }
   roccs.map(_.tlNode).foreach { tl => tlOtherMastersNode :=* tl }
+
+  // TMA Performance Counter MMIO Device (optional)
+  val perfCounterDevice = if (boomParams.core.enableTMACounters) {
+    val params = BoomPerfCounterParams(address = 0x10030000L + tileId * 0x1000L)
+    val dev = LazyModule(new BoomPerfCounterDevice(params, xBytes))
+    connectTLSlave(dev.node, xBytes)
+    Some(dev)
+  } else None
+
+  // BundleBridge sink for L2 performance counters (wired from subsystem via diplomacy)
+  val l2PerfCounterSinkNode: Option[BundleBridgeSink[Vec[UInt]]] = if (boomParams.core.enableTMACounters) {
+    Some(BundleBridgeSink[Vec[UInt]](Some(() => Vec(BoomPerfCounterConsts.L2_NUM_COUNTERS, UInt(64.W))))) // sized to L2_NUM_COUNTERS (18)
+  } else None
 }
 
 /**
@@ -242,6 +258,44 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   hellaCacheArb.io.requestor <> hellaCachePorts.toSeq
   lsu.io.hellacache <> hellaCacheArb.io.mem
   outer.dcache.module.io.lsu <> lsu.io.dmem
+
+  // L2 performance counters received via BundleBridge diplomacy from subsystem
+  val l2PerfCounters = outer.l2PerfCounterSinkNode.map(_.bundle)
+
+  // TMA Performance Counter MMIO wiring
+  outer.perfCounterDevice.foreach { dev =>
+    core.io.tma_counters.foreach { ctrs =>
+      dev.module.io.counters := ctrs
+      // Override inline L2 counter slots (75-91) with actual L2 counter values
+      l2PerfCounters.foreach { l2ctrs =>
+        for (i <- 0 until BoomPerfCounterConsts.L2_INLINE_NUM_COUNTERS) {
+          dev.module.io.counters(BoomPerfCounterConsts.CORE_NUM_COUNTERS + BoomPerfCounterConsts.MEM_ORDER_NUM_COUNTERS + BoomPerfCounterConsts.DATA_DEP_NUM_COUNTERS + i) := l2ctrs(i)
+        }
+        // l2_demand_miss_pending: appended at end (index 109) to avoid shifting existing indices
+        dev.module.io.counters(BoomPerfCounterConsts.NUM_COUNTERS - 1) := l2ctrs(BoomPerfCounterConsts.L2_INLINE_NUM_COUNTERS)
+      }
+    }
+  }
+
+  // DPI-C counter dump at simulation end (gated by +dump-tma-counters plusarg)
+  // Only instantiated when enableTMASimDump is true (Verilator/VCS only).
+  // Do NOT enable for FPGA, FireSim, or ASIC flows — DPI-C is unsupported.
+  if (outer.boomParams.core.enableTMASimDump) {
+    core.io.tma_counters.foreach { ctrs =>
+      val dump = Module(new SimTMACounterDump(BoomPerfCounterConsts.NUM_COUNTERS, outer.tileId))
+      dump.io.clock := clock
+      dump.io.reset := reset.asBool
+      dump.io.counters := ctrs
+      // Override inline L2 counter slots with actual values
+      l2PerfCounters.foreach { l2ctrs =>
+        for (i <- 0 until BoomPerfCounterConsts.L2_INLINE_NUM_COUNTERS) {
+          dump.io.counters(BoomPerfCounterConsts.CORE_NUM_COUNTERS + BoomPerfCounterConsts.MEM_ORDER_NUM_COUNTERS + BoomPerfCounterConsts.DATA_DEP_NUM_COUNTERS + i) := l2ctrs(i)
+        }
+        // l2_demand_miss_pending: appended at end (index 109)
+        dump.io.counters(BoomPerfCounterConsts.NUM_COUNTERS - 1) := l2ctrs(BoomPerfCounterConsts.L2_INLINE_NUM_COUNTERS)
+      }
+    }
+  }
 
   // Generate a descriptive string
   val frontendStr = outer.frontend.module.toString

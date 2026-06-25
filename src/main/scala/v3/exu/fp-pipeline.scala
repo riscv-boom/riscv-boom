@@ -53,6 +53,10 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
 
     val debug_tsc_reg    = Input(UInt(width=xLen.W))
     val debug_wb_wdata   = Output(Vec(numWakeupPorts, UInt((fLen+1).W)))
+
+    // TMA L3: FP issue valids and divider busy
+    val perf_iss_valids = Output(Vec(fpIssueParams.issueWidth, Bool()))
+    val perf_fdiv_busy  = Output(Bool())
   })
 
   //**********************************
@@ -99,6 +103,10 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   issue_unit.io.ld_miss := false.B
 
   require (exe_units.numTotalBypassPorts == 0)
+
+  // TMA L3: expose FP issue valids and divider busy
+  io.perf_iss_valids := iss_valids
+  io.perf_fdiv_busy  := exe_units.anyDivBusy
 
   //-------------------------------------------------------------
   // **** Dispatch Stage ****

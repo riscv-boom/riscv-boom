@@ -91,6 +91,8 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     val wb_resp     = Input(Bool())
 
     val probe_rdy   = Output(Bool())
+
+    val refill_active = Output(Bool())
   })
 
   // TODO: Optimize this. We don't want to mess with cache during speculation
@@ -141,6 +143,15 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   val grant_had_data = Reg(Bool())
   val finish_to_prefetch = Reg(Bool())
 
+  // Latching register: true when a demand request has entered the RPQ for this MSHR allocation
+  val has_demand = RegInit(false.B)
+  when (state.isOneOf(s_invalid, s_prefetch)) {
+    has_demand := false.B
+  }
+  when (rpq.io.enq.fire) {
+    has_demand := true.B
+  }
+
   // Block probes if a tag write we started is still in the pipeline
   val meta_hazard = RegInit(0.U(2.W))
   when (meta_hazard =/= 0.U) { meta_hazard := meta_hazard + 1.U }
@@ -149,6 +160,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   io.idx.valid := state =/= s_invalid
   io.tag.valid := state =/= s_invalid
   io.way.valid := !state.isOneOf(s_invalid, s_prefetch)
+  io.refill_active := !state.isOneOf(s_invalid, s_prefetch, s_prefetched) && has_demand
   io.idx.bits := req_idx
   io.tag.bits := req_tag
   io.way.bits := req.way_en
@@ -545,6 +557,8 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
 
     val fence_rdy = Output(Bool())
     val probe_rdy = Output(Bool())
+
+    val refill_in_flight = Output(Bool())
   })
 
   val req_idx = OHToUInt(io.req.map(_.valid))
@@ -769,6 +783,8 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     sdq_val := sdq_val & ~(UIntToOH(replay_arb.io.out.bits.sdq_id) & Fill(cfg.nSDQ, free_sdq)) |
       PriorityEncoderOH(~sdq_val(cfg.nSDQ-1,0)) & Fill(cfg.nSDQ, sdq_enq)
   }
+
+  io.refill_in_flight := mshrs.map(_.io.refill_active).reduce(_||_)
 
   prefetcher.io.mshr_avail    := RegNext(pri_rdy)
   prefetcher.io.req_val       := RegNext(commit_vals.reduce(_||_))

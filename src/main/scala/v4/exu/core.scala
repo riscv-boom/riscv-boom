@@ -1462,7 +1462,7 @@ class BoomCore(roccCSRs: Seq[Seq[CustomCSR]])(implicit p: Parameters) extends Bo
         trace_ingress.io.in.trap_return := RegNext(rob.io.commit.uops(w).is_eret)
         io.trace_core_ingress.get.group(w) <> trace_ingress.io.out
     }
-    io.trace_core_ingress.get.ctx := RegNext(csr.io.ptbr.asid)
+    // io.trace_core_ingress.get.ctx := RegNext(csr.io.ptbr.asid)
     io.trace_core_ingress.get.tval := RegNext(csr.io.tval)
     io.trace_core_ingress.get.cause := RegNext(csr.io.cause)
     io.trace_core_ingress.get.time := RegNext(csr.io.time)

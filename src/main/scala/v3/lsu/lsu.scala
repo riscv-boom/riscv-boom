@@ -104,6 +104,7 @@ class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
     val release = Bool()
   })
 
+  val refill_in_flight = Input(Bool())
 }
 
 class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
@@ -152,7 +153,15 @@ class LSUCoreIO(implicit p: Parameters) extends BoomBundle()(p)
     val acquire = Bool()
     val release = Bool()
     val tlbMiss = Bool()
+    val stldForwardStall = UInt(xLen.W)
+    val stldForwardSuccess = UInt(xLen.W)
+    val stldForwardWakeupRetry = UInt(xLen.W)
+    val stldBlockLoadWakeup = UInt(xLen.W)
+    val loadOrderingFailure = UInt(xLen.W)
+    val loadNackRetry = UInt(xLen.W)
   })
+
+  val refill_in_flight = Output(Bool())
 }
 
 class LSUIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
@@ -251,6 +260,19 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.core.perf.tlbMiss := io.ptw.req.fire
   io.core.perf.acquire := io.dmem.perf.acquire
   io.core.perf.release := io.dmem.perf.release
+  io.core.refill_in_flight := io.dmem.refill_in_flight
+  val perfStldForwardStall = WireDefault(0.U(xLen.W))
+  val perfStldForwardSuccess = WireDefault(0.U(xLen.W))
+  val perfStldForwardWakeupRetry = WireDefault(0.U(xLen.W))
+  val perfStldBlockLoadWakeup = WireDefault(0.U(xLen.W))
+  val perfLoadOrderingFailure = WireDefault(0.U(xLen.W))
+  val perfLoadNackRetry = WireDefault(0.U(xLen.W))
+  io.core.perf.stldForwardStall := perfStldForwardStall
+  io.core.perf.stldForwardSuccess := perfStldForwardSuccess
+  io.core.perf.stldForwardWakeupRetry := perfStldForwardWakeupRetry
+  io.core.perf.stldBlockLoadWakeup := perfStldBlockLoadWakeup
+  io.core.perf.loadOrderingFailure := perfLoadOrderingFailure
+  io.core.perf.loadNackRetry := perfLoadNackRetry
 
 
 
@@ -1061,6 +1083,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val mem_forward_ldq_idx = lcam_ldq_idx
   val mem_forward_ld_addr = lcam_addr
   val mem_forward_stq_idx = Wire(Vec(memWidth, UInt(log2Ceil(numStqEntries).W)))
+  val mem_forward_stalled = Wire(Vec(memWidth, Bool()))
 
   val wb_forward_valid    = RegNext(mem_forward_valid)
   val wb_forward_ldq_idx  = RegNext(mem_forward_ldq_idx)
@@ -1189,6 +1212,11 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
                                  !IsKilledByBranch(io.core.brupdate, lcam_uop(w))    &&
                                  !io.core.exception && !RegNext(io.core.exception)))
   mem_forward_stq_idx     := forwarding_idx
+  mem_forward_stalled     := widthMap(w => ldst_addr_matches(w).reduce(_||_) && !mem_forward_valid(w))
+  perfStldForwardStall    := mem_forward_stalled.reduce(_||_).asUInt
+  perfStldForwardWakeupRetry := PopCount(will_fire_load_wakeup)
+  perfLoadOrderingFailure := PopCount(failed_loads)
+  perfLoadNackRetry       := PopCount(nacking_loads)
 
   // Avoid deadlock with a 1-w LSU prioritizing load wakeups > store commits
   // On a 2W machine, load wakeups and store commits occupy separate pipelines,
@@ -1212,6 +1240,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       block_load_wakeup := true.B
     }
   }
+  perfStldBlockLoadWakeup := block_load_wakeup.asUInt
 
 
   // Task 3: Clr unsafe bit in ROB for succesful translations
@@ -1280,6 +1309,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   }
 
   val dmem_resp_fired = WireInit(widthMap(w => false.B))
+  val wb_forward_success = WireInit(widthMap(w => false.B))
 
   for (w <- 0 until memWidth) {
     // Handle nacks
@@ -1370,6 +1400,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       io.core.exe(w).fresp.bits.data := loadgen.data
 
       when (data_ready && live) {
+        wb_forward_success(w) := true.B
         ldq(f_idx).bits.succeeded := data_ready
         ldq(f_idx).bits.forward_std_val := true.B
         ldq(f_idx).bits.forward_stq_idx := wb_forward_stq_idx(w)
@@ -1378,6 +1409,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       }
     }
   }
+  perfStldForwardSuccess := PopCount(wb_forward_success)
 
   // Initially assume the speculative load wakeup failed
   io.core.ld_miss         := RegNext(io.core.spec_ld_wakeup.map(_.valid).reduce(_||_))

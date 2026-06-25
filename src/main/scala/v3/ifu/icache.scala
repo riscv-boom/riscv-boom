@@ -81,6 +81,7 @@ class ICacheBundle(val outer: ICache) extends BoomBundle()(outer.p)
 
   val perf = Output(new Bundle {
     val acquire = Bool()
+    val lookups = Bool() // Resolved I-cache lookup outcomes (io.resp.valid || s2_miss); miss-rate denominator
   })
 }
 
@@ -333,6 +334,7 @@ class ICacheModule(outer: ICache) extends LazyModuleImp(outer)
   tl_out.e.valid := false.B
 
   io.perf.acquire := tl_out.a.fire
+  io.perf.lookups := io.resp.valid || s2_miss
 
   when (!refill_valid) { invalidated := false.B }
   when (refill_fire) { refill_valid := true.B }
