@@ -1610,7 +1610,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       }
     }
     // Handle store acks
-    when (io.dmem.store_ack(w).valid) {
+    when (io.dmem.store_ack(w).valid && !io.dmem.store_ack(w).bits.is_hella) {
       stq_succeeded(io.dmem.store_ack(w).bits.uop.stq_idx) := true.B
     }
 
