@@ -40,6 +40,8 @@ case class BoomCoreParams(
   numFetchBufferEntries: Int = 16,
   enableAgePriorityIssue: Boolean = true,
   enablePrefetching: Boolean = false,
+  enableSoftwarePrefetchRoCC: Boolean = false, // Decode ld x0 as prefetch via RoCC (from TEA)
+  prefetchCommitToL1: Boolean = false, // Commit prefetched lines into the data array instead of parking in s_prefetch
   enableFastLoadUse: Boolean = true,
   enableCommitMapTable: Boolean = false,
   enableFastPNR: Boolean = false,
@@ -240,6 +242,8 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 
   val enableFastLoadUse = boomParams.enableFastLoadUse
   val enablePrefetching = boomParams.enablePrefetching
+  val enableSoftwarePrefetchRoCC = boomParams.enableSoftwarePrefetchRoCC
+  val prefetchCommitToL1 = boomParams.prefetchCommitToL1
   val nLBEntries = dcacheParams.nMSHRs
 
   //************************************

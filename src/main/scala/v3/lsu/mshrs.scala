@@ -276,10 +276,15 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.resp.bits.uop  := rpq.io.deq.bits.uop
     io.resp.bits.data := loadgen.data
     io.resp.bits.is_hella := rpq.io.deq.bits.is_hella
+    io.resp.bits.is_hella_prft := rpq.io.deq.bits.is_hella_prft
     when (rpq.io.deq.fire) {
       commit_line   := true.B
     }
-      .elsewhen (rpq.io.empty && !commit_line)
+      // With prefetchCommitToL1, prefetches skip this early-out and fall
+      // through to the normal commit path (s_meta_read -> s_commit_line),
+      // writing the line into the data array instead of parking in s_prefetch
+      .elsewhen (rpq.io.empty && !commit_line &&
+                 !(prefetchCommitToL1.B && isPrefetch(req.uop.mem_cmd)))
     {
       when (!rpq.io.enq.fire) {
         state := s_mem_finish_1
@@ -288,7 +293,9 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     } .elsewhen (rpq.io.empty || (rpq.io.deq.valid && !drain_load)) {
       // io.commit_val is for the prefetcher. it tells the prefetcher that this line was correctly acquired
       // The prefetcher should consider fetching the next line
-      io.commit_val := true.B
+      // Don't signal commit for prefetches — they shouldn't trigger the HW prefetcher
+      // (ported from EECS-NTNU/riscv-boom TEA)
+      io.commit_val := !isPrefetch(req.uop.mem_cmd)
       state := s_meta_read
     }
   } .elsewhen (state === s_meta_read) {
@@ -424,7 +431,12 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
   val s_idle :: s_mem_access :: s_mem_ack :: s_resp :: Nil = Enum(4)
 
   val state = RegInit(s_idle)
-  io.req.ready := state === s_idle
+  // Refuse prefetches: isRead(M_PFR) is false, so a prefetch here would be
+  // emitted as a TileLink Put (a stray MMIO write of garbage). Refusing makes
+  // the dcache nack, and the LSU drops nacked prefetches.
+  io.req.ready := state === s_idle && !isPrefetch(io.req.bits.uop.mem_cmd)
+  assert(state === s_idle || !isPrefetch(req.uop.mem_cmd),
+    "[iomshr] prefetch must never allocate an IO MSHR")
 
   val loadgen = new LoadGen(req.uop.mem_size, req.uop.mem_signed, req.addr, grant_word, false.B, wordBytes)
 
@@ -460,6 +472,7 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
 
   io.resp.valid     := (state === s_resp) && send_resp
   io.resp.bits.is_hella := req.is_hella
+  io.resp.bits.is_hella_prft := req.is_hella_prft
   io.resp.bits.uop  := req.uop
   io.resp.bits.data := loadgen.data
 
@@ -581,17 +594,16 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   val lb_read_arb  = Module(new Arbiter(new LineBufferReadReq, cfg.nMSHRs))
   val lb_write_arb = Module(new Arbiter(new LineBufferWriteReq, cfg.nMSHRs))
 
-  lb_read_arb.io.out.ready  := false.B
+  // Allow concurrent read and write to the linebuffer (ported from EECS-NTNU/riscv-boom TEA)
+  lb_read_arb.io.out.ready  := true.B
   lb_write_arb.io.out.ready := true.B
 
   val lb_read_data = WireInit(0.U(encRowBits.W))
   when (lb_write_arb.io.out.fire) {
     lb.write(lb_write_arb.io.out.bits.lb_addr, lb_write_arb.io.out.bits.data)
-  } .otherwise {
-    lb_read_arb.io.out.ready := true.B
-    when (lb_read_arb.io.out.fire) {
-      lb_read_data := lb.read(lb_read_arb.io.out.bits.lb_addr)
-    }
+  }
+  when (lb_read_arb.io.out.fire) {
+    lb_read_data := lb.read(lb_read_arb.io.out.bits.lb_addr)
   }
   def widthMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
 

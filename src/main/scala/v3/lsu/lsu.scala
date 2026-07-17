@@ -52,6 +52,7 @@ import freechips.rocketchip.util.Str
 import boom.v3.common._
 import boom.v3.exu.{BrUpdateInfo, Exception, FuncUnitResp, CommitSignals, ExeUnitResp}
 import boom.v3.util.{BoolToChar, AgePriorityEncoder, IsKilledByBranch, GetNewBrMask, WrapInc, IsOlder, UpdateBrMask}
+import freechips.rocketchip.rocket.isPrefetch
 
 class LSUExeIO(implicit p: Parameters) extends BoomBundle()(p)
 {
@@ -68,6 +69,7 @@ class BoomDCacheReq(implicit p: Parameters) extends BoomBundle()(p)
   val addr  = UInt(coreMaxAddrBits.W)
   val data  = Bits(coreDataBits.W)
   val is_hella = Bool() // Is this the hellacache req? If so this is not tracked in LDQ or STQ
+  val is_hella_prft = Bool() // Prefetch response can be ignored (ported from EECS-NTNU/riscv-boom TEA)
 }
 
 class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
@@ -75,6 +77,7 @@ class BoomDCacheResp(implicit p: Parameters) extends BoomBundle()(p)
 {
   val data = Bits(coreDataBits.W)
   val is_hella = Bool()
+  val is_hella_prft = Bool() // Prefetch response can be ignored (ported from EECS-NTNU/riscv-boom TEA)
 }
 
 class LSUDMemIO(implicit p: Parameters, edge: TLEdgeOut) extends BoomBundle()(p)
@@ -225,7 +228,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
           stq_tail === stq_execute_head,
             "stq_execute_head got off track.")
 
-  val h_ready :: h_s1 :: h_s2 :: h_s2_nack :: h_wait :: h_replay :: h_dead :: Nil = Enum(7)
+  // State machine expanded for software prefetch support (ported from EECS-NTNU/riscv-boom TEA)
+  val h_ready :: h_s1 :: h_s2 :: h_s2_nack :: h_s2_xcpt :: h_wait :: h_replay_s0 :: h_replay_s1 :: h_dead :: Nil = Enum(9)
   // s1 : do TLB, if success and not killed, fire request go to h_s2
   //      store s1_data to register
   //      if tlb miss, go to s2_nack
@@ -710,6 +714,11 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   val exe_tlb_paddr = widthMap(w => Cat(dtlb.io.resp(w).paddr(paddrBits-1,corePgIdxBits),
                                         exe_tlb_vaddr(w)(corePgIdxBits-1,0)))
   val exe_tlb_uncacheable = widthMap(w => !(dtlb.io.resp(w).cacheable))
+  val exe_tlb_xcpt = widthMap(w => dtlb.io.req(w).fire && (
+    dtlb.io.resp(w).ma.ld || dtlb.io.resp(w).ma.st ||
+    dtlb.io.resp(w).pf.ld || dtlb.io.resp(w).pf.st ||
+    dtlb.io.resp(w).ae.ld || dtlb.io.resp(w).ae.st ||
+    dtlb.io.resp(w).gf.ld || dtlb.io.resp(w).gf.st))
 
   for (w <- 0 until memWidth) {
     assert (exe_tlb_paddr(w) === dtlb.io.resp(w).paddr || exe_req(w).bits.sfence.valid, "[lsu] paddrs should match.")
@@ -761,6 +770,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     dmem_req(w).bits.addr  := 0.U
     dmem_req(w).bits.data  := 0.U
     dmem_req(w).bits.is_hella := false.B
+    dmem_req(w).bits.is_hella_prft := false.B
 
     io.dmem.s1_kill(w) := false.B
 
@@ -803,7 +813,10 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     } .elsewhen (will_fire_hella_incoming(w)) {
       assert(hella_state === h_s1)
 
-      dmem_req(w).valid               := !io.hellacache.s1_kill && (!exe_tlb_miss(w) || hella_req.phys)
+      // Drop uncacheable prefetches (like normal loads do): an M_PFR reaching
+      // the IO MSHR would be emitted as a TileLink Put (a stray MMIO write)
+      dmem_req(w).valid               := !io.hellacache.s1_kill && (hella_req.phys || (!exe_tlb_miss(w) && !exe_tlb_xcpt(w))) &&
+                                         !(isPrefetch(hella_req.cmd) && exe_tlb_uncacheable(w))
       dmem_req(w).bits.addr           := exe_tlb_paddr(w)
       dmem_req(w).bits.data           := (new freechips.rocketchip.rocket.StoreGen(
         hella_req.size, 0.U,
@@ -813,12 +826,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       dmem_req(w).bits.uop.mem_size   := hella_req.size
       dmem_req(w).bits.uop.mem_signed := hella_req.signed
       dmem_req(w).bits.is_hella       := true.B
+      dmem_req(w).bits.is_hella_prft  := isPrefetch(hella_req.cmd)
 
       hella_paddr := exe_tlb_paddr(w)
     }
       .elsewhen (will_fire_hella_wakeup(w))
     {
-      assert(hella_state === h_replay)
+      assert(hella_state === h_replay_s0)
       dmem_req(w).valid               := true.B
       dmem_req(w).bits.addr           := hella_paddr
       dmem_req(w).bits.data           := (new freechips.rocketchip.rocket.StoreGen(
@@ -829,6 +843,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       dmem_req(w).bits.uop.mem_size   := hella_req.size
       dmem_req(w).bits.uop.mem_signed := hella_req.signed
       dmem_req(w).bits.is_hella       := true.B
+      dmem_req(w).bits.is_hella_prft  := isPrefetch(hella_req.cmd)
     }
 
     //-------------------------------------------------------------
@@ -1534,6 +1549,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       hella_req   := io.hellacache.req.bits
       hella_state := h_s1
     }
+  // Hellacache state machine with software prefetch support
+  // (prefetch changes ported from EECS-NTNU/riscv-boom TEA, Björn Gottschall 2022)
   } .elsewhen (hella_state === h_s1) {
     can_fire_hella_incoming(memWidth-1) := true.B
 
@@ -1541,52 +1558,112 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     hella_xcpt := dtlb.io.resp(memWidth-1)
 
     when (io.hellacache.s1_kill) {
-      when (will_fire_hella_incoming(memWidth-1) && dmem_req_fire(memWidth-1)) {
+      when (!isPrefetch(hella_req.cmd) && (will_fire_hella_incoming(memWidth-1) && dmem_req_fire(memWidth-1))) {
         hella_state := h_dead
       } .otherwise {
         hella_state := h_ready
       }
     } .elsewhen (will_fire_hella_incoming(memWidth-1) && dmem_req_fire(memWidth-1)) {
       hella_state := h_s2
+    } .elsewhen (!hella_req.phys && exe_tlb_xcpt(memWidth-1)) {
+      hella_state := h_s2_xcpt
     } .otherwise {
       hella_state := h_s2_nack
     }
   } .elsewhen (hella_state === h_s2_nack) {
     io.hellacache.s2_nack := true.B
     hella_state := h_ready
+  } .elsewhen(hella_state === h_s2_xcpt) {
+    when (!isPrefetch(hella_req.cmd)) {
+      io.hellacache.s2_xcpt := hella_xcpt
+      hella_state := h_ready
+    } .elsewhen(io.hellacache.s2_kill) {
+      hella_state := h_ready
+    } .otherwise {
+      // Prefetch with TLB exception: go to h_dead which crafts a dummy response
+      hella_state := h_dead
+    }
   } .elsewhen (hella_state === h_s2) {
     io.hellacache.s2_xcpt := hella_xcpt
-    when (io.hellacache.s2_kill || hella_xcpt.asUInt =/= 0.U) {
-      hella_state := h_dead
+    when (io.hellacache.s2_kill) {
+      when (isPrefetch(hella_req.cmd)) {
+        hella_state := h_ready
+      } .otherwise {
+        hella_state := h_dead
+      }
     } .otherwise {
       hella_state := h_wait
     }
   } .elsewhen (hella_state === h_wait) {
-    for (w <- 0 until memWidth) {
-      when (io.dmem.resp(w).valid && io.dmem.resp(w).bits.is_hella) {
-        hella_state := h_ready
+    // Qualify nacks with is_hella_prft matching the outstanding request: a
+    // stale prefetch nack must never redirect a non-prefetch (e.g. PTW)
+    // request into h_replay_s0 — the resulting double-fetch leaves a stale
+    // response behind that a LATER walk would consume as its PTE.
+    val hella_nack_prft_filter = true // FIXB_TOGGLE
+    val hella_nack = (0 until memWidth).map(w =>
+      io.dmem.nack(w).valid && io.dmem.nack(w).bits.is_hella &&
+      (!hella_nack_prft_filter.B ||
+       io.dmem.nack(w).bits.is_hella_prft === isPrefetch(hella_req.cmd)))
 
-        io.hellacache.resp.valid       := true.B
-        io.hellacache.resp.bits.addr   := hella_req.addr
-        io.hellacache.resp.bits.tag    := hella_req.tag
-        io.hellacache.resp.bits.cmd    := hella_req.cmd
-        io.hellacache.resp.bits.signed := hella_req.signed
-        io.hellacache.resp.bits.size   := hella_req.size
-        io.hellacache.resp.bits.data   := io.dmem.resp(w).bits.data
-      } .elsewhen (io.dmem.nack(w).valid && io.dmem.nack(w).bits.is_hella) {
-        hella_state := h_replay
+    when (hella_nack.reduce(_||_) && isPrefetch(hella_req.cmd)) {
+      // Nacked prefetch: drop it instead of replaying — prefetches are best-effort
+      hella_state := h_ready
+      io.hellacache.resp.valid       := true.B
+      io.hellacache.resp.bits.addr   := hella_req.addr
+      io.hellacache.resp.bits.tag    := hella_req.tag
+      io.hellacache.resp.bits.cmd    := hella_req.cmd
+      io.hellacache.resp.bits.signed := hella_req.signed
+      io.hellacache.resp.bits.size   := hella_req.size
+      io.hellacache.resp.bits.data   := 0.U
+    } .elsewhen (hella_nack.reduce(_||_)) {
+      hella_state := h_replay_s0
+    } .elsewhen(isPrefetch(hella_req.cmd)) {
+      // Prefetch: craft a dummy response immediately, don't wait for dcache data
+      hella_state := h_ready
+      io.hellacache.resp.valid       := true.B
+      io.hellacache.resp.bits.addr   := hella_req.addr
+      io.hellacache.resp.bits.tag    := hella_req.tag
+      io.hellacache.resp.bits.cmd    := hella_req.cmd
+      io.hellacache.resp.bits.signed := hella_req.signed
+      io.hellacache.resp.bits.size   := hella_req.size
+      io.hellacache.resp.bits.data   := 0.U
+    } .otherwise {
+      for (w <- 0 until memWidth) {
+        when(io.dmem.resp(w).valid && io.dmem.resp(w).bits.is_hella && !io.dmem.resp(w).bits.is_hella_prft) {
+          hella_state := h_ready
+          io.hellacache.resp.valid       := true.B
+          io.hellacache.resp.bits.addr   := hella_req.addr
+          io.hellacache.resp.bits.tag    := hella_req.tag
+          io.hellacache.resp.bits.cmd    := hella_req.cmd
+          io.hellacache.resp.bits.signed := hella_req.signed
+          io.hellacache.resp.bits.size   := hella_req.size
+          io.hellacache.resp.bits.data   := io.dmem.resp(w).bits.data
+        }
       }
     }
-  } .elsewhen (hella_state === h_replay) {
+  } .elsewhen (hella_state === h_replay_s0) {
     can_fire_hella_wakeup(memWidth-1) := true.B
-
     when (will_fire_hella_wakeup(memWidth-1) && dmem_req_fire(memWidth-1)) {
-      hella_state := h_wait
+      hella_state := h_replay_s1
     }
+  } .elsewhen(hella_state === h_replay_s1) {
+    hella_state := h_wait
   } .elsewhen (hella_state === h_dead) {
-    for (w <- 0 until memWidth) {
-      when (io.dmem.resp(w).valid && io.dmem.resp(w).bits.is_hella) {
-        hella_state := h_ready
+    when (isPrefetch(hella_req.cmd)) {
+      // Prefetch: craft a dummy response and return to ready
+      hella_state := h_ready
+      io.hellacache.resp.valid       := true.B
+      io.hellacache.resp.bits.addr   := hella_req.addr
+      io.hellacache.resp.bits.tag    := hella_req.tag
+      io.hellacache.resp.bits.cmd    := hella_req.cmd
+      io.hellacache.resp.bits.signed := hella_req.signed
+      io.hellacache.resp.bits.size   := hella_req.size
+      io.hellacache.resp.bits.data   := 0.U
+    } .otherwise {
+      for (w <- 0 until memWidth) {
+        when(io.dmem.resp(w).valid && io.dmem.resp(w).bits.is_hella && !io.dmem.resp(w).bits.is_hella_prft) {
+          hella_state := h_ready
+        }
       }
     }
   }

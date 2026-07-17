@@ -598,6 +598,31 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
 
   //-------------------------------------------------------------
 
+  // Decode ld x0 as software prefetch via RoCC
+  // (ported from EECS-NTNU/riscv-boom TEA, Björn Gottschall 2022)
+  // !!! Not compliant with RISC-V standard — ld x0 should be able to throw exceptions !!!
+  if (boomParams.enableSoftwarePrefetchRoCC) {
+    val prefetch_insn = cs.uses_ldq &&
+      !cs.is_amo &&
+      !cs.is_fence &&
+      !cs.is_fencei &&
+      (cs.iq_type === IQT_MEM) &&
+      (cs.mem_cmd === freechips.rocketchip.rocket.M_XRD) &&
+      (cs.dst_type === RT_FIX) &&
+      (inst(RD_MSB, RD_LSB) === 0.U)
+
+    when(prefetch_insn) {
+      uop.dst_rtype := RT_X
+      uop.ldst_val  := false.B
+      uop.mem_cmd   := freechips.rocketchip.rocket.M_PFR
+      uop.uses_ldq  := false.B
+      uop.uses_stq  := false.B
+      uop.iq_type   := IQT_INT
+      uop.fu_code   := FU_CSR
+      uop.uopc      := uopROCC
+    }
+  }
+
   io.deq.uop := uop
 }
 

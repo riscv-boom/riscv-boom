@@ -14,6 +14,7 @@ package boom.v3.exu
 
 import chisel3._
 import chisel3.util._
+import midas.targetutils.SynthesizePrintf
 
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.tile.{RoCCCoreIO, RoCCInstruction}
@@ -112,6 +113,13 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   val rxq_rs1       = Reg(Vec(numRxqEntries, UInt(xLen.W)))
   val rxq_rs2       = Reg(Vec(numRxqEntries, UInt(xLen.W)))
 
+  // DIAG (temporary): split STAGE=rxq-issue into "never issued from IQ" vs
+  // "issued but capture guard blocked". Per-entry latches, reset at (re)alloc
+  // (enq) and on full reset/flush.
+  val diag_req_seen = RegInit(VecInit(Seq.fill(numRxqEntries)(false.B))) // io.req.valid ever fired
+  val diag_blk_exc  = RegInit(VecInit(Seq.fill(numRxqEntries)(false.B))) // blocked by io.exception
+  val diag_blk_br   = RegInit(VecInit(Seq.fill(numRxqEntries)(false.B))) // blocked by IsKilledByBranch
+
   // RoCC commit queue. Wait for response, or immediate unbusy
   val rcq           = Module(new Queue(new MicroOp(), numRcqEntries))
 
@@ -146,6 +154,23 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
     rxq_uop      (rxq_tail) := io.core.dis_uops(rocc_idx)
     rxq_inst     (rxq_tail) := io.core.dis_uops(rocc_idx).inst
     rxq_tail                := WrapInc(rxq_tail, numRxqEntries)
+    diag_req_seen(rxq_tail) := false.B // fresh entry
+    diag_blk_exc (rxq_tail) := false.B
+    diag_blk_br  (rxq_tail) := false.B
+  }
+
+  // DIAG: latch that io.req fired for this entry (regardless of the capture
+  // guard), and if the guard blocked it, why. Distinguishes never-issued from
+  // issued-but-capture-blocked at the hang.
+  when (io.req.valid) {
+    val d_idx = io.req.bits.uop.rxq_idx
+    diag_req_seen(d_idx) := true.B
+    val d_killed = IsKilledByBranch(io.brupdate, io.req.bits.uop)
+    val d_exc    = io.exception || RegNext(io.exception)
+    when (d_killed || d_exc) {
+      diag_blk_exc(d_idx) := d_exc
+      diag_blk_br (d_idx) := d_killed
+    }
   }
 
   // Wait for operands
@@ -214,7 +239,15 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
   //--------------------------
   // Exception / Reset
 
-  when (reset.asBool) {
+  // FIX: on any pipeline flush (io.exception = rob.io.flush.valid), FULLY reset
+  // the RXQ instead of preserving "committed" (past-PNR) entries. A flush is
+  // taken at the ROB head and squashes/re-fetches everything younger, including
+  // past-PNR RoCC uops between head and PNR; stock preserved their RXQ entries
+  // -> orphan (ROB re-fetches, RXQ keeps a stale copy) -> ROB-head wedge. Full
+  // reset keeps the RXQ consistent with the ROB (safe here: the only RoCC op is
+  // the idempotent prefetch, so any re-fetch/re-issue is harmless).
+  val pnr_flush_fix = false // PNRFIX_TOGGLE  (false = stock, for A/B)
+  when (reset.asBool || (io.exception && pnr_flush_fix.B)) {
     rxq_tail     := 0.U
     rxq_head     := 0.U
     rxq_com_head := 0.U
@@ -222,8 +255,12 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
       rxq_val(i)       := false.B
       rxq_op_val(i)    := false.B
       rxq_committed(i) := false.B
+      diag_req_seen(i) := false.B
+      diag_blk_exc(i)  := false.B
+      diag_blk_br(i)   := false.B
     }
   } .elsewhen (io.exception) {
+    // STOCK behavior (fix disabled): rewind tail, preserve committed entries
     rxq_tail := rxq_com_head
     for (i <- 0 until numRxqEntries) {
       when (!rxq_committed(i)) {
@@ -231,6 +268,24 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
         rxq_op_val(i)   := false.B
       }
     }
+  }
+
+  // FIX (rxq-reclaim, 2026-07-08): rxq_head advances ONLY on fire (needs
+  // rxq_val && rxq_op_val && rxq_committed) and rxq_com_head ONLY on commit
+  // (needs rxq_val). But a branch-kill (IsKilledByBranch above) or an exception
+  // clears rxq_val WITHOUT advancing either pointer, so a killed head/com_head
+  // permanently strands the RoCC pipe -> ROB-head wedge (observed on mcf as
+  // roccdiag2 STAGE=rxq-issue-BLOCKED-OTHER @ ~5.18B cyc; reproduces with
+  // fast-load-use OFF, so it is NOT the spec-load poison). Reclaim killed
+  // entries by skipping them, preserving head <= com_head <= tail. SAFE: the
+  // only RoCC op here is the idempotent software prefetch, so dropping a killed
+  // copy is harmless (the ROB re-fetches/re-executes it if it was real).
+  val rxq_reclaim_fix = true // RECLAIMFIX_TOGGLE
+  when (rxq_reclaim_fix.B && !rxq_val(rxq_com_head) && (rxq_com_head =/= rxq_tail)) {
+    rxq_com_head := WrapInc(rxq_com_head, numRxqEntries)
+  }
+  when (rxq_reclaim_fix.B && !rxq_val(rxq_head) && (rxq_head =/= rxq_com_head)) {
+    rxq_head := WrapInc(rxq_head, numRxqEntries)
   }
 
 
@@ -257,5 +312,55 @@ class RoCCShim(implicit p: Parameters) extends BoomModule
     io.resp.bits.data          := io.core.rocc.resp.bits.data
 
     rcq.io.deq.ready           := true.B
+  }
+
+  // DIAG (temporary): fallback probe for the revert-to-stock experiment. If
+  // stock ALSO hangs, name where the RoCC op is stuck — the RXQ-fire side or
+  // the RCQ-writeback side. Trip at 4000 cyc (< the 8192-cyc pipeline-hung
+  // assert). Remove once the hang is resolved.
+  val diag_rxq_empty   = rxq_tail === rxq_head
+  val diag_outstanding = !diag_rxq_empty || rcq.io.deq.valid
+  val diag_resp_fire   = io.resp.valid && io.resp.ready
+  val diag_stall       = RegInit(0.U(20.W))
+  diag_stall := Mux(diag_outstanding && !diag_resp_fire, diag_stall + 1.U, 0.U)
+  val diag_trip = diag_stall > 4000.U
+  // RXQ-fire side — split rxq-issue by whether io.req ever fired (Hyp1 vs Hyp2):
+  assert(!(diag_trip && !diag_rxq_empty && !rxq_op_val(rxq_head) && !diag_req_seen(rxq_head)),
+    "[roccdiag2] STAGE=rxq-issue-NEVERREQ: uop never issued from IQ (io.req never fired)")
+  assert(!(diag_trip && !diag_rxq_empty && !rxq_op_val(rxq_head) && diag_req_seen(rxq_head)
+           && diag_blk_exc(rxq_head)),
+    "[roccdiag2] STAGE=rxq-issue-BLOCKED-EXC: issued but capture blocked by io.exception")
+  assert(!(diag_trip && !diag_rxq_empty && !rxq_op_val(rxq_head) && diag_req_seen(rxq_head)
+           && diag_blk_br(rxq_head) && !diag_blk_exc(rxq_head)),
+    "[roccdiag2] STAGE=rxq-issue-BLOCKED-BR: issued but capture blocked by IsKilledByBranch")
+  assert(!(diag_trip && !diag_rxq_empty && !rxq_op_val(rxq_head) && diag_req_seen(rxq_head)
+           && !diag_blk_exc(rxq_head) && !diag_blk_br(rxq_head)),
+    "[roccdiag2] STAGE=rxq-issue-BLOCKED-OTHER: issued, op_val unset, no guard reason latched")
+  assert(!(diag_trip && !diag_rxq_empty && rxq_op_val(rxq_head) && !rxq_committed(rxq_head)),
+    "[roccdiag2] STAGE=rxq-pnr: RXQ head has operand but not committed (PNR)")
+  assert(!(diag_trip && !diag_rxq_empty && rxq_op_val(rxq_head) && rxq_committed(rxq_head)
+           && !io.core.rocc.cmd.ready),
+    "[roccdiag2] STAGE=rxq-cmd: RXQ head committed but accelerator cmd.ready low")
+  assert(!(diag_trip && !diag_rxq_empty && rxq_op_val(rxq_head) && rxq_committed(rxq_head)
+           && io.core.rocc.cmd.ready && !rcq.io.enq.ready),
+    "[roccdiag2] STAGE=rxq-enq: RXQ head ready but RCQ full (enq.ready low)")
+  // RCQ-writeback side (buffered RT_X op can't retire):
+  assert(!(diag_trip && rcq.io.deq.valid && (rcq.io.deq.bits.dst_rtype === RT_X) && !io.resp.ready),
+    "[roccdiag2] STAGE=rcq-writeback: RCQ RT_X head but io.resp.ready low (ll_wbarb in(2) starved)")
+
+  // SYNTHPRINT (temporary): once the RXQ head has been stalled > 200 cyc (above
+  // normal RoCC-path occupancy, below the 4000-cyc assert trip), stream the
+  // shim head state every cycle. Watching io.req.valid over time deconfounds
+  // NEVERREQ vs BLOCKED-EXC without a resettable latch. Volume is capped by the
+  // 4000-cyc assert halt (~3800 lines/probe). Wrapped in SynthesizePrintf so
+  // ONLY this printf is synthesized on FPGA (not Rocket/BOOM's other printfs).
+  when (!diag_rxq_empty && diag_stall > 200.U) {
+    SynthesizePrintf(printf("[pf-shim] stall=%d head=%d rob=%d opval=%d comm=%d val=%d cmdrdy=%d resprdy=%d reqv=%d reqidx=%d reqrob=%d exc=%d rexc=%d bmis=%d reqseen=%d blkexc=%d blkbr=%d\n",
+      diag_stall, rxq_head, rxq_uop(rxq_head).rob_idx,
+      rxq_op_val(rxq_head), rxq_committed(rxq_head), rxq_val(rxq_head),
+      io.core.rocc.cmd.ready, io.resp.ready,
+      io.req.valid, io.req.bits.uop.rxq_idx, io.req.bits.uop.rob_idx,
+      io.exception, RegNext(io.exception), io.brupdate.b2.mispredict,
+      diag_req_seen(rxq_head), diag_blk_exc(rxq_head), diag_blk_br(rxq_head)))
   }
 }

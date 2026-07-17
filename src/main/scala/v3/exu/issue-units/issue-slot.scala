@@ -17,6 +17,7 @@ package boom.v3.exu
 
 import chisel3._
 import chisel3.util._
+import midas.targetutils.SynthesizePrintf
 
 import org.chipsalliance.cde.config.Parameters
 
@@ -284,6 +285,38 @@ class IssueSlot(val numWakeupPorts: Int)(implicit p: Parameters)
       io.uop.uopc := uopSTD
       io.uop.lrs1_rtype := RT_X
     }
+  }
+
+  // DIAG (temporary): a uopROCC (prefetch) slot that lingers un-issued names
+  // WHY it can't issue. Trips at 4000 cyc (< the 8192-cyc pipeline-hung assert).
+  // Reset when the slot is granted (issues) or goes invalid.
+  val diag_is_rocc  = is_valid && (slot_uop.uopc === uopROCC)
+  val diag_iq_stall = RegInit(0.U(20.W))
+  diag_iq_stall := Mux(diag_is_rocc && !io.grant, diag_iq_stall + 1.U, 0.U)
+  val diag_iq_trip = diag_iq_stall > 4000.U
+  assert(!(diag_iq_trip && !io.request && !p1),
+    "[iqdiag] STAGE=iq-notreq-p1: RoCC slot valid but p1 (rs1) not ready")
+  assert(!(diag_iq_trip && !io.request && p1 && !p2),
+    "[iqdiag] STAGE=iq-notreq-p2: RoCC slot valid, p1 ok but p2 not ready")
+  assert(!(diag_iq_trip && !io.request && p1 && p2 && !p3),
+    "[iqdiag] STAGE=iq-notreq-p3: RoCC slot valid, p1/p2 ok but p3 not ready")
+  assert(!(diag_iq_trip && !io.request && p1 && p2 && p3 && !ppred),
+    "[iqdiag] STAGE=iq-notreq-ppred: RoCC slot valid, p1/p2/p3 ok but ppred not ready")
+  assert(!(diag_iq_trip && io.request),
+    "[iqdiag] STAGE=iq-req-nogrant: RoCC slot REQUESTING but never granted (issue-select starvation)")
+
+  // SYNTHPRINT (temporary): once a uopROCC slot has lingered un-issued > 200 cyc
+  // (above normal, below the 4000-cyc assert trip), stream the issue-side state
+  // every cycle. wkp1 = a wakeup port matched prs1 THIS cycle (mirrors the
+  // p1-set logic on next_uop.prs1) — distinguishes "wakeup arrived but p1 didn't
+  // set" (wakeup bug) from "wakeup never arrived". Volume capped by the 4000-cyc
+  // assert halt. SynthesizePrintf so ONLY this printf is synthesized on FPGA.
+  val diag_wk_p1 = io.wakeup_ports.map(w => w.valid && (w.bits.pdst === next_uop.prs1)).reduce(_ || _)
+  when (diag_is_rocc && diag_iq_stall > 200.U) {
+    SynthesizePrintf(printf("[pf-iq] stall=%d rob=%d prs1=%d st=%d p1=%d p2=%d p3=%d ppred=%d req=%d grant=%d pois1=%d pois2=%d ldmiss=%d kill=%d wkp1=%d\n",
+      diag_iq_stall, slot_uop.rob_idx, slot_uop.prs1, state,
+      p1, p2, p3, ppred, io.request, io.grant,
+      p1_poisoned, p2_poisoned, io.ldspec_miss, io.kill, diag_wk_p1))
   }
 
   // debug outputs

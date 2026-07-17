@@ -14,6 +14,7 @@ import freechips.rocketchip.devices.tilelink.{BootROMParams}
 import freechips.rocketchip.prci.{SynchronousCrossing, AsynchronousCrossing, RationalCrossing}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
+import freechips.rocketchip.diplomacy.LazyModule
 
 import boom.v3.ifu._
 import boom.v3.exu._
@@ -537,3 +538,115 @@ class WithSWBPD extends Config((site, here, up) => {
     case other => other
   }
 })
+
+// Software prefetch RoCC accelerator (ported from EECS-NTNU/riscv-boom TEA, Björn Gottschall 2022)
+// Enables both the RoCC accelerator and the decode hack (ld x0 → prefetch)
+class WithSoftwarePrefetchRoCC(queueSize: Int = 16) extends Config((site, here, up) => {
+  case BuildRoCC => up(BuildRoCC) ++ Seq((p: Parameters) => {
+    val prefetcher = LazyModule(new boom.v3.lsu.SoftwarePrefetchRoCC(
+      new OpcodeSet(Seq("b00000011".U)), queueSize = queueSize)(p))
+    prefetcher
+  })
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
+      enableSoftwarePrefetchRoCC = true
+    )))
+    case other => other
+  }
+})
+
+// Enable prefetching on all BOOM tiles. Without this, a completed prefetch
+// refill goes straight to s_invalid instead of parking in s_prefetch
+// (finish_to_prefetch is gated on enablePrefetching), so prefetched lines are
+// dropped without ever being committed -- prefetches become a no-op.
+// Large/Mega/Ultra set this in their core params; Medium/Small do not.
+class WithBoomEnablePrefetching extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(
+      core = tp.tileParams.core.copy(enablePrefetching = true)))
+    case other => other
+  }
+})
+
+// Commit prefetched lines into the L1 data array (Rocket-dcache-style) instead
+// of parking them in the MSHR's s_prefetch state. Persistent across MSHR
+// reuse/probes/fences at the cost of cache pollution and victim writebacks.
+class WithBoomPrefetchCommitToL1 extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(
+      core = tp.tileParams.core.copy(prefetchCommitToL1 = true)))
+    case other => other
+  }
+})
+
+// Override the number of dcache MSHRs on all BOOM tiles (more outstanding
+// misses for software-prefetch workloads; the MSHR linebuffer scales with it)
+class WithBoomDCacheMSHRs(n: Int) extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(
+      dcache = tp.tileParams.dcache.map(_.copy(nMSHRs = n))))
+    case other => other
+  }
+})
+
+// Toggle BOOM fast-load-use (speculative load wakeup / spec_ld_wakeup broadcast).
+// Diagnostic for the sw-prefetch mcf wedge: enableFastLoadUse=false removes the
+// spec_ld_wakeup broadcast (lsu.scala) and thus the poison machinery entirely
+// (issue-slot.scala:215 assert(!next_p1_poisoned) + the speculative issue of a
+// poison-woken prefetch). If mcf passes with this off, fast-load-use/poison is
+// the wedge root.
+class WithBoomFastLoadUse(enable: Boolean) extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(
+      core = tp.tileParams.core.copy(enableFastLoadUse = enable)))
+    case other => other
+  }
+})
+
+// UltraBoom config from EECS-NTNU/riscv-boom TEA (Björn Gottschall 2022)
+// Scaled-up MegaBoom with 16 MSHRs, larger queues, sized for software prefetch workloads
+class WithNUltraBooms(n: Int = 1) extends Config(
+  new WithTAGELBPD ++
+    new Config((site, here, up) => {
+      case TilesLocated(InSubsystem) => {
+        val prev = up(TilesLocated(InSubsystem), site)
+        val idOffset = up(NumTiles)
+        (0 until n).map { i =>
+          BoomTileAttachParams(
+            tileParams = BoomTileParams(
+              core = BoomCoreParams(
+                fetchWidth = 8,
+                decodeWidth = 4,
+                numRobEntries = 192,
+                issueParams = Seq(
+                  IssueParams(issueWidth=2, numEntries=48, iqType=IQT_MEM.litValue, dispatchWidth=4),
+                  IssueParams(issueWidth=4, numEntries=80, iqType=IQT_INT.litValue, dispatchWidth=4),
+                  IssueParams(issueWidth=2, numEntries=48, iqType=IQT_FP.litValue , dispatchWidth=4)),
+                numIntPhysRegisters = 192,
+                numFpPhysRegisters = 192,
+                numLdqEntries = 64,
+                numStqEntries = 64,
+                maxBrCount = 30,
+                numFetchBufferEntries = 48,
+                enablePrefetching = true,
+                ftq = FtqParameters(nEntries=60),
+                fpu = Some(freechips.rocketchip.tile.FPUParams(sfmaLatency=4, dfmaLatency=4, divSqrt=true)),
+                numDCacheBanks = 1,
+                numRXQEntries = 16,
+                numRCQEntries = 16,
+              ),
+              dcache = Some(
+                DCacheParams(rowBits = 128, nSets=64, nWays=8, nMSHRs=16, nTLBWays=32, nSDQ=64, nRPQ=16)
+              ),
+              icache = Some(
+                ICacheParams(rowBits = 128, nSets=64, nWays=8, fetchBytes=4*4)
+              ),
+              tileId = i + idOffset
+            ),
+            crossingParams = RocketCrossingParams()
+          )
+        } ++ prev
+      }
+      case NumTiles => up(NumTiles) + n
+    })
+)

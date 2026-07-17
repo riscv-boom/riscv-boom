@@ -278,8 +278,9 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   val cmd_lrsc           = widthMap(w => usingAtomics.B && io.req(w).bits.cmd.isOneOf(M_XLR, M_XSC))
   val cmd_amo_logical    = widthMap(w => usingAtomics.B && isAMOLogical(io.req(w).bits.cmd))
   val cmd_amo_arithmetic = widthMap(w => usingAtomics.B && isAMOArithmetic(io.req(w).bits.cmd))
-  val cmd_read           = widthMap(w => isRead(io.req(w).bits.cmd))
-  val cmd_write          = widthMap(w => isWrite(io.req(w).bits.cmd))
+  // Treat prefetch as read/write for TLB permission checks (ported from EECS-NTNU/riscv-boom TEA)
+  val cmd_read           = widthMap(w => isRead(io.req(w).bits.cmd) || io.req(w).bits.cmd === M_PFR)
+  val cmd_write          = widthMap(w => isWrite(io.req(w).bits.cmd) || io.req(w).bits.cmd === M_PFW)
   val cmd_write_perms    = widthMap(w => cmd_write(w) ||
     coreParams.haveCFlush.B && io.req(w).bits.cmd === M_FLUSH_ALL) // not a write, but needs write permissions
 
