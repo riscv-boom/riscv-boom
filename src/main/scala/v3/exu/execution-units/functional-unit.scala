@@ -35,7 +35,7 @@ import boom.v3.util._
 object FUConstants
 {
   // bit mask, since a given execution pipeline may support multiple functional units
-  val FUC_SZ = 10
+  val FUC_SZ = 13
   val FU_X   = BitPat.dontCare(FUC_SZ)
   val FU_ALU =   1.U(FUC_SZ.W)
   val FU_JMP =   2.U(FUC_SZ.W)
@@ -47,6 +47,9 @@ object FUConstants
   val FU_FDV = 128.U(FUC_SZ.W)
   val FU_I2F = 256.U(FUC_SZ.W)
   val FU_F2I = 512.U(FUC_SZ.W)
+  val FU_MULE2N = 1024.U(FUC_SZ.W)
+  val FU_MULE3N = 2048.U(FUC_SZ.W)
+  val FU_MULE5N = 4096.U(FUC_SZ.W)
 
   // FP stores generate data through FP F2I, and generate address through MemAddrCalc
   val FU_F2IMEM = 516.U(FUC_SZ.W)
@@ -722,4 +725,724 @@ class PipelinedMulUnit(numStages: Int, dataWidth: Int)(implicit p: Parameters)
   imul.io.req.bits.tag := DontCare
   // response
   io.resp.bits.data    := imul.io.resp.bits.data
+}
+
+class FoldedMule2NUnit(dataWidth: Int)(implicit p: Parameters)
+  extends FunctionalUnit(
+    isPipelined = false,
+    numStages = 1,
+    numBypassStages = 0,
+    dataWidth = dataWidth)
+{
+  require(xLen == 64, "[mule2n] BOOM MULE2N implementation assumes RV64.")
+
+  val prodWidth  = 2 * xLen
+  val chunkWidth = xLen / 2
+
+  val sIdle :: sCalc0 :: sCalc1 :: sResp :: Nil = Enum(4)
+  val state = RegInit(sIdle)
+
+  val r_uop          = Reg(new MicroOp())
+  val sign_r         = RegInit(false.B)
+  val chunk1_valid_r = RegInit(false.B)
+  val multiplicand_r = Reg(UInt(xLen.W))
+  val chunk0_r       = Reg(UInt(chunkWidth.W))
+  val chunk1_r       = Reg(UInt(chunkWidth.W))
+  val chunk0_high_r  = RegInit(false.B)
+  val chunk1_high_r  = RegInit(false.B)
+  val acc_sum_r      = RegInit(0.U(prodWidth.W))
+  val acc_carry_r    = RegInit(0.U(prodWidth.W))
+  val result_r       = RegInit(0.U(xLen.W))
+
+  private def csa(a: UInt, b: UInt, c: UInt): (UInt, UInt) = {
+    val width = a.getWidth
+    val sum   = Wire(UInt(width.W))
+    val carry = Wire(UInt(width.W))
+    sum   := a ^ b ^ c
+    carry := (((a & b) | (a & c) | (b & c)) << 1)(width - 1, 0)
+    (sum, carry)
+  }
+
+  private def absSigned(value: UInt): UInt = {
+    Mux(value(xLen - 1), (~value).asUInt + 1.U, value)
+  }
+
+  private def shiftChunk(value: UInt, upperHalf: Bool): UInt = {
+    val shifted = Wire(UInt(prodWidth.W))
+    shifted := Mux(upperHalf, (value << chunkWidth)(prodWidth - 1, 0), value)
+    shifted
+  }
+
+  val req_a = io.req.bits.rs1_data(xLen - 1, 0)
+  val req_b = io.req.bits.rs2_data(xLen - 1, 0)
+
+  val a_abs = absSigned(req_a)
+  val b_abs = absSigned(req_b)
+
+  val a_low_nonzero  = a_abs(chunkWidth - 1, 0) =/= 0.U
+  val a_high_nonzero = a_abs(xLen - 1, chunkWidth) =/= 0.U
+  val b_low_nonzero  = b_abs(chunkWidth - 1, 0) =/= 0.U
+  val b_high_nonzero = b_abs(xLen - 1, chunkWidth) =/= 0.U
+
+  val a_single_chunk = !(a_low_nonzero && a_high_nonzero)
+  val b_single_chunk = !(b_low_nonzero && b_high_nonzero)
+
+  val choose_a_as_chunk =
+    Mux(a_single_chunk =/= b_single_chunk, a_single_chunk, PopCount(a_abs) <= PopCount(b_abs))
+
+  val chunk_seed        = Mux(choose_a_as_chunk, a_abs, b_abs)
+  val multiplicand_seed = Mux(choose_a_as_chunk, b_abs, a_abs)
+  val sign_seed         = req_a(xLen - 1) ^ req_b(xLen - 1)
+
+  val chunk_low_seed    = chunk_seed(chunkWidth - 1, 0)
+  val chunk_high_seed   = chunk_seed(xLen - 1, chunkWidth)
+  val low_nonzero_seed  = chunk_low_seed =/= 0.U
+  val high_nonzero_seed = chunk_high_seed =/= 0.U
+
+  val choose_high_first =
+    high_nonzero_seed &&
+    (!low_nonzero_seed || (PopCount(chunk_high_seed) < PopCount(chunk_low_seed)))
+
+  val chunk0_seed       = Mux(choose_high_first, chunk_high_seed, chunk_low_seed)
+  val chunk1_seed       = Mux(choose_high_first, chunk_low_seed, chunk_high_seed)
+  val chunk0_high_seed  = choose_high_first
+  val chunk1_high_seed  = !choose_high_first
+  val chunk1_valid_seed = low_nonzero_seed && high_nonzero_seed
+
+  val calc0_active = state === sCalc0
+  val calc1_active = state === sCalc1
+  val current_chunk = Mux(calc1_active, chunk1_r, chunk0_r)
+  val current_high  = Mux(calc1_active, chunk1_high_r, chunk0_high_r)
+  val gated_chunk   = Mux(calc0_active || calc1_active, current_chunk, 0.U(chunkWidth.W))
+
+  val pp_lines = Wire(Vec(chunkWidth, UInt(prodWidth.W)))
+  for (i <- 0 until chunkWidth) {
+    pp_lines(i) := Mux(gated_chunk(i), (Cat(0.U(xLen.W), multiplicand_r) << i)(prodWidth - 1, 0), 0.U(prodWidth.W))
+  }
+
+  val ppm_sum   = Wire(Vec(chunkWidth + 1, UInt(prodWidth.W)))
+  val ppm_carry = Wire(Vec(chunkWidth + 1, UInt(prodWidth.W)))
+  ppm_sum(0)   := 0.U
+  ppm_carry(0) := 0.U
+
+  for (i <- 0 until chunkWidth) {
+    val stage = csa(ppm_sum(i), ppm_carry(i), pp_lines(i))
+    ppm_sum(i + 1)   := stage._1
+    ppm_carry(i + 1) := stage._2
+  }
+
+  val chunk_sum_shifted   = shiftChunk(ppm_sum(chunkWidth), current_high)
+  val chunk_carry_shifted = shiftChunk(ppm_carry(chunkWidth), current_high)
+  val feedback0           = csa(acc_sum_r, acc_carry_r, chunk_sum_shifted)
+  val feedback1           = csa(feedback0._1, feedback0._2, chunk_carry_shifted)
+  val final_product       = feedback1._1 + feedback1._2
+  val final_mag_result    = final_product(xLen - 1, 0)
+  val final_result        = Mux(sign_r, (~final_mag_result).asUInt + 1.U, final_mag_result)
+
+  when (state =/= sIdle) {
+    r_uop.br_mask := GetNewBrMask(io.brupdate, r_uop)
+  }
+
+  val do_kill = (state =/= sIdle) && (IsKilledByBranch(io.brupdate, r_uop) || io.req.bits.kill)
+
+  io.req.ready := state === sIdle
+  io.resp.valid := state === sResp && !do_kill
+  io.resp.bits.predicated := false.B
+  io.resp.bits.data := result_r
+  io.resp.bits.fflags.valid := false.B
+  io.resp.bits.uop := r_uop
+  io.resp.bits.uop.br_mask := GetNewBrMask(io.brupdate, r_uop)
+
+  when (do_kill) {
+    state := sIdle
+    acc_sum_r := 0.U
+    acc_carry_r := 0.U
+  } .otherwise {
+    switch (state) {
+      is (sIdle) {
+        when (io.req.fire) {
+          r_uop := io.req.bits.uop
+          r_uop.br_mask := GetNewBrMask(io.brupdate, io.req.bits.uop)
+          sign_r := sign_seed
+          multiplicand_r := multiplicand_seed
+          chunk0_r := chunk0_seed
+          chunk1_r := chunk1_seed
+          chunk0_high_r := chunk0_high_seed
+          chunk1_high_r := chunk1_high_seed
+          chunk1_valid_r := chunk1_valid_seed
+          acc_sum_r := 0.U
+          acc_carry_r := 0.U
+
+          when (a_abs === 0.U || b_abs === 0.U) {
+            result_r := 0.U
+            state := sResp
+          } .otherwise {
+            state := sCalc0
+          }
+        }
+      }
+
+      is (sCalc0) {
+        when (chunk1_valid_r) {
+          acc_sum_r := feedback1._1
+          acc_carry_r := feedback1._2
+          state := sCalc1
+        } .otherwise {
+          result_r := final_result
+          state := sResp
+        }
+      }
+
+      is (sCalc1) {
+        result_r := final_result
+        state := sResp
+      }
+
+      is (sResp) {
+        when (io.resp.ready) {
+          state := sIdle
+        }
+      }
+    }
+  }
+}
+
+class FoldedMule3NUnit(dataWidth: Int)(implicit p: Parameters)
+  extends FunctionalUnit(
+    isPipelined = false,
+    numStages = 1,
+    numBypassStages = 0,
+    dataWidth = dataWidth)
+{
+  require(xLen == 64, "[mule3n] BOOM MULE3N implementation assumes RV64.")
+
+  val prodWidth      = 2 * xLen
+  val chunkWidth     = 22
+  val highChunkShift = 44
+  val shiftWidth     = log2Ceil(prodWidth)
+
+  val sIdle :: sCalc0 :: sCalc1 :: sCalc2 :: sResp :: Nil = Enum(5)
+  val state = RegInit(sIdle)
+
+  val r_uop          = Reg(new MicroOp())
+  val sign_r         = RegInit(false.B)
+  val chunk1_valid_r = RegInit(false.B)
+  val chunk2_valid_r = RegInit(false.B)
+  val multiplicand_r = Reg(UInt(xLen.W))
+  val chunk0_r       = Reg(UInt(chunkWidth.W))
+  val chunk1_r       = Reg(UInt(chunkWidth.W))
+  val chunk2_r       = Reg(UInt(chunkWidth.W))
+  val chunk0_shift_r = Reg(UInt(shiftWidth.W))
+  val chunk1_shift_r = Reg(UInt(shiftWidth.W))
+  val chunk2_shift_r = Reg(UInt(shiftWidth.W))
+  val acc_sum_r      = RegInit(0.U(prodWidth.W))
+  val acc_carry_r    = RegInit(0.U(prodWidth.W))
+  val result_r       = RegInit(0.U(xLen.W))
+
+  private def csa(a: UInt, b: UInt, c: UInt): (UInt, UInt) = {
+    val width = a.getWidth
+    val sum   = Wire(UInt(width.W))
+    val carry = Wire(UInt(width.W))
+    sum   := a ^ b ^ c
+    carry := (((a & b) | (a & c) | (b & c)) << 1)(width - 1, 0)
+    (sum, carry)
+  }
+
+  private def absSigned(value: UInt): UInt = {
+    Mux(value(xLen - 1), (~value).asUInt + 1.U, value)
+  }
+
+  private def chunkComesFirst(weightA: UInt, shiftA: UInt, weightB: UInt, shiftB: UInt): Bool = {
+    (weightA < weightB) || ((weightA === weightB) && (shiftA < shiftB))
+  }
+
+  val req_a = io.req.bits.rs1_data(xLen - 1, 0)
+  val req_b = io.req.bits.rs2_data(xLen - 1, 0)
+
+  val a_abs = absSigned(req_a)
+  val b_abs = absSigned(req_b)
+
+  val a_low_nonzero  = a_abs(21, 0) =/= 0.U
+  val a_mid_nonzero  = a_abs(43, 22) =/= 0.U
+  val a_high_nonzero = a_abs(63, 44) =/= 0.U
+  val b_low_nonzero  = b_abs(21, 0) =/= 0.U
+  val b_mid_nonzero  = b_abs(43, 22) =/= 0.U
+  val b_high_nonzero = b_abs(63, 44) =/= 0.U
+
+  val a_chunk_count = a_low_nonzero.asUInt +& a_mid_nonzero.asUInt +& a_high_nonzero.asUInt
+  val b_chunk_count = b_low_nonzero.asUInt +& b_mid_nonzero.asUInt +& b_high_nonzero.asUInt
+
+  val choose_a_as_chunk =
+    Mux(a_chunk_count =/= b_chunk_count, a_chunk_count < b_chunk_count, PopCount(a_abs) <= PopCount(b_abs))
+
+  val chunk_seed        = Mux(choose_a_as_chunk, a_abs, b_abs)
+  val multiplicand_seed = Mux(choose_a_as_chunk, b_abs, a_abs)
+  val sign_seed         = req_a(xLen - 1) ^ req_b(xLen - 1)
+
+  val chunk_low_seed  = chunk_seed(21, 0)
+  val chunk_mid_seed  = chunk_seed(43, 22)
+  val chunk_high_seed = Cat(0.U(2.W), chunk_seed(63, 44))
+
+  val low_nonzero_seed  = chunk_low_seed =/= 0.U
+  val mid_nonzero_seed  = chunk_mid_seed =/= 0.U
+  val high_nonzero_seed = chunk_high_seed =/= 0.U
+
+  val low_weight  = Mux(low_nonzero_seed, PopCount(chunk_low_seed), 63.U(6.W))
+  val mid_weight  = Mux(mid_nonzero_seed, PopCount(chunk_mid_seed), 63.U(6.W))
+  val high_weight = Mux(high_nonzero_seed, PopCount(chunk_high_seed), 63.U(6.W))
+
+  val shiftLow  = 0.U(shiftWidth.W)
+  val shiftMid  = 22.U(shiftWidth.W)
+  val shiftHigh = highChunkShift.U(shiftWidth.W)
+
+  val swap01 = !chunkComesFirst(low_weight, shiftLow, mid_weight, shiftMid)
+  val stage0_chunk0  = Mux(swap01, chunk_mid_seed, chunk_low_seed)
+  val stage0_chunk1  = Mux(swap01, chunk_low_seed, chunk_mid_seed)
+  val stage0_weight0 = Mux(swap01, mid_weight, low_weight)
+  val stage0_weight1 = Mux(swap01, low_weight, mid_weight)
+  val stage0_shift0  = Mux(swap01, shiftMid, shiftLow)
+  val stage0_shift1  = Mux(swap01, shiftLow, shiftMid)
+  val stage0_valid0  = Mux(swap01, mid_nonzero_seed, low_nonzero_seed)
+  val stage0_valid1  = Mux(swap01, low_nonzero_seed, mid_nonzero_seed)
+
+  val swap12 = !chunkComesFirst(stage0_weight1, stage0_shift1, high_weight, shiftHigh)
+  val stage1_chunk1  = Mux(swap12, chunk_high_seed, stage0_chunk1)
+  val stage1_chunk2  = Mux(swap12, stage0_chunk1, chunk_high_seed)
+  val stage1_weight1 = Mux(swap12, high_weight, stage0_weight1)
+  val stage1_weight2 = Mux(swap12, stage0_weight1, high_weight)
+  val stage1_shift1  = Mux(swap12, shiftHigh, stage0_shift1)
+  val stage1_shift2  = Mux(swap12, stage0_shift1, shiftHigh)
+  val stage1_valid1  = Mux(swap12, high_nonzero_seed, stage0_valid1)
+  val stage1_valid2  = Mux(swap12, stage0_valid1, high_nonzero_seed)
+
+  val swap01b = !chunkComesFirst(stage0_weight0, stage0_shift0, stage1_weight1, stage1_shift1)
+  val chunk0_seed       = Mux(swap01b, stage1_chunk1, stage0_chunk0)
+  val chunk1_seed       = Mux(swap01b, stage0_chunk0, stage1_chunk1)
+  val chunk2_seed       = stage1_chunk2
+  val chunk0_shift_seed = Mux(swap01b, stage1_shift1, stage0_shift0)
+  val chunk1_shift_seed = Mux(swap01b, stage0_shift0, stage1_shift1)
+  val chunk2_shift_seed = stage1_shift2
+  val chunk0_valid_seed = Mux(swap01b, stage1_valid1, stage0_valid0)
+  val chunk1_valid_seed = Mux(swap01b, stage0_valid0, stage1_valid1)
+  val chunk2_valid_seed = stage1_valid2
+
+  val calc0_active = state === sCalc0
+  val calc1_active = state === sCalc1
+  val calc2_active = state === sCalc2
+  val current_chunk = Mux(calc2_active, chunk2_r, Mux(calc1_active, chunk1_r, chunk0_r))
+  val current_shift = Mux(calc2_active, chunk2_shift_r, Mux(calc1_active, chunk1_shift_r, chunk0_shift_r))
+  val gated_chunk   = Mux(calc0_active || calc1_active || calc2_active, current_chunk, 0.U(chunkWidth.W))
+
+  val pp_lines = Wire(Vec(chunkWidth, UInt(prodWidth.W)))
+  for (i <- 0 until chunkWidth) {
+    pp_lines(i) := Mux(gated_chunk(i), (Cat(0.U(xLen.W), multiplicand_r) << i)(prodWidth - 1, 0), 0.U(prodWidth.W))
+  }
+
+  val ppm_sum   = Wire(Vec(chunkWidth + 1, UInt(prodWidth.W)))
+  val ppm_carry = Wire(Vec(chunkWidth + 1, UInt(prodWidth.W)))
+  ppm_sum(0)   := 0.U
+  ppm_carry(0) := 0.U
+
+  for (i <- 0 until chunkWidth) {
+    val stage = csa(ppm_sum(i), ppm_carry(i), pp_lines(i))
+    ppm_sum(i + 1)   := stage._1
+    ppm_carry(i + 1) := stage._2
+  }
+
+  val chunk_sum_shifted   = (ppm_sum(chunkWidth) << current_shift)(prodWidth - 1, 0)
+  val chunk_carry_shifted = (ppm_carry(chunkWidth) << current_shift)(prodWidth - 1, 0)
+  val feedback0           = csa(acc_sum_r, acc_carry_r, chunk_sum_shifted)
+  val feedback1           = csa(feedback0._1, feedback0._2, chunk_carry_shifted)
+  val final_product       = feedback1._1 + feedback1._2
+  val final_mag_result    = final_product(xLen - 1, 0)
+  val final_result        = Mux(sign_r, (~final_mag_result).asUInt + 1.U, final_mag_result)
+
+  when (state =/= sIdle) {
+    r_uop.br_mask := GetNewBrMask(io.brupdate, r_uop)
+  }
+
+  val do_kill = (state =/= sIdle) && (IsKilledByBranch(io.brupdate, r_uop) || io.req.bits.kill)
+
+  io.req.ready := state === sIdle
+  io.resp.valid := state === sResp && !do_kill
+  io.resp.bits.predicated := false.B
+  io.resp.bits.data := result_r
+  io.resp.bits.fflags.valid := false.B
+  io.resp.bits.uop := r_uop
+  io.resp.bits.uop.br_mask := GetNewBrMask(io.brupdate, r_uop)
+
+  when (do_kill) {
+    state := sIdle
+    acc_sum_r := 0.U
+    acc_carry_r := 0.U
+  } .otherwise {
+    switch (state) {
+      is (sIdle) {
+        when (io.req.fire) {
+          r_uop := io.req.bits.uop
+          r_uop.br_mask := GetNewBrMask(io.brupdate, io.req.bits.uop)
+          sign_r := sign_seed
+          multiplicand_r := multiplicand_seed
+          chunk0_r := chunk0_seed
+          chunk1_r := chunk1_seed
+          chunk2_r := chunk2_seed
+          chunk0_shift_r := chunk0_shift_seed
+          chunk1_shift_r := chunk1_shift_seed
+          chunk2_shift_r := chunk2_shift_seed
+          chunk1_valid_r := chunk1_valid_seed
+          chunk2_valid_r := chunk2_valid_seed
+          acc_sum_r := 0.U
+          acc_carry_r := 0.U
+
+          when (a_abs === 0.U || b_abs === 0.U || !chunk0_valid_seed) {
+            result_r := 0.U
+            state := sResp
+          } .otherwise {
+            state := sCalc0
+          }
+        }
+      }
+
+      is (sCalc0) {
+        when (chunk1_valid_r) {
+          acc_sum_r := feedback1._1
+          acc_carry_r := feedback1._2
+          state := sCalc1
+        } .otherwise {
+          result_r := final_result
+          state := sResp
+        }
+      }
+
+      is (sCalc1) {
+        when (chunk2_valid_r) {
+          acc_sum_r := feedback1._1
+          acc_carry_r := feedback1._2
+          state := sCalc2
+        } .otherwise {
+          result_r := final_result
+          state := sResp
+        }
+      }
+
+      is (sCalc2) {
+        result_r := final_result
+        state := sResp
+      }
+
+      is (sResp) {
+        when (io.resp.ready) {
+          state := sIdle
+        }
+      }
+    }
+  }
+}
+
+class FoldedMule5NUnit(dataWidth: Int)(implicit p: Parameters)
+  extends FunctionalUnit(
+    isPipelined = false,
+    numStages = 1,
+    numBypassStages = 0,
+    dataWidth = dataWidth)
+{
+  require(xLen == 64, "[mule5n] BOOM MULE5N implementation assumes RV64.")
+
+  val prodWidth      = 2 * xLen
+  val chunkWidth     = 13
+  val highChunkShift = 52
+  val shiftWidth     = log2Ceil(prodWidth)
+
+  val sIdle :: sCalc0 :: sCalc1 :: sCalc2 :: sCalc3 :: sCalc4 :: sResp :: Nil = Enum(7)
+  val state = RegInit(sIdle)
+
+  val r_uop          = Reg(new MicroOp())
+  val sign_r         = RegInit(false.B)
+  val multiplicand_r = Reg(UInt(xLen.W))
+  val chunk0_r       = Reg(UInt(chunkWidth.W))
+  val chunk1_r       = Reg(UInt(chunkWidth.W))
+  val chunk2_r       = Reg(UInt(chunkWidth.W))
+  val chunk3_r       = Reg(UInt(chunkWidth.W))
+  val chunk4_r       = Reg(UInt(chunkWidth.W))
+  val chunk0_shift_r = Reg(UInt(shiftWidth.W))
+  val chunk1_shift_r = Reg(UInt(shiftWidth.W))
+  val chunk2_shift_r = Reg(UInt(shiftWidth.W))
+  val chunk3_shift_r = Reg(UInt(shiftWidth.W))
+  val chunk4_shift_r = Reg(UInt(shiftWidth.W))
+  val chunk1_valid_r = RegInit(false.B)
+  val chunk2_valid_r = RegInit(false.B)
+  val chunk3_valid_r = RegInit(false.B)
+  val chunk4_valid_r = RegInit(false.B)
+  val acc_sum_r      = RegInit(0.U(prodWidth.W))
+  val acc_carry_r    = RegInit(0.U(prodWidth.W))
+  val result_r       = RegInit(0.U(xLen.W))
+
+  private def csa(a: UInt, b: UInt, c: UInt): (UInt, UInt) = {
+    val width = a.getWidth
+    val sum   = Wire(UInt(width.W))
+    val carry = Wire(UInt(width.W))
+    sum   := a ^ b ^ c
+    carry := (((a & b) | (a & c) | (b & c)) << 1)(width - 1, 0)
+    (sum, carry)
+  }
+
+  private def absSigned(value: UInt): UInt = {
+    Mux(value(xLen - 1), (~value).asUInt + 1.U, value)
+  }
+
+  private def chunkComesFirst(weightA: UInt, shiftA: UInt, weightB: UInt, shiftB: UInt): Bool = {
+    (weightA < weightB) || ((weightA === weightB) && (shiftA < shiftB))
+  }
+
+  private def sortPair(
+    chunkA: UInt, shiftA: UInt, weightA: UInt, validA: Bool,
+    chunkB: UInt, shiftB: UInt, weightB: UInt, validB: Bool
+  ): (UInt, UInt, UInt, Bool, UInt, UInt, UInt, Bool) = {
+    val swap = !chunkComesFirst(weightA, shiftA, weightB, shiftB)
+    (
+      Mux(swap, chunkB, chunkA),
+      Mux(swap, shiftB, shiftA),
+      Mux(swap, weightB, weightA),
+      Mux(swap, validB, validA),
+      Mux(swap, chunkA, chunkB),
+      Mux(swap, shiftA, shiftB),
+      Mux(swap, weightA, weightB),
+      Mux(swap, validA, validB)
+    )
+  }
+
+  val req_a = io.req.bits.rs1_data(xLen - 1, 0)
+  val req_b = io.req.bits.rs2_data(xLen - 1, 0)
+
+  val a_abs = absSigned(req_a)
+  val b_abs = absSigned(req_b)
+
+  val a_chunk0_nonzero = a_abs(12, 0) =/= 0.U
+  val a_chunk1_nonzero = a_abs(25, 13) =/= 0.U
+  val a_chunk2_nonzero = a_abs(38, 26) =/= 0.U
+  val a_chunk3_nonzero = a_abs(51, 39) =/= 0.U
+  val a_chunk4_nonzero = a_abs(63, 52) =/= 0.U
+  val b_chunk0_nonzero = b_abs(12, 0) =/= 0.U
+  val b_chunk1_nonzero = b_abs(25, 13) =/= 0.U
+  val b_chunk2_nonzero = b_abs(38, 26) =/= 0.U
+  val b_chunk3_nonzero = b_abs(51, 39) =/= 0.U
+  val b_chunk4_nonzero = b_abs(63, 52) =/= 0.U
+
+  val a_chunk_count = a_chunk0_nonzero.asUInt +& a_chunk1_nonzero.asUInt +& a_chunk2_nonzero.asUInt +& a_chunk3_nonzero.asUInt +& a_chunk4_nonzero.asUInt
+  val b_chunk_count = b_chunk0_nonzero.asUInt +& b_chunk1_nonzero.asUInt +& b_chunk2_nonzero.asUInt +& b_chunk3_nonzero.asUInt +& b_chunk4_nonzero.asUInt
+
+  val choose_a_as_chunk =
+    Mux(a_chunk_count =/= b_chunk_count, a_chunk_count < b_chunk_count, PopCount(a_abs) <= PopCount(b_abs))
+
+  val chunk_seed        = Mux(choose_a_as_chunk, a_abs, b_abs)
+  val multiplicand_seed = Mux(choose_a_as_chunk, b_abs, a_abs)
+  val sign_seed         = req_a(xLen - 1) ^ req_b(xLen - 1)
+
+  val chunkSeed0 = chunk_seed(12, 0)
+  val chunkSeed1 = chunk_seed(25, 13)
+  val chunkSeed2 = chunk_seed(38, 26)
+  val chunkSeed3 = chunk_seed(51, 39)
+  val chunkSeed4 = Cat(0.U(1.W), chunk_seed(63, 52))
+
+  val valid0  = chunkSeed0 =/= 0.U
+  val valid1  = chunkSeed1 =/= 0.U
+  val valid2  = chunkSeed2 =/= 0.U
+  val valid3  = chunkSeed3 =/= 0.U
+  val valid4  = chunk_seed(63, 52) =/= 0.U
+  val weight0 = Mux(valid0, PopCount(chunkSeed0), 63.U(6.W))
+  val weight1 = Mux(valid1, PopCount(chunkSeed1), 63.U(6.W))
+  val weight2 = Mux(valid2, PopCount(chunkSeed2), 63.U(6.W))
+  val weight3 = Mux(valid3, PopCount(chunkSeed3), 63.U(6.W))
+  val weight4 = Mux(valid4, PopCount(chunkSeed4), 63.U(6.W))
+
+  val shift0 = 0.U(shiftWidth.W)
+  val shift1 = 13.U(shiftWidth.W)
+  val shift2 = 26.U(shiftWidth.W)
+  val shift3 = 39.U(shiftWidth.W)
+  val shift4 = highChunkShift.U(shiftWidth.W)
+
+  val (s10c0, s10s0, s10w0, s10v0, s10c1, s10s1, s10w1, s10v1) =
+    sortPair(chunkSeed0, shift0, weight0, valid0, chunkSeed1, shift1, weight1, valid1)
+  val (s10c2, s10s2, s10w2, s10v2, s10c3, s10s3, s10w3, s10v3) =
+    sortPair(chunkSeed2, shift2, weight2, valid2, chunkSeed3, shift3, weight3, valid3)
+
+  val (s11c1, s11s1, s11w1, s11v1, s11c2, s11s2, s11w2, s11v2) =
+    sortPair(s10c1, s10s1, s10w1, s10v1, s10c2, s10s2, s10w2, s10v2)
+  val (s11c3, s11s3, s11w3, s11v3, s11c4, s11s4, s11w4, s11v4) =
+    sortPair(s10c3, s10s3, s10w3, s10v3, chunkSeed4, shift4, weight4, valid4)
+
+  val (s12c0, s12s0, s12w0, s12v0, s12c1, s12s1, s12w1, s12v1) =
+    sortPair(s10c0, s10s0, s10w0, s10v0, s11c1, s11s1, s11w1, s11v1)
+  val (s12c2, s12s2, s12w2, s12v2, s12c3, s12s3, s12w3, s12v3) =
+    sortPair(s11c2, s11s2, s11w2, s11v2, s11c3, s11s3, s11w3, s11v3)
+
+  val (s13c1, s13s1, s13w1, s13v1, s13c2, s13s2, s13w2, s13v2) =
+    sortPair(s12c1, s12s1, s12w1, s12v1, s12c2, s12s2, s12w2, s12v2)
+  val (s13c3, s13s3, s13w3, s13v3, s13c4, s13s4, s13w4, s13v4) =
+    sortPair(s12c3, s12s3, s12w3, s12v3, s11c4, s11s4, s11w4, s11v4)
+
+  val (s14c0, s14s0, _, s14v0, s14c1, s14s1, _, s14v1) =
+    sortPair(s12c0, s12s0, s12w0, s12v0, s13c1, s13s1, s13w1, s13v1)
+  val (s14c2, s14s2, _, s14v2, s14c3, s14s3, _, s14v3) =
+    sortPair(s13c2, s13s2, s13w2, s13v2, s13c3, s13s3, s13w3, s13v3)
+
+  val (chunk0_seed, chunk0_shift_seed, _, chunk0_valid_seed, chunk1_seed, chunk1_shift_seed, _, chunk1_valid_seed) =
+    sortPair(s14c0, s14s0, Mux(s14v0, PopCount(s14c0), 63.U(6.W)), s14v0,
+             s14c1, s14s1, Mux(s14v1, PopCount(s14c1), 63.U(6.W)), s14v1)
+  val (chunk2_seed, chunk2_shift_seed, _, chunk2_valid_seed, chunk3_seed, chunk3_shift_seed, _, chunk3_valid_seed) =
+    sortPair(s14c2, s14s2, Mux(s14v2, PopCount(s14c2), 63.U(6.W)), s14v2,
+             s14c3, s14s3, Mux(s14v3, PopCount(s14c3), 63.U(6.W)), s14v3)
+  val chunk4_seed       = s13c4
+  val chunk4_shift_seed = s13s4
+  val chunk4_valid_seed = s13v4
+
+  val calc0_active = state === sCalc0
+  val calc1_active = state === sCalc1
+  val calc2_active = state === sCalc2
+  val calc3_active = state === sCalc3
+  val calc4_active = state === sCalc4
+
+  val currentChunk = Mux(calc4_active, chunk4_r,
+                     Mux(calc3_active, chunk3_r,
+                     Mux(calc2_active, chunk2_r,
+                     Mux(calc1_active, chunk1_r, chunk0_r))))
+  val currentShift = Mux(calc4_active, chunk4_shift_r,
+                     Mux(calc3_active, chunk3_shift_r,
+                     Mux(calc2_active, chunk2_shift_r,
+                     Mux(calc1_active, chunk1_shift_r, chunk0_shift_r))))
+  val gatedChunk = Mux(calc0_active || calc1_active || calc2_active || calc3_active || calc4_active,
+                   currentChunk, 0.U(chunkWidth.W))
+
+  val pp_lines = Wire(Vec(chunkWidth, UInt(prodWidth.W)))
+  for (i <- 0 until chunkWidth) {
+    pp_lines(i) := Mux(gatedChunk(i), (Cat(0.U(xLen.W), multiplicand_r) << i)(prodWidth - 1, 0), 0.U(prodWidth.W))
+  }
+
+  val ppm_sum   = Wire(Vec(chunkWidth + 1, UInt(prodWidth.W)))
+  val ppm_carry = Wire(Vec(chunkWidth + 1, UInt(prodWidth.W)))
+  ppm_sum(0)   := 0.U
+  ppm_carry(0) := 0.U
+
+  for (i <- 0 until chunkWidth) {
+    val stage = csa(ppm_sum(i), ppm_carry(i), pp_lines(i))
+    ppm_sum(i + 1)   := stage._1
+    ppm_carry(i + 1) := stage._2
+  }
+
+  val chunk_sum_shifted   = (ppm_sum(chunkWidth) << currentShift)(prodWidth - 1, 0)
+  val chunk_carry_shifted = (ppm_carry(chunkWidth) << currentShift)(prodWidth - 1, 0)
+  val feedback0           = csa(acc_sum_r, acc_carry_r, chunk_sum_shifted)
+  val feedback1           = csa(feedback0._1, feedback0._2, chunk_carry_shifted)
+  val final_product       = feedback1._1 + feedback1._2
+  val final_mag_result    = final_product(xLen - 1, 0)
+  val final_result        = Mux(sign_r, (~final_mag_result).asUInt + 1.U, final_mag_result)
+
+  when (state =/= sIdle) {
+    r_uop.br_mask := GetNewBrMask(io.brupdate, r_uop)
+  }
+
+  val do_kill = (state =/= sIdle) && (IsKilledByBranch(io.brupdate, r_uop) || io.req.bits.kill)
+
+  io.req.ready := state === sIdle
+  io.resp.valid := state === sResp && !do_kill
+  io.resp.bits.predicated := false.B
+  io.resp.bits.data := result_r
+  io.resp.bits.fflags.valid := false.B
+  io.resp.bits.uop := r_uop
+  io.resp.bits.uop.br_mask := GetNewBrMask(io.brupdate, r_uop)
+
+  when (do_kill) {
+    state := sIdle
+    acc_sum_r := 0.U
+    acc_carry_r := 0.U
+  } .otherwise {
+    switch (state) {
+      is (sIdle) {
+        when (io.req.fire) {
+          r_uop := io.req.bits.uop
+          r_uop.br_mask := GetNewBrMask(io.brupdate, io.req.bits.uop)
+          sign_r := sign_seed
+          multiplicand_r := multiplicand_seed
+          chunk0_r := chunk0_seed
+          chunk1_r := chunk1_seed
+          chunk2_r := chunk2_seed
+          chunk3_r := chunk3_seed
+          chunk4_r := chunk4_seed
+          chunk0_shift_r := chunk0_shift_seed
+          chunk1_shift_r := chunk1_shift_seed
+          chunk2_shift_r := chunk2_shift_seed
+          chunk3_shift_r := chunk3_shift_seed
+          chunk4_shift_r := chunk4_shift_seed
+          chunk1_valid_r := chunk1_valid_seed
+          chunk2_valid_r := chunk2_valid_seed
+          chunk3_valid_r := chunk3_valid_seed
+          chunk4_valid_r := chunk4_valid_seed
+          acc_sum_r := 0.U
+          acc_carry_r := 0.U
+
+          when (a_abs === 0.U || b_abs === 0.U || !chunk0_valid_seed) {
+            result_r := 0.U
+            state := sResp
+          } .otherwise {
+            state := sCalc0
+          }
+        }
+      }
+
+      is (sCalc0) {
+        when (chunk1_valid_r) {
+          acc_sum_r := feedback1._1
+          acc_carry_r := feedback1._2
+          state := sCalc1
+        } .otherwise {
+          result_r := final_result
+          state := sResp
+        }
+      }
+
+      is (sCalc1) {
+        when (chunk2_valid_r) {
+          acc_sum_r := feedback1._1
+          acc_carry_r := feedback1._2
+          state := sCalc2
+        } .otherwise {
+          result_r := final_result
+          state := sResp
+        }
+      }
+
+      is (sCalc2) {
+        when (chunk3_valid_r) {
+          acc_sum_r := feedback1._1
+          acc_carry_r := feedback1._2
+          state := sCalc3
+        } .otherwise {
+          result_r := final_result
+          state := sResp
+        }
+      }
+
+      is (sCalc3) {
+        when (chunk4_valid_r) {
+          acc_sum_r := feedback1._1
+          acc_carry_r := feedback1._2
+          state := sCalc4
+        } .otherwise {
+          result_r := final_result
+          state := sResp
+        }
+      }
+
+      is (sCalc4) {
+        result_r := final_result
+        state := sResp
+      }
+
+      is (sResp) {
+        when (io.resp.ready) {
+          state := sIdle
+        }
+      }
+    }
+  }
 }

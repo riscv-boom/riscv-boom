@@ -129,9 +129,11 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
 
   // wb arbiter for the 0th ll writeback
   // TODO: should this be a multi-arb?
-  val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 1 +
-                                                                   (if (usingFPU) 1 else 0) +
-                                                                   (if (usingRoCC) 1 else 0)))
+  val ll_wbarb_inputs  = 1 +
+                         (if (usingFPU) 1 else 0) +
+                         (if (usingRoCC) 1 else 0) +
+                         exe_units.slow_custom_mul_units.length
+  val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), ll_wbarb_inputs))
   val iregister_read   = Module(new RegisterRead(
                            issue_units.map(_.issueWidth).sum,
                            exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits).toSeq,
@@ -1202,6 +1204,14 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   if (usingRoCC) {
     require(usingFPU)
     ll_wbarb.io.in(2)       <> exe_units.rocc_unit.io.ll_iresp
+  }
+  {
+    var ll_idx = 1 + (if (usingFPU) 1 else 0) + (if (usingRoCC) 1 else 0)
+    for (unit <- exe_units.slow_custom_mul_units) {
+      ll_wbarb.io.in(ll_idx) <> unit.io.ll_iresp
+      ll_idx += 1
+    }
+    require(ll_idx == ll_wbarb_inputs)
   }
 
   //-------------------------------------------------------------

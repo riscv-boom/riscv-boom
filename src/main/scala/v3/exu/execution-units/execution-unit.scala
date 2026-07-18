@@ -93,6 +93,9 @@ abstract class ExecutionUnit(
   val hasAlu           : Boolean       = false,
   val hasFpu           : Boolean       = false,
   val hasMul           : Boolean       = false,
+  val hasMule2n        : Boolean       = false,
+  val hasMule3n        : Boolean       = false,
+  val hasMule5n        : Boolean       = false,
   val hasDiv           : Boolean       = false,
   val hasFdiv          : Boolean       = false,
   val hasIfpu          : Boolean       = false,
@@ -169,7 +172,7 @@ abstract class ExecutionUnit(
   // TODO add "number of fflag ports", so we can properly account for FPU+Mem combinations
   def hasFFlags     : Boolean = hasFpu || hasFdiv
 
-  require ((hasFpu || hasFdiv) ^ (hasAlu || hasMul || hasMem || hasIfpu),
+  require ((hasFpu || hasFdiv) ^ (hasAlu || hasMul || hasMem || hasIfpu || hasMule2n || hasMule3n || hasMule5n),
     "[execute] we no longer support mixing FP and Integer functional units in the same exe unit.")
   def hasFcsr = hasIfpu || hasFpu || hasFdiv
 
@@ -181,7 +184,7 @@ abstract class ExecutionUnit(
       alu = hasAlu,
       jmp = hasJmpUnit,
       mem = hasMem,
-      muld = hasMul || hasDiv,
+      muld = hasMul || hasMule2n || hasMule3n || hasMule5n || hasDiv,
       fpu = hasFpu,
       csr = hasCSR,
       fdiv = hasFdiv,
@@ -206,6 +209,9 @@ class ALUExeUnit(
   hasCSR         : Boolean = false,
   hasAlu         : Boolean = true,
   hasMul         : Boolean = false,
+  hasMule2n      : Boolean = false,
+  hasMule3n      : Boolean = false,
+  hasMule5n      : Boolean = false,
   hasDiv         : Boolean = false,
   hasIfpu        : Boolean = false,
   hasMem         : Boolean = false,
@@ -214,18 +220,21 @@ class ALUExeUnit(
   extends ExecutionUnit(
     readsIrf         = true,
     writesIrf        = hasAlu || hasMul || hasDiv,
-    writesLlIrf      = hasMem || hasRocc,
+    writesLlIrf      = hasMem || hasRocc || hasMule2n || hasMule3n || hasMule5n,
     writesLlFrf      = (hasIfpu || hasMem) && p(tile.TileKey).core.fpu != None,
     numBypassStages  =
       if (hasAlu && hasMul) 3 //TODO XXX p(tile.TileKey).core.imulLatency
       else if (hasAlu) 1 else 0,
     dataWidth        = 64 + 1,
     bypassable       = hasAlu,
-    alwaysBypassable = hasAlu && !(hasMem || hasJmpUnit || hasMul || hasDiv || hasCSR || hasIfpu || hasRocc),
+    alwaysBypassable = hasAlu && !(hasMem || hasJmpUnit || hasMul || hasMule2n || hasMule3n || hasMule5n || hasDiv || hasCSR || hasIfpu || hasRocc),
     hasCSR           = hasCSR,
     hasJmpUnit       = hasJmpUnit,
     hasAlu           = hasAlu,
     hasMul           = hasMul,
+    hasMule2n        = hasMule2n,
+    hasMule3n        = hasMule3n,
+    hasMule5n        = hasMule5n,
     hasDiv           = hasDiv,
     hasIfpu          = hasIfpu,
     hasMem           = hasMem,
@@ -243,6 +252,9 @@ class ALUExeUnit(
     BoomCoreStringPrefix("==ExeUnit==") +
     (if (hasAlu)  BoomCoreStringPrefix(" - ALU") else "") +
     (if (hasMul)  BoomCoreStringPrefix(" - Mul") else "") +
+    (if (hasMule2n) BoomCoreStringPrefix(" - MULE2N") else "") +
+    (if (hasMule3n) BoomCoreStringPrefix(" - MULE3N") else "") +
+    (if (hasMule5n) BoomCoreStringPrefix(" - MULE5N") else "") +
     (if (hasDiv)  BoomCoreStringPrefix(" - Div") else "") +
     (if (hasIfpu) BoomCoreStringPrefix(" - IFPU") else "") +
     (if (hasMem)  BoomCoreStringPrefix(" - Mem") else "") +
@@ -252,6 +264,9 @@ class ALUExeUnit(
 
   val div_busy  = WireInit(false.B)
   val ifpu_busy = WireInit(false.B)
+  val mule2n_busy = WireInit(false.B)
+  val mule3n_busy = WireInit(false.B)
+  val mule5n_busy = WireInit(false.B)
 
   // The Functional Units --------------------
   // Specifically the functional units with fast writeback to IRF
@@ -259,6 +274,9 @@ class ALUExeUnit(
 
   io.fu_types := Mux(hasAlu.B, FU_ALU, 0.U) |
                  Mux(hasMul.B, FU_MUL, 0.U) |
+                 Mux(!mule2n_busy && hasMule2n.B, FU_MULE2N, 0.U) |
+                 Mux(!mule3n_busy && hasMule3n.B, FU_MULE3N, 0.U) |
+                 Mux(!mule5n_busy && hasMule5n.B, FU_MULE5N, 0.U) |
                  Mux(!div_busy && hasDiv.B, FU_DIV, 0.U) |
                  Mux(hasCSR.B, FU_CSR, 0.U) |
                  Mux(hasJmpUnit.B, FU_JMP, 0.U) |
@@ -299,6 +317,8 @@ class ALUExeUnit(
     }
   }
 
+  val ll_iresp_units = ArrayBuffer[DecoupledIO[ExeUnitResp]]()
+
   var rocc: RoCCShim = null
   if (hasRocc) {
     rocc = Module(new RoCCShim)
@@ -313,10 +333,15 @@ class ALUExeUnit(
     rocc.io.exception         := io.com_exception
     io.rocc                   <> rocc.io.core
 
-    rocc.io.resp.ready        := io.ll_iresp.ready
-    io.ll_iresp.valid         := rocc.io.resp.valid
-    io.ll_iresp.bits.uop      := rocc.io.resp.bits.uop
-    io.ll_iresp.bits.data     := rocc.io.resp.bits.data
+    val rocc_resp = Wire(Decoupled(new ExeUnitResp(dataWidth)))
+    rocc_resp.valid := rocc.io.resp.valid
+    rocc_resp.bits := DontCare
+    rocc_resp.bits.uop := rocc.io.resp.bits.uop
+    rocc_resp.bits.data := rocc.io.resp.bits.data
+    rocc_resp.bits.predicated := false.B
+    rocc_resp.bits.fflags.valid := false.B
+    rocc.io.resp.ready := rocc_resp.ready
+    ll_iresp_units += rocc_resp
   }
 
 
@@ -332,6 +357,81 @@ class ALUExeUnit(
     imul.io.req.bits.kill     := io.req.bits.kill
     imul.io.brupdate := io.brupdate
     iresp_fu_units += imul
+  }
+
+  var mule2n: FoldedMule2NUnit = null
+  if (hasMule2n) {
+    mule2n = Module(new FoldedMule2NUnit(xLen))
+    mule2n.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_MULE2N)
+    mule2n.io.req.bits.uop      := io.req.bits.uop
+    mule2n.io.req.bits.rs1_data := io.req.bits.rs1_data
+    mule2n.io.req.bits.rs2_data := io.req.bits.rs2_data
+    mule2n.io.req.bits.rs3_data := DontCare
+    mule2n.io.req.bits.pred_data := false.B
+    mule2n.io.req.bits.kill     := io.req.bits.kill
+    mule2n.io.brupdate          := io.brupdate
+
+    val mule2n_resp = Wire(Decoupled(new ExeUnitResp(dataWidth)))
+    mule2n_resp.valid := mule2n.io.resp.valid
+    mule2n_resp.bits := DontCare
+    mule2n_resp.bits.uop := mule2n.io.resp.bits.uop
+    mule2n_resp.bits.data := mule2n.io.resp.bits.data
+    mule2n_resp.bits.predicated := mule2n.io.resp.bits.predicated
+    mule2n_resp.bits.fflags.valid := false.B
+    mule2n.io.resp.ready := mule2n_resp.ready
+    ll_iresp_units += mule2n_resp
+
+    mule2n_busy := !mule2n.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code_is(FU_MULE2N))
+  }
+
+  var mule3n: FoldedMule3NUnit = null
+  if (hasMule3n) {
+    mule3n = Module(new FoldedMule3NUnit(xLen))
+    mule3n.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_MULE3N)
+    mule3n.io.req.bits.uop      := io.req.bits.uop
+    mule3n.io.req.bits.rs1_data := io.req.bits.rs1_data
+    mule3n.io.req.bits.rs2_data := io.req.bits.rs2_data
+    mule3n.io.req.bits.rs3_data := DontCare
+    mule3n.io.req.bits.pred_data := false.B
+    mule3n.io.req.bits.kill     := io.req.bits.kill
+    mule3n.io.brupdate          := io.brupdate
+
+    val mule3n_resp = Wire(Decoupled(new ExeUnitResp(dataWidth)))
+    mule3n_resp.valid := mule3n.io.resp.valid
+    mule3n_resp.bits := DontCare
+    mule3n_resp.bits.uop := mule3n.io.resp.bits.uop
+    mule3n_resp.bits.data := mule3n.io.resp.bits.data
+    mule3n_resp.bits.predicated := mule3n.io.resp.bits.predicated
+    mule3n_resp.bits.fflags.valid := false.B
+    mule3n.io.resp.ready := mule3n_resp.ready
+    ll_iresp_units += mule3n_resp
+
+    mule3n_busy := !mule3n.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code_is(FU_MULE3N))
+  }
+
+  var mule5n: FoldedMule5NUnit = null
+  if (hasMule5n) {
+    mule5n = Module(new FoldedMule5NUnit(xLen))
+    mule5n.io.req.valid         := io.req.valid && io.req.bits.uop.fu_code_is(FU_MULE5N)
+    mule5n.io.req.bits.uop      := io.req.bits.uop
+    mule5n.io.req.bits.rs1_data := io.req.bits.rs1_data
+    mule5n.io.req.bits.rs2_data := io.req.bits.rs2_data
+    mule5n.io.req.bits.rs3_data := DontCare
+    mule5n.io.req.bits.pred_data := false.B
+    mule5n.io.req.bits.kill     := io.req.bits.kill
+    mule5n.io.brupdate          := io.brupdate
+
+    val mule5n_resp = Wire(Decoupled(new ExeUnitResp(dataWidth)))
+    mule5n_resp.valid := mule5n.io.resp.valid
+    mule5n_resp.bits := DontCare
+    mule5n_resp.bits.uop := mule5n.io.resp.bits.uop
+    mule5n_resp.bits.data := mule5n.io.resp.bits.data
+    mule5n_resp.bits.predicated := mule5n.io.resp.bits.predicated
+    mule5n_resp.bits.fflags.valid := false.B
+    mule5n.io.resp.ready := mule5n_resp.ready
+    ll_iresp_units += mule5n_resp
+
+    mule5n_busy := !mule5n.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code_is(FU_MULE5N))
   }
 
   var ifpu: IntToFPUnit = null
@@ -401,6 +501,17 @@ class ALUExeUnit(
     io.ll_iresp <> io.lsu_io.iresp
     if (usingFPU) {
       io.ll_fresp <> io.lsu_io.fresp
+    }
+  } else if (writesLlIrf) {
+    require(ll_iresp_units.nonEmpty)
+    if (ll_iresp_units.size == 1) {
+      io.ll_iresp <> ll_iresp_units.head
+    } else {
+      val ll_iresp_arb = Module(new Arbiter(new ExeUnitResp(dataWidth), ll_iresp_units.size))
+      for ((unit, idx) <- ll_iresp_units.zipWithIndex) {
+        ll_iresp_arb.io.in(idx) <> unit
+      }
+      io.ll_iresp <> ll_iresp_arb.io.out
     }
   }
 

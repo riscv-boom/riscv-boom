@@ -73,6 +73,22 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
     exe_units.filter(_.hasAlu)
   }
 
+  lazy val mule2n_units = {
+    exe_units.filter(_.hasMule2n)
+  }
+
+  lazy val mule3n_units = {
+    exe_units.filter(_.hasMule3n)
+  }
+
+  lazy val mule5n_units = {
+    exe_units.filter(_.hasMule5n)
+  }
+
+  lazy val slow_custom_mul_units = {
+    exe_units.filter(u => u.hasMule2n || u.hasMule3n || u.hasMule5n)
+  }
+
   lazy val csr_unit = {
     require (exe_units.count(_.hasCSR) == 1)
     exe_units.find(_.hasCSR).get
@@ -121,6 +137,9 @@ class ExecutionUnits(val fpu: Boolean)(implicit val p: Parameters) extends HasBo
         hasCSR         = is_nth(1),
         hasRocc        = is_nth(1) && usingRoCC,
         hasMul         = is_nth(2),
+        hasMule2n      = is_nth(2),
+        hasMule3n      = is_nth(2),
+        hasMule5n      = is_nth(2),
         hasDiv         = is_nth(3),
         hasIfpu        = is_nth(4) && usingFPU))
       exe_units += alu_exe_unit

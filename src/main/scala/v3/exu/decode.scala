@@ -160,6 +160,10 @@ object X64Decode extends DecodeConstants
  */
 object XDecode extends DecodeConstants
 {
+  private val MULE2N = BitPat("b0001101??????????000?????0001011")
+  private val MULE3N = BitPat("b0001110??????????000?????0001011")
+  private val MULE5N = BitPat("b0001111??????????000?????0001011")
+
            //                                                                  frs3_en                        wakeup_delay
            //     is val inst?                                                 |  imm sel                     |    bypassable (aka, known/fixed latency)
            //     |  is fp inst?                                               |  |     uses_ldq              |    |  is_br
@@ -215,6 +219,9 @@ object XDecode extends DecodeConstants
   DIVUW   -> List(Y, N, X, uopDIVUW, IQT_INT, FU_DIV , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, CSR.N),
   REMW    -> List(Y, N, X, uopREMW , IQT_INT, FU_DIV , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, CSR.N),
   REMUW   -> List(Y, N, X, uopREMUW, IQT_INT, FU_DIV , RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, CSR.N),
+  MULE2N  -> List(Y, N, X, uopMULE2N,IQT_INT, FU_MULE2N, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, CSR.N),
+  MULE3N  -> List(Y, N, X, uopMULE3N,IQT_INT, FU_MULE3N, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, CSR.N),
+  MULE5N  -> List(Y, N, X, uopMULE5N,IQT_INT, FU_MULE5N, RT_FIX, RT_FIX, RT_FIX, N, IS_X, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, CSR.N),
 
   AUIPC   -> List(Y, N, X, uopAUIPC, IQT_INT, FU_JMP , RT_FIX, RT_X  , RT_X  , N, IS_U, N, N, N, N, N, M_X  , 1.U, N, N, N, N, N, CSR.N), // use BRU for the PC read
   JAL     -> List(Y, N, X, uopJAL  , IQT_INT, FU_JMP , RT_FIX, RT_X  , RT_X  , N, IS_J, N, N, N, N, N, M_X  , 1.U, N, N, N, N, N, CSR.N),
