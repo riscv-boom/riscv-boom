@@ -655,7 +655,7 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
 
   // lr/sc
   val debug_sc_fail_addr = RegInit(0.U)
-  val debug_sc_fail_cnt  = RegInit(0.U(8.W))
+  val debug_sc_fail_cnt  = RegInit(0.U(32.W))
 
   val lrsc_count = RegInit(0.U(log2Ceil(lrscCycles).W))
   val lrsc_valid = lrsc_count > lrscBackoff.U
