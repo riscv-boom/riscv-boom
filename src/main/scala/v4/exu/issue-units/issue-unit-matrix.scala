@@ -38,7 +38,7 @@ class IssueUnitAgeMatrix(
     val prs3_wakeups = (io.wakeup_ports zip prs3_matches).map { case (wu,m) => wu.valid && m }
     val prs1_rebusys = (io.wakeup_ports zip prs1_matches).map { case (wu,m) => wu.bits.rebusy && m }
     val prs2_rebusys = (io.wakeup_ports zip prs2_matches).map { case (wu,m) => wu.bits.rebusy && m }
-    val bypassables  = io.wakeup_ports.map { wu => wu.bits.bypassable } 
+    val bypassables  = io.wakeup_ports.map { wu => wu.bits.bypassable }
     val speculative_masks = io.wakeup_ports.map { wu => wu.bits.speculative_mask }
 
 
@@ -132,65 +132,71 @@ class IssueUnitAgeMatrix(
 
   // Dispatch Logic
   // This is the relatively naive (combinatorial) implementation of dispatch logic, where it searches for empty entries and dispatch into it
-  val slots_empty = (0 until numIssueSlots).map(i => !issue_slots(i).will_be_valid && !issue_slots(i).valid)
+  val slots_empty = VecInit((0 until numIssueSlots).map(i => !issue_slots(i).will_be_valid && !issue_slots(i).valid))
   // dis_valids no exception
   val dis_readys = WireDefault(VecInit.fill(dispatchWidth)(false.B))
-  // Chisel quirk here I guess... 
-  val dis_indices = WireDefault(VecInit.fill(dispatchWidth)(0.U(log2Ceil(numIssueSlots).W)))  
+  val dis_indices = WireDefault(VecInit.fill(dispatchWidth)(0.U(log2Ceil(numIssueSlots).W)))
   val dis_valids = (0 until dispatchWidth).map(i => io.dis_uops(i).valid && !dis_uops(i).exception && !dis_uops(i).is_fence && !dis_uops(i).is_fencei)
 
-  var dis_scan = 0.U
-  for (i <- 0 until numIssueSlots) {
-    when (dis_scan < dispatchWidth.U && slots_empty(i)) {
-      dis_readys(dis_scan) := true.B
-      dis_indices(dis_scan) := i.U
-    }
-    dis_scan = Mux(dis_scan < dispatchWidth.U && slots_empty(i), dis_scan + 1.U, dis_scan)
+  var unallocated_slots = slots_empty.asUInt
+  for (i <- 0 until dispatchWidth) {
+    dis_readys(i) := unallocated_slots.orR
+    dis_indices(i) := PriorityEncoder(unallocated_slots)
+    unallocated_slots = unallocated_slots & ~UIntToOH(dis_indices(i), numIssueSlots)
   }
 
   for (w <- 0 until numIssueSlots) {
     issue_slots(w).in_uop.valid := false.B
     issue_slots(w).in_uop.bits  := DontCare
-    for (i <- 0 until dispatchWidth) {
-      io.dis_uops(i).ready := dis_readys(i)
-      // when (dis_valids(i) && dis_readys(i) && (dis_indices(i) === w.U)) {
-      //   issue_slots(w).in_uop.valid := true.B
-      //   issue_slots(w).in_uop.bits  := dis_uops(i)
-      // }
-      when (dis_valids(i) && dis_readys(i)) {
-        issue_slots(dis_indices(i)).in_uop.valid := true.B
-        issue_slots(dis_indices(i)).in_uop.bits  := dis_uops(i)
-      }      
+  }
+  for (i <- 0 until dispatchWidth) {
+    io.dis_uops(i).ready := dis_readys(i)
+    when (dis_valids(i) && dis_readys(i)) {
+      issue_slots(dis_indices(i)).in_uop.valid := true.B
+      issue_slots(dis_indices(i)).in_uop.bits  := dis_uops(i)
     }
   }
-
-
-
-  
 
   // age matrix for tracking
   //  val slots_age_matrix = RegInit( VecInit(Seq.fill(numIssueSlots)(Vec(numIssueSlots, false.B))))
   val slots_age_matrix = RegInit(VecInit.tabulate(numIssueSlots, numIssueSlots) { (_, _) => false.B})
-  
-  val slots_issue = VecInit((0 until dispatchWidth).map(i => io.dis_uops(i).valid))
 
-  val slots_valids = WireDefault(VecInit(slots.map(_.io.valid)))
-  val slots_valid_alloc = WireDefault(VecInit(slots.map(s => !s.io.valid & s.io.will_be_valid)))
-  val slots_valid_dealloc = WireDefault(VecInit(slots.map(s => s.io.valid & !s.io.will_be_valid)))
+  val slots_valids = VecInit(slots.map(_.io.valid))
+  val slots_valid_alloc = VecInit(issue_slots.map(_.in_uop.valid))
+  val slots_valid_dealloc = VecInit(slots.map(s => s.io.valid && !s.io.will_be_valid))
+
+  // Record the allocations from older dispatch lanes so multiple uops entering
+  // in the same cycle are ordered by their program order.
+  val older_allocations = WireDefault(VecInit.fill(numIssueSlots)(0.U(numIssueSlots.W)))
+  var prior_allocations = 0.U(numIssueSlots.W)
+  for (i <- 0 until dispatchWidth) {
+    val lane_allocates = dis_valids(i) && dis_readys(i)
+    when (lane_allocates) {
+      older_allocations(dis_indices(i)) := prior_allocations
+    }
+    prior_allocations = Mux(
+      lane_allocates,
+      prior_allocations | UIntToOH(dis_indices(i), numIssueSlots),
+      prior_allocations)
+  }
+
+  val surviving_slots = slots_valids.asUInt & ~slots_valid_dealloc.asUInt
 
   // age matrix logic
   for (i <- 0 until numIssueSlots) {
     // allocation of issue slot
     when (slots_valid_alloc(i)) {
-      slots_age_matrix(i) := slots_valids
+      slots_age_matrix(i) := VecInit((surviving_slots | older_allocations(i)).asBools)
       // when deallocation
     }.elsewhen (slots_valid_dealloc(i)) {
-      // fill the age matrix with 1 so that it's the youngest
-      slots_age_matrix(i) := VecInit.fill(numIssueSlots)(true.B)
-      // and zero out this entry in all other age tags
-      // an alt design is to leave this as is and mask it with the valids 
+      slots_age_matrix(i) := VecInit.fill(numIssueSlots)(false.B)
+    }.otherwise {
       for (j <- 0 until numIssueSlots) {
-        slots_age_matrix(j)(i) := false.B
+        // A newly allocated entry is younger than every surviving entry, and a
+        // deallocated entry must disappear from every surviving age row.
+        when (slots_valid_alloc(j) || slots_valid_dealloc(j)) {
+          slots_age_matrix(i)(j) := false.B
+        }
       }
     }
   }
@@ -205,20 +211,20 @@ class IssueUnitAgeMatrix(
        val fu_code_match = (issue_slots(j).iss_uop.fu_code zip io.fu_types(i)).map {
         case (r,c) => r && c
       }.reduce(_||_)
-     
+
  //     val fu_code_match = (io.fu_types(i).asUInt & issue_slots(j).iss_uop.fu_code.asUInt).orR
       iss_ready(i)(j) := fu_code_match & issue_slots(j).request
     }
   }
 
-  
+
   // issue logic
   // Compute the wiring of the mux before, and connect them predicated on the age calculation signal
   val iss_signals = Wire(Vec(issueWidth, Valid(UInt(log2Ceil(numIssueSlots).W))))
   val iss_uops = Wire(Vec(issueWidth, Valid(new MicroOp)))
 
   if (!params.useFullIssueSel) {
-  
+
     //    This is the case where a very PD scalable algorithm is used
     //  val issue_age_mask = VecInit.tabulate(issueWidth)(_ => slots_age_matrix)
     val issue_oldest_oh = Wire(Vec(issueWidth, Vec(numIssueSlots, Bool())))
@@ -304,7 +310,7 @@ class IssueUnitAgeMatrix(
   // two assumptions here
   // a single issue slot cannot be issued by two issue ports
   // a single issue port cannot be driven by two issue slots
-  
+
   for (w <- 0 until numIssueSlots) {
     issue_slots(w).grant := false.B
     for (i<- 0 until issueWidth) {
@@ -313,7 +319,7 @@ class IssueUnitAgeMatrix(
       }
     }
   }
-  
+
   for (i <- 0 until issueWidth) {
     iss_uops(i).valid := false.B
     iss_uops(i).bits := DontCare
@@ -322,9 +328,9 @@ class IssueUnitAgeMatrix(
       iss_uops(i).valid := true.B
       iss_uops(i).bits := issue_slots(iu_index).iss_uop
     }
-  }  
+  }
   io.iss_uops := iss_uops
-  
+
   for (i <- 0 until numIssueSlots) {
     when (io.squash_grant) {
       io.iss_uops.map {u => u.valid := false.B}
