@@ -106,6 +106,9 @@ case class BoomCoreParams(
   enableBranchPrintf: Boolean = false,
   enableMemtracePrintf: Boolean = false,
 
+  // Width of the TraceDoctor oracle trace vector; 0 disables the port
+  traceDoctorWidth: Int = 0,
+
   enableTraceCoreIngress: Boolean = false,
   override val asidLen: Int = 0
 

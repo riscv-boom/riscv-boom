@@ -88,6 +88,11 @@ class BoomTile private(
   val masterNode = TLIdentityNode()
   val slaveNode = TLIdentityNode()
 
+  // TraceDoctor oracle trace port (present only when traceDoctorWidth > 0)
+  val traceDoctorNode = if (boomParams.core.traceDoctorWidth > 0) {
+    Some(BundleBridgeSource(() => new BoomTraceDoctorIO(boomParams.core.traceDoctorWidth)))
+  } else None
+
   val tile_master_blocker =
     tileParams.blockerCtrlAddr
       .map(BasicBusBlockerParams(_, xBytes, masterPortBeatBytes, deadlock = true))
@@ -187,6 +192,9 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
 
   // Pass through various external constants and reports
   outer.traceSourceNode.bundle <> core.io.trace
+  (outer.traceDoctorNode zip core.io.traceDoctor).foreach { case (node, td) =>
+    node.bundle := td
+  }
   outer.bpwatchSourceNode.bundle <> DontCare // core.io.bpwatch
   core.io.hartid := outer.hartIdSinkNode.bundle
 

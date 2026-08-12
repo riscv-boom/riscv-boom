@@ -66,6 +66,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     val fcsr_rm = UInt(freechips.rocketchip.tile.FPConstants.RM_SZ.W)
     val traceStall = Input(Bool())
     val trace_core_ingress = if (boomParams.enableTraceCoreIngress) Some(Output(new TraceCoreInterface(traceIngressParams))) else None
+    val traceDoctor = if (boomParams.traceDoctorWidth > 0) Some(Output(new BoomTraceDoctorIO(boomParams.traceDoctorWidth))) else None
   })
 
   io.ptw_tlb := DontCare
@@ -1524,5 +1525,89 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     io.trace_core_ingress.get.cause := RegNext(csr.io.cause)
     io.trace_core_ingress.get.time := RegNext(csr.io.time)
     io.trace_core_ingress.get.priv := RegNext(csr.io.status.prv)
+  }
+
+  //-------------------------------------------------------------
+  // TraceDoctor oracle trace port (TIP-style 4-state attribution)
+  //
+  // Emits one 512b token whenever the commit stage changes state, carrying
+  // everything the host-side oracle worker needs to attribute every cycle
+  // to an instruction: Computing (commits), Stalled (ROB blocked), Flushed
+  // (ROB emptied by misspeculation) and Drained (ROB emptied by front-end).
+  //
+  // Token layout (64b words, little-endian on the host):
+  //   word0: tsc[47:0] | state[55:48] | reserved[63:56]
+  //          state: 0=committing 1=dispatching 2=robEmpty
+  //                 3=robPopulated(edge) 4=exception 5=mispredict(sticky)
+  //   word1: per-slot flags, 16b each (slot w at bits [16w+15:16w]):
+  //          0=arch_valid 1=is_br 2=is_jal 3=is_jalr 4=flush_on_commit
+  //   word2..5: committed PC per slot, sign-extended to 64b
+  //   word6..7: reserved (zero)
+  io.traceDoctor.foreach { td =>
+    require(boomParams.traceDoctorWidth == 512,
+      "TraceDoctor oracle packing currently defines a 512b token")
+    assert(coreWidth <= 4, "TraceDoctor oracle token supports up to 4-wide cores")
+
+    val tdException   = rob.io.com_xcpt.valid
+    val tdCommitting  = rob.io.commit.arch_valids.reduce(_||_)
+    val tdDispatching = dis_fire.reduce(_||_)
+    val tdRobEmpty    = rob.io.empty
+    val tdRobPopulated = !tdRobEmpty && RegNext(tdRobEmpty)
+    val tdHeadMoved   = rob.io.rob_head_idx =/= RegNext(rob.io.rob_head_idx)
+    val tdTailMoved   = rob.io.rob_tail_idx =/= RegNext(rob.io.rob_tail_idx)
+    val tdCsrStall    = csr.io.csr_stall
+
+    // Sticky mispredict: set at branch resolution, carried until the next
+    // emitted token reports it (resolution may coincide with a stall).
+    val tdMispredictNow = brupdate.b2.mispredict
+    val tdMispredictPending = RegInit(false.B)
+    val tdMispredict = tdMispredictNow || tdMispredictPending
+
+    val tdEmit = !tdCsrStall && (tdCommitting || tdException || tdDispatching ||
+      tdRobPopulated || tdHeadMoved || tdTailMoved || tdMispredictNow)
+
+    when (tdEmit) {
+      tdMispredictPending := false.B
+    } .elsewhen (tdMispredictNow) {
+      tdMispredictPending := true.B
+    }
+
+    val tdState = Cat(
+      tdMispredict,   // 5
+      tdException,    // 4
+      tdRobPopulated, // 3
+      tdRobEmpty,     // 2
+      tdDispatching,  // 1
+      tdCommitting    // 0
+    )
+
+    val tdWord0 = Cat(0.U(8.W), tdState.pad(8), debug_tsc_reg(47, 0))
+
+    val tdFlags = Cat((0 until 4).reverse.map { w =>
+      if (w < coreWidth) {
+        Cat(
+          rob.io.commit.uops(w).debug_bmiss,     // 5: committed as a resolved-mispredicted branch
+          rob.io.commit.uops(w).flush_on_commit, // 4
+          rob.io.commit.uops(w).is_jalr,         // 3
+          rob.io.commit.uops(w).is_jal,          // 2
+          rob.io.commit.uops(w).is_br,           // 1
+          rob.io.commit.arch_valids(w)           // 0
+        ).pad(16)
+      } else {
+        0.U(16.W)
+      }
+    })
+
+    val tdPCs = Cat((0 until 4).reverse.map { w =>
+      if (w < coreWidth) {
+        Sext(rob.io.commit.uops(w).debug_pc(vaddrBits-1, 0), xLen).pad(64)
+      } else {
+        0.U(64.W)
+      }
+    })
+
+    // Registered once for timing slack; valid and payload stay in lockstep.
+    td.valid := RegNext(tdEmit, false.B)
+    td.bits  := RegNext(Cat(0.U(128.W), tdPCs, tdFlags, tdWord0))
   }
 }

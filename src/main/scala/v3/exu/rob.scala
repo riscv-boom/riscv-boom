@@ -330,6 +330,9 @@ class Rob(
                                    io.enq_uops(w).is_fencei)
       rob_unsafe(rob_tail)    := io.enq_uops(w).unsafe
       rob_uop(rob_tail)       := io.enq_uops(w)
+      // Force-false at allocation: upstream MicroOp construction sites are
+      // not audited for this observation-only field (TraceDoctor oracle).
+      rob_uop(rob_tail).debug_bmiss := false.B
       rob_exception(rob_tail) := io.enq_uops(w).exception
       rob_predicated(rob_tail)   := false.B
       rob_fflags(w)(rob_tail)    := 0.U
@@ -428,6 +431,7 @@ class Rob(
       GetRowIdx(io.brupdate.b2.uop.rob_idx) === com_idx) {
       io.commit.uops(w).debug_fsrc := BSRC_C
       io.commit.uops(w).taken      := io.brupdate.b2.taken
+      io.commit.uops(w).debug_bmiss := true.B
     }
 
 
@@ -478,6 +482,7 @@ class Rob(
       MatchBank(GetBankIdx(io.brupdate.b2.uop.rob_idx))) {
       rob_uop(GetRowIdx(io.brupdate.b2.uop.rob_idx)).debug_fsrc := BSRC_C
       rob_uop(GetRowIdx(io.brupdate.b2.uop.rob_idx)).taken      := io.brupdate.b2.taken
+      rob_uop(GetRowIdx(io.brupdate.b2.uop.rob_idx)).debug_bmiss := true.B
     }
 
     // -----------------------------------------------
