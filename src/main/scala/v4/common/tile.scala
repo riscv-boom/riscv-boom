@@ -27,6 +27,7 @@ import boom.v4.ifu._
 import boom.v4.lsu._
 import boom.v4.util.{BoomCoreStringPrefix}
 import freechips.rocketchip.prci.ClockSinkParameters
+import freechips.rocketchip.trace.{TraceEncoderParams,TraceEncoderController, TraceSinkArbiter}
 
 
 case class BoomTileAttachParams(
@@ -48,7 +49,8 @@ case class BoomTileParams(
   dcache: Option[DCacheParams] = Some(DCacheParams()),
   btb: Option[BTBParams] = Some(BTBParams()),
   name: Option[String] = Some("boom_tile"),
-  tileId: Int = 0
+  tileId: Int = 0,
+  traceParams: Option[TraceEncoderParams] = None
 ) extends InstantiableTileParams[BoomTile]
 {
   require(icache.isDefined)
@@ -142,8 +144,29 @@ class BoomTile private(
 
   // ROCC
   val roccs = p(BuildRoCC).map(_(p))
+  val roccCSRs = roccs.map(_.roccCSRs)
+  require(roccCSRs.flatten.map(_.id).toSet.size == roccCSRs.flatten.size,
+    "LazyRoCC instantiations require overlapping CSRs")
   roccs.map(_.atlNode).foreach { atl => tlMasterXbar.node :=* atl }
   roccs.map(_.tlNode).foreach { tl => tlOtherMastersNode :=* tl }
+
+  val trace_encoder_controller = boomParams.traceParams.map { t =>
+    val trace_encoder_controller = LazyModule(new TraceEncoderController(t.encoderBaseAddr, xBytes, tileId))
+    connectTLSlave(trace_encoder_controller.node, xBytes)
+    trace_encoder_controller
+  }
+
+  val trace_encoder = boomParams.traceParams match {
+    case Some(t) => Some(t.buildEncoder(p))
+    case None => None
+  }
+
+  val (trace_sinks, traceSinkIds) = boomParams.traceParams match {
+    case Some(t) => t.buildSinks.map {_(p)}.unzip
+    case None => (Nil, Nil)
+  }
+
+  DisableMonitors { implicit p => tlSlaveXbar.node :*= slaveNode }
 }
 
 /**
@@ -153,9 +176,7 @@ class BoomTile private(
  */
 class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
 
-  Annotated.params(this, outer.boomParams)
-
-  val core = Module(new BoomCore()(outer.p))
+  val core = Module(new BoomCore(outer.roccCSRs)(outer.p))
   val lsu  = Module(new LSU()(outer.p, outer.dcache.module.edge))
 
   val ptwPorts         = ListBuffer(lsu.io.ptw, outer.frontend.module.io.ptw, core.io.ptw_tlb)
@@ -230,6 +251,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
     core.io.rocc.resp <> respArb.io.out
     core.io.rocc.busy <> (cmdRouter.io.busy || outer.roccs.map(_.module.io.busy).reduce(_||_))
     core.io.rocc.interrupt := outer.roccs.map(_.module.io.interrupt).reduce(_||_)
+    (core.io.rocc.csrs zip outer.roccs.map(_.module.io.csrs).flatten).foreach { t => t._2 <> t._1 }
   }
 
   // PTW
@@ -243,6 +265,29 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   hellaCacheArb.io.requestor <> hellaCachePorts.toSeq
   lsu.io.hellacache <> hellaCacheArb.io.mem
   outer.dcache.module.io.lsu <> lsu.io.dmem
+
+  if (outer.boomParams.traceParams.isDefined) {
+    core.io.trace_core_ingress.get <> outer.trace_encoder.get.module.io.in
+    outer.trace_encoder_controller.foreach { lm =>
+      outer.trace_encoder.get.module.io.control <> lm.module.io.control
+    }
+
+    val trace_sink_arbiter = Module(new TraceSinkArbiter(outer.traceSinkIds, 
+      use_monitor = outer.boomParams.traceParams.get.useArbiterMonitor, 
+      monitor_name = outer.boomParams.uniqueName))
+
+    trace_sink_arbiter.io.target := outer.trace_encoder.get.module.io.control.target
+    trace_sink_arbiter.io.in <> outer.trace_encoder.get.module.io.out 
+
+    core.io.traceStall := outer.trace_encoder.get.module.io.stall
+
+    outer.trace_sinks.zip(outer.traceSinkIds).foreach { case (sink, id) =>
+      val index = outer.traceSinkIds.indexOf(id)
+      sink.module.io.trace_in <> trace_sink_arbiter.io.out(index)
+    }
+  } else {
+    core.io.traceStall := false.B // no trace encoder, so no stall
+  }
 
   // Generate a descriptive string
   val frontendStr = outer.frontend.module.toString

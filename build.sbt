@@ -6,7 +6,7 @@ ThisBuild / organization     := "ucb-bar"
 
 val chiselVersion = "6.5.0"
 
-val rocketVersion = "1.6-snapshot"
+val rocketVersion = "1.6-SNAPSHOT"
 
 lazy val root = (project in file("."))
   .settings(

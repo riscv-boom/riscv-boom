@@ -1610,7 +1610,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
       }
     }
     // Handle store acks
-    when (io.dmem.store_ack(w).valid) {
+    when (io.dmem.store_ack(w).valid && !io.dmem.store_ack(w).bits.is_hella) {
       stq_succeeded(io.dmem.store_ack(w).bits.uop.stq_idx) := true.B
     }
 
@@ -1842,6 +1842,8 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   io.hellacache.resp.bits.dprv     := io.ptw.status.prv
   io.hellacache.resp.bits.dv       := io.ptw.status.v
   io.hellacache.resp.bits.data     := io.dmem.ll_resp.bits.data
+  io.hellacache.resp.bits.idx.foreach(_ := hella_req.idx.get)
+
 
   when (hella_state === h_ready) {
     io.hellacache.req.ready := true.B

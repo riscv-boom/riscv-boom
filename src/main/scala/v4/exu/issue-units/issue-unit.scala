@@ -26,6 +26,8 @@ case class IssueParams(
   numEntries: Int = 8,
   useFullIssueSel: Boolean = true,
   numSlowEntries: Int = 0,
+  // useMatrixIssue: Boolean = true,
+  useMatrixIssue: Boolean = false,
   iqType: Int
 )
 
@@ -58,6 +60,10 @@ abstract class IssueUnit(
     val squash_grant     = Input(Bool())
 
     val tsc_reg          = Input(UInt(xLen.W))
+
+    // For the speculative non-interference (SNI) implementation
+    val rob_head = Input(UInt(robAddrSz.W))
+    val rob_pnr_idx = Input(UInt(robAddrSz.W))
   })
 
 
@@ -78,7 +84,11 @@ object IssueUnit
     if (useColumnIssueUnit)
       Module(new IssueUnitBanked(params, numWakeupPorts, useSingleWideDispatch))
     else
-      Module(new IssueUnitCollapsing(params, numWakeupPorts))
+      if (params.useMatrixIssue) {
+        Module(new IssueUnitAgeMatrix(params, numWakeupPorts))        
+      } else {
+        Module(new IssueUnitCollapsing(params, numWakeupPorts))        
+      }
   }
 
 }
