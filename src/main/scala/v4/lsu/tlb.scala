@@ -8,6 +8,7 @@ import freechips.rocketchip.rocket._
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.subsystem.{CacheBlockBytes}
 import freechips.rocketchip.diplomacy.{RegionType}
+import freechips.rocketchip.devices.debug.DebugModuleKey
 import freechips.rocketchip.util._
 
 import boom.v4.common._
@@ -147,23 +148,27 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
                 Mux(do_refill, refill_ppn,
                 Mux(vm_enabled(w) && special_entry.nonEmpty.B, special_entry.map(_.ppn(vpn(w))).getOrElse(0.U), io.req(w).bits.vaddr >> pgIdxBits)))
   val mpu_physaddr = widthMap(w => Cat(mpu_ppn(w), io.req(w).bits.vaddr(pgIdxBits-1, 0)))
+  val mpu_priv = widthMap(w =>
+    Mux(usingVM.B && (do_refill || io.req(w).bits.passthrough /* PTW */), PRV.S.U, Cat(io.ptw.status.debug, priv)))
   val pmp = Seq.fill(lsuWidth) { Module(new PMPChecker(lgMaxSize)) }
   for (w <- 0 until lsuWidth) {
     pmp(w).io.addr := mpu_physaddr(w)
     pmp(w).io.size := io.req(w).bits.size
     pmp(w).io.pmp := (io.ptw.pmp: Seq[PMP])
-    pmp(w).io.prv := Mux(usingVM.B && (do_refill || io.req(w).bits.passthrough /* PTW */), PRV.S.U, priv) // TODO should add separate bit to track PTW
+    pmp(w).io.prv := mpu_priv(w)
   }
   val legal_address = widthMap(w => edge.manager.findSafe(mpu_physaddr(w)).reduce(_||_))
   def fastCheck(member: TLManagerParameters => Boolean, w: Int) =
     legal_address(w) && edge.manager.fastProperty(mpu_physaddr(w), member, (b:Boolean) => b.B)
   val cacheable = widthMap(w => fastCheck(_.supportsAcquireT, w) && (instruction || !usingDataScratchpad).B)
   val homogeneous = widthMap(w => TLBPageLookup(edge.manager.managers, xLen, p(CacheBlockBytes), BigInt(1) << pgIdxBits, 1 << lgMaxSize)(mpu_physaddr(w)).homogeneous)
-  val prot_r   = widthMap(w => fastCheck(_.supportsGet, w) && pmp(w).io.r)
-  val prot_w   = widthMap(w => fastCheck(_.supportsPutFull, w) && pmp(w).io.w)
+  val deny_access_to_debug = widthMap(w =>
+    mpu_priv(w) <= PRV.M.U && p(DebugModuleKey).map(_.address.contains(mpu_physaddr(w))).getOrElse(false.B))
+  val prot_r   = widthMap(w => fastCheck(_.supportsGet, w) && !deny_access_to_debug(w) && pmp(w).io.r)
+  val prot_w   = widthMap(w => fastCheck(_.supportsPutFull, w) && !deny_access_to_debug(w) && pmp(w).io.w)
   val prot_al  = widthMap(w => fastCheck(_.supportsLogical, w))
   val prot_aa  = widthMap(w => fastCheck(_.supportsArithmetic, w))
-  val prot_x   = widthMap(w => fastCheck(_.executable, w) && pmp(w).io.x)
+  val prot_x   = widthMap(w => fastCheck(_.executable, w) && !deny_access_to_debug(w) && pmp(w).io.x)
   val prot_eff = widthMap(w => fastCheck(Seq(RegionType.PUT_EFFECTS, RegionType.GET_EFFECTS) contains _.regionType, w))
 
   val sector_hits = widthMap(w => VecInit(sectored_entries.map(_.sectorHit(vpn(w)))))
