@@ -179,7 +179,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   // Dealing with branch resolutions
 
   // The individual branch resolutions from each ALU
-  val brinfos = Reg(Vec(coreWidth, new BrResolutionInfo()))
+  val brinfos = Reg(Vec(exe_units.alu_units.length, new BrResolutionInfo()))
 
   // "Merged" branch update info from all ALUs
   // brmask contains masks for rapidly clearing mispredicted instructions
