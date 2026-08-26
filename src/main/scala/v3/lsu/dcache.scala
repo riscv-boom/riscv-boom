@@ -63,7 +63,7 @@ class BoomWritebackUnit(implicit edge: TLEdgeOut, p: Parameters) extends L1Hella
   val r_address = Cat(req.tag, req.idx) << blockOffBits
   val id = cfg.nMSHRs
   val probeResponse = edge.ProbeAck(
-                          fromSource = id.U,
+                          fromSource = req.source,
                           toAddress = r_address,
                           lgSize = lgCacheBlockBytes.U,
                           reportPermissions = req.param,
@@ -775,8 +775,8 @@ class BoomNonBlockingDCacheModule(outer: BoomNonBlockingDCache) extends LazyModu
   tl_out.a <> mshrs.io.mem_acquire
 
   // probes and releases
-  prober.io.req.valid   := tl_out.b.valid && !lrsc_valid
-  tl_out.b.ready        := prober.io.req.ready && !lrsc_valid
+  prober.io.req.valid   := tl_out.b.valid && !lrsc_valid && !wb.io.idx.valid // block probes if wb unit is busy
+  tl_out.b.ready        := prober.io.req.ready && !lrsc_valid && !wb.io.idx.valid
   prober.io.req.bits    := tl_out.b.bits
   prober.io.way_en      := s2_tag_match_way(0)
   prober.io.block_state := s2_hit_state(0)

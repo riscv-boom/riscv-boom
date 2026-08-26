@@ -103,7 +103,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   // s_meta_write_req  : Write the metadata for new cache lne
   // s_meta_write_resp :
 
-  val s_invalid :: s_refill_req :: s_refill_resp :: s_drain_rpq_loads :: s_meta_read :: s_meta_resp_1 :: s_meta_resp_2 :: s_meta_clear :: s_wb_meta_read :: s_wb_req :: s_wb_resp :: s_commit_line :: s_drain_rpq :: s_meta_write_req :: s_mem_finish_1 :: s_mem_finish_2 :: s_prefetched :: s_prefetch :: Nil = Enum(18)
+  val s_invalid :: s_refill_req :: s_refill_resp :: s_drain_rpq_loads :: s_meta_read :: s_meta_resp_1 :: s_meta_resp_2 :: s_early_grantack :: s_meta_clear :: s_wb_meta_read :: s_wb_req :: s_wb_resp :: s_commit_line :: s_drain_rpq :: s_meta_write_req :: s_mem_finish_1 :: s_mem_finish_2 :: s_prefetched :: s_prefetch :: Nil = Enum(19)
   val state = RegInit(s_invalid)
 
   val req     = Reg(new BoomDCacheReqInternal)
@@ -304,7 +304,16 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   } .elsewhen (state === s_meta_resp_2) {
     val needs_wb = io.meta_resp.bits.coh.onCacheControl(M_FLUSH)._1
     state := Mux(!io.meta_resp.valid, s_meta_read, // Prober could have nack'd this read
-             Mux(needs_wb, s_meta_clear, s_commit_line))
+             Mux(needs_wb, s_early_grantack, s_commit_line))
+  } .elsewhen (state === s_early_grantack) {
+      // if we are going to wb states, need to GrantAck first to avoid deadlock with LLC
+      // delay GrantAck till last moment to avoid RaW condition for probe metadata read
+      io.mem_finish.valid := grantack.valid
+      io.mem_finish.bits  := grantack.bits
+      when (io.mem_finish.fire || !grantack.valid) {
+        grantack.valid := false.B
+        state := s_meta_clear
+      }
   } .elsewhen (state === s_meta_clear) {
     io.meta_write.valid         := true.B
     io.meta_write.bits.idx      := req_idx
@@ -371,6 +380,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       finish_to_prefetch := false.B
     }
   } .elsewhen (state === s_mem_finish_1) {
+    // if we sent early GrantAck, valid will be false and we just move on
     io.mem_finish.valid := grantack.valid
     io.mem_finish.bits  := grantack.bits
     when (io.mem_finish.fire || !grantack.valid) {
