@@ -31,7 +31,8 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     val ppn = UInt(ppnBits.W)
     val u = Bool()
     val g = Bool()
-    val ae = Bool()
+    val ae_ptw = Bool()
+    val ae_final = Bool()
     val sw = Bool()
     val sx = Bool()
     val sr = Bool()
@@ -183,7 +184,8 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     newEntry.c := cacheable(0)
     newEntry.u := pte.u
     newEntry.g := pte.g
-    newEntry.ae := io.ptw.resp.bits.ae_final
+    newEntry.ae_ptw := io.ptw.resp.bits.ae_ptw
+    newEntry.ae_final := io.ptw.resp.bits.ae_final
     newEntry.sr := pte.sr()
     newEntry.sw := pte.sw()
     newEntry.sx := pte.sx()
@@ -213,15 +215,16 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
   val entries = widthMap(w => VecInit(all_entries.map(_.getData(vpn(w)))))
   val normal_entries = widthMap(w => VecInit(ordinary_entries.map(_.getData(vpn(w)))))
   val nPhysicalEntries = 1 + special_entry.size
-  val ptw_ae_array = widthMap(w => Cat(false.B, entries(w).map(_.ae).asUInt))
+  val ptw_ae_array = widthMap(w => Cat(false.B, entries(w).map(_.ae_ptw).asUInt))
+  val final_ae_array = widthMap(w => Cat(false.B, entries(w).map(_.ae_final).asUInt))
   val priv_rw_ok   = widthMap(w => Mux(!priv_s || io.ptw.status.sum, entries(w).map(_.u).asUInt, 0.U) | Mux(priv_s, ~entries(w).map(_.u).asUInt, 0.U))
   val priv_x_ok    = widthMap(w => Mux(priv_s, ~entries(w).map(_.u).asUInt, entries(w).map(_.u).asUInt))
   val r_array      = widthMap(w => Cat(true.B, priv_rw_ok(w) & (entries(w).map(_.sr).asUInt | Mux(io.ptw.status.mxr, entries(w).map(_.sx).asUInt, 0.U))))
   val w_array      = widthMap(w => Cat(true.B, priv_rw_ok(w) & entries(w).map(_.sw).asUInt))
   val x_array      = widthMap(w => Cat(true.B, priv_x_ok(w)  & entries(w).map(_.sx).asUInt))
-  val pr_array     = widthMap(w => Cat(Fill(nPhysicalEntries, prot_r(w))   , normal_entries(w).map(_.pr).asUInt) & ~ptw_ae_array(w))
-  val pw_array     = widthMap(w => Cat(Fill(nPhysicalEntries, prot_w(w))   , normal_entries(w).map(_.pw).asUInt) & ~ptw_ae_array(w))
-  val px_array     = widthMap(w => Cat(Fill(nPhysicalEntries, prot_x(w))   , normal_entries(w).map(_.px).asUInt) & ~ptw_ae_array(w))
+  val pr_array     = widthMap(w => Cat(Fill(nPhysicalEntries, prot_r(w))   , normal_entries(w).map(_.pr).asUInt) & ~(ptw_ae_array(w) | final_ae_array(w)))
+  val pw_array     = widthMap(w => Cat(Fill(nPhysicalEntries, prot_w(w))   , normal_entries(w).map(_.pw).asUInt) & ~(ptw_ae_array(w) | final_ae_array(w)))
+  val px_array     = widthMap(w => Cat(Fill(nPhysicalEntries, prot_x(w))   , normal_entries(w).map(_.px).asUInt) & ~(ptw_ae_array(w) | final_ae_array(w)))
   val eff_array    = widthMap(w => Cat(Fill(nPhysicalEntries, prot_eff(w)) , normal_entries(w).map(_.eff).asUInt))
   val c_array      = widthMap(w => Cat(Fill(nPhysicalEntries, cacheable(w)), normal_entries(w).map(_.c).asUInt))
   val paa_array    = widthMap(w => Cat(Fill(nPhysicalEntries, prot_aa(w))  , normal_entries(w).map(_.paa).asUInt))
