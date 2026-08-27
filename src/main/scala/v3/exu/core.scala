@@ -1606,8 +1606,17 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
       }
     })
 
+    // Context tags: same source as the tacit encoder (csr.io.ptbr.asid), so
+    // the two instruments agree on process identity; prv distinguishes
+    // kernel from user at trap edges. The format tag lets host workers
+    // reject captures from bitstreams predating these fields.
+    val tdWord6 = Cat(0xD1.U(8.W),                 // format tag
+                      0.U(38.W),
+                      csr.io.status.prv.pad(2),    // [17:16]
+                      csr.io.ptbr.asid.pad(16))    // [15:0]
+
     // Registered once for timing slack; valid and payload stay in lockstep.
     td.valid := RegNext(tdEmit, false.B)
-    td.bits  := RegNext(Cat(0.U(128.W), tdPCs, tdFlags, tdWord0))
+    td.bits  := RegNext(Cat(0.U(64.W), tdWord6, tdPCs, tdFlags, tdWord0))
   }
 }
