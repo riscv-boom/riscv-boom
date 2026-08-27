@@ -611,10 +611,20 @@ class DecodeUnit(implicit p: Parameters) extends BoomModule
       (cs.dst_type === RT_FIX) &&
       (inst(RD_MSB, RD_LSB) === 0.U)
 
+    // funct3 selects the hint: `ld x0` (0b011) keeps M_PFR (unchanged behaviour for
+    // every existing user), `lw x0` (0b010) requests M_PFW. Write intent matters when
+    // the prefetched line is read-modify-written: with M_PFR the load hits but the
+    // store still acquires ownership, so the latency reappears on the store.
+    // The mem command that actually reaches the dcache is driven by the RoCC
+    // accelerator (swprft-rocc.scala); this keeps the uop consistent with it, which
+    // is what tlb.scala's cmd_read/cmd_write permission check looks at.
+    val prefetch_write = inst(14, 12) === "b010".U
+
     when(prefetch_insn) {
       uop.dst_rtype := RT_X
       uop.ldst_val  := false.B
-      uop.mem_cmd   := freechips.rocketchip.rocket.M_PFR
+      uop.mem_cmd   := Mux(prefetch_write, freechips.rocketchip.rocket.M_PFW,
+                                           freechips.rocketchip.rocket.M_PFR)
       uop.uses_ldq  := false.B
       uop.uses_stq  := false.B
       uop.iq_type   := IQT_INT
