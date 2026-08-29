@@ -74,7 +74,8 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
 
     // To inform the prefetcher when we are commiting the fetch of this line
     val commit_val  = Output(Bool())
-    val commit_addr = Output(UInt(coreMaxAddrBits.W))
+    val commit_paddr = Output(UInt(coreMaxAddrBits.W))
+    val commit_vaddr = Output(UInt(coreMaxAddrBits.W))
     val commit_coh  = Output(new ClientMetadata)
 
     // Reading from the line buffer
@@ -107,9 +108,9 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   val state = RegInit(s_invalid)
 
   val req     = Reg(new BoomDCacheReqInternal)
-  val req_idx = req.addr(untagBits-1, blockOffBits)
-  val req_tag = req.addr >> untagBits
-  val req_block_addr = (req.addr >> blockOffBits) << blockOffBits
+  val req_idx = req.paddr(untagBits-1, blockOffBits)
+  val req_tag = req.paddr >> untagBits
+  val req_block_addr = (req.paddr >> blockOffBits) << blockOffBits
   val req_needs_wb = RegInit(false.B)
 
   val new_coh = RegInit(ClientMetadata.onReset)
@@ -185,7 +186,8 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   io.resp.valid          := false.B
   io.resp.bits           := rpq.io.deq.bits
   io.commit_val          := false.B
-  io.commit_addr         := req.addr
+  io.commit_paddr         := req.paddr
+  io.commit_vaddr         := req.vaddr
   io.commit_coh          := coh_on_grant
   io.meta_read.valid     := false.B
   io.meta_read.bits.idx := req_idx
@@ -197,7 +199,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   io.lb_write.bits.offset := refill_address_inc >> rowOffBits
   io.lb_write.bits.data   := io.mem_grant.bits.data
   io.mem_grant.ready := false.B
-  io.lb_read.offset := rpq.io.deq.bits.addr >> rowOffBits
+  io.lb_read.offset := rpq.io.deq.bits.paddr >> rowOffBits
 
   when (io.req_sec_val && io.req_sec_rdy) {
     req.uop.mem_cmd := dirtier_cmd
@@ -268,18 +270,18 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
                      !isWrite(rpq.io.deq.bits.uop.mem_cmd) &&
                      (rpq.io.deq.bits.uop.mem_cmd =/= M_XLR)) // LR should go through replay
     // drain all loads for now
-    val rp_addr = Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
+    val rp_addr = Cat(req_tag, req_idx, rpq.io.deq.bits.paddr(blockOffBits-1,0))
     val word_idx  = if (rowWords == 1) 0.U else rp_addr(log2Up(rowWords*coreDataBytes)-1, log2Up(wordBytes))
     val data      = io.lb_resp
     val data_word = data >> Cat(word_idx, 0.U(log2Up(coreDataBits).W))
     val loadgen = new LoadGen(rpq.io.deq.bits.uop.mem_size, rpq.io.deq.bits.uop.mem_signed,
-      Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0)),
+      Cat(req_tag, req_idx, rpq.io.deq.bits.paddr(blockOffBits-1,0)),
       data_word, false.B, wordBytes)
 
 
     rpq.io.deq.ready  := io.resp.ready && drain_load
 
-    io.lb_read.offset := rpq.io.deq.bits.addr >> rowOffBits
+    io.lb_read.offset := rpq.io.deq.bits.paddr >> rowOffBits
 
     io.resp.valid     := rpq.io.deq.valid && drain_load
     io.resp.bits.data := loadgen.data
@@ -338,7 +340,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   } .elsewhen (state === s_drain_rpq) {
     io.replay <> rpq.io.deq
     io.replay.bits.way_en    := req.way_en
-    io.replay.bits.addr := Cat(req_tag, req_idx, rpq.io.deq.bits.addr(blockOffBits-1,0))
+    io.replay.bits.paddr := Cat(req_tag, req_idx, rpq.io.deq.bits.paddr(blockOffBits-1,0))
     when (io.replay.fire && isWrite(rpq.io.deq.bits.uop.mem_cmd)) {
       // Set dirty bit
       val (is_hit, _, coh_on_hit) = new_coh.onAccess(rpq.io.deq.bits.uop.mem_cmd)
@@ -413,10 +415,10 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
   val state = RegInit(s_idle)
   io.req.ready := state === s_idle
 
-  val loadgen = new LoadGen(req.uop.mem_size, req.uop.mem_signed, req.addr, grant_word, false.B, wordBytes)
+  val loadgen = new LoadGen(req.uop.mem_size, req.uop.mem_signed, req.paddr, grant_word, false.B, wordBytes)
 
   val a_source  = id.U
-  val a_address = req.addr
+  val a_address = req.paddr
   val a_size    = req.uop.mem_size
   val a_data    = Fill(beatWords, req.data)
 
@@ -460,7 +462,7 @@ class BoomIOMSHR(id: Int)(implicit edge: TLEdgeOut, p: Parameters) extends BoomM
   when (state === s_mem_ack && io.mem_ack.valid) {
     state := s_resp
     when (isRead(req.uop.mem_cmd)) {
-      grant_word := wordFromBeat(req.addr, io.mem_ack.bits.data)
+      grant_word := wordFromBeat(req.paddr, io.mem_ack.bits.data)
     }
   }
   when (state === s_resp) {
@@ -545,7 +547,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   io.prefetch <> prefetcher.io.prefetch
 
 
-  val cacheable = edge.manager.supportsAcquireBFast(req.bits.addr, lgCacheBlockBytes.U)
+  val cacheable = edge.manager.supportsAcquireBFast(req.bits.paddr, lgCacheBlockBytes.U)
 
   // --------------------
   // The MSHR SDQ
@@ -586,7 +588,8 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
   val refill_arb     = Module(new Arbiter(new L1DataWriteReq           , cfg.nMSHRs))
 
   val commit_vals    = Wire(Vec(cfg.nMSHRs, Bool()))
-  val commit_addrs   = Wire(Vec(cfg.nMSHRs, UInt(coreMaxAddrBits.W)))
+  val commit_paddrs   = Wire(Vec(cfg.nMSHRs, UInt(coreMaxAddrBits.W)))
+  val commit_vaddrs   = Wire(Vec(cfg.nMSHRs, UInt(coreMaxAddrBits.W)))
   val commit_cohs    = Wire(Vec(cfg.nMSHRs, new ClientMetadata))
 
   var sec_rdy   = false.B
@@ -603,8 +606,8 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     mshr.io.id := i.U(log2Ceil(cfg.nMSHRs).W)
 
     for (w <- 0 until lsuWidth) {
-      idx_matches(w)(i) := mshr.io.idx.valid && mshr.io.idx.bits === io.req(w).bits.addr(untagBits-1,blockOffBits)
-      tag_matches(w)(i) := mshr.io.tag.valid && mshr.io.tag.bits === io.req(w).bits.addr >> untagBits
+      idx_matches(w)(i) := mshr.io.idx.valid && mshr.io.idx.bits === io.req(w).bits.paddr(untagBits-1,blockOffBits)
+      tag_matches(w)(i) := mshr.io.tag.valid && mshr.io.tag.bits === io.req(w).bits.paddr >> untagBits
       way_matches(w)(i) := mshr.io.way.valid && mshr.io.way.bits === io.req(w).bits.way_en
     }
     wb_tag_list(i) := mshr.io.wb_req.bits.tag
@@ -648,7 +651,8 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     }
 
     commit_vals(i)  := mshr.io.commit_val
-    commit_addrs(i) := mshr.io.commit_addr
+    commit_paddrs(i) := mshr.io.commit_paddr
+    commit_vaddrs(i) := mshr.io.commit_vaddr
     commit_cohs(i)  := mshr.io.commit_coh
 
     mshr.io.mem_grant.valid := false.B
@@ -743,6 +747,7 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
 
   prefetcher.io.mshr_avail    := RegNext(pri_rdy)
   prefetcher.io.req_val       := RegNext(commit_vals.reduce(_||_))
-  prefetcher.io.req_addr      := RegNext(Mux1H(commit_vals, commit_addrs))
+  prefetcher.io.req_paddr     := RegNext(Mux1H(commit_vals, commit_paddrs))
+  prefetcher.io.req_vaddr     := RegNext(Mux1H(commit_vals, commit_vaddrs))
   prefetcher.io.req_coh       := RegNext(Mux1H(commit_vals, commit_cohs))
 }
