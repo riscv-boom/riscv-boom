@@ -5,7 +5,7 @@ The Execute Pipeline
 .. figure:: /figures/execution-pipeline-2w.png
     :alt: Dual Issue Pipeline
 
-    An example pipeline for a dual-issue BOOM. The first issue port schedules :term:`UOP<Micro-Op (UOP)`s onto
+    An example pipeline for a dual-issue BOOM. The first issue port schedules :term:`UOP<Micro-Op (UOP)>`s onto
     Execute Unit #0, which can accept ALU operations, FPU operations, and integer multiply instructions.
     The second issue port schedules ALU operations, integer divide instructions (unpipelined), and load/store
     operations. The ALU operations can bypass to dependent instructions. Note that the ALU in Execution Unit #0 is
@@ -14,8 +14,8 @@ The Execute Pipeline
     of lower-level :term:`Functional Unit`s.
 
 The **Execution Pipeline** covers the execution and write-back of :term:`Micro-Ops (UOPs)<Micro-Op (UOP)>`.
-Although the :term:`UOPs<Micro-Op (UOP)` will travel down the pipeline one after the other
-(in the order they have been issued), the :term:`UOPs<Micro-Op (UOP)` themselves are
+Although the :term:`UOPs<Micro-Op (UOP)>` will travel down the pipeline one after the other
+(in the order they have been issued), the :term:`UOPs<Micro-Op (UOP)>` themselves are
 likely to have been issued to the Execution Pipeline out-of-order.
 :numref:`dual-issue-pipeline` shows an example Execution Pipeline for a
 dual-issue BOOM.
@@ -34,7 +34,7 @@ Execution Units
 
 
 An :term:`Execution Unit` is a module that a single issue port will schedule
-:term:`UOPs<Micro-Op (UOP)` onto and contains some mix of :term:`Functional Unit` s. Phrased in
+:term:`UOPs<Micro-Op (UOP)>` onto and contains some mix of :term:`Functional Unit` s. Phrased in
 another way, each issue port from the **Issue Queue** talks to one and only
 one :term:`Execution Unit`. An :term:`Execution Unit` may contain just a single simple
 integer ALU, or it could contain a full complement of floating point
@@ -49,7 +49,7 @@ Scheduling Readiness
 
 An :term:`Execution Unit` provides a bit-vector of the :term:`Functional Unit` s it has
 available to the issue scheduler. The issue scheduler will only schedule
-:term:`UOPs<Micro-Op (UOP)` that the :term:`Execution Unit` supports. For :term:`Functional Unit` s that
+:term:`UOPs<Micro-Op (UOP)>` that the :term:`Execution Unit` supports. For :term:`Functional Unit` s that
 may not always be ready (e.g., an un-pipelined divider), the appropriate
 bit in the bit-vector will be disabled (See :numref:`dual-issue-pipeline`).
 
@@ -62,7 +62,7 @@ Functional Unit
 
     The abstract Pipelined :term:`Functional Unit` class. An expert-written, low-level :term:`Functional Unit`
     is instantiated within the :term:`Functional Unit`. The request and response ports are abstracted and bypass and
-    branch speculation support is provided. :term:`UOPs<Micro-Op (UOP)` are individually killed by gating off their response as they
+    branch speculation support is provided. :term:`UOPs<Micro-Op (UOP)>` are individually killed by gating off their response as they
     exit the low-level :term:`Functional Unit` .
 
 :term:`Functional Unit` s are the muscle of the CPU, computing the necessary
@@ -89,12 +89,12 @@ interface.
 Pipelined Functional Units
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-A pipelined :term:`Functional Unit` can accept a new :term:`UOP<Micro-Op (UOP)` every cycle. Each
-:term:`UOP<Micro-Op (UOP)` will take a known, fixed latency.
+A pipelined :term:`Functional Unit` can accept a new :term:`UOP<Micro-Op (UOP)>` every cycle. Each
+:term:`UOP<Micro-Op (UOP)>` will take a known, fixed latency.
 
 Speculation support is provided by auto-generating a pipeline that
-passes down the :term:`UOP<Micro-Op (UOP)` meta-data and *branch mask* in parallel with
-the :term:`UOP<Micro-Op (UOP)` within the expert-written :term:`Functional Unit` . If a :term:`UOP<Micro-Op (UOP)` is
+passes down the :term:`UOP<Micro-Op (UOP)>` meta-data and *branch mask* in parallel with
+the :term:`UOP<Micro-Op (UOP)>` within the expert-written :term:`Functional Unit` . If a :term:`UOP<Micro-Op (UOP)>` is
 misspeculated, it’s response is de-asserted as it exits the functional
 unit.
 
@@ -105,15 +105,15 @@ Un-pipelined Functional Units
 
 Un-pipelined :term:`Functional Unit` s (e.g., a divider) take an variable (and
 unknown) number of cycles to complete a single operation. Once occupied,
-they de-assert their ready signal and no additional :term:`UOPs<Micro-Op (UOP)` may be
+they de-assert their ready signal and no additional :term:`UOPs<Micro-Op (UOP)>` may be
 scheduled to them.
 
 Speculation support is provided by tracking the **branch mask** of the
-:term:`UOP<Micro-Op (UOP)` in the :term:`Functional Unit`.
+:term:`UOP<Micro-Op (UOP)>` in the :term:`Functional Unit`.
 
 The only requirement of the expert-written un-pipelined :term:`Functional Unit`
 is to provide a *kill* signal to quickly remove misspeculated
-:term:`UOPs<Micro-Op (UOP)`. [1]_
+:term:`UOPs<Micro-Op (UOP)>`. [1]_
 
 .. _fu-hierarchy:
 .. figure:: /figures/functional-unit-hierarchy.png
@@ -131,24 +131,24 @@ Branch Unit & Branch Speculation
 The :term:`Branch Unit` handles the resolution of all branch and jump
 instructions.
 
-All :term:`UOPs<Micro-Op (UOP)` that are "inflight" in the pipeline (have an allocated ROB
+All :term:`UOPs<Micro-Op (UOP)>` that are "inflight" in the pipeline (have an allocated ROB
 entry) are given a branch mask, where each bit in the branch mask
-corresponds to an un-executed, inflight branch that the :term:`UOP<Micro-Op (UOP)` is
+corresponds to an un-executed, inflight branch that the :term:`UOP<Micro-Op (UOP)>` is
 speculated under. Each branch in *Decode* is allocated a branch tag,
-and all following :term:`UOPs<Micro-Op (UOP)` will have the corresponding bit in the
+and all following :term:`UOPs<Micro-Op (UOP)>` will have the corresponding bit in the
 branch mask set (until the branch is resolved by the :term:`Branch Unit`).
 
 If the branches (or jumps) have been correctly speculated by the
 :term:`Front-end`, then the :term:`Branch Unit` s only action is to broadcast the
-corresponding branch tag to *all* inflight :term:`UOPs<Micro-Op (UOP)` that the branch has
-been resolved correctly. Each :term:`UOP<Micro-Op (UOP)` can then clear the corresponding
+corresponding branch tag to *all* inflight :term:`UOPs<Micro-Op (UOP)>` that the branch has
+been resolved correctly. Each :term:`UOP<Micro-Op (UOP)>` can then clear the corresponding
 bit in its branch mask, and that branch tag can then be allocated to a
 new branch in the *Decode* stage.
 
 If a branch (or jump) is misspeculated, the :term:`Branch Unit` must redirect
 the PC to the correct target, kill the :term:`Front-end` and :term:`Fetch Buffer`, and
 broadcast the misspeculated branch tag so that all dependent, inflight
-:term:`UOPs<Micro-Op (UOP)` may be killed. The PC redirect signal goes out immediately, to
+:term:`UOPs<Micro-Op (UOP)>` may be killed. The PC redirect signal goes out immediately, to
 decrease the misprediction penalty. However, the *kill* signal is
 delayed a cycle for critical path reasons.
 

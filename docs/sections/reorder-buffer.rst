@@ -59,7 +59,7 @@ Each ROB entry contains relatively little state:
 
 -  is entry an exception?
 
--  branch mask (which branches is this entry still speculated under?
+-  branch mask (which branches is this entry still speculated under?)
 
 -  rename state (what is the logical destination and the stale physical
    destination?)
