@@ -243,31 +243,9 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
 
   //-------------------------------------------------------------
   // Uarch Hardware Performance Events (HPEs)
+  val boomPerfEvents = Module(new boom.v3.perf.BoomPerfEvents)
+  val perfEvents = boomPerfEvents.perfEvents
 
-  val perfEvents = new freechips.rocketchip.rocket.EventSets(Seq(
-    new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-      ("exception", () => rob.io.com_xcpt.valid),
-      ("nop",       () => false.B),
-      ("nop",       () => false.B),
-      ("nop",       () => false.B))),
-
-    new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-//      ("I$ blocked",                        () => icache_blocked),
-      ("nop",                               () => false.B),
-      ("branch misprediction",              () => b2.mispredict),
-      ("control-flow target misprediction", () => b2.mispredict &&
-                                                  b2.cfi_type === CFI_JALR),
-      ("flush",                             () => rob.io.flush.valid),
-      ("branch resolved",                   () => b2.valid)
-    )),
-
-    new freechips.rocketchip.rocket.EventSet((mask, hits) => (mask & hits).orR, Seq(
-      ("I$ miss",     () => io.ifu.perf.acquire),
-      ("D$ miss",     () => io.lsu.perf.acquire),
-      ("D$ release",  () => io.lsu.perf.release),
-      ("ITLB miss",   () => io.ifu.perf.tlbMiss),
-      ("DTLB miss",   () => io.lsu.perf.tlbMiss),
-      ("L2 TLB miss", () => io.ptw.perf.l2miss)))))
   val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
   csr.io.inst foreach { c => c := DontCare }
   csr.io.rocc_interrupt := io.rocc.interrupt
@@ -1312,6 +1290,34 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
 
   assert (!(rob.io.com_xcpt.valid && !rob.io.flush.valid),
     "[core] exception occurred, but pipeline flush signal not set!")
+
+
+  //-------------------------------------------------------------
+  // **** Hook up HPM Perf events ****
+  //-------------------------------------------------------------
+
+  boomPerfEvents.io.branch_mispredict := b2.mispredict
+  boomPerfEvents.io.cfi_target_mispredict := b2.mispredict && b2.cfi_type === CFI_JALR
+  boomPerfEvents.io.branch_resolved := b2.valid
+
+  boomPerfEvents.io.rob_flush := rob.io.flush.valid
+  boomPerfEvents.io.commit_uops := rob.io.commit.valids
+  boomPerfEvents.io.sfence_valid := io.ifu.sfence.valid
+  boomPerfEvents.io.redirect_val := io.ifu.redirect_val
+  boomPerfEvents.io.redirect_flush := io.ifu.redirect_flush
+  boomPerfEvents.io.rob_flush := rob.io.flush.valid
+  boomPerfEvents.io.ifu_acquire := io.ifu.perf.acquire
+  boomPerfEvents.io.lsu_acquire := io.lsu.perf.acquire
+  boomPerfEvents.io.lsu_release := io.lsu.perf.release
+  boomPerfEvents.io.ifu_tlb_miss := io.ifu.perf.tlbMiss
+  boomPerfEvents.io.lsu_tlb_miss := io.lsu.perf.tlbMiss
+  boomPerfEvents.io.ptw_l2_miss := io.ptw.perf.l2miss
+
+  boomPerfEvents.io.dec_valids := dec_valids
+  boomPerfEvents.io.fetchpacket_valid := io.ifu.fetchpacket.valid
+  boomPerfEvents.io.dec_fbundle_valids := VecInit(dec_fbundle.uops.map(_.valid))
+  boomPerfEvents.io.dec_stalls := dec_stalls
+  boomPerfEvents.io.dec_fire := dec_fire
 
   //-------------------------------------------------------------
   //-------------------------------------------------------------
