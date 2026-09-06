@@ -1555,7 +1555,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     can_fire_hella_incoming(memWidth-1) := true.B
 
     hella_data := io.hellacache.s1_data
-    hella_xcpt := dtlb.io.resp(memWidth-1)
+    // Only trust the TLB response when the hellacache request actually went
+    // through this port this cycle; otherwise the bits belong to some other op.
+    when (will_fire_hella_incoming(memWidth-1)) {
+      hella_xcpt := dtlb.io.resp(memWidth-1)
+    } .otherwise {
+      hella_xcpt := 0.U.asTypeOf(new rocket.HellaCacheExceptions)
+    }
 
     when (io.hellacache.s1_kill) {
       when (!isPrefetch(hella_req.cmd) && (will_fire_hella_incoming(memWidth-1) && dmem_req_fire(memWidth-1))) {
@@ -1585,7 +1591,14 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
     }
   } .elsewhen (hella_state === h_s2) {
     io.hellacache.s2_xcpt := hella_xcpt
-    when (io.hellacache.s2_kill) {
+    // A request that reports an exception at s2 must not also deliver data.
+    // Physical (PTW) requests bypass the s1 exception gate and are always
+    // issued to the dcache, so if the TLB flagged a PMA/PMP fault the read is
+    // already in flight: drain it in h_dead instead of forwarding it from
+    // h_wait to a walker that has already taken its exception exit (upstream
+    // BOOM behaviour; dropped by the software-prefetch port).
+    val s2_xcpt_pending = !isPrefetch(hella_req.cmd) && hella_xcpt.asUInt =/= 0.U
+    when (io.hellacache.s2_kill || s2_xcpt_pending) {
       when (isPrefetch(hella_req.cmd)) {
         hella_state := h_ready
       } .otherwise {
