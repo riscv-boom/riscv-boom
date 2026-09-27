@@ -24,6 +24,24 @@ import boom.v3.lsu._
 // BOOM Config Fragments
 // ---------------------
 
+/** Enable the native PMU and its MMIO interface (separate from CSR HPM counters). */
+case object EnableBoomPMU extends Field[Boolean](false)
+
+/** Collect the event catalog without requiring a native MMIO counter bank. */
+case object EnableBoomPMUEvents extends Field[Boolean](false)
+
+class WithBoomPMUEvents extends Config((site, here, up) => {
+  case EnableBoomPMUEvents => true
+})
+
+case object BoomPMUBaseAddress extends Field[BigInt](BigInt("40000000", 16))
+
+class WithBoomPMU(baseAddress: BigInt = BigInt("40000000", 16)) extends Config((site, here, up) => {
+  case EnableBoomPMU => true
+  case EnableBoomPMUEvents => true
+  case BoomPMUBaseAddress => baseAddress
+})
+
 class WithBoomCommitLogPrintf extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
     case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(core = tp.tileParams.core.copy(
@@ -320,6 +338,7 @@ class WithCloneBoomTiles(
   case TilesLocated(`location`) => {
     val prev = up(TilesLocated(location), site)
     val idOffset = up(NumTiles)
+    require(!site(EnableBoomPMU) && !site(EnableBoomPMUEvents), "The BOOM PMU example requires independently elaborated tiles; cloning is not supported")
     val tileAttachParams = up(TilesLocated(cloneLocation)).find(_.tileParams.tileId == cloneTileId)
       .get.asInstanceOf[BoomTileAttachParams]
     (0 until n).map { i =>

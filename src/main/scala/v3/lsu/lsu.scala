@@ -42,6 +42,7 @@
 package boom.v3.lsu
 
 import chisel3._
+import pmu.PMUScopeKey
 import chisel3.util._
 
 import org.chipsalliance.cde.config.Parameters
@@ -253,6 +254,12 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   io.ptw <> dtlb.io.ptw
   io.core.perf.tlbMiss := io.ptw.req.fire
+  if (p(EnableBoomPMUEvents)) {
+    val registry = p(PMUScopeKey).get
+    val dtlb_increment = WireInit(io.ptw.req.fire.asUInt)
+    registry.register("lsu.dtlb_walk_requests", dtlb_increment, unit = "requests",
+      description = "Accepted data-side PTW requests, including speculative translations")
+  }
   io.core.perf.acquire := io.dmem.perf.acquire
   io.core.perf.release := io.dmem.perf.release
 

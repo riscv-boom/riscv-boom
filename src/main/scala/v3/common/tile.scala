@@ -6,6 +6,8 @@
 package boom.v3.common
 
 import chisel3._
+import pmu.{PMURegistry, PMUScopeKey, TilePMU}
+import pmu.tilelink.PMUTileLink
 import chisel3.util.{RRArbiter, Queue}
 
 import scala.collection.mutable.{ListBuffer}
@@ -66,6 +68,19 @@ case class BoomTileParams(
   val uniqueName = s"${baseName}_$tileId"
 }
 
+object BoomTile {
+  // Called once per tile, before BaseTile or any lazy child captures Parameters.
+  private def withPMUScope(params: BoomTileParams, parent: Parameters): Parameters = {
+    if (parent(EnableBoomPMU) || parent(EnableBoomPMUEvents)) {
+      val registry = new PMURegistry(params.uniqueName)
+      parent.alterPartial {
+        case PMUScopeKey => Some(registry)
+        case EnableBoomPMUEvents => true
+      }
+    } else parent
+  }
+}
+
 /**
  * BOOM tile
  *
@@ -82,11 +97,20 @@ class BoomTile private(
 
   // Private constructor ensures altered LazyModule.p is used implicitly
   def this(params: BoomTileParams, crossing: HierarchicalElementCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters) =
-    this(params, crossing.crossingType, lookup, p)
+    this(params, crossing.crossingType, lookup, BoomTile.withPMUScope(params, p))
 
   val intOutwardNode = None
   val masterNode = TLIdentityNode()
   val slaveNode = TLIdentityNode()
+
+  // The node is negotiated now; its register map is populated after producers
+  // register in the tile module body. All controls stay in the tile clock domain.
+  val pmuMMIO = if (p(EnableBoomPMU)) {
+    val adapter = new PMUTileLink(p(BoomPMUBaseAddress) + BigInt(tileId) * 4096,
+      xBytes, boomParams.uniqueName)
+    connectTLSlave(adapter.node, xBytes)
+    Some(adapter)
+  } else None
 
   // TraceDoctor oracle trace port (present only when traceDoctorWidth > 0)
   val traceDoctorNode = if (boomParams.core.traceDoctorWidth > 0) {
@@ -293,6 +317,22 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
     }
   } else {
     core.io.traceStall := false.B // no trace encoder, so no stall
+  }
+
+  // Finalize only after all lazy and ordinary producer modules have elaborated.
+  // Publish the event surface independently of optional native MMIO counters.
+  val pmuEvents = if (p(EnableBoomPMUEvents)) {
+    val registry = p(PMUScopeKey).get
+    val cycles = WireInit(1.U)
+    registry.register("tile.cycles", cycles, unit = "cycles",
+      description = "Tile clock cycles outside reset, including stalls and idle cycles")
+    Some(registry.build())
+  } else None
+
+  val nativePMU = outer.pmuMMIO.map { adapter =>
+    val attachment = TilePMU.build(pmuEvents.get)
+    adapter.attach(attachment)
+    attachment
   }
 
   // Generate a descriptive string

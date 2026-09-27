@@ -26,6 +26,7 @@ package boom.v3.exu
 import scala.math.ceil
 
 import chisel3._
+import pmu.PMUScopeKey
 import chisel3.util._
 
 import org.chipsalliance.cde.config.Parameters
@@ -252,6 +253,9 @@ class Rob(
   val rob_tail_vals       = Wire(Vec(coreWidth, Bool())) // are the instructions at the tail valid? (to track partial row dispatches)
   val rob_head_uses_stq   = Wire(Vec(coreWidth, Bool()))
   val rob_head_uses_ldq   = Wire(Vec(coreWidth, Bool()))
+  val pmu_commit_enabled = if (p(EnableBoomPMUEvents)) Some(Wire(Bool())) else None
+  val pmu_head_busy = if (p(EnableBoomPMUEvents)) Some(Wire(Vec(coreWidth, Bool()))) else None
+  val pmu_head_exception = if (p(EnableBoomPMUEvents)) Some(Wire(Vec(coreWidth, Bool()))) else None
   val rob_head_fflags     = Wire(Vec(coreWidth, UInt(freechips.rocketchip.tile.FPConstants.FLAGS_SZ.W)))
 
   val exception_thrown = Wire(Bool())
@@ -498,6 +502,10 @@ class Rob(
     rob_head_fflags(w)   := rob_fflags(w)(rob_head)
     rob_head_uses_stq(w) := rob_uop(rob_head).uses_stq
     rob_head_uses_ldq(w) := rob_uop(rob_head).uses_ldq
+    if (p(EnableBoomPMUEvents)) {
+      pmu_head_busy.get(w) := rob_bsy(rob_head)
+      pmu_head_exception.get(w) := rob_exception(rob_head)
+    }
 
     //------------------------------------------------
     // Invalid entries are safe; thrown exceptions are unsafe.
@@ -540,6 +548,23 @@ class Rob(
 
   } //for (w <- 0 until coreWidth)
 
+  // Count architectural retirement, excluding predicated-away instructions.
+  // The producer supplies the complete increment; PMU does not infer a reduction.
+  if (p(EnableBoomPMUEvents)) {
+    val registry = p(PMUScopeKey).get
+    val retired_increment = WireInit(PopCount(io.commit.arch_valids))
+    registry.register("rob.instructions_retired", retired_increment, unit = "instructions",
+      description = "Architecturally retired instructions on this cycle")
+    val head_load_increment = WireInit(PMUEventLogic.headLoadWaiting(
+      rob_head_vals.toSeq, pmu_head_busy.get.toSeq, rob_head_uses_ldq.toSeq,
+      pmu_head_exception.get.toSeq, pmu_commit_enabled.get).asUInt)
+    val no_retire_increment = WireInit((!empty && !io.commit.arch_valids.asUInt.orR).asUInt)
+    registry.register("rob.head_load_wait_cycles", head_load_increment, unit = "cycles",
+      description = "Oldest valid entry in current ROB head row is a busy load without exception; excludes rollback, reset state, CSR/trace stalls and flush")
+    registry.register("rob.nonempty_no_retire_cycles", no_retire_increment, unit = "cycles",
+      description = "Nonempty ROB with no architectural retirement; includes recovery, external stalls and predicated-only commit")
+  }
+
   // **************************************************************************
   // --------------------------------------------------------------------------
   // **************************************************************************
@@ -553,6 +578,9 @@ class Rob(
   // it that want to commit (only throw exception when head of the bundle).
 
   var block_commit = (rob_state =/= s_normal) && (rob_state =/= s_wait_till_empty) || RegNext(exception_thrown) || RegNext(RegNext(exception_thrown))
+  if (p(EnableBoomPMUEvents)) {
+    pmu_commit_enabled.get := !block_commit && !io.csr_stall && !io.trace_stall && !io.flush.valid
+  }
   var will_throw_exception = false.B
   var block_xcpt   = false.B
 
