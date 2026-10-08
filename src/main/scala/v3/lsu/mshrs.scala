@@ -7,6 +7,7 @@
 package boom.v3.lsu
 
 import chisel3._
+import pmu.PMUScopeKey
 import chisel3.util._
 
 import org.chipsalliance.cde.config.Parameters
@@ -757,6 +758,15 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
       Mux(!cacheable, mmio_rdy, sdq_rdy && Mux(idx_match(w), tag_match(w) && sec_rdy, pri_rdy))
     io.secondary_miss(w) := idx_match(w) && way_match(w) && !tag_match(w)
     io.block_hit(w)      := idx_match(w) && tag_match(w)
+  }
+  if (usingPMU) {
+    val registry = p(PMUScopeKey).get
+    // One selected input can allocate a new cacheable MSHR. Secondary merges,
+    // permission upgrades and MMIO requests are excluded. Prefetches are included.
+    val line_miss = PMUEventLogic.lineMissAllocation(
+      req.fire, cacheable, idx_match(req_idx), req.bits.tag_match)
+    registry.register("lsu.dcache_line_misses", line_miss, unit = "requests",
+      description = "Accepted cacheable line-miss MSHR allocations including prefetches/speculation; excludes merges, permission upgrades and MMIO")
   }
   io.refill         <> refill_arb.io.out
 

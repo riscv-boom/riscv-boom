@@ -32,6 +32,8 @@ import java.nio.file.{Paths}
 
 import chisel3._
 import chisel3.util._
+import chisel3.util.experimental.BoringUtils
+import pmu.PMUScopeKey
 
 import org.chipsalliance.cde.config.Parameters
 import freechips.rocketchip.rocket.Instructions._
@@ -389,6 +391,9 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     (RegNext(dec_valids(i) && dec_uops(i).is_jalr && csr.io.status.debug))
   }.reduce(_||_)
 
+  // Observe the selected redirect arm, including priority over branch recovery.
+  val pmu_branch_redirect = if (usingPMU) Some(WireInit(false.B)) else None
+
   // TODO FIX THIS HACK
   // The below code works because of two quirks with the flush mechanism
   //  1 ) All flush_on_commit instructions are also is_unique,
@@ -422,6 +427,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     }
     io.ifu.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
   } .elsewhen (brupdate.b2.mispredict && !RegNext(rob.io.flush.valid)) {
+    if (usingPMU) { pmu_branch_redirect.get := true.B }
     val block_pc = AlignPCToBoundary(io.ifu.get_pc(1).pc, icBlockBytes)
     val uop_maybe_pc = block_pc | brupdate.b2.uop.pc_lob
     val npc = uop_maybe_pc + Mux(brupdate.b2.uop.is_rvc || brupdate.b2.uop.edge_inst, 2.U, 4.U)
@@ -713,6 +719,58 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   val dis_stalls = dis_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
   dis_fire := dis_valids zip dis_stalls map {case (v,s) => v && !s}
   dis_ready := !dis_stalls.last
+
+  if (usingPMU) {
+    val registry = p(PMUScopeKey).get
+    // BasicDispatcher requires capacity in every issue queue, independently of
+    // stale iq_type bits in an invalid input. Free-list valid is likewise raw capacity.
+    val int_capacity = BoringUtils.bore(rename_stage.freelist.io.alloc_pregs.head.valid)
+    val fp_capacity = if (usingFPU)
+      BoringUtils.bore(fp_rename_stage.freelist.io.alloc_pregs.head.valid) else true.B
+    val rob_full = BoringUtils.bore(rob.full)
+    val rob_draining = BoringUtils.bore(rob.rob_state) === rob.s_wait_till_empty
+    val empty_capacity = rob.io.ready && int_capacity && fp_capacity &&
+      dispatcher.io.ren_uops.head.ready && !io.lsu.ldq_full(0) && !io.lsu.stq_full(0) &&
+      !dec_brmask_logic.io.debug_branch_mask.andR && !dec_xcpt_stall
+    val redirect = io.ifu.redirect_flush || brupdate.b1.mispredict_mask.orR ||
+      brupdate.b2.mispredict || rob.io.commit.rollback
+    val control_stall = csr.io.csr_stall
+    val events = PMUEventLogic.dispatch(
+      dis_valids.toSeq, dis_fire.toSeq,
+      Seq.fill(coreWidth)(rob_full), ren_stalls.toSeq,
+      dispatcher.io.ren_uops.map(u => !u.ready).toSeq,
+      (0 until coreWidth).map(w => io.lsu.ldq_full(w) && dis_uops(w).uses_ldq),
+      (0 until coreWidth).map(w => io.lsu.stq_full(w) && dis_uops(w).uses_stq),
+      (0 until coreWidth).map(w => rob_draining || wait_for_empty_pipeline(w) || wait_for_rocc(w) || dis_prior_slot_unique(w)),
+      dis_rocc_alloc_stall, redirect, control_stall, empty_capacity)
+
+    registry.register("branch.mispredict_redirects", pmu_branch_redirect.get, unit = "redirects",
+      description = "Selected branch recovery redirects, excluding higher-priority ROB flushes")
+    registry.register("pipeline.dispatched_uops", events.dispatched, unit = "uops",
+      description = "Uops accepted at dispatch, including speculative and predicated work")
+    val cycleEvents = Seq(
+      ("pipeline.frontend_starved_cycles", events.frontend_starved,
+        "Empty dispatch with ROB, INT/FP register, all issue-queue, LDQ/STQ and branch-tag capacity; excludes recovery, CSR and decode-exception blocking"),
+      ("pipeline.backend_blocked_cycles", events.backend_blocked,
+        "First waiting dispatch lane blocked by ROB, rename, dispatcher, LDQ/STQ or RoCC allocation; excludes recovery and CSR stalls"),
+      ("pipeline.redirect_blocked_cycles", events.redirect_blocked,
+        "Explicit redirect or rollback control active, excluding CSR stalls; does not include subsequent refill delay"),
+      ("pipeline.rob_blocked_cycles", events.rob_blocked,
+        "First waiting dispatch lane blocked by a full ROB; excludes recovery and CSR stalls"),
+      ("pipeline.rename_blocked_cycles", events.rename_blocked,
+        "First waiting dispatch lane has an INT/FP/predicate rename stall; excludes recovery and CSR stalls"),
+      ("pipeline.issue_queue_blocked_cycles", events.issue_queue_blocked,
+        "First waiting lane blocked by dispatcher readiness; BasicDispatcher requires all queues ready, even queues unused by that uop"),
+      ("lsu.ldq_blocked_cycles", events.ldq_blocked,
+        "First waiting dispatch lane uses LDQ and cannot allocate; excludes recovery and CSR stalls"),
+      ("lsu.stq_blocked_cycles", events.stq_blocked,
+        "First waiting dispatch lane uses STQ and cannot allocate; excludes recovery and CSR stalls"),
+      ("pipeline.serialization_blocked_cycles", events.serialization_blocked,
+        "First waiting lane blocked by ROB draining, unique instruction, drain/order or RoCC fence conditions; excludes recovery and CSR stalls"))
+    cycleEvents.foreach { case (name, condition, description) =>
+      registry.register(name, condition, unit = "cycles", description = description)
+    }
+  }
 
   //-------------------------------------------------------------
   // LDQ/STQ Allocation Logic

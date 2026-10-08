@@ -14,6 +14,7 @@ import freechips.rocketchip.devices.tilelink.{BootROMParams}
 import freechips.rocketchip.prci.{SynchronousCrossing, AsynchronousCrossing, RationalCrossing}
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
+import pmu.{PMUParams, TilePMUParams}
 
 import boom.v3.ifu._
 import boom.v3.exu._
@@ -22,6 +23,27 @@ import boom.v3.lsu._
 // ---------------------
 // BOOM Config Fragments
 // ---------------------
+
+/** Collect PMU events in every BOOM tile, keeping any tile PMU already configured. */
+class WithPMUEvents extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem)) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(
+      pmu = Some(tp.tileParams.pmu.getOrElse(PMUParams()))))
+    case other => other
+  }
+})
+
+/** Add a tile PMU to every BOOM tile (separate from the CSR HPM counters).
+  * Tile i's registers are at baseAddress + i * 0x1000.
+  */
+class WithTilePMU(baseAddress: BigInt = BigInt("40000000", 16), counterBits: Int = 64) extends Config((site, here, up) => {
+  case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem)) map {
+    case tp: BoomTileAttachParams => tp.copy(tileParams = tp.tileParams.copy(
+      pmu = Some(PMUParams(tilePMU = Some(
+        TilePMUParams(baseAddress + BigInt(tp.tileParams.tileId) * 0x1000, counterBits))))))
+    case other => other
+  }
+})
 
 class WithBoomCommitLogPrintf extends Config((site, here, up) => {
   case TilesLocated(InSubsystem) => up(TilesLocated(InSubsystem), site) map {
@@ -321,6 +343,7 @@ class WithCloneBoomTiles(
     val idOffset = up(NumTiles)
     val tileAttachParams = up(TilesLocated(cloneLocation)).find(_.tileParams.tileId == cloneTileId)
       .get.asInstanceOf[BoomTileAttachParams]
+    require(tileAttachParams.tileParams.pmu.isEmpty, "BOOM PMU requires independently elaborated tiles; cloning is not supported")
     (0 until n).map { i =>
       CloneTileAttachParams(cloneTileId, tileAttachParams.copy(
         tileParams = tileAttachParams.tileParams.copy(tileId = i + idOffset)

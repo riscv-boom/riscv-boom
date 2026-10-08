@@ -12,6 +12,7 @@
 package boom.v3.ifu
 
 import chisel3._
+import pmu.PMUScopeKey
 import chisel3.util._
 
 import org.chipsalliance.cde.config._
@@ -338,6 +339,13 @@ class BoomFrontendModule(outer: BoomFrontend) extends LazyModuleImp(outer)
   io.ptw <> tlb.io.ptw
   io.cpu.perf.tlbMiss := io.ptw.req.fire
   io.cpu.perf.acquire := icache.io.perf.acquire
+  if (usingPMU) {
+    val registry = p(PMUScopeKey).get
+    registry.register("frontend.icache_line_misses", icache.io.perf.acquire, unit = "requests",
+      description = "Accepted instruction-cache refill requests, including speculative fetches")
+    registry.register("frontend.itlb_walk_requests", io.ptw.req.fire, unit = "requests",
+      description = "Accepted instruction-side PTW requests, including speculative translations")
+  }
 
   // --------------------------------------------------------
   // **** NextPC Select (F0) ****

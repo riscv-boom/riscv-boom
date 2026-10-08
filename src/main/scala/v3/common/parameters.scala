@@ -162,6 +162,12 @@ trait HasBoomCoreParameters extends freechips.rocketchip.tile.HasCoreParameters
 {
   val boomParams: BoomCoreParams = tileParams.core.asInstanceOf[BoomCoreParams]
 
+  // PMU events are collected when the tile's pmu parameter is set.
+  val usingPMU: Boolean = tileParams match {
+    case t: BoomTileParams => t.pmu.isDefined
+    case _ => false
+  }
+
   //************************************
   // Superscalar Widths
 

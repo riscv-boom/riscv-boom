@@ -6,6 +6,8 @@
 package boom.v3.common
 
 import chisel3._
+import pmu.{CanHavePMUEvents, PMUParams, PMURegistry, PMUScopeKey, TilePMU}
+import pmu.tilelink.PMUTileLink
 import chisel3.util.{RRArbiter, Queue}
 
 import scala.collection.mutable.{ListBuffer}
@@ -48,7 +50,8 @@ case class BoomTileParams(
   dcache: Option[DCacheParams] = Some(DCacheParams()),
   btb: Option[BTBParams] = Some(BTBParams()),
   name: Option[String] = Some("boom_tile"),
-  tileId: Int = 0
+  tileId: Int = 0,
+  pmu: Option[PMUParams] = None
 ) extends InstantiableTileParams[BoomTile]
 {
   require(icache.isDefined)
@@ -62,6 +65,16 @@ case class BoomTileParams(
   val clockSinkParams: ClockSinkParameters = ClockSinkParameters()
   val baseName = name.getOrElse("boom_tile")
   val uniqueName = s"${baseName}_$tileId"
+}
+
+object BoomTile {
+  // Called once per tile, before BaseTile or any lazy child captures Parameters.
+  private def withPMUScope(params: BoomTileParams, parent: Parameters): Parameters = {
+    if (params.pmu.isDefined) {
+      val registry = new PMURegistry(params.uniqueName)
+      parent.alterPartial { case PMUScopeKey => Some(registry) }
+    } else parent
+  }
 }
 
 /**
@@ -80,11 +93,19 @@ class BoomTile private(
 
   // Private constructor ensures altered LazyModule.p is used implicitly
   def this(params: BoomTileParams, crossing: HierarchicalElementCrossingParamsLike, lookup: LookupByHartIdImpl)(implicit p: Parameters) =
-    this(params, crossing.crossingType, lookup, p)
+    this(params, crossing.crossingType, lookup, BoomTile.withPMUScope(params, p))
 
   val intOutwardNode = None
   val masterNode = TLIdentityNode()
   val slaveNode = TLIdentityNode()
+
+  // The node is negotiated now; its register map is populated after producers
+  // register in the tile module body. All controls stay in the tile clock domain.
+  val pmuMMIO = boomParams.pmu.flatMap(_.tilePMU).map { params =>
+    val mmio = new PMUTileLink(params, xBytes, boomParams.uniqueName)
+    connectTLSlave(mmio.node, xBytes)
+    mmio
+  }
 
   val tile_master_blocker =
     tileParams.blockerCtrlAddr
@@ -96,6 +117,7 @@ class BoomTile private(
   // TODO: this doesn't block other masters, e.g. RoCCs
   tlOtherMastersNode := tile_master_blocker.map { _.node := tlMasterXbar.node } getOrElse { tlMasterXbar.node }
   masterNode :=* tlOtherMastersNode
+  DisableMonitors { implicit p => tlSlaveXbar.node :*= slaveNode }
 
   val cpuDevice: SimpleDevice = new SimpleDevice("cpu", Seq("ucb-bar,boom0", "riscv")) {
     override def parent = Some(ResourceAnchors.cpus)
@@ -152,7 +174,7 @@ class BoomTile private(
  *
  * @param outer top level BOOM tile
  */
-class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
+class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer) with CanHavePMUEvents {
 
   val core = Module(new BoomCore()(outer.p))
   val lsu  = Module(new LSU()(outer.p, outer.dcache.module.edge))
@@ -242,6 +264,23 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer){
   hellaCacheArb.io.requestor <> hellaCachePorts.toSeq
   lsu.io.hellacache <> hellaCacheArb.io.mem
   outer.dcache.module.io.lsu <> lsu.io.dmem
+
+  // Build the registry only after all lazy and ordinary producer modules have elaborated.
+  val pmuEvents = if (outer.boomParams.pmu.isDefined) {
+    val registry = p(PMUScopeKey).get
+    registry.register("tile.cycles", 1.U, unit = "cycles",
+      description = "Tile clock cycles outside reset, including stalls and idle cycles")
+    Some(registry.build())
+  } else None
+  pmuEvents.foreach { events =>
+    ElaborationArtefacts.add(s"${events.manifest.source}.pmu.json", events.manifest.toJson)
+  }
+
+  val tilePMU = for (events <- pmuEvents; mmio <- outer.pmuMMIO) yield {
+    val attachment = TilePMU.build(events, mmio.params.counterBits)
+    mmio.attach(attachment)
+    attachment
+  }
 
   // Generate a descriptive string
   val frontendStr = outer.frontend.module.toString
