@@ -17,7 +17,7 @@ class PMUDispatchEvents(width: Int) extends Bundle {
   val serialization_blocked = Bool()
 }
 
-/** Kept independent of BOOM parameters so the actual predicates can be RTL-tested. */
+/** Dispatch, ROB-head and MSHR event predicates, independent of BOOM parameters. */
 object PMUEventLogic {
   def dispatch(
     valids: Seq[Bool], fires: Seq[Bool],

@@ -254,10 +254,9 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
   io.ptw <> dtlb.io.ptw
   io.core.perf.tlbMiss := io.ptw.req.fire
-  if (p(EnableBoomPMUEvents)) {
+  if (usingPMU) {
     val registry = p(PMUScopeKey).get
-    val dtlb_increment = WireInit(io.ptw.req.fire.asUInt)
-    registry.register("lsu.dtlb_walk_requests", dtlb_increment, unit = "requests",
+    registry.register("lsu.dtlb_walk_requests", io.ptw.req.fire, unit = "requests",
       description = "Accepted data-side PTW requests, including speculative translations")
   }
   io.core.perf.acquire := io.dmem.perf.acquire

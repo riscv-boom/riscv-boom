@@ -398,7 +398,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   }.reduce(_||_)
 
   // Observe the selected redirect arm, including priority over branch recovery.
-  val pmu_branch_redirect = if (p(EnableBoomPMUEvents)) Some(WireInit(false.B)) else None
+  val pmu_branch_redirect = if (usingPMU) Some(WireInit(false.B)) else None
 
   // TODO FIX THIS HACK
   // The below code works because of two quirks with the flush mechanism
@@ -433,7 +433,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
     }
     io.ifu.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
   } .elsewhen (brupdate.b2.mispredict && !RegNext(rob.io.flush.valid)) {
-    if (p(EnableBoomPMUEvents)) { pmu_branch_redirect.get := true.B }
+    if (usingPMU) { pmu_branch_redirect.get := true.B }
     val block_pc = AlignPCToBoundary(io.ifu.get_pc(1).pc, icBlockBytes)
     val uop_maybe_pc = block_pc | brupdate.b2.uop.pc_lob
     val npc = uop_maybe_pc + Mux(brupdate.b2.uop.is_rvc || brupdate.b2.uop.edge_inst, 2.U, 4.U)
@@ -726,7 +726,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
   dis_fire := dis_valids zip dis_stalls map {case (v,s) => v && !s}
   dis_ready := !dis_stalls.last
 
-  if (p(EnableBoomPMUEvents)) {
+  if (usingPMU) {
     val registry = p(PMUScopeKey).get
     // BasicDispatcher requires capacity in every issue queue, independently of
     // stale iq_type bits in an invalid input. Free-list valid is likewise raw capacity.
@@ -750,11 +750,9 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
       (0 until coreWidth).map(w => rob_draining || wait_for_empty_pipeline(w) || wait_for_rocc(w) || dis_prior_slot_unique(w)),
       dis_rocc_alloc_stall, redirect, control_stall, empty_capacity)
 
-    val branch_increment = WireInit(pmu_branch_redirect.get.asUInt)
-    registry.register("branch.mispredict_redirects", branch_increment, unit = "redirects",
+    registry.register("branch.mispredict_redirects", pmu_branch_redirect.get, unit = "redirects",
       description = "Selected branch recovery redirects, excluding higher-priority ROB flushes")
-    val dispatched_increment = WireInit(events.dispatched)
-    registry.register("pipeline.dispatched_uops", dispatched_increment, unit = "uops",
+    registry.register("pipeline.dispatched_uops", events.dispatched, unit = "uops",
       description = "Uops accepted at dispatch, including speculative and predicated work")
     val cycleEvents = Seq(
       ("pipeline.frontend_starved_cycles", events.frontend_starved,
@@ -776,8 +774,7 @@ class BoomCore()(implicit p: Parameters) extends BoomModule
       ("pipeline.serialization_blocked_cycles", events.serialization_blocked,
         "First waiting lane blocked by ROB draining, unique instruction, drain/order or RoCC fence conditions; excludes recovery and CSR/trace stalls"))
     cycleEvents.foreach { case (name, condition, description) =>
-      val increment = WireInit(condition.asUInt)
-      registry.register(name, increment, unit = "cycles", description = description)
+      registry.register(name, condition, unit = "cycles", description = description)
     }
   }
 

@@ -771,13 +771,13 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
     io.secondary_miss(w) := idx_match(w) && way_match(w) && !tag_match(w)
     io.block_hit(w)      := idx_match(w) && tag_match(w)
   }
-  if (p(EnableBoomPMUEvents)) {
+  if (usingPMU) {
     val registry = p(PMUScopeKey).get
     // One selected input can allocate a new cacheable MSHR. Secondary merges,
     // permission upgrades and MMIO requests are excluded. Prefetches are included.
-    val miss_increment = WireInit(PMUEventLogic.lineMissAllocation(
-      req.fire, cacheable, idx_match(req_idx), req.bits.tag_match).asUInt)
-    registry.register("lsu.dcache_line_misses", miss_increment, unit = "requests",
+    val line_miss = PMUEventLogic.lineMissAllocation(
+      req.fire, cacheable, idx_match(req_idx), req.bits.tag_match)
+    registry.register("lsu.dcache_line_misses", line_miss, unit = "requests",
       description = "Accepted cacheable line-miss MSHR allocations including prefetches/speculation; excludes merges, permission upgrades and MMIO")
   }
   io.refill         <> refill_arb.io.out
