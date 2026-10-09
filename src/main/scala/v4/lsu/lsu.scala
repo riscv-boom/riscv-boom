@@ -856,7 +856,7 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
 
 
   //------------------------------
-  // Issue Someting to Memory
+  // Issue Something to Memory
   //
   // A memory op can come from many different places
   // The address either was freshly translated, or we are
