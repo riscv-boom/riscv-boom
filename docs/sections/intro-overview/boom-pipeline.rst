@@ -46,7 +46,9 @@ Dispatch
 ^^^^^^^^
 
 The :term:`UOP<Micro-Op (UOP)>` is then *dispatched*, or written, into
-a set of :term:`Issue Queue` s.
+the **Reorder Buffer (ROB)** and a set of :term:`Issue Queues` concurrently.
+This occurs after the **Rename** stage, ensuring the ROB can track the 
+instruction using its physical register mappings.
 
 Issue
 ^^^^^
@@ -89,11 +91,11 @@ ALU operations and load operations are *written* back to the
 Commit
 ^^^^^^
 
-The **Reorder Buffer (ROB)**, tracks the status of each instruction
-in the pipeline. When the head of the **ROB** is not-busy, the **ROB**
-*commits* the instruction. For stores, the **ROB** signals to the
-store at the head of the **Store Queue (SAQ/SDQ)** that it can now write its
-data to memory.
+The **Reorder Buffer (ROB)**, which was populated during the **Dispatch** stage, 
+tracks the status of each instruction in the pipeline. When the head of the 
+**ROB** is not-busy, the **ROB** *commits* the instruction. For stores, the 
+**ROB** signals to the store at the head of the **Store Queue (SAQ/SDQ)** that 
+it can now write its data to memory.
 
 Branch Support
 --------------
