@@ -9,7 +9,7 @@ The Purpose of Renaming
 
 *Renaming* is a technique to rename the *ISA* (or *logical*) register
 specifiers in an instruction by mapping them to a new space of
-*physical* registers. The goal to *register renaming* is to break the
+*physical* registers. The goal of *register renaming* is to break the
 output-dependencies (WAW) and anti-dependences (WAR) between instructions, leaving
 only the true dependences (RAW). Said again, but in architectural
 terminology, register renaming eliminates write-after-write (WAW) and
@@ -39,7 +39,7 @@ This is in contrast to an "implicit renaming" or "data-in-ROB"
 out-of-order core design. The **Architectural Register File (ARF)** only
 holds the committed register state, while the ROB holds the speculative
 write-back data. On commit, the ROB transfers the speculative data to
-the ARF[2]_
+the ARF. [2]_
 
 The Rename Map Table
 --------------------
@@ -56,9 +56,9 @@ The Rename Map Table
 The **Rename Map Table (abbreviated as Map Table)** holds the speculative mappings from ISA registers
 to physical registers.
 
-Each branch gets its own copy of the Rename Map Table[3]_ On a branch
+Each branch gets its own copy of the Rename Map Table. [3]_ On a branch
 mispredict, the Rename Map Table can be reset instantly from the mispredicting
-branch’s copy of the Rename Map Table
+branch’s copy of the Rename Map Table.
 
 As the RV64G ISA uses fixed locations of the register specifiers (and no
 implicit register specifiers), the Map Table can be read before the
@@ -84,7 +84,7 @@ issued.
 The Free List
 -------------
 
-The **Free List** tracks the physical registers that are currently un-used
+The **Free List** tracks the physical registers that are currently unused
 and is used to allocate new physical registers to instructions passing
 through the *Rename* stage.
 
