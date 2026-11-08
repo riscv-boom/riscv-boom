@@ -181,3 +181,20 @@ abstract class IssueUnit(
     else if (iqType == IQT_FP.litValue) " fp"
     else "unknown"
 }
+
+object IssueUnit
+{
+  /**
+   * Construct the issue unit selected by BoomCoreParams.enableAgePriorityIssue
+   *
+   * @param params issue queue params
+   * @param numWakeupPorts number of wakeup ports for the issue queue
+   * @param agePriority true for the age-ordered collapsing queue, false for the
+   *                    unordered (R10K-style) queue
+   */
+  def apply(params: IssueParams, numWakeupPorts: Int, agePriority: Boolean)
+    (implicit p: Parameters): IssueUnit = {
+    if (agePriority) new IssueUnitCollapsing(params, numWakeupPorts)
+    else             new IssueUnitStatic(params, numWakeupPorts)
+  }
+}

@@ -59,9 +59,10 @@ class FpPipeline(implicit p: Parameters) extends BoomModule with tile.HasFPUPara
   // construct all of the modules
 
   val exe_units      = new boom.v3.exu.ExecutionUnits(fpu=true)
-  val issue_unit     = Module(new IssueUnitCollapsing(
+  val issue_unit     = Module(IssueUnit(
                          issueParams.find(_.iqType == IQT_FP.litValue).get,
-                         numWakeupPorts))
+                         numWakeupPorts,
+                         enableAgePriorityIssue))
   issue_unit.suggestName("fp_issue_unit")
   val fregfile       = Module(new RegisterFileSynthesizable(numFpPhysRegs,
                          exe_units.numFrfReadPorts,

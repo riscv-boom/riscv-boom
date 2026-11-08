@@ -35,7 +35,7 @@ class IssueUnitStatic(
   //-------------------------------------------------------------
   // Issue Table
 
-  val entry_wen_oh = VecInit(Seq.fill(numIssueSlots){ Wire(Bits(dispatchWidth.W)) })
+  val entry_wen_oh = Wire(Vec(numIssueSlots, Bits(dispatchWidth.W)))
   for (i <- 0 until numIssueSlots) {
     issue_slots(i).in_uop.valid := entry_wen_oh(i).orR
     issue_slots(i).in_uop.bits  := Mux1H(entry_wen_oh(i), dis_uops)
