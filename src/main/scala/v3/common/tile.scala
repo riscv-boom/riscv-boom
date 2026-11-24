@@ -189,7 +189,7 @@ class BoomTileModuleImp(outer: BoomTile) extends BaseTileModuleImp(outer) with C
 
   // Pass through various external constants and reports
   outer.traceSourceNode.bundle <> core.io.trace
-  outer.bpwatchSourceNode.bundle <> DontCare // core.io.bpwatch
+  outer.bpwatchSourceNode.bundle := DontCare // core.io.bpwatch is unimplemented in BOOM (#819)
   core.io.hartid := outer.hartIdSinkNode.bundle
 
   // Connect the core pipeline to other intra-tile modules
