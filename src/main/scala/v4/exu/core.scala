@@ -206,7 +206,7 @@ class BoomCore(roccCSRs: Seq[Seq[CustomCSR]])(implicit p: Parameters) extends Bo
   // Dealing with branch resolutions
 
   // The individual branch resolutions from each ALU
-  val brinfos = Reg(Vec(coreWidth, Valid(new BrResolutionInfo)))
+  val brinfos = Reg(Vec(alu_exe_units.length, Valid(new BrResolutionInfo)))
 
   // "Merged" branch update info from all ALUs
   // brmask contains masks for rapidly clearing mispredicted instructions
