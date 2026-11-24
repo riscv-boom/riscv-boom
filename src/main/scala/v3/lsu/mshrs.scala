@@ -42,6 +42,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
 
     val req_pri_val = Input(Bool())
     val req_pri_rdy = Output(Bool())
+    val req_pri_rdy_next = Output(Bool())
     val req_sec_val = Input(Bool())
     val req_sec_rdy = Output(Bool())
 
@@ -105,7 +106,10 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   // s_meta_write_resp :
 
   val s_invalid :: s_refill_req :: s_refill_resp :: s_drain_rpq_loads :: s_meta_read :: s_meta_resp_1 :: s_meta_resp_2 :: s_meta_clear :: s_wb_meta_read :: s_wb_req :: s_wb_resp :: s_commit_line :: s_drain_rpq :: s_meta_write_req :: s_mem_finish_1 :: s_mem_finish_2 :: s_prefetched :: s_prefetch :: Nil = Enum(18)
+
   val state = RegInit(s_invalid)
+  val next_state = WireInit(state)
+  state := next_state
 
   val req     = Reg(new BoomDCacheReqInternal)
   val req_idx = req.addr(untagBits-1, blockOffBits)
@@ -157,6 +161,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
   io.meta_write.valid    := false.B
   io.meta_write.bits     := DontCare
   io.req_pri_rdy         := false.B
+  io.req_pri_rdy_next    := next_state.isOneOf(s_invalid, s_prefetch) // In s_prefetch, the buffered line can be discarded to accept a new primary request
   io.req_sec_rdy         := sec_rdy && rpq.io.enq.ready
   io.mem_acquire.valid   := false.B
   io.mem_acquire.bits    := DontCare
@@ -218,7 +223,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     grant_had_data := false.B
 
     when (io.req_pri_val && io.req_pri_rdy) {
-      state := handle_pri_req(state)
+      next_state := handle_pri_req(state)
     }
   } .elsewhen (state === s_refill_req) {
     io.mem_acquire.valid := true.B
@@ -229,7 +234,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       lgSize          = lgCacheBlockBytes.U,
       growPermissions = grow_param)._2
     when (io.mem_acquire.fire) {
-      state := s_refill_resp
+      next_state := s_refill_resp
     }
   } .elsewhen (state === s_refill_resp) {
     when (edge.hasData(io.mem_grant.bits)) {
@@ -248,7 +253,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     when (refill_done) {
       grantack.valid := edge.isRequest(io.mem_grant.bits)
       grantack.bits := edge.GrantAck(io.mem_grant.bits)
-      state := Mux(grant_had_data, s_drain_rpq_loads, s_drain_rpq)
+      next_state := Mux(grant_had_data, s_drain_rpq_loads, s_drain_rpq)
       assert(!(!grant_had_data && req_needs_wb))
       commit_line := false.B
       new_coh := coh_on_grant
@@ -283,14 +288,14 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       .elsewhen (rpq.io.empty && !commit_line)
     {
       when (!rpq.io.enq.fire) {
-        state := s_mem_finish_1
+        next_state := s_mem_finish_1
         finish_to_prefetch := enablePrefetching.B
       }
     } .elsewhen (rpq.io.empty || (rpq.io.deq.valid && !drain_load)) {
       // io.commit_val is for the prefetcher. it tells the prefetcher that this line was correctly acquired
       // The prefetcher should consider fetching the next line
       io.commit_val := true.B
-      state := s_meta_read
+      next_state := s_meta_read
     }
   } .elsewhen (state === s_meta_read) {
     io.meta_read.valid := !io.prober_state.valid || !grantack.valid || (io.prober_state.bits(untagBits-1,blockOffBits) =/= req_idx)
@@ -298,13 +303,13 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.meta_read.bits.tag := req_tag
     io.meta_read.bits.way_en := req.way_en
     when (io.meta_read.fire) {
-      state := s_meta_resp_1
+      next_state := s_meta_resp_1
     }
   } .elsewhen (state === s_meta_resp_1) {
-    state := s_meta_resp_2
+    next_state := s_meta_resp_2
   } .elsewhen (state === s_meta_resp_2) {
     val needs_wb = io.meta_resp.bits.coh.onCacheControl(M_FLUSH)._1
-    state := Mux(!io.meta_resp.valid, s_meta_read, // Prober could have nack'd this read
+    next_state := Mux(!io.meta_resp.valid, s_meta_read, // Prober could have nack'd this read
              Mux(needs_wb, s_meta_clear, s_commit_line))
   } .elsewhen (state === s_meta_clear) {
     io.meta_write.valid         := true.B
@@ -314,7 +319,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.meta_write.bits.way_en   := req.way_en
 
     when (io.meta_write.fire) {
-      state      := s_wb_req
+      next_state := s_wb_req
     }
   } .elsewhen (state === s_wb_req) {
     io.wb_req.valid          := true.B
@@ -326,11 +331,11 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.wb_req.bits.source    := io.id
     io.wb_req.bits.voluntary := true.B
     when (io.wb_req.fire) {
-      state := s_wb_resp
+      next_state := s_wb_resp
     }
   } .elsewhen (state === s_wb_resp) {
     when (io.wb_resp) {
-      state := s_commit_line
+      next_state := s_commit_line
     }
   } .elsewhen (state === s_commit_line) {
     io.lb_read.valid       := true.B
@@ -345,7 +350,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     when (io.refill.fire) {
       refill_ctr := refill_ctr + 1.U
       when (refill_ctr === (cacheDataBeats - 1).U) {
-        state := s_drain_rpq
+        next_state := s_drain_rpq
       }
     }
   } .elsewhen (state === s_drain_rpq) {
@@ -359,7 +364,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
       new_coh := coh_on_hit
     }
     when (rpq.io.empty && !rpq.io.enq.valid) {
-      state := s_meta_write_req
+      next_state := s_meta_write_req
     }
   } .elsewhen (state === s_meta_write_req) {
     io.meta_write.valid         := true.B
@@ -368,7 +373,7 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.meta_write.bits.data.tag := req_tag
     io.meta_write.bits.way_en   := req.way_en
     when (io.meta_write.fire) {
-      state := s_mem_finish_1
+      next_state := s_mem_finish_1
       finish_to_prefetch := false.B
     }
   } .elsewhen (state === s_mem_finish_1) {
@@ -376,26 +381,26 @@ class BoomMSHR(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()(p)
     io.mem_finish.bits  := grantack.bits
     when (io.mem_finish.fire || !grantack.valid) {
       grantack.valid := false.B
-      state := s_mem_finish_2
+      next_state := s_mem_finish_2
     }
   } .elsewhen (state === s_mem_finish_2) {
-    state := Mux(finish_to_prefetch, s_prefetch, s_invalid)
+    next_state := Mux(finish_to_prefetch, s_prefetch, s_invalid)
   } .elsewhen (state === s_prefetch) {
     io.req_pri_rdy := true.B
     when ((io.req_sec_val && !io.req_sec_rdy) || io.clear_prefetch) {
-      state := s_invalid
+      next_state := s_invalid
     } .elsewhen (io.req_sec_val && io.req_sec_rdy) {
       val (is_hit, _, coh_on_hit) = new_coh.onAccess(io.req.uop.mem_cmd)
       when (is_hit) { // Proceed with refill
         new_coh := coh_on_hit
-        state := s_meta_read
+        next_state := s_meta_read
       } .otherwise { // Reacquire this line
         new_coh := ClientMetadata.onReset
-        state := s_refill_req
+        next_state := s_refill_req
       }
     } .elsewhen (io.req_pri_val && io.req_pri_rdy) {
       grant_had_data := false.B
-      state := handle_pri_req(state)
+      next_state := handle_pri_req(state)
     }
   }
 }
@@ -704,9 +709,10 @@ class BoomMSHRFile(implicit edge: TLEdgeOut, p: Parameters) extends BoomModule()
 
   // Try to round-robin the MSHRs
   val mshr_head      = RegInit(0.U(log2Ceil(cfg.nMSHRs).W))
-  mshr_alloc_idx    := RegNext(AgePriorityEncoder(mshrs.map(m=>m.io.req_pri_rdy), mshr_head))
-  when (pri_rdy && pri_val) { mshr_head := WrapInc(mshr_head, cfg.nMSHRs) }
+  var mshr_head_next = Mux(pri_rdy && pri_val, WrapInc(mshr_alloc_idx, cfg.nMSHRs), mshr_head)
+  mshr_head := mshr_head_next
 
+  mshr_alloc_idx    := RegNext(AgePriorityEncoder(mshrs.map(m=>m.io.req_pri_rdy_next), mshr_head_next))
 
 
   io.meta_write <> meta_write_arb.io.out
