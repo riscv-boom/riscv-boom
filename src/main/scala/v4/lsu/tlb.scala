@@ -185,7 +185,7 @@ class NBDTLB(instruction: Boolean, lgMaxSize: Int, cfg: TLBConfig)(implicit edge
     newEntry.ppn := pte.ppn
     newEntry.c := cacheable(0)
     newEntry.u := pte.u
-    newEntry.g := pte.g
+    newEntry.g := pte.g && pte.v
     newEntry.ae := io.ptw.resp.bits.ae_final
     newEntry.sr := pte.sr()
     newEntry.sw := pte.sw()
