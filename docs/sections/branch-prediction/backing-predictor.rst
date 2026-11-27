@@ -116,7 +116,7 @@ accurately, each :term:`Fetch Packet` ) must snapshot the :term:`GHR<Global Hist
 
 There is one final wrinkle - exceptional pipeline behavior. While each
 branch contains a snapshot of the :term:`GHR<Global History Register (GHR)>` , any
-instruction can potential throw an exception that will cause a :term:`Front-end`
+instruction can potentially throw an exception that will cause a :term:`Front-end`
 redirect. Such an event will cause the :term:`GHR<Global History Register (GHR)>` to become
 corrupted. For exceptions, this may seem acceptable - exceptions should
 be rare and the trap handlers will cause a pollution of the :term:`GHR<Global History Register (GHR)>`
@@ -182,7 +182,7 @@ This state can be very expensive but it can be deallocated once the
 branch is resolved in the **Execute** stage. Therefore, the state is
 stored in parallel with the :term:`Branch Rename Snapshot` s. During **Decode**
 and **Rename**, a **Branch Tag** is allocated to each branch and a
-snapshot of the rename tables are made to facilitate single-cycle
+snapshot of the rename tables is made to facilitate single-cycle
 rollback if a misprediction occurs. Like the branch tag and **Rename
 Map Table** snapshots, the corresponding :term:`Branch Rename Snapshot`
 can be deallocated once the branch is resolved by the :term:`Branch Unit` in
@@ -457,8 +457,8 @@ The Random Predictor
 
 The Random Predictor uses an LFSR to randomize both "was a prediction
 made?" and "which direction each branch in the :term:`Fetch Packet` should
-take?". This is very useful for both torturing-testing BOOM and for
-providing a worse-case performance baseline for comparing branch
+take?". This is very useful for both torture-testing BOOM and for
+providing a worst-case performance baseline for comparing branch
 predictors.
 
 .. [7] It’s the *PC Tag* storage and *Branch Target* storage that
