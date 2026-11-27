@@ -774,12 +774,13 @@ class LSU(implicit p: Parameters, edge: TLEdgeOut) extends BoomModule()(p)
   dtlb.io.sfence                    := exe_sfence
 
   // exceptions
-  val ma_ld  = widthMap(w => dtlb.io.resp(w).ma.ld && exe_tlb_uop(w).uses_ldq)
-  val ma_st  = widthMap(w => dtlb.io.resp(w).ma.st && exe_tlb_uop(w).uses_stq && !exe_tlb_uop(w).is_fence)
-  val pf_ld  = widthMap(w => dtlb.io.resp(w).pf.ld && exe_tlb_uop(w).uses_ldq)
-  val pf_st  = widthMap(w => dtlb.io.resp(w).pf.st && exe_tlb_uop(w).uses_stq)
-  val ae_ld  = widthMap(w => dtlb.io.resp(w).ae.ld && exe_tlb_uop(w).uses_ldq)
-  val ae_st  = widthMap(w => dtlb.io.resp(w).ae.st && exe_tlb_uop(w).uses_stq)
+  // On a miss (including the refill cycle) the TLB exception bits are not valid; the access is retried
+  val ma_ld  = widthMap(w => dtlb.io.resp(w).ma.ld && exe_tlb_uop(w).uses_ldq && !dtlb.io.resp(w).miss)
+  val ma_st  = widthMap(w => dtlb.io.resp(w).ma.st && exe_tlb_uop(w).uses_stq && !exe_tlb_uop(w).is_fence && !dtlb.io.resp(w).miss)
+  val pf_ld  = widthMap(w => dtlb.io.resp(w).pf.ld && exe_tlb_uop(w).uses_ldq && !dtlb.io.resp(w).miss)
+  val pf_st  = widthMap(w => dtlb.io.resp(w).pf.st && exe_tlb_uop(w).uses_stq && !dtlb.io.resp(w).miss)
+  val ae_ld  = widthMap(w => dtlb.io.resp(w).ae.ld && exe_tlb_uop(w).uses_ldq && !dtlb.io.resp(w).miss)
+  val ae_st  = widthMap(w => dtlb.io.resp(w).ae.st && exe_tlb_uop(w).uses_stq && !dtlb.io.resp(w).miss)
   val dbg_bp = widthMap(w => bkptu(w).io.debug_st && ((exe_tlb_uop(w).uses_ldq && bkptu(w).io.debug_ld) ||
                                                       (exe_tlb_uop(w).uses_stq && bkptu(w).io.debug_st && !exe_tlb_uop(w).is_fence)))
   val bp     = widthMap(w => bkptu(w).io.debug_st && ((exe_tlb_uop(w).uses_ldq && bkptu(w).io.xcpt_ld) ||
